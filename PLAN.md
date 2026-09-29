@@ -13,13 +13,17 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
-`:packages:routing`, `:packages:keychain`, `:packages:user-defaults`, `build-logic`.
-**Empty**: the other 13 modules plus most of `:iosApp`.
+`:packages:routing`, `:packages:keychain`, `:packages:user-defaults`,
+`:packages:database`, `build-logic`. **Empty**: the other 11 Gradle modules (the nine
+feature modules, `:packages:network`, `:packages:sync`) plus most of `:androidApp` and
+`:iosApp`.
 
-**Progress: Phases 0-3 complete, `./gradlew check` green on all three targets.**
-Phases 4-15 outstanding. Test baseline **183 unique** (core 42, domain 43, routing 49,
-keychain 12, user-defaults 12, di 19, design-system 6, composition-root 3), each run on
-`jvmTest`, `testAndroidHostTest` and `iosSimulatorArm64Test` — 549 executions.
+**Progress: Phases 0-4 complete, `./gradlew check` green on all three targets.**
+Phases 5-15 outstanding. Test baseline **246 unique in commonTest** (database 60, core 42,
+domain 43, routing 49, di 19, keychain 12, user-defaults 12, design-system 6,
+composition-root 3) plus **6 in `jvmTest`** (reflection and filesystem, which have no
+common equivalent): 252 on `jvmTest`, 246 on `iosSimulatorArm64Test`, and 186 on
+`testAndroidHostTest` — see the Phase 4 note on why the database's 60 do not run there.
 
 ## Decisions taken
 
@@ -402,40 +406,81 @@ Two asymmetries that are deliberate and each have a test pinning it:
 ## Phase 4 — `:packages:database` (Room KMP)
 
 The largest single chunk. Room 2.8.4 + `sqlite-bundled` + KSP, per
-`tasktracker.kmp.room`. `schemaDirectory` points at `$projectDir/schemas`, which
-**does not exist** — create it so a migration diff shows in review.
+`tasktracker.kmp.room`. `schemaDirectory` points at `$projectDir/schemas`, committed so a
+migration diff shows in review.
 
-- [ ] **4.1** `schemas/` directory + first Room entities: `OutboxRecord`,
-      `SyncMetadataRecord`, session cache. Room entities are declared here; the
-      feature's own records are registered by the feature's data module, preserving
-      the original's one-way dependency.
-- [ ] **4.2** `OutboxRecord` — `OutboxOperation` (upsert/delete),
-      `OutboxEntity` (project/workItem), `OutboxStatus` (pending/inFlight/failed/dead),
-      plus `id`, `entityKind`, `entityID`, `operation`, `payload`, **`userID`**,
-      `createdAt`, `status`, `attemptCount`, `lastAttemptAt`, `lastError`. Note the
-      original's warning: a property literally named `entity` compiles and then
-      corrupts the store.
-- [ ] **4.3** `inTransaction { }` — mutate, commit once, **roll back on any throw**.
-      This is strictly better than `ModelContext.rollback()`: it is a real
-      `ROLLBACK`.
-- [ ] **4.4** `OutboxQueue.kt` — `claim(limit, maxAttempts, userID)` oldest-first,
-      then `complete` / `fail` / `reject` / `release` / `recoverStrandedEntries` /
-      `entries` / `count(where:)` / `removeAll`. `release` and `fail` are different
-      operations and the difference is load-bearing.
-- [ ] **4.5** `SyncMetadataStore.kt` — **one row per scope string** (`"projects"`,
-      `"workItems:<projectID>"`) so a partial sync of one project does not advance
-      the whole app's position. Plus `SessionCache` for the current user id, which
-      is stamped on outbox rows and on status changes.
-- [ ] **4.6** Preserve the original's hard-won warning: an in-memory store **must**
-      use the in-memory builder. Pointing a file-backed store at a null device
-      creates real SQLite sidecars and crashes a test runner with SIGSEGV.
-- [ ] **4.7** `commonTest` — 43 tests: claim ordering, attempt accounting,
-      dead-lettering at `maxAttempts`, stranded recovery, user-scoped claiming,
-      release-vs-fail semantics, per-scope cursor independence, transaction rollback
-      leaving neither an entity nor an outbox row.
+- [x] **4.1** `schemas/` directory + Room entities. **There is no `ModelSchemaRegistry`**
+      and there cannot be one: `@Database(entities = [...])` is read by the annotation
+      processor at compile time. One `@Database` per feature would be worse than no
+      registry — a repository has to write its entity *and* the outbox row in one
+      transaction, which is only possible when both tables are in the same database, and
+      the queue disagreeing with the store is the exact failure the outbox exists to
+      prevent. The dependency still points one way; adding a feature table is a one-line
+      edit to `entities` when phases 8 and 11 land. The three cross-cutting tables are
+      `OutboxRecord`, `SyncMetadataRecord`, `SessionRecord`, as in the original.
+- [x] **4.2** `OutboxRecord` — `OutboxOperation` (upsert/delete), `OutboxEntity`
+      (project/workItem), `OutboxStatus` (pending/inFlight/failed/dead), plus `id`,
+      `entityKind`, `entityID`, `operation`, `payload`, **`userID`**, `createdAt`, `status`,
+      `attemptCount`, `lastAttemptAt`, `lastError`. The original's warning is kept as a
+      comment on `entityKind`. The three state columns are `String`, not enum-typed, so a
+      value from a newer build is *readable* and refused with an `OutboxError` at a point
+      that can name the row, rather than blowing up inside a `TypeConverter`.
+- [x] **4.3** `inTransaction { }` — mutate, commit once, **roll back on any throw**.
+      Room's KMP `commonMain` has no `withTransaction`; the primitive is
+      `useWriterConnection { it.immediateTransaction { … } }`, which is a real `BEGIN`/
+      `ROLLBACK` and nests via savepoints. `IMMEDIATE` rather than `DEFERRED` because
+      `claim` reads then writes, and a deferred transaction that upgrades can fail
+      mid-flight. This is strictly better than `ModelContext.rollback()`: the rollback is
+      the transaction's own behaviour and cannot be forgotten.
+- [x] **4.4** `OutboxQueue.kt` — `claim(limit, maxAttempts, userID)` oldest-first with an
+      id tie-break, then `complete` / `fail` / `reject` / `release` /
+      `recoverStrandedEntries` / `entries` / `count(status:)` / `removeAll`. `release` and
+      `fail` are different operations and the difference is load-bearing. `reject` is a
+      default *method*, not an extension: Kotlin members shadow extensions, so the
+      original's same-signature protocol extension would be dead code rather than a
+      compile error. The scoped and unscoped claims are one `@Query` (`:userID IS NULL`),
+      where the original needed two fetch descriptors.
+- [x] **4.5** `SyncMetadataStore.kt` — **one row per scope string** (`"projects"`,
+      `"workItems:<projectID>"`) so a partial sync of one project does not advance the
+      whole app's position. Plus `SessionCache`, whose rows are stamped on outbox entries
+      and on status changes. `Instant` is stored as epoch **milliseconds**, the granularity
+      the original's "same millisecond" tie-break assumed.
+- [x] **4.6** An in-memory store **must** use the in-memory builder. `DatabaseConfiguration.inMemory`
+      carries an empty name, so there is no path a caller could pass by mistake; Room
+      rejects a blank name and `:memory:` outright. The original pointed a file-backed
+      store at `/dev/null` and lost a build to real SQLite sidecars.
+- [x] **4.7** `commonTest` — **60 tests**: claim ordering and the id tie-break, attempt
+      accounting, dead-lettering at `maxAttempts`, stranded recovery, user-scoped
+      claiming, release-vs-fail semantics, per-scope cursor independence, `IN ()` guards,
+      and transaction rollback leaving neither table's row behind. Plus 6 in `jvmTest`:
+      the structural "no token in `SessionRecord`" guard (reflection) and on-disk location
+      behaviour (a real file-backed store, directory creation, an unusable location).
 
-**Exit criteria**: 149 tests green. `packages/database/schemas/` committed.
+### Phase 4 notes
 
+- **`testAndroidHostTest` is disabled for this module** (see `build.gradle.kts`). Room's
+  Android builder is `databaseBuilder(context, klass, name)` and needs a real `Context`;
+  a host JVM test cannot produce one, because the `android.jar` on that classpath is a
+  stub that throws `Stub!` from its constructors. Every test here opens a store, so leaving
+  it on fails the whole suite for one wiring reason. The android target is still fully
+  compiled, generated code included. Robolectric is the fix if this module ever wants
+  host-side Android coverage — a new dependency, so not a call to make inside a phase
+  about transaction semantics.
+- **What Room's KMP API does not have**: `withTransaction` and the `Room` builders are not
+  in `commonMain`, so the builder is an `expect`/`actual` (Android additionally needs a
+  `Context`, threaded as `host: Any?`); `@Database` needs `@ConstructedBy` off Android,
+  which means declaring an `expect object … : RoomDatabaseConstructor<T>` — and it must be
+  declared *before* the `@Database` class, or KSP fails with `MissingType`. `Dispatchers.IO`
+  is `internal` in coroutines' common source set, so the query dispatcher is an
+  `expect`/`actual` too.
+- **Runtime caveat**: the android and iOS builders, `createParentDirectory`, and the
+  `NSUserDefaults`-free path resolution are compile-verified only, as with the keychain
+  and user-defaults actuals. Nothing about the *transaction semantics* is unverified —
+  those run on both the JVM and an iOS simulator.
+
+**Exit criteria**: met — **246 common + 6 jvmTest** (was 186 measured, not the 183 the
+plan had been carrying; Phase 3's own count was off by three). `packages/database/schemas/`
+committed.
 ---
 
 ## Phase 5 — `:packages:network` (Ktor 3.6.0)
