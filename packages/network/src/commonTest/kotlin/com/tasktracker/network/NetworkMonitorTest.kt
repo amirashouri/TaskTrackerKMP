@@ -180,13 +180,15 @@ class NetworkMonitorTest {
     }
 
     @Test
-    fun `only satisfied allows sync`() {
-        assertTrue(Connectivity.Satisfied.allowsSync)
-        // A captive portal has a network and cannot reach anything, and a cold-start
-        // monitor knows nothing — neither is worth spending a request on.
-        assertFalse(Connectivity.Unsatisfied.allowsSync)
-        assertFalse(Connectivity.RequiresConnection.allowsSync)
-        assertFalse(Connectivity.Unknown.allowsSync)
+    fun `a cold start is not a broken path`() {
+        // The client's own rule: fail fast only on a path the platform has actively said
+        // cannot be used. Whether a sync *cycle* is worth starting is `:packages:sync`'s
+        // policy and is not decided by this type — see the note on `isKnownUnusable`.
+        assertFalse(Connectivity.Satisfied.isKnownUnusable)
+        assertFalse(Connectivity.Unknown.isKnownUnusable)
+        // A captive portal has a network and cannot reach anything.
+        assertTrue(Connectivity.Unsatisfied.isKnownUnusable)
+        assertTrue(Connectivity.RequiresConnection.isKnownUnusable)
     }
 
     @Test

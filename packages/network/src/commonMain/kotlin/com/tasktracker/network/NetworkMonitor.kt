@@ -22,19 +22,18 @@ enum class Connectivity {
     ;
 
     /**
-     * The original's `allowsSync`, not `isOnline`: a captive portal has a network and
-     * cannot reach the server, so only [Satisfied] is worth spending a request on.
-     */
-    val allowsSync: Boolean get() = this == Satisfied
-
-    /**
      * Whether the platform has said the path *cannot* be used, as opposed to not having
      * said yet.
      *
-     * Distinct from [allowsSync] on purpose. The sync engine asks [allowsSync] — there is
-     * no point starting a sync on a path that cannot carry it. The client asks *this*: a
-     * monitor that has not reported yet is [Unknown], and failing fast on it would park
-     * every request on every cold start, before the platform has had a chance to answer.
+     * [Unknown] is deliberately **not** unusable. A monitor has not reported at all on a
+     * cold start, and a client that failed fast on it would park every request on every
+     * launch, before the platform has had a chance to answer.
+     *
+     * Whether a *sync cycle* is worth starting is a different question with a different
+     * answer, so it is not answered here. The original wrote that policy as an internal
+     * extension on this type inside `SyncService`, with a comment saying a view should ask
+     * `SyncCoordinator.canSyncNow` instead so the rule is written down once; the port
+     * keeps it there, in `:packages:sync`.
      */
     val isKnownUnusable: Boolean get() = this == Unsatisfied || this == RequiresConnection
 }
@@ -72,8 +71,7 @@ interface ConnectivityWatcher {
  * @param watcher the platform watcher. Injected rather than constructed so a test can drive
  *   statuses without one. The secondary constructors pick the real one for this platform.
  */
-class NetworkMonitor internal constructor(private val watcher: ConnectivityWatcher) :
-    ConnectivitySource {
+class NetworkMonitor(private val watcher: ConnectivityWatcher) : ConnectivitySource {
 
     /** Uses the platform watcher. Throws on Android, which needs a `Context` — see [forHost]. */
     constructor() : this(createConnectivityWatcher(null))
@@ -151,6 +149,17 @@ class NetworkMonitor internal constructor(private val watcher: ConnectivityWatch
          * platform. [host] is ignored on JVM and iOS.
          */
         fun forHost(host: Any?): NetworkMonitor = NetworkMonitor(createConnectivityWatcher(host))
+
+        /**
+         * A monitor driven by a caller-supplied [ConnectivityWatcher].
+         *
+         * Public, and this is the second reason the primary constructor is not `internal`:
+         * hiding it while [ConnectivityWatcher] is public would mean a consumer could see the
+         * seam and never supply one. `:packages:sync` needs exactly that — its coordinator
+         * tests must not depend on the machine having a network, and cannot use [forHost]
+         * because on Android that demands a `Context`.
+         */
+        fun forWatcher(watcher: ConnectivityWatcher): NetworkMonitor = NetworkMonitor(watcher)
     }
 }
 

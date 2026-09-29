@@ -89,9 +89,12 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
     // carrying an edge the module does not use and that a graph check would then enforce
     // forever.
     ":packages:network" to setOf(":packages:core"),
+    // core, database and network — the same three the original's Package.swift declared.
+    // :packages:domain is deliberately absent: the engine routes opaque payloads and never
+    // learns what a WorkItem is, and the graph check enforces every declared edge, so a
+    // dependency here would be one the module has to keep justifying.
     ":packages:sync" to setOf(
         ":packages:core",
-        ":packages:domain",
         ":packages:database",
         ":packages:network",
     ),

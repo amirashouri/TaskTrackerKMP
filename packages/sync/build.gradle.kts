@@ -4,7 +4,8 @@ plugins {
 
 dependencies {
     commonMainImplementation(project(":packages:core"))
-    commonMainImplementation(project(":packages:domain"))
     commonMainImplementation(project(":packages:database"))
     commonMainImplementation(project(":packages:network"))
+    commonMainImplementation(libs.kotlinx.coroutines.core)
+    commonMainImplementation(libs.kotlinx.serialization.json)
 }

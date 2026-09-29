@@ -14,16 +14,16 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
 `:packages:routing`, `:packages:keychain`, `:packages:user-defaults`,
-`:packages:database`, `:packages:network`, `build-logic`. **Empty**: the other 10 Gradle
-modules (the nine feature modules and `:packages:sync`) plus most of `:androidApp` and
-`:iosApp`.
+`:packages:database`, `:packages:network`, `:packages:sync`, `build-logic`. **Empty**:
+the nine feature modules plus most of `:androidApp` and `:iosApp`.
 
-**Progress: Phases 0-5 complete, `./gradlew check` green on all three targets.**
-Phases 6-15 outstanding. Test baseline **334 unique in commonTest** (network 88, database
-60, core 42, domain 43, routing 49, di 19, keychain 12, user-defaults 12, design-system 6,
-composition-root 3) plus **6 in `jvmTest`** (reflection and filesystem, which have no
-common equivalent): 340 on `jvmTest`, 334 on `iosSimulatorArm64Test`, and 274 on
-`testAndroidHostTest` — see the Phase 4 note on why the database's 60 do not run there.
+**Progress: Phases 0-6 complete, `./gradlew check` green on all three targets.**
+Phases 7-15 outstanding. Test baseline **404 unique in commonTest** (sync 70, network 88,
+database 60, core 42, domain 43, routing 49, di 19, keychain 12, user-defaults 12,
+design-system 6, composition-root 3) plus **14 in `jvmTest`** (database 6: reflection and
+filesystem; sync 8: a real SQLite-backed outbox, which has no common equivalent): 418 on
+`jvmTest`, 404 on `iosSimulatorArm64Test`, and 344 on `testAndroidHostTest` — see the
+Phase 4 note on why the database's 60 do not run there.
 
 ## Decisions taken
 
@@ -601,22 +601,22 @@ a real Ktor client on the JVM and on an iOS simulator.
 
 ## Phase 6 — `:packages:sync`
 
-- [ ] **6.1** `SyncScope.kt` — a scope is **not** an entity type: a workItems change
+- [x] **6.1** `SyncScope.kt` — a scope is **not** an entity type: a workItems change
       may reference a project. Plus `SyncTrigger` (appLaunch/foreground/localWrite/
-      periodic/manual/connectivityRestored) and `SyncPhase`.
-- [ ] **6.2** `SyncStatus.kt` — `SyncReport` (pushed, accepted, conflicts, rejected,
+      periodic/manual/connectivityRestored), `SyncPhase` and `SyncStage`.
+- [x] **6.2** `SyncStatus.kt` — `SyncReport` (pushed, accepted, conflicts, rejected,
       retrying, applied, queueDepth, deadLetterCount, failures, requiresSignOut,
       `isSuccess`/`isDeferred`) and `SyncStatus`. **Dead-lettering is not a failure.**
-- [ ] **6.3** `SyncConfiguration.kt` — pushBatchSize 50, maxPushBatchesPerCycle 10,
+- [x] **6.3** `SyncConfiguration.kt` — pushBatchSize 50, maxPushBatchesPerCycle 10,
       maxAttempts 5, pullPageSize 100, maxPullPagesPerScope 10, plus `SyncSchedule`
       (60s interval). Every bound exists so a month-long backlog trickles out
       instead of running until the app is killed.
-- [ ] **6.4** `SyncTransport.kt` — `PushOutcome` (`.accepted` / `.conflict` /
+- [x] **6.4** `SyncTransport.kt` — `PushOutcome` (`.accepted` / `.conflict` /
       `.rejected` / `.retryLater`; **conflict is a success for the queue**),
       `PushResult` (carries `entryID` so ordering cannot be assumed),
       `RemoteChange`, `PullPage`, `SyncTransport` (push **in the order given**),
       `SyncApplySink` (idempotent, server-wins).
-- [ ] **6.5** `SyncEngine.kt` — the core. Fixed order: **recover stranded → push
+- [x] **6.5** `SyncEngine.kt` — the core. Fixed order: **recover stranded → push
       oldest-first in order → pull each scope from its cursor → finalise**. Push-first
       because the pull only reflects what the server has. Serialised by a `Mutex`
       (two concurrent cycles would double-push). A retryable failure **stops the push
@@ -626,20 +626,68 @@ a real Ktor client on the JVM and on an iOS simulator.
       An unmentioned change is retry, never accepted. A repeated id invalidates that
       change's verdict entirely. Session-ended mid-push **releases**. Never throws —
       returns a `SyncReport`.
-- [ ] **6.6** `HttpSyncTransport.kt` — all paths `/v1`-prefixed and defined in one
+- [x] **6.6** `HttpSyncTransport.kt` — all paths `/v1`-prefixed and defined in one
       place: `POST /v1/sync/push`, `GET /v1/sync/changes/{scope}`.
-- [ ] **6.7** `MockSyncTransport.kt` — **new**, no counterpart in the original,
-      because there is no backend. Backs the whole cycle offline.
-- [ ] **6.8** `SyncCoordinator.kt` — decides **when** to sync and enforces
+- [x] **6.7** `MockSyncTransport.kt` — **new**, no counterpart in the original,
+      because there is no backend. Backs the whole cycle offline. Shipped as
+      `InMemorySyncTransport`, which echoes pushed changes into the change log so a
+      round trip is observable without a server.
+- [x] **6.8** `SyncCoordinator.kt` — decides **when** to sync and enforces
       single-flight across the timer, app lifecycle and the connectivity monitor.
       `synchronize(trigger)` returns null for both "already running" and "offline".
       `stop()` is called by teardown.
-- [ ] **6.9** `commonTest` — 41 tests: recover/push/pull order, oldest-first claiming,
+- [x] **6.9** `commonTest` — 41 tests: recover/push/pull order, oldest-first claiming,
       stop-on-retryable, per-cycle attempt dedup, id-matched verdicts,
       conflict-is-success, duplicate verdict invalidation, session-ended release,
       per-scope cursor advance, retry-whole-page, single-flight, transport paths.
 
-**Exit criteria**: 222 tests green.
+**Notes**
+
+- **`allowsSync` moved to `:packages:sync`, where the original has it.** The original
+  asks `monitor.current.allowsSync` in `SyncCoordinator`; Phase 5 had put the predicate
+  on the network value, which put a *sync policy* inside the transport layer. `:packages:
+  network` now exposes `isKnownUnusable` (a fact: this path cannot carry traffic) and the
+  coordinator owns `allowsSync = !isKnownUnusable` (a decision). The two differ in one
+  case, and it matters: `NWPathMonitor` reports `Unknown` before its first callback, so
+  reading `Unknown` as "offline" would leave a perfectly connected device sitting on a
+  queue of unsynced work until the next launch. `Unknown` syncs; `Unsatisfied` and
+  `RequiresConnection` do not.
+- **`NetworkMonitor`'s constructor is public, with a `forWatcher` factory.** It was
+  `internal`, which would have left a consumer able to *see* `ConnectivityWatcher` and
+  never supply one. `:packages:sync`'s coordinator tests must not depend on the machine
+  having a network, and cannot use `forHost` because on Android that demands a `Context`.
+  The monitor is still started by the composition root, not the coordinator — the
+  original's split, and the app shares that one monitor with `:packages:routing`.
+- **The queue double is checked against the real queue.** The engine's `commonTest` runs
+  against a hand-written `InMemoryOutboxQueue`, which is a bet: that it behaves like
+  `RoomOutboxQueue` for every transition the engine drives. A double that is *almost*
+  right makes the whole suite pass while asserting nothing. `RoomBackedSyncTest` (8
+  tests, `jvmTest`) runs the same script through both and compares the rows. Writing it
+  immediately corrected three documented beliefs: there is **no time-based backoff** in
+  `claimable` (a row that failed a moment ago is handed straight back, which is why
+  `SyncEngine` needs a seen-this-cycle guard), the order is `createdAt` then `id` even
+  when the enqueue order is the reverse, and `pushed` counts what was *offered*.
+- **`SyncCoordinator` is not an actor.** The original is a Swift `actor`, which forced
+  every read into an `await` and made the phase callback a capture of `self`. The
+  observable state is a `MutableStateFlow`, so `currentStatus` is a plain property and
+  the callback is a lambda with nothing to retain. `statusUpdates()` returns the
+  `StateFlow` itself: the original dropped a status identical to the current one
+  (`guard next != status`), so conflating loses nothing, and replaying the current value
+  is what lets a screen opened mid-cycle render the phase immediately.
+- **A missing sink fails the cycle.** If a scope's `SyncApplySink` is absent, the engine
+  reports a failure for that scope rather than skipping the page. The original had a
+  silent `else`; skipping means the cursor advances over changes that were never
+  applied, and they are only re-read if the cursor is rewound by something else.
+- **Nothing throws out of `run`.** Every store, transport and clock call is caught and
+  turned into a `SyncFailure` on the report, because a sync that throws takes the
+  caller's coroutine with it — and the callers are a `launch` in a loop, a
+  `foreground` event and a connectivity callback.
+
+**Exit criteria**: met — **70** in `commonTest` (all three targets; the plan's 41 was a
+guess) plus **8** in `jvmTest` for the real-queue parity described above. `:packages:sync`
+depends on `:packages:core`, `:packages:database` and `:packages:network` — **not**
+`:packages:domain`, which the original's `Package.swift` does not depend on either; the
+architecture table was corrected to match rather than a dependency invented to satisfy it.
 
 ---
 

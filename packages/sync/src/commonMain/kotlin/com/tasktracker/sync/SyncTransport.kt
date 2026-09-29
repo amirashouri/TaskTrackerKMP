@@ -1,0 +1,151 @@
+package com.tasktracker.sync
+
+import com.tasktracker.database.OutboxEntity
+import com.tasktracker.database.OutboxEntry
+import com.tasktracker.database.OutboxOperation
+
+/**
+ * What the server did with one queued change.
+ *
+ * The distinction between these four is the whole retry policy, so it is modelled
+ * explicitly instead of being collapsed into a success flag. In particular [Conflict] is
+ * a *success* for the queue: the server's copy won, the local change is resolved, and the
+ * next pull brings the server's version down. Treating it as a failure would retry a
+ * change the server has already decided, forever.
+ */
+sealed interface PushOutcome {
+    /** Applied. */
+    data object Accepted : PushOutcome
+
+    /** The server's version is newer and has won. Resolved, not retryable. */
+    data class Conflict(val serverVersion: String?) : PushOutcome
+
+    /**
+     * Permanently invalid. Retrying cannot help, so this dead-letters immediately instead
+     * of burning the remaining attempts on a guaranteed failure.
+     */
+    data class Rejected(val reason: String) : PushOutcome
+
+    /** A transport failure or 5xx. The entry goes back for another attempt. */
+    data class RetryLater(val reason: String) : PushOutcome
+}
+
+/**
+ * The server's verdict on one change, tied to the change it refers to.
+ *
+ * The entry id travels with the outcome rather than being implied by position. A transport
+ * that returns a bare `List<PushOutcome>` forces the engine to assume the server answered
+ * in request order, and an out-of-order or partial reply then attaches "accepted" to the
+ * wrong change — which loses a user's edit with no error anywhere. Matching on an explicit
+ * id fails loudly instead.
+ */
+data class PushResult(val entryID: String, val outcome: PushOutcome) {
+    companion object {
+        fun accepted(entryID: String): PushResult = PushResult(entryID, PushOutcome.Accepted)
+    }
+}
+
+/**
+ * One change the server has that this device may not.
+ *
+ * **Not a data class**: [payload] is a `ByteArray`, and generated equality compares arrays
+ * by identity, so two changes carrying the same JSON would compare unequal and a test
+ * asserting on an applied page would be testing nothing. The third array-identity trap in
+ * the port, after `HttpRequest` and `OutboxEntry`.
+ */
+class RemoteChange(
+    val entity: OutboxEntity,
+    val entityID: String,
+    val operation: OutboxOperation,
+    /** The entity's new state, or the bare id for a delete. Opaque here: this module has no
+     * business knowing the shape of a `WorkItem`, and the sink that applies it does. */
+    val payload: ByteArray,
+    val version: String?,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is RemoteChange) return false
+        return entity == other.entity &&
+            entityID == other.entityID &&
+            operation == other.operation &&
+            payload.contentEquals(other.payload) &&
+            version == other.version
+    }
+
+    override fun hashCode(): Int {
+        var result = entity.hashCode()
+        result = 31 * result + entityID.hashCode()
+        result = 31 * result + operation.hashCode()
+        result = 31 * result + payload.contentHashCode()
+        result = 31 * result + (version?.hashCode() ?: 0)
+        return result
+    }
+
+    /** Deliberately omits [payload]: it is opaque here and can hold a whole work item. */
+    override fun toString(): String =
+        "RemoteChange(entity=$entity, entityID=$entityID, operation=$operation, " +
+            "version=$version, payloadSize=${payload.size})"
+}
+
+/** One page of a pull. */
+data class PullPage(
+    val changes: List<RemoteChange>,
+    /** Opaque resume token. Only the server knows how to order its log, so the engine
+     * stores and returns it without interpreting it. */
+    val nextCursor: String?,
+    val hasMore: Boolean,
+) {
+    companion object {
+        val empty: PullPage = PullPage(changes = emptyList(), nextCursor = null, hasMore = false)
+    }
+}
+
+/**
+ * Talks to the server on the engine's behalf.
+ *
+ * An interface rather than a concrete HTTP client, so the engine's logic — ordering, retry
+ * classification, cursor handling, crash recovery — is testable without a server. This is
+ * the same reasoning as `HttpClient` sitting in front of the transport in
+ * `:packages:network`.
+ */
+interface SyncTransport {
+    /**
+     * Applies queued changes **in the order given**.
+     *
+     * Order is a hard requirement, not a preference: the outbox deliberately claims
+     * oldest-first because the server applies a stream sequentially, and "update task 7"
+     * arriving before "create task 7" is rejected as an unknown id.
+     *
+     * @return one result per change, in any order. A change the server does not mention has
+     * an unknown fate and will be retried, never assumed to have landed.
+     */
+    suspend fun push(entries: List<OutboxEntry>): List<PushResult>
+
+    suspend fun pull(scope: SyncScope, cursor: String?, limit: Int): PullPage
+}
+
+/**
+ * Applies a server change to the local store.
+ *
+ * Implemented by whichever feature owns the entity, which is why this is an interface:
+ * `:packages:sync` routes opaque payloads to the feature that can decode them and never
+ * imports that feature itself.
+ */
+interface SyncApplySink {
+    /**
+     * Applies one change, server-wins. Must be idempotent, because a cursor can only be
+     * advanced after the page is applied, so an interrupted cycle re-delivers the same
+     * page on the next run.
+     */
+    suspend fun apply(change: RemoteChange)
+}
+
+/** A failure this module raises, as opposed to one the network layer raised. */
+sealed class SyncException(message: String) : Exception(message) {
+    /**
+     * A change arrived for an entity no sink claims. A wiring bug, not a data problem,
+     * and deliberately fatal for the scope it arrives on — see [SyncEngine.pull].
+     */
+    class NoSink(val entity: OutboxEntity) :
+        SyncException("No local store is registered to apply incoming ${entity.wireValue} changes.")
+}
