@@ -14,15 +14,15 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
 `:packages:routing`, `:packages:keychain`, `:packages:user-defaults`,
-`:packages:database`, `build-logic`. **Empty**: the other 11 Gradle modules (the nine
-feature modules, `:packages:network`, `:packages:sync`) plus most of `:androidApp` and
+`:packages:database`, `:packages:network`, `build-logic`. **Empty**: the other 10 Gradle
+modules (the nine feature modules and `:packages:sync`) plus most of `:androidApp` and
 `:iosApp`.
 
-**Progress: Phases 0-4 complete, `./gradlew check` green on all three targets.**
-Phases 5-15 outstanding. Test baseline **246 unique in commonTest** (database 60, core 42,
-domain 43, routing 49, di 19, keychain 12, user-defaults 12, design-system 6,
+**Progress: Phases 0-5 complete, `./gradlew check` green on all three targets.**
+Phases 6-15 outstanding. Test baseline **334 unique in commonTest** (network 88, database
+60, core 42, domain 43, routing 49, di 19, keychain 12, user-defaults 12, design-system 6,
 composition-root 3) plus **6 in `jvmTest`** (reflection and filesystem, which have no
-common equivalent): 252 on `jvmTest`, 246 on `iosSimulatorArm64Test`, and 186 on
+common equivalent): 340 on `jvmTest`, 334 on `iosSimulatorArm64Test`, and 274 on
 `testAndroidHostTest` — see the Phase 4 note on why the database's 60 do not run there.
 
 ## Decisions taken
@@ -485,36 +485,117 @@ committed.
 
 ## Phase 5 — `:packages:network` (Ktor 3.6.0)
 
-- [ ] **5.1** `HttpRequest.kt` — transport-agnostic value type: method, path, query,
-      headers, body, `requiresAuth`, `isIdempotent`, deadline. `Sendable` by
-      construction.
-- [ ] **5.2** `HttpResponseSummary.kt` — exposes `isUnauthorized` / `isForbidden`.
-- [ ] **5.3** `HttpClient.kt` — the interface, so feature Data depends on a
-      capability and not on Ktor.
-- [ ] **5.4** `KtorHttpClient.kt` — `ContentNegotiation` + a custom
-      `HttpResponseValidator` mapping status → `AppError` (transport, timeout, 401,
-      403, 5xx, decoding). `expect` engine factory with `Darwin`/`OkHttp` actuals.
-- [ ] **5.5** `RequestInterceptor.kt` — `adapt` / `retry` and `InterceptorDecision`.
-      `AuthSessionDelegate` is declared **by its consumer**, which is why `TokenVault`
-      conforms to it in `:packages:feature-auth-data` and `:packages:network` never
-      depends on auth.
-- [ ] **5.6** `AuthInterceptor.kt` — on **403** the session **terminates** (a fresh
-      token cannot help). On **401**, allow at most one refresh and one replay; if
-      the replay 401s again the session ends.
-- [ ] **5.7** `NetworkMonitor.kt` — `expect`/`actual` publishing `Connectivity`
-      (`satisfied`/`unsatisfied`/`requiresConnection`/`unknown`) as fresh streams.
-      Android: `ConnectivityManager.NetworkCallback`. iOS: `NWPathMonitor`. JVM:
-      always satisfied. `setOverride` must exist so the Settings "Force Offline"
-      switch is honest on a simulator.
-- [ ] **5.8** `RetryPolicy.kt` — exponential backoff with jitter, and
-      **method-aware**: a POST is never replayed on a transport error unless it
-      explicitly opts in via `isIdempotent`, because the server may already have
-      applied the change. Ktor's `HttpRequestRetry` retries POST in some
-      configurations, so this rule must be re-imposed explicitly.
-- [ ] **5.9** `commonTest` — 32 tests: status→`AppError` mapping, idempotent-POST
-      replay rules, retry/backoff, interceptor chain.
+- [x] **5.1** `HttpRequest.kt` — transport-agnostic value type: method, path, query,
+      headers, body, `requiresAuth`, `timeout`, `isIdempotent`. **Not a data class**,
+      because the generated `equals` compares a `ByteArray` body by identity: two
+      requests built separately from the same JSON would be unequal. Hand-written
+      `equals`/`hashCode`/`copy`, the same trap `:packages:database` hit with outbox
+      payloads. `toString` prints the body's *length* — a sign-in body is a POST, and this
+      value is logged on every retry.
+- [x] **5.2** `HttpResponseSummary.kt` — `isUnauthorized` / `isForbidden` /
+      `isServerError`, and `isSuccess` as **2xx exactly** (a 3xx is not a success and must
+      not reach a decoder expecting the final body).
+- [x] **5.3** `HttpClient.kt` — the interface, so feature Data depends on a capability and
+      not on Ktor. `KSerializer` is passed explicitly where the original relied on
+      `Encodable`/`Decodable` inference; the reified seams are `jsonBody` and `post`.
+- [x] **5.4** `KtorHttpClient.kt` — `expect` engine factory with `OkHttp` actuals for
+      JVM/Android and `Darwin` for iOS (Foundation's `URLSession`, so the iOS transport is
+      the original's unchanged). **No `HttpResponseValidator`**, contrary to the plan, and
+      the reason is the auth design: validation throws on a non-2xx, and `AuthInterceptor`
+      has to *see* the 401 to decide between "refresh once and replay" and "end the
+      session". `expectSuccess = false`, and validation happens in `validated()` after the
+      interceptor chain — which is also simply what `URLSession` did. Status→`AppError` and
+      exception→`AppError` both live in `HttpErrorMapping`, with the `{message|error}`
+      envelope and its 200-character cap. The `sleeper` is injected, so the retry tests
+      assert the *delays asked for* (400ms, 800ms) instead of stopping a stopwatch.
+- [x] **5.5** `RequestInterceptor.kt` — `adapt` / `retry` and `InterceptorDecision`.
+      `AuthSessionDelegate` is declared **by its consumer**, which is why `TokenVault` will
+      conform to it in `:packages:feature-auth-data` and `:packages:network` never depends
+      on auth. `adapt`/`retry` are interface methods with defaults rather than protocol
+      extensions with defaults, for the same reason `OutboxQueue.reject` is a default
+      method in Phase 4: **a Kotlin member shadows a same-signature extension**, so the
+      original's shape would have been silently dead code.
+- [x] **5.6** `AuthInterceptor.kt` — on **403** the session **terminates** (a fresh token
+      cannot help). On **401**, at most one refresh and one replay; a 401 *after* the
+      replay ends the session rather than burning a second refresh. The refresh's `catch`
+      rethrows `CancellationException` first — the original's bare `catch` covers that too
+      only because Swift has no cancellation, and catching it would sign the user out on
+      the way out of a cancelled screen.
+- [x] **5.7** `NetworkMonitor.kt` — the plan sketched an `expect class`; the seam is
+      instead `expect fun createConnectivityWatcher(host)` behind a two-method
+      `ConnectivityWatcher`, because path classification, de-duplication, the override and
+      the stream all belong in common code where they are testable, and each platform
+      contributes only what it alone can know. Android:
+      `registerDefaultNetworkCallback` + `NET_CAPABILITY_VALIDATED` (INTERNET alone is
+      exactly what a captive portal advertises), with `ACCESS_NETWORK_STATE` declared in
+      the *module's* manifest. iOS: `NWPathMonitor`, which is also the only path API that
+      distinguishes `satisfiable` from `unsatisfied`. JVM: always `Satisfied`, because
+      there is no portable way to ask a desktop JVM and guessing "offline" would park a
+      queue that could have drained. `MutableStateFlow`, **not** core's `Broadcaster`:
+      connectivity is a level, not a stream of events, so conflating is right and
+      replay-on-subscribe is what lets a screen opened while offline render immediately.
+      `setOverride` is what makes the Settings "Force Offline" switch honest on a
+      simulator. `Connectivity.isKnownUnusable` is separate from `allowsSync` so a cold
+      start (`Unknown`) does not fail fast and park every request.
+- [x] **5.8** `RetryPolicy.kt` — exponential backoff with full jitter in
+      `[exponential/2, exponential]`, and **method-aware**: a POST is never replayed on a
+      transport error unless it opts in via `isIdempotent`. `2^(attempt-1)` is computed in
+      integer arithmetic so a large `maxRetries` cannot overflow. The `Random` is injected
+      so the jitter band is asserted against a seed rather than by luck.
+- [x] **5.9** `commonTest` — **88 tests**, run on all three targets: the status table and
+      its fallbacks, envelope and non-JSON message extraction, the 200-character cap, the
+      idempotent-POST replay rules, exact backoff delays, the full 401/403/refresh matrix
+      including the concurrent three-calls-each-401 case, URL building (base path, per-
+      segment encoding, escaped query values), content-type handling, cancellation not
+      being reported as a network failure, and the monitor's override/dedupe/replay rules.
+      `ktor-client-mock` replaces `StubURLProtocol`, keeping the original's two load-
+      bearing decisions: scripts keyed by path (a flat FIFO makes the concurrent test
+      prove nothing) and a 500 for any call past the end of a script (so an accidental
+      replay loop fails instead of passing).
 
-**Exit criteria**: 181 tests green. Uses `ktor-client-mock` (already wired).
+### Phase 5 notes
+
+- **`.offline` is not guessed from a connection failure.** The original mapped
+  `URLError.notConnectedToInternet` to `.offline` and a DNS failure to `.transport`;
+  those are distinguishable on Darwin (`NSURLErrorNotConnectedToInternet` vs
+  `NSURLErrorCannotFindHost`) and *not* on OkHttp, which raises `UnknownHostException` for
+  both. A shared mapping must pick one, and both options lie: guess `Offline` and a user
+  with a DNS problem watches a banner that fixing their DNS will not clear; guess
+  `Transport` and the honest offline state is lost everywhere. So `.offline` is claimed
+  only where it is a **positive** statement — the monitor reporting an unusable path, which
+  the client turns into a fast local failure with no round trip — and a failed connection
+  stays `.transport`, which renders a "try again" affordance rather than a diagnosis.
+  Cost: on iOS, a DNS failure shows "try again" where the original would have shown the
+  offline banner. That is the wrong way round to be wrong.
+- **No `ContentNegotiation`, no Ktor `Logging`** — both would be a *second* place doing a
+  job `:packages:core` already owns: a second `Json` with its own leniency, one call away
+  from the strict one that makes `AppError.Decoding` reachable, and a second path to the
+  log that bypasses the redaction in `logMessage`. The two events that matter (replay
+  after refresh, session end) go through `TTLogger`.
+- **Architecture**: `:packages:network` depends on `:packages:core` only. The table said
+  `core` + `domain`; the module uses no domain type, and the graph check *enforces* every
+  declared edge, so the rule was widened to the truth rather than a dependency added to
+  satisfy it. A transport that starts naming domain types is deciding what a request
+  *means*, which is the repositories' job one layer up.
+- **Ktor 3.6 API notes, all found by the compiler**: `HttpRequestBuilder.method` is Ktor's
+  own `HttpMethod` enum, so this module's enum is spelled `io.ktor.http.HttpMethod.parse`;
+  the mock engine's byte overload is `respond(content = …)`, not `respondBytes`; and
+  `ContentType.parse` throws `BadContentTypeFormatException`, which extends `Exception`
+  and not `IllegalArgumentException` — the one Ktor type that breaks the convention, on
+  every platform.
+- **`Content-Type` rides on the body, not on a header.** Ktor renders
+  `OutgoingContent.contentType` into the request at send time, so a hand-set header is
+  either dropped or one of two values. `MockEngine` stops short of that step, so the
+  observable fact in a test is `request.body.contentType` — worth knowing before a test
+  "fails" on a header that a real engine would have written.
+- **Compile-verified only**: the Darwin and OkHttp engine factories, `NWPathMonitor`'s
+  cinterop, and `ConnectivityManager`'s callback. Tests inject `MockEngine` and a fake
+  watcher, so no test in this phase opens a socket. Same caveat as the keychain and
+  database actuals.
+
+**Exit criteria**: met — **88** (all common, all three targets; the plan's 32 was a
+guess). The 401/403 rules, the idempotency rule and the retry ladder are verified against
+a real Ktor client on the JVM and on an iOS simulator.
 
 ---
 

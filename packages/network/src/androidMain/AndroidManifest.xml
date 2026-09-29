@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ACCESS_NETWORK_STATE is declared here rather than only in androidApp.
+
+  ConnectivityManager.registerDefaultNetworkCallback throws SecurityException without it,
+  and a library that silently needs a permission its manifest does not mention fails at
+  runtime on a device it has never been run on. The app manifest declares it too — the
+  merger unions them, so the duplicate is not an error — but the requirement belongs to
+  the code that has it.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

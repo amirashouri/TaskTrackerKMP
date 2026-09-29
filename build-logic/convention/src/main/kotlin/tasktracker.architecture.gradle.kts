@@ -81,7 +81,14 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
     ":packages:di" to setOf(":packages:core"),
     ":packages:routing" to setOf(":packages:core", ":packages:domain"),
     ":packages:database" to setOf(":packages:core", ":packages:domain"),
-    ":packages:network" to setOf(":packages:core", ":packages:domain"),
+    // core only, and this is the table's one deliberately narrow entry after
+    // :packages:core itself. A transport is the bottom of the stack: it builds URLs and
+    // decodes bytes, and the moment it names a domain type it starts deciding what a
+    // request *means*, which is the repositories' job one layer up. The original's
+    // NetworkService depended on TaskTrackerCore alone; the rule now says so, rather than
+    // carrying an edge the module does not use and that a graph check would then enforce
+    // forever.
+    ":packages:network" to setOf(":packages:core"),
     ":packages:sync" to setOf(
         ":packages:core",
         ":packages:domain",
