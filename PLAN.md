@@ -13,12 +13,13 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
-`build-logic`. **Empty**: the other 16 modules plus most of `:iosApp`.
+`:packages:routing`, `build-logic`. **Empty**: the other 15 modules plus most of
+`:iosApp`.
 
-**Progress: Phases 0-1 complete, `./gradlew check` green on all three targets.**
-Phases 2-15 outstanding. Test baseline **113 unique** (core 42, domain 43, di 19,
-design-system 6, composition-root 3), each run on `jvmTest`, `testAndroidHostTest`
-and `iosSimulatorArm64Test` — 339 executions.
+**Progress: Phases 0-2 complete, `./gradlew check` green on all three targets.**
+Phases 3-15 outstanding. Test baseline **162 unique** (core 42, domain 43, routing 49,
+di 19, design-system 6, composition-root 3), each run on `jvmTest`,
+`testAndroidHostTest` and `iosSimulatorArm64Test` — 486 executions.
 
 ## Decisions taken
 
@@ -293,25 +294,46 @@ Port `Packages/RoutingService` (4 files, 717 lines). Note: `Router.swift` is
 already SwiftUI-free, so it ports directly with no UI dependency. `:shared-ui`
 renders it.
 
-- [ ] **2.1** `AppRoute.kt` — `RootDestination` (auth/main), `AppTab`
+- [x] **2.1** `Routes.kt` — `RootDestination` (auth/main), `AppTab`
       (projects/board/backlog/settings with `isProjectScoped`), `AppRoute` sealed
       hierarchy (board, backlog, archive, workItemEditor, settings), `DeepLinkScheme`.
-- [ ] **2.2** `DeepLinkParser.kt` — a **pure function** mapping `tasktracker://` to
+      Two accessors on `AppRoute`, deliberately not one: `projectIDOrNull` (every
+      project-scoped case, used by `currentProjectID`) and `selectsActiveProject`
+      (board/backlog/archive only). The editor is project-scoped but must **not**
+      become the active project — a deep link to an item in another project scopes the
+      screen without moving the tabs out from under the user. `AppTab` keeps `wireValue`
+      instead of `title`/`systemImage`, which belong in presentation.
+- [x] **2.2** `DeepLinkParser.kt` — a **pure function** mapping `tasktracker://` to
       a `ParsedLink` (tab, optional modal route, stack to install first). Grammar:
       `projects`, `settings`, `board/<id>`, `backlog/<id>`, `archive/<id>`,
       `workitem/<pid>/<iid>`, `workitem/<pid>/new`. Archive and work-item links land
       on the **Board** tab, so an archive always opens within a project tab.
-- [ ] **2.3** `Router.kt` — app-wide navigation state: `root`, `isRestoringSession`,
+      Takes a `String`: common Kotlin has no URL type, so the iOS shell passes
+      `URL.absoluteString` and Android `Intent.data.toString()`. The hand-rolled split
+      has to do what Foundation's `host` + `pathComponents` did for free — drop an
+      empty authority (`tasktracker:///board/x` parses like the two-slash form), strip
+      query and fragment, and percent-decode.
+- [x] **2.3** `Router.kt` — app-wide navigation state: `root`, `isRestoringSession`,
       `selectedTab`, four per-tab paths, `activeProjectID`. `openProject(id, in tab)`
       is the **only** way into a project-scoped tab, so tab bookkeeping and stack
       contents cannot drift. `restoreLastVisitedProject` takes a **tri-state
       `Boolean?`**: true restores, false drops a project deleted elsewhere, null
       (store read failed) keeps the id. Persists under `routing.lastVisitedProjectID`.
-- [ ] **2.4** `commonTest` — 30 tests: tab scoping, `openProject`, push/pop, deep-link
-      application, the tri-state restore.
+      All fields live in one immutable `RouterState` behind a single `StateFlow`, and
+      every transition goes through a `compareAndSet` loop: `push` moves the tab, the
+      stack and the active project at once, and a field-per-property port would let a
+      reader observe a tab switched to a board that had not been installed yet. `root`
+      has no setter at all, which is stronger than the original's `private(set)` +
+      comment — a same-module caller could still reach that one.
+- [x] **2.4** `commonTest` — 49 tests: the 30 from `RouterTests.swift` plus 19
+      covering the areas the hand-rolled URL split introduces (query/fragment,
+      percent-escapes, empty authority, case-folding), the two route accessors, and
+      `openProject` rejection on Settings.
 
-**Exit criteria**: 96 tests green. `enterAuth` keeps `activeProjectID` deliberately —
-it belongs to the device, not the session.
+**Exit criteria**: met — 162 unique tests green (was 113). `enterAuth` keeps
+`activeProjectID` deliberately: it belongs to the device, not the session. A redundant
+`enterMain` keeps navigation and only re-asserts that the session read landed, matching
+the original's early return.
 
 ---
 

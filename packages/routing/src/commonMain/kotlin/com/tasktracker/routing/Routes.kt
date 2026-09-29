@@ -1,0 +1,119 @@
+package com.tasktracker.routing
+
+import com.tasktracker.core.ProjectID
+import com.tasktracker.core.WorkItemID
+
+/**
+ * The top-level split. A session is in exactly one of these, and only the session
+ * layer is allowed to change it.
+ */
+enum class RootDestination {
+    Auth,
+    Main,
+}
+
+/**
+ * The signed-in shell's tabs.
+ *
+ * Board and Backlog are top-level tabs, not pushes off the Projects stack, because
+ * they are the two surfaces a user switches between dozens of times a day; burying
+ * one of them under two taps per switch is the navigation mistake this shape exists
+ * to fix. Both show the *active* project — the last one the user opened — so a single
+ * tap lands on the same board they left, from anywhere in the app.
+ *
+ * [wireValue] rather than the original's `rawValue`: a Swift enum's raw value was
+ * never load-bearing, but here the string is the thing presentation will switch on to
+ * look up a label, and naming it makes that role explicit. The original also carried
+ * `title` and `systemImage`, which this omits on purpose — see [AppRoute]'s note.
+ */
+enum class AppTab(val wireValue: String) {
+    Projects("projects"),
+    Board("board"),
+    Backlog("backlog"),
+    Settings("settings"),
+    ;
+
+    /**
+     * The tabs that show one project's view, driven by the router's active project.
+     *
+     * Kept as a `when` over the enum rather than a `Set<AppTab>` member: adding a tab
+     * then leaves a compile error here instead of silently defaulting to false in a
+     * property initialiser that no test would catch.
+     */
+    val isProjectScoped: Boolean
+        get() = when (this) {
+            Board, Backlog -> true
+            Projects, Settings -> false
+        }
+
+    companion object {
+        fun fromWireValue(value: String): AppTab? = entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+/**
+ * A destination inside the signed-in area.
+ *
+ * Sealed so presentation can `when` over it exhaustively — a new destination becomes
+ * a compile error at every screen that switches on it, which is the check the
+ * original got from Swift's compiler. Presentation will also need a label for each
+ * case; the original had `systemImage` here, but it belongs in presentation beside
+ * the other resources, not in a module that may not depend on the design system.
+ */
+sealed interface AppRoute {
+    data class Board(val projectID: ProjectID) : AppRoute
+
+    data class Backlog(val projectID: ProjectID) : AppRoute
+
+    /** The month-grouped history of a project's finished and closed work. */
+    data class Archive(val projectID: ProjectID) : AppRoute
+
+    data class WorkItemEditor(val projectID: ProjectID, val workItemID: WorkItemID?) : AppRoute
+
+    data object Settings : AppRoute
+}
+
+/** The project a route is scoped to, or null for [AppRoute.Settings]. */
+val AppRoute.projectIDOrNull: ProjectID?
+    get() = when (this) {
+        is AppRoute.Board -> projectID
+        is AppRoute.Backlog -> projectID
+        is AppRoute.Archive -> projectID
+        is AppRoute.WorkItemEditor -> projectID
+        AppRoute.Settings -> null
+    }
+
+/**
+ * The project this route makes *current*, or null if opening it changes nothing.
+ *
+ * Deliberately narrower than [projectIDOrNull], and the difference is load-bearing:
+ * [WorkItemEditor] is project-scoped but must not become the active project. Opening
+ * the editor for a project the user has not entered — a deep link to an item in
+ * another project, or a search result the Projects list opened — scopes the screen
+ * without switching which project's board the tabs show. Collapsing the two into one
+ * accessor is the easy mistake, and it would silently move the Board and Backlog tabs
+ * out from under the user.
+ */
+val AppRoute.selectsActiveProject: ProjectID?
+    get() = when (this) {
+        is AppRoute.Board -> projectID
+        is AppRoute.Backlog -> projectID
+        is AppRoute.Archive -> projectID
+        is AppRoute.WorkItemEditor, AppRoute.Settings -> null
+    }
+
+/**
+ * A parsed deep link, before the router decides whether the session permits applying it.
+ */
+data class ParsedLink(
+    val tab: AppTab,
+    /** Destination to present modally (a sheet), or `null` for a plain push. */
+    val route: AppRoute?,
+    /** The navigation stack to install before presenting [route]. */
+    val path: List<AppRoute>,
+)
+
+/** Custom URL scheme registered in the iOS `Info.plist` and the Android manifest. */
+object DeepLinkScheme {
+    const val TASK_TRACKER: String = "tasktracker"
+}
