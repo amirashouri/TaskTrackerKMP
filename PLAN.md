@@ -1,0 +1,834 @@
+# TaskTrackerKMP — Port Plan
+
+Resumable task list for porting `/Users/amirreza/Desktop/SampleProjects/TaskTracker`
+(SwiftUI/SwiftData, 165 files, 13 SwiftPM packages, 395 unit + 10 UI tests) to
+Kotlin Multiplatform.
+
+**Every task below is a checkbox. Tick it when it is done. Start any session by
+finding the first unticked box.**
+
+## Where things stand
+
+Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen.
+
+Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
+`:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
+`build-logic`. **Empty**: the other 16 modules plus most of `:iosApp`.
+
+**Progress: Phases 0-1 complete, `./gradlew check` green on all three targets.**
+Phases 2-15 outstanding. Test baseline **113 unique** (core 42, domain 43, di 19,
+design-system 6, composition-root 3), each run on `jvmTest`, `testAndroidHostTest`
+and `iosSimulatorArm64Test` — 339 executions.
+
+## Decisions taken
+
+- **Navigation** — hand-rolled `Router` ported verbatim as pure state in
+  `:packages:routing` (a `library` module with no Compose dependency, so it cannot
+  hold composables). `:shared-ui` owns a Compose navigation host that reads it. No
+  third-party nav library. Mirrors `AGENTS.md:575-596` in the original.
+- **Strings** — extracted to `composeResources/values/strings.xml` in
+  `:packages:design-system`. It is the only module allowed to configure
+  `compose.resources` (two modules doing it collide at dex merge). The original
+  has **zero** localization; this is a deliberate fix of that gap.
+- **iOS shell** — XcodeGen-generated `iosApp/project.yml`, iOS 26, `tasktracker://`
+  scheme, mirroring the original's `project.yml`. Built late so Android gives fast
+  feedback.
+- **Backend** — none. `MockAuthRemote` is ported and a `MockSyncTransport` is
+  written alongside it, so the full push/pull cycle is exercisable offline.
+- **Tests** — all 395 ported alongside their module, not deferred.
+
+## Non-negotiable invariants (from the original's design)
+
+These are the four sync invariants, the transaction atomicity, and the ordering
+rules. Each has already caused a real bug when broken in the original.
+
+1. **One transaction writes both** the record and its outbox row. A two-step
+   version leaves a hole where a crash strands an edit with nothing queued.
+2. **Pulls never enqueue.** A `SyncApplySink` that queued what it applied would
+   make every pull generate a push, forever.
+3. **Push is ordered and oldest-first**, and a retryable verdict *stops the push
+   loop* for the cycle. Claiming past it would break the ordering the queue exists
+   for.
+4. **Status history is local-only** and never enqueued.
+5. **Verdicts are matched by entry id, never by position.** An unmentioned change
+   is treated as retry, never accepted. A repeated id invalidates that change's
+   verdict entirely.
+6. **Session-ended mid-push releases, never fails.** One sign-out must not push a
+   user's unsaved work over the dead-letter limit.
+7. **`resolvedAt != null` exactly when `isTerminal`**, enforced on the *read* path
+   as well as the write path.
+
+## Rules that apply to every task
+
+- `:packages:design-system` is the **only** module that configures `compose.resources`.
+- One composable per file; file named after the composable. A `private` sub-composable
+  in the file that renders it is the only exception.
+- No `Material3`. The original is not a Material app.
+- Every file opens with a multi-paragraph KDoc explaining *why* and naming the
+  rejected alternative. This is the established convention in the four files that
+  already exist.
+- Test names are backtick full sentences. **No commas in test names** — Kotlin/Native
+  rejects them.
+- `verifyArchitectureGraph` uses **exact-set** matching: a new declared dependency
+  without a matching edit to `allowedLibraryTable` in
+  `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` fails
+  the build. Missing dependencies are violations too.
+- Never write an unbounded `for (x in flow)`. The original records an intermittent
+  SIGSEGV at teardown from exactly this.
+- Every `expect` needs a `jvm` actual, because the convention plugin adds a `jvm()`
+  host target and runs `commonTest` there.
+
+## How to build
+
+```bash
+# This machine has no system JDK. The project needs 25, which Android Studio bundles.
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+
+./gradlew check                        # 3 targets + both architecture guards
+./gradlew verifyArchitectureGraph      # 22 modules, all edges allowed
+./gradlew verifyModuleImports          # 22 modules, one task each
+```
+
+Current test baseline: **37** (`:packages:core` 9, `:packages:di` 19,
+`:packages:design-system` 6, `:composition-root` 3), each run on `jvmTest`,
+`testAndroidHostTest` and `iosSimulatorArm64Test` — 111 executions. Update this
+number in the same change as any test addition.
+
+### Kotlin/Native constraints hit while writing tests
+
+- **`.` and `,` are illegal inside backtick test names.** Kotlin/Native rejects them.
+  `"clears 4.5 to 1 against white"` does not compile; write
+  `"clears the text contrast bar against white"`.
+- **`String.format` is JVM-only.** It is not in `commonTest` scope and does not compile
+  for Kotlin/Native. Format numbers by hand.
+- Truncating a `Color` channel with `.toInt()` yields 0 for anything under 1.0, because
+  the channel is a 0-1 `Float`. Scale by 255 first.
+
+---
+
+## Phase 0 — Build foundation
+
+- [x] **0.1** Apply `org.jetbrains.kotlin.plugin.serialization` in
+      `build-logic/convention/src/main/kotlin/tasktracker.kmp.library.gradle.kts`.
+      Now also required in `gradle/libs.versions.toml` as
+      `kotlin-serialization-gradlePlugin` and on the convention's compile classpath.
+- [x] **0.2** Add `kspJvm` to `tasktracker.kmp.room.gradle.kts`.
+- [x] **0.3** Add `ktor-client-darwin` (iosMain) and `ktor-client-okhttp`
+      (androidMain + jvmMain) to `packages/network/build.gradle.kts`. Uses
+      `add("iosMainImplementation", ...)` because a platform source set with no
+      directory yet gets no generated accessor.
+- [x] **0.4** Created
+      `packages/design-system/src/commonMain/composeResources/values/strings.xml` with
+      the status / priority / tab / connectivity / sync / error vocabulary, extracted
+      from the original's literals. Screen-level strings are added in Phases 11-13.
+- [x] **0.5** Added `Accent.kt` with `ttAccent()` and `TaskTrackerAccent.Light` /
+      `.Dark`, taking the values from the original's `AccentColor.colorset`
+      (`#34537A` light, `#5F6873` dark).
+- [x] **0.6** `AccentContrastTest` — 6 tests, asserting the token values directly
+      instead of reading a colorset off disk. **Contrast is measured per appearance**:
+      each accent is checked against the canvas it actually appears on. Checking the
+      light accent against a dark canvas is not stricter, it measures a combination
+      that cannot occur, and it fails a correct colour.
+- [x] **0.7** Added `.gitignore`. The generated `iosApp/TaskTracker.xcodeproj` is
+      ignored, as `project.yml` is the source of truth.
+- [x] **0.8** `iosApp/project.yml`, `Info.plist`, `Assets.xcassets`, and the
+      `AppUITestCase` base. `xcodegen generate` verified.
+- [x] **0.9** *(not originally planned — found during 0.3)* **Call
+      `applyDefaultHierarchyTemplate()` in `tasktracker.kmp.library`.** This was a real
+      bug: without it the plugin registers only per-target source sets
+      (`iosArm64Main`, `iosSimulatorArm64Main`), so **no `iosMain` existed at all** and
+      `packages/design-system/src/iosMain/.../Colors.ios.kt` had never been compiled by
+      anything. The module built clean for iOS with no implementation of its `expect`
+      colour declarations. Now fixed, and the iOS target compiles and tests.
+
+**Exit criteria**: `./gradlew check` green; `ttAccent` resolvable on all four targets;
+`Res.string.*` compiles; `xcodegen generate` succeeds. **All met — 37 tests green.**
+
+
+---
+
+## Phase 1 — `:packages:core` + `:packages:domain`
+
+Pure Kotlin, no platform dependencies, everything else depends on them. Port
+`Packages/TaskTrackerCore` (10 files, 813 lines) and
+`Packages/TaskTrackerDomain` (7 files, 1,065 lines).
+
+### `:packages:core` — `com.tasktracker.core`
+
+- [x] **1.1** `AppError.kt` — 12 cases, as a `sealed class` **extending
+      `Exception`**, not a returned value. The original throws; a value would change
+      every signature and, worse, the failure mode — a thrown error is caught once at
+      the boundary, a returned one must be checked by every caller. Detail-carrying
+      cases name their property `detail`, not `message`, because `Throwable.message`
+      is the *visible* text and a shadowing property would make
+      `Server(500, "boom").message` return the fragment while the banner showed
+      "Server error (500). boom". `isRetryable` / `requiresSignOut` /
+      `isConnectivityFailure` are total `when`s with no `else`, so adding a case
+      without classifying it is a compile error. `logText` is the compact form for
+      logs, kept separate from the user-facing text.
+- [x] **1.1a** Error text lives in `AppError`, **not** in `strings.xml`. `:packages:
+      core` is allowed no project dependencies at all, so it cannot read `Res`;
+      routing these through `:packages:design-system` would invert the layering to
+      serve a string, and duplicating them would create a second source of truth
+      that no module can consume. The `error_*` strings were deleted from
+      `strings.xml` and a comment left in their place explaining why.
+- [x] **1.2** `Identifiers.kt` — `@JvmInline value class` over `kotlin.uuid.Uuid`
+      (needs `@file:OptIn(ExperimentalUuidApi::class)`, and an explicit
+      `import kotlin.jvm.JvmInline` — it is only auto-imported on JVM, so without it
+      the **Kotlin/Native** compile fails while JVM succeeds). Transparent
+      serialization gives a bare JSON string, which is what the server expects.
+      `parse*ID` returns `null` rather than throwing: IDs arrive from deep links and
+      clipboard pastes, which are untrusted, and a `Result` around a non-`AppError`
+      throwable would leak past the data layer's contract.
+- [x] **1.3** `Broadcaster.kt` — replaces `AsyncBroadcaster`. A `Channel` per
+      subscriber, exactly the original's continuation dictionary. **Not**
+      `MutableSharedFlow`: it has no `complete()`, so [finish] is inexpressible and a
+      view subscribing after a sign-out would wait forever on a stream that can only
+      be silent. Two bugs found and fixed while porting, both of which the KDoc had
+      claimed were already handled:
+      - the unregister sat *after* the collect, so a cancelled collector leaked a
+        queue that nothing drains — now in a `finally`;
+      - a subscriber registering *after* `finish()` got a live channel that nothing
+        would ever close — now gated on a `finished` flag and returns an empty flow.
+      Uses `flow { }` + `consumeAsFlow`, not `callbackFlow`, which requires the block
+      to end in `awaitClose` and so throws on the normal completion path.
+- [x] **1.4** `DateCoding.kt` — ISO-8601 UTC at **whole-second** resolution, on
+      `kotlin.time.Instant`. **Not** `kotlinx.datetime.Instant`: in kotlinx-datetime
+      0.7+ it is a deprecated typealias for `kotlin.time.Instant`, so importing it
+      would put a deprecation warning in every downstream module. Whole-second
+      truncation is `Instant.fromEpochSeconds(epochSeconds)`, not `truncatedTo` —
+      which takes a `DateTimeUnit` while `kotlin.time.seconds` is a `Duration`.
+      `kotlinx-datetime` was dropped from this module as a result; nothing needs it.
+- [x] **1.4a** `JSONCoding.kt` — the `Json` instances, plus `InstantWireSerializer`.
+      Every `Instant` property in a DTO must carry
+      `@Serializable(with = InstantWireSerializer::class)`: kotlinx ships a built-in
+      `Instant` serializer that emits fractional seconds, and it is picked
+      **silently**, so a forgotten annotation produces a build that succeeds and a
+      wire format that quietly differs from the server's. There is no way to make it
+      the project default — a `SerializersModule` entry only applies to `@Contextual`.
+      `ignoreUnknownKeys` is **off**: a field renamed on the server has to fail at
+      the boundary as `AppError.Decoding`, not decode as `null` on every device.
+- [x] **1.5** `JWT.kt` — claims-only inspection, **no signature verification**; the
+      client only needs `exp` to know when to refresh a token it did not mint.
+      `Base64.decode` requires padding by default *and* rejects the URL-safe
+      alphabet, so `decodeBase64URL` translates and restores padding arithmetically
+      rather than switching to a globally-lenient config, which would also stop it
+      rejecting a genuinely truncated payload. A fractional `exp` is rejected rather
+      than truncated.
+- [x] **1.6** `Log.kt` — replaces `TTLogger`'s `OSLogPrivacy` mirror with an
+      explicit `logMessage { }` builder. Kotlin has no cross-platform
+      `ExpressionByStringInterpolation`, and the alternative — a string template that
+      cannot be redacted — makes "remember not to log the token" the only safeguard.
+      Redaction happens before any sink sees the text, and `sink` is `internal` so
+      nothing can hand a raw template to a platform logger and bypass it.
+- [x] **1.7** `DateProvider.kt` — injectable wall clock so JWT expiry is testable
+      without sleeping. `TestDateProvider` ships in `main`, not `test`, because the
+      sync engine's suite lives in a different module from the clock it drives.
+- [x] **1.8** `commonTest` — **42 tests** (was 9): date round-trips and lenient
+      parsing, broadcaster fan-out/ordering/finish/cancellation, `AppError`
+      classification and the visible-vs-log shape split, JWT claims and base64url,
+      identifier wire format, coders' strictness.
+
+### `:packages:domain` — `com.tasktracker.domain`
+
+- [x] **1.9** `Entities.kt` — `WorkItemStatus` with three deliberately distinct
+      predicates: `appearsOnBoard` (todo/inProgress/inReview/**done**), `isTerminal`
+      (done + closed), `isComplete` (**done only**). `Priority` orders by declaration
+      so `compareTo` and `sortedBy` are plain ascending iteration. `Project` carries
+      `keyPrefix` and `nextItemNumber`, floored at 1 in an `init` — which is why that
+      one property is a `var`, since a `val` cannot be normalised there. `WorkItem`
+      carries `key`, `rank`, `resolvedAt` and `reconcileResolutionAt()`.
+      `WorkItemOrderingKey` is the single definition of item order, shared with the
+      persistence layer.
+- [x] **1.9a** **`title` and `systemImage` are deliberately gone from the status
+      enum.** `:packages:domain` may only see `:packages:core`, so it cannot read
+      `composeResources`; putting English labels in the business rules makes the app
+      untranslatable and is the failure this port is supposed to avoid. The domain
+      exposes `wireValue` instead — one stable string used as the JSON name, the Room
+      column value and the deep-link segment — and presentation maps it with an
+      **exhaustive** `when`, so a new status breaks every renderer at compile time
+      instead of rendering blank. The mapping lands in
+      `:packages:feature-projects-presentation` (Phase 12) with the rest of the strings.
+- [x] **1.10** `ProjectRules.kt` — name ≤120, details ≤4000, key prefix 2-10
+      uppercased alphanumerics. `WorkItemRules`: title ≤255, details ≤8000, assignee
+      ≤120, blank assignee → null. **Every rule returns the normalised value**, and
+      every length guard uses the existing `graphemeClusterCount`. `canTransition`
+      permits all transitions including out of `done`. `WorkItemGrouping` derives
+      board/backlog/archive membership as three separate pure functions. The ASCII
+      guard in `normaliseKeyPrefix` is an explicit code-point range, not
+      `Char.isAscii()` — the latter is stdlib-experimental and would cost this file
+      an opt-in for one comparison. `BoardColumn` replaces the original's tuple so the
+      column carries a name.
+- [x] **1.11** `AuthRules.kt` — email ≤254, password ≤256, display name ≤120. Each
+      returns the normalised value so `"  Ada@Example.com  "` cannot become a second
+      account. Passwords are still **not** trimmed: a registration policy leaking into
+      sign-in is how you tell a returning user their password is too short.
+- [x] **1.12** `StatusChange` lives in `Entities.kt` alongside the other entities,
+      not in its own file — it is a value type with no behaviour of its own, and a
+      one-declaration file per type is noise at this size. Immutable, `from == null`
+      means creation, never edited, local-only by design.
+- [x] **1.13** `commonTest` — **43 tests**: every normalisation and limit boundary,
+      key-prefix casing *and* non-ASCII rejection, the transition matrix, the four
+      ordering keys, board/backlog/archive disjointness, the resolution invariant in
+      both directions, and a serialisation round trip.
+- [x] **1.14** `packages/domain/build.gradle.kts` declares
+      `libs.kotlinx.serialization.json` itself. It is **not** inherited from
+      `:packages:core`: a KMP `commonMainImplementation` dependency is not `api`, so
+      core's own dependency is not on this module's compile classpath, and `@Serializable`
+      on a domain entity does not resolve without it.
+
+**Exit criteria**: met. **85 tests** in core + domain (42 + 43, against a planned 66),
+`graphemeClusterCount` is the length primitive everywhere, and `./gradlew check` is
+green on `jvmTest`, `testAndroidHostTest` and `iosSimulatorArm64Test` with both
+architecture guards passing.
+
+**Do not port**: `StreamObservation.swift`. It exists solely because a
+`@MainActor deinit` is `nonisolated`. `ViewModel.onCleared()` is a real hook.
+
+---
+
+## Phase 2 — `:packages:routing`
+
+Port `Packages/RoutingService` (4 files, 717 lines). Note: `Router.swift` is
+already SwiftUI-free, so it ports directly with no UI dependency. `:shared-ui`
+renders it.
+
+- [ ] **2.1** `AppRoute.kt` — `RootDestination` (auth/main), `AppTab`
+      (projects/board/backlog/settings with `isProjectScoped`), `AppRoute` sealed
+      hierarchy (board, backlog, archive, workItemEditor, settings), `DeepLinkScheme`.
+- [ ] **2.2** `DeepLinkParser.kt` — a **pure function** mapping `tasktracker://` to
+      a `ParsedLink` (tab, optional modal route, stack to install first). Grammar:
+      `projects`, `settings`, `board/<id>`, `backlog/<id>`, `archive/<id>`,
+      `workitem/<pid>/<iid>`, `workitem/<pid>/new`. Archive and work-item links land
+      on the **Board** tab, so an archive always opens within a project tab.
+- [ ] **2.3** `Router.kt` — app-wide navigation state: `root`, `isRestoringSession`,
+      `selectedTab`, four per-tab paths, `activeProjectID`. `openProject(id, in tab)`
+      is the **only** way into a project-scoped tab, so tab bookkeeping and stack
+      contents cannot drift. `restoreLastVisitedProject` takes a **tri-state
+      `Boolean?`**: true restores, false drops a project deleted elsewhere, null
+      (store read failed) keeps the id. Persists under `routing.lastVisitedProjectID`.
+- [ ] **2.4** `commonTest` — 30 tests: tab scoping, `openProject`, push/pop, deep-link
+      application, the tri-state restore.
+
+**Exit criteria**: 96 tests green. `enterAuth` keeps `activeProjectID` deliberately —
+it belongs to the device, not the session.
+
+---
+
+## Phase 3 — Keychain + UserDefaults
+
+### `:packages:keychain`
+
+- [ ] **3.1** `KeychainAccess.kt` — `expect` interface. Every operation suspends so
+      the production implementation stays the single serialisation point.
+- [ ] **3.2** Actuals: `iosMain` (Security framework, generic-password items scoped
+      to a service name), `androidMain` (Android Keystore),
+      `jvmMain` (in-memory — this is a test-only host target).
+- [ ] **3.3** `KeychainStore.kt` — `KeychainKey` enum plus a typed store with
+      `Codable` get/set and `removeAll`.
+- [ ] **3.4** `InMemoryKeychain.kt` — test/preview stand-in that also supports
+      **fault injection**, because the interesting auth paths are the ones where the
+      keychain fails.
+- [ ] **3.5** `commonTest` — 6 tests: round-trips, removal, fault injection.
+
+### `:packages:user-defaults`
+
+- [ ] **3.6** `DefaultsKey.kt` — `lastSeenProject`, `boardShowsBacklog`,
+      `hasSeenSyncHint`, `networkSimulation`, `cachedProfile`, with
+      `com.tasktracker.` namespacing. `cachedProfile` is explicitly non-sensitive.
+- [ ] **3.7** `UserDefaultsStore.kt` + 4 actuals (NSUserDefaults /
+      SharedPreferences / JVM Properties). Typed get/set/remove/removeAll.
+- [ ] **3.8** `commonTest` — 4 tests: namespacing, `Codable` round-trips, `hasValue`.
+
+**Exit criteria**: 106 tests green.
+
+---
+
+## Phase 4 — `:packages:database` (Room KMP)
+
+The largest single chunk. Room 2.8.4 + `sqlite-bundled` + KSP, per
+`tasktracker.kmp.room`. `schemaDirectory` points at `$projectDir/schemas`, which
+**does not exist** — create it so a migration diff shows in review.
+
+- [ ] **4.1** `schemas/` directory + first Room entities: `OutboxRecord`,
+      `SyncMetadataRecord`, session cache. Room entities are declared here; the
+      feature's own records are registered by the feature's data module, preserving
+      the original's one-way dependency.
+- [ ] **4.2** `OutboxRecord` — `OutboxOperation` (upsert/delete),
+      `OutboxEntity` (project/workItem), `OutboxStatus` (pending/inFlight/failed/dead),
+      plus `id`, `entityKind`, `entityID`, `operation`, `payload`, **`userID`**,
+      `createdAt`, `status`, `attemptCount`, `lastAttemptAt`, `lastError`. Note the
+      original's warning: a property literally named `entity` compiles and then
+      corrupts the store.
+- [ ] **4.3** `inTransaction { }` — mutate, commit once, **roll back on any throw**.
+      This is strictly better than `ModelContext.rollback()`: it is a real
+      `ROLLBACK`.
+- [ ] **4.4** `OutboxQueue.kt` — `claim(limit, maxAttempts, userID)` oldest-first,
+      then `complete` / `fail` / `reject` / `release` / `recoverStrandedEntries` /
+      `entries` / `count(where:)` / `removeAll`. `release` and `fail` are different
+      operations and the difference is load-bearing.
+- [ ] **4.5** `SyncMetadataStore.kt` — **one row per scope string** (`"projects"`,
+      `"workItems:<projectID>"`) so a partial sync of one project does not advance
+      the whole app's position. Plus `SessionCache` for the current user id, which
+      is stamped on outbox rows and on status changes.
+- [ ] **4.6** Preserve the original's hard-won warning: an in-memory store **must**
+      use the in-memory builder. Pointing a file-backed store at a null device
+      creates real SQLite sidecars and crashes a test runner with SIGSEGV.
+- [ ] **4.7** `commonTest` — 43 tests: claim ordering, attempt accounting,
+      dead-lettering at `maxAttempts`, stranded recovery, user-scoped claiming,
+      release-vs-fail semantics, per-scope cursor independence, transaction rollback
+      leaving neither an entity nor an outbox row.
+
+**Exit criteria**: 149 tests green. `packages/database/schemas/` committed.
+
+---
+
+## Phase 5 — `:packages:network` (Ktor 3.6.0)
+
+- [ ] **5.1** `HttpRequest.kt` — transport-agnostic value type: method, path, query,
+      headers, body, `requiresAuth`, `isIdempotent`, deadline. `Sendable` by
+      construction.
+- [ ] **5.2** `HttpResponseSummary.kt` — exposes `isUnauthorized` / `isForbidden`.
+- [ ] **5.3** `HttpClient.kt` — the interface, so feature Data depends on a
+      capability and not on Ktor.
+- [ ] **5.4** `KtorHttpClient.kt` — `ContentNegotiation` + a custom
+      `HttpResponseValidator` mapping status → `AppError` (transport, timeout, 401,
+      403, 5xx, decoding). `expect` engine factory with `Darwin`/`OkHttp` actuals.
+- [ ] **5.5** `RequestInterceptor.kt` — `adapt` / `retry` and `InterceptorDecision`.
+      `AuthSessionDelegate` is declared **by its consumer**, which is why `TokenVault`
+      conforms to it in `:packages:feature-auth-data` and `:packages:network` never
+      depends on auth.
+- [ ] **5.6** `AuthInterceptor.kt` — on **403** the session **terminates** (a fresh
+      token cannot help). On **401**, allow at most one refresh and one replay; if
+      the replay 401s again the session ends.
+- [ ] **5.7** `NetworkMonitor.kt` — `expect`/`actual` publishing `Connectivity`
+      (`satisfied`/`unsatisfied`/`requiresConnection`/`unknown`) as fresh streams.
+      Android: `ConnectivityManager.NetworkCallback`. iOS: `NWPathMonitor`. JVM:
+      always satisfied. `setOverride` must exist so the Settings "Force Offline"
+      switch is honest on a simulator.
+- [ ] **5.8** `RetryPolicy.kt` — exponential backoff with jitter, and
+      **method-aware**: a POST is never replayed on a transport error unless it
+      explicitly opts in via `isIdempotent`, because the server may already have
+      applied the change. Ktor's `HttpRequestRetry` retries POST in some
+      configurations, so this rule must be re-imposed explicitly.
+- [ ] **5.9** `commonTest` — 32 tests: status→`AppError` mapping, idempotent-POST
+      replay rules, retry/backoff, interceptor chain.
+
+**Exit criteria**: 181 tests green. Uses `ktor-client-mock` (already wired).
+
+---
+
+## Phase 6 — `:packages:sync`
+
+- [ ] **6.1** `SyncScope.kt` — a scope is **not** an entity type: a workItems change
+      may reference a project. Plus `SyncTrigger` (appLaunch/foreground/localWrite/
+      periodic/manual/connectivityRestored) and `SyncPhase`.
+- [ ] **6.2** `SyncStatus.kt` — `SyncReport` (pushed, accepted, conflicts, rejected,
+      retrying, applied, queueDepth, deadLetterCount, failures, requiresSignOut,
+      `isSuccess`/`isDeferred`) and `SyncStatus`. **Dead-lettering is not a failure.**
+- [ ] **6.3** `SyncConfiguration.kt` — pushBatchSize 50, maxPushBatchesPerCycle 10,
+      maxAttempts 5, pullPageSize 100, maxPullPagesPerScope 10, plus `SyncSchedule`
+      (60s interval). Every bound exists so a month-long backlog trickles out
+      instead of running until the app is killed.
+- [ ] **6.4** `SyncTransport.kt` — `PushOutcome` (`.accepted` / `.conflict` /
+      `.rejected` / `.retryLater`; **conflict is a success for the queue**),
+      `PushResult` (carries `entryID` so ordering cannot be assumed),
+      `RemoteChange`, `PullPage`, `SyncTransport` (push **in the order given**),
+      `SyncApplySink` (idempotent, server-wins).
+- [ ] **6.5** `SyncEngine.kt` — the core. Fixed order: **recover stranded → push
+      oldest-first in order → pull each scope from its cursor → finalise**. Push-first
+      because the pull only reflects what the server has. Serialised by a `Mutex`
+      (two concurrent cycles would double-push). A retryable failure **stops the push
+      loop** for the cycle. Entries claimed but already attempted this cycle are
+      `fail`ed rather than released — the claim charged an attempt, or they strand
+      invisible until next launch. Verdicts matched **by entry id, never position**.
+      An unmentioned change is retry, never accepted. A repeated id invalidates that
+      change's verdict entirely. Session-ended mid-push **releases**. Never throws —
+      returns a `SyncReport`.
+- [ ] **6.6** `HttpSyncTransport.kt` — all paths `/v1`-prefixed and defined in one
+      place: `POST /v1/sync/push`, `GET /v1/sync/changes/{scope}`.
+- [ ] **6.7** `MockSyncTransport.kt` — **new**, no counterpart in the original,
+      because there is no backend. Backs the whole cycle offline.
+- [ ] **6.8** `SyncCoordinator.kt` — decides **when** to sync and enforces
+      single-flight across the timer, app lifecycle and the connectivity monitor.
+      `synchronize(trigger)` returns null for both "already running" and "offline".
+      `stop()` is called by teardown.
+- [ ] **6.9** `commonTest` — 41 tests: recover/push/pull order, oldest-first claiming,
+      stop-on-retryable, per-cycle attempt dedup, id-matched verdicts,
+      conflict-is-success, duplicate verdict invalidation, session-ended release,
+      per-scope cursor advance, retry-whole-page, single-flight, transport paths.
+
+**Exit criteria**: 222 tests green.
+
+---
+
+## Phase 7 — `:packages:feature-projects-domain`
+
+- [ ] **7.1** `ProjectRepositoryPort.kt` — the port presentation depends on. Every
+      value crossing it is immutable. **Every write returns the value it produced.**
+      `ProjectChange` is a **typed, scoped** invalidation event (`.projects` /
+      `.workItems` + optional `ProjectID`), not `Unit`, so a view model re-reads only
+      when it cares. `statusChanges` returns newest-first. `seedSampleDataIfNeeded` is
+      idempotent and writes through the normal outbox path.
+- [ ] **7.2** `ProjectUseCases.kt` — six use cases, each owning a decision the data
+      layer cannot:
+      - `CreateProject`
+      - `UpdateProject` — deliberately **cannot** change `keyPrefix` (that would
+        orphan every issued key). A no-op edit reads instead of writing so
+        `updatedAt` does not bump.
+      - `CreateWorkItem`
+      - `MoveWorkItem` — reads the current status first, so a stale screen gets
+        "no longer exists" rather than a bare failure.
+      - `SaveWorkItem` — one use case for create-or-update, because a status change
+        is **also** a re-rank. The port's update takes no status, which is exactly
+        what makes the move easy to forget.
+      - `RemoveProject` — deletes only when nothing `isComplete`; otherwise
+        **archives**, so a project's record of closed decisions survives.
+- [ ] **7.3** `Projections.kt` — `BoardProjection` (one column per board status, in
+      `boardOrder`), `BacklogProjection` (flat, only `.backlog`, so it can never
+      re-list a board card), `ArchiveProjection` (months keyed by month start, with an
+      injectable calendar), `ProjectSummary`. Grouping lives here, not in a
+      composable, so board/backlog/archive cannot disagree.
+- [ ] **7.4** `ArchiveWorkItem.kt` — the guarded move to `.closed`. Refuses an
+      already-terminal item rather than no-op'ing, because `done` and `closed` are
+      not interchangeable and rewriting one into the other would lie in the history.
+- [ ] **7.5** `WorkItemPreview.kt` — "is there anything worth expanding to on this
+      card", trimming first so a whitespace-only description cannot produce a
+      disclosure that opens onto nothing.
+- [ ] **7.6** `FakeProjectRepository` + `commonTest` — ~30 of the 95: use-case
+      refusals, projections, archive, preview, and the fake itself.
+
+**Exit criteria**: 252 tests green.
+
+---
+
+## Phase 8 — `:packages:feature-projects-data`
+
+- [ ] **8.1** `RoomProjectRepository.kt` — the only way to change a project or work
+      item. Every mutation writes the record **and** its outbox row inside a single
+      `inTransaction`. Re-reads affected rows after commit and publishes the matching
+      `ProjectChange`. Includes `seedSampleDataIfNeeded` with **relative** due dates,
+      so the sample board does not become a wall of overdue cards.
+- [ ] **8.2** `LocalDataSyncSink.kt` — `SyncApplySink` over the same container.
+      **Never writes to the outbox.** Idempotent by construction. A project change
+      publishes **both** `.projects` and `.workItems`, because deleting a project
+      takes its items with it and a board left open would show a column of items that
+      no longer exist.
+- [ ] **8.3** `WorkItemRecord.kt` — `projectID` is a plain string, not a
+      relationship: the cascade has to be written explicitly anyway, and a
+      relationship could make a deleted project's items vanish before their delete
+      rows are written. `domainValue` reconciles `resolvedAt` on the **read** path, so
+      a row written before the column existed heals on first read. `isOverdue`
+      excludes terminal items.
+- [ ] **8.4** `ProjectRecord.kt` — carries `nextItemNumber`, which is **never
+      derived by counting rows**: counting is wrong the moment an item is deleted,
+      and two offline devices need a counter to merge.
+- [ ] **8.5** `StatusChangeRecord.kt` — append-only, deliberately **not** related to
+      the work item: cascade deletes must be explicit, and a history row must never
+      reattach itself to a reused id.
+- [ ] **8.6** `ProjectChangeBus.kt` — the one invalidation channel the repository and
+      the sink publish on. Fresh stream per subscriber; `send` is a no-op when nobody
+      listens (a screen opened later re-reads on start).
+- [ ] **8.7** `SampleData.kt` — the first-launch board.
+- [ ] **8.8** **Converter field-completeness test.** Both record↔domain converters in
+      the original silently dropped a field (`resolvedAt`, `nextItemNumber`) because
+      the compiler fills in a default. Write a test that reflects over each entity's
+      fields and asserts each one appears in **both** converters. This is the single
+      highest-value new test in the port.
+- [ ] **8.9** `commonTest` — ~65 of the 95: outbox atomicity, sink idempotency and
+      no-echo, pull invalidation reaching the same channel a local edit does, a sink
+      throw leaving the cursor put, status history surviving its item, a sync round
+      trip.
+
+**Exit criteria**: 317 tests green. `:composition-root` still compiles with an empty
+graph.
+
+---
+
+## Phase 9 — `:packages:feature-auth-domain` + `:packages:feature-auth-data`
+
+### Domain
+
+- [ ] **9.1** `AuthSession.kt` — `UserIdentity` (id, email, optional displayName,
+      `preferredGreeting`), `SessionState` (signedOut/restoring/signedIn),
+      `AuthTokens`. `AuthSessionPort` is the seam: `signIn`, `signOut`, `restore`,
+      `sessionUpdates`.
+- [ ] **9.2** `SignInUseCase.kt` — normalises through `AuthRules` **before** the
+      port, so a malformed address never becomes a request.
+
+### Data
+
+- [ ] **9.3** `AuthRepository.kt` — the ordering that makes a session trustworthy:
+      **retain tokens before publishing `signedIn`**; a failed sign-in touches
+      nothing; sign out **clears credentials then publishes `signedOut`**. Both
+      orderings are load-bearing and coroutine dispatch makes the bug easy to write
+      (a `launch` instead of an awaited call silently reorders).
+- [ ] **9.4** `TokenVault.kt` — owns the two tokens and every usability decision.
+      Conforms to `AuthSessionDelegate`. Collapses concurrent refreshes. Keeps
+      secrets separate from the profile, which lives in user-defaults and must be
+      readable before the store opens.
+- [ ] **9.5** `HttpAuthRemote.kt` — private wire shapes (`access_token` /
+      `refresh_token`). The `Endpoint` seam exists so a POST can set
+      `isIdempotent: true` — that is what stops a dropped connection during refresh
+      from reading as a failed sign-in.
+- [ ] **9.6** `MockAuthRemote.kt` — DEBUG stand-in, because `baseURL` is `.invalid`.
+      Mints **genuine unsigned JWTs with a real `exp`** so expiry, forced refresh and
+      restore are genuinely exercised.
+- [ ] **9.7** `SessionStateBus.kt` — the auth feature's own broadcaster.
+- [ ] **9.8** `commonTest` — 46 tests: token-vault expiry with a controlled clock,
+      refresh collapsing, repository ordering, wire shape through a stub client, mock
+      JWTs, sign-in use case normalisation, bus teardown. Use a `BoundedStream` helper;
+      never an unbounded `for (x in flow)`.
+
+**Exit criteria**: 363 tests green.
+
+---
+
+## Phase 10 — Design system completion
+
+- [ ] **10.1** `ThemeScheme.kt` — three cases (`system`/`light`/`dark`) rather than a
+      boolean, because "follow the system" is a distinct choice. Owns its own
+      preferences key, deliberately **not** a `DefaultsKey` — appearance must survive
+      sign-out. An unrecognised stored value falls back to `system`.
+- [ ] **10.2** Typography scale and spacing scale. The original has **neither**; both
+      features currently take fills from shared tokens. Adding them here is the point
+      of a design system.
+- [ ] **10.3** `AppMark.kt` and `AmbientBackdrop.kt` — shared so the splash and
+      sign-in cross-fade cannot drift. The backdrop is accessibility-hidden.
+- [ ] **10.4** `Glass.kt` — `ttGlassCard`, `TTGlassSegmentedPicker`,
+      `TTGlassButtonStyle`. **iOS 26 `glassEffect` / `GlassEffectContainer` have no
+      Compose equivalent.** Use a translucent surface with a brush/blur equivalent and
+      accept the visual difference. On the board, the glass bars must float over a
+      single scrolling container as siblings, because a material can only sample what
+      is drawn behind it.
+- [ ] **10.5** Add `compose-uiTooling` / `compose-uiToolingPreview` for `@Preview`.
+      They are in the catalog and currently unreferenced, so there is no preview
+      support at all despite every Swift view having one.
+- [ ] **10.6** `commonTest` — 9 tests: accent contrast against the real token value,
+      theme fallback, `colorScheme` nil-ness for system.
+
+**Exit criteria**: 372 tests green.
+
+---
+
+## Phase 11 — `:packages:feature-auth-presentation`
+
+- [ ] **11.1** `AuthEnvironment.kt` — a nullable `CompositionLocal` holding the
+      interface, plus `MissingAuthSessionView` and a `.previewSession()` modifier.
+- [ ] **11.2** `SignInModel.kt` — two fields plus a `Phase`. **No router
+      reference**, because the session bus drives the transition.
+- [ ] **11.3** `SignInView.kt` — the app's opening screen. Product name only, no
+      navigation.
+- [ ] **11.4** `LabelledField.kt`, `ErrorBanner.kt`, `PrimaryButtonStyle.kt`,
+      `KeyboardHints.kt` (platform-neutral enums, because the package also builds for
+      Android and the JVM host).
+- [ ] **11.5** `AuthPreviewData.kt` fixtures.
+- [ ] **11.6** 5 Compose UI tests: sign-in, session restore, sign-out, auth-gate
+      return.
+
+**Exit criteria**: 372 tests + 5 UI tests green.
+
+---
+
+## Phase 12 — `:packages:feature-projects-presentation`
+
+The largest presentation surface: 24 files.
+
+- [ ] **12.1** `ProjectEnvironment.kt` + `ViewPreviewData.kt` fixtures.
+- [ ] **12.2** ViewModels (7) — `ProjectsListModel` (holds summaries, re-reads on
+      `ProjectChange`, exposes a `notice` for the archive-instead-of-delete outcome),
+      `ProjectEditorModel` (draft with `canSave`/`hasChanges`, loaded as a snapshot so
+      a concurrent remote rename loses), `ProjectBoardModel`,
+      `ProjectBacklogModel`, `WorkItemEditorModel` (**a draft, never a stored
+      record** — a form bound to a persisted row could save an edit with no outbox
+      row), `ProjectArchiveModel`, `ProjectPickerModel`.
+- [ ] **12.3** Screens (8) — `ProjectsListScreen` (swipe-delete + confirmation naming
+      the archive rule), `ProjectEditorScreen` (key prefix **read-only**),
+      `ProjectBoardScreen`, `ProjectBacklogScreen`, `ProjectArchiveScreen`
+      (month-grouped, newest first, terminal-only actions hidden),
+      `ProjectPickerSheet`, `WorkItemEditorScreen`, `WorkItemEditorSheet`.
+- [ ] **12.4** Views (7) — `BoardColumn`, `WorkItemCard`, `WorkItemBacklogRow`,
+      `ProjectRow`, `PriorityBadge`, `ProjectSwitcherButton`, `NewProjectSheet`.
+- [ ] **12.5** 4 Compose UI tests: card content rules, column behaviour, the archive
+      round-trip from **both** places a task can be filed from (backlog row button
+      and board card menu), because archiving is a status move and the two surfaces
+      must agree.
+
+**Exit criteria**: all green.
+
+---
+
+## Phase 13 — Settings + composition root + shared-ui shell
+
+### `:packages:feature-settings-domain`
+
+- [ ] **13.1** `SettingsPort.kt` — connectivity read + fresh update stream,
+      `setForcedOffline` phrased as **intent** rather than a value to install, sync
+      activity + updates, `canSyncNow`, `syncNow`, `endSession` (**a closure the app
+      injects** — the settings package does not name the auth feature or the session
+      coordinator), `appVersion()`.
+- [ ] **13.2** `SettingsVocabulary.kt` — `ConnectivitySummary` and `SyncActivity`
+      (7 phases) with user-facing titles, plus `SyncOutcome` and `AppVersion`.
+      Deliberately **not** `NetworkMonitor.Connectivity` or `SyncStatus`.
+- [ ] **13.3** `SyncNow.kt` — owns the offline decision. A control that goes dead for
+      an invisible reason leaves the user concluding the app is broken, so it answers
+      `.offline` and the screen can say the edits are queued and safe.
+- [ ] **13.4** `commonTest` — 9 tests: `SyncNow` outcomes, port counters.
+
+### `:packages:feature-settings-data`
+
+- [ ] **13.5** `LiveSettingsService.kt` — the only file that knows a settings screen
+      is fed by the network monitor and the sync coordinator. Every `when` is
+      deliberately **total, no `else`**, so a case added upstream becomes a build
+      error here rather than silently disappearing.
+
+### `:packages:feature-settings-presentation`
+
+- [ ] **13.6** `SettingsModel.kt`, `SettingsScreen.kt`, `SettingsEnvironment.kt`,
+      `SettingsPreviewData.kt`. Rows appear only when their numbers are non-zero, so
+      the quiet state cannot stand in for the alarming one. The About row hides itself
+      when there is no version key.
+
+### `:composition-root`
+
+- [ ] **13.7** Register the object graph in 7 modules (platform, persistence,
+      projects, auth, sync, session, settings), in dependency order. The three
+      looping services (monitor, sync coordinator, timer) are **explicitly started**,
+      never started during resolution — factories must stay a pure lookup.
+- [ ] **13.8** **Invert `AppGraphTest`.** It currently asserts
+      `assertFalse(resolver.registeredNames.isNotEmpty(), "expected an empty graph")`.
+      That assertion is the first thing to fail and must be replaced, not deleted.
+- [ ] **13.9** Add the missing `AppGraphAccessTest`. `AppGraph.kt`'s kdoc already
+      claims it exists and that it fails if anything outside the composition root
+      calls `KoinResolver` directly. It does not exist. Write it, or delete the claim.
+
+### `:shared-ui`
+
+- [ ] **13.10** `SessionCoordinator.kt` — `SessionTeardown` (clears pull metadata and
+      session cache, resets the container's session scope, stops the sync
+      coordinator) and the coordinator that turns `SessionState` into `Router.root`.
+      `hasLiveSession` guards a cold launch from treating "no credentials" as
+      "session ended". **Outbox rows are kept** — they carry the queuing account's id
+      and only that account can claim them.
+- [ ] **13.11** `RootScreen.kt` — holds the splash until **both** a minimum floor has
+      elapsed **and** the session has answered. Either half alone is wrong. Restores
+      the last visited project **twice** (`onAppear` and on `root` change), both
+      idempotent, because the router is on the auth gate while the async restore runs.
+- [ ] **13.12** `SplashScreen.kt` — canvas + `AppMark` + name, drawn on the ambient
+      backdrop so the hand-off from the launch screen is invisible and the
+      splash→sign-in cross-fade has a static background.
+- [ ] **13.13** `NavigationHost.kt` — the Compose navigation host that renders the
+      hand-rolled `Router`. `ProjectScopedTabScreen` is the root of both project tabs:
+      the active project's screen, or a picker sheet when nothing is active. The
+      scoped screens take a **non-optional** project id and rebuild on id change — a
+      mid-view project switch must stop the old model or its collection keeps
+      refreshing a board nobody shows. Tapping a project row routes through
+      `openProject`, never a raw push.
+- [ ] **13.14** Delete `ShellPlaceholder()` from `TaskTrackerApp.kt`.
+
+**Exit criteria**: ~381 tests green, Android app runs end to end.
+
+---
+
+## Phase 14 — iOS shell
+
+Much of the scaffolding landed in Phase 0 so the Xcode project generates from day one.
+What remains is verifying the link and filling in the behaviours.
+
+- [x] **14.1** `iosApp/project.yml` — XcodeGen manifest, iOS 26 deployment target,
+      bundle id `com.tasktracker.app`, `tasktracker://` URL scheme, `UILaunchScreen`
+      → `CanvasBackground`, portrait + both landscapes,
+      `ITSAppUsesNonExemptEncryption: false`. `fileGroups` lists `../PLAN.md` and
+      `project.yml` — without it the manifest is invisible in the navigator and the first
+      sign of trouble is a hand-edit to `project.pbxproj` that the next
+      `xcodegen generate` silently discards. The original records the same lesson at
+      `project.yml:10-15`.
+- [x] **14.2** `iosApp/TaskTracker/Info.plist`, written by hand with
+      `GENERATE_INFOPLIST_FILE: NO` on the target.
+- [x] **14.3** `iosApp/TaskTracker/Assets.xcassets` — `CanvasBackground.colorset`
+      (white / black) and `AppIcon.appiconset`. **No `AccentColor` colorset**, on
+      purpose: `ttAccent()` is a token in `commonMain`, so an iOS colorset would be a
+      second source of truth for a value nothing reads. If system chrome ever needs the
+      accent, derive the colorset from the token rather than hand-writing it.
+- [x] **14.4** `shared-ui/src/iosMain/.../MainViewController.kt` — exports
+      `mainViewController()` to Swift and **owns the graph**, mirroring
+      `TaskTrackerApplication` on Android. It takes no arguments precisely so
+      `shared-ui` does not have to `export(project(":packages:di"))` and publish the DI
+      port into the framework's public surface for the platform shell to construct the
+      thing it should be *given*.
+- [x] **14.5** `iosApp/TaskTracker/TaskTrackerApp.swift` — a `WindowGroup` and nothing
+      else. No iOS navigation or view state, matching `MainActivity`.
+- [x] **14.6** `iosApp/TaskTrackerUITests/AppUITestCase.swift` — base class documenting
+      the two traps: the system "Save Password?" sheet (it covers the app while leaving
+      the underlying screen visible **and** in the accessibility tree, so element
+      assertions keep passing while every tap is silently discarded) and the simulator
+      keeping its container between launches (sign-out is a one-way door through the
+      keychain, and uninstalling to reset would discard the seeded-data store).
+- [ ] **14.7** Build script phase running
+      `./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64`. Written in
+      `project.yml` as a `preBuildScript` with `basedOnDependencyAnalysis: false` —
+      without that flag Xcode decides the script has nothing to do and skips it, leaving
+      a stale or missing framework for the build to fail on in a way that points at the
+      linker rather than at Gradle. **Not yet verified end to end.**
+- [ ] **14.8** Verify the link on an iPhone 17 Pro simulator: `xcodegen generate`,
+      then `xcodebuild -project TaskTracker.xcodeproj -scheme TaskTracker -destination
+      'platform=iOS Simulator,name=iPhone 17 Pro' build`. Expect a first failure here —
+      the framework output path, the `xcode-frameworks` copy task, and the `Info.plist`
+      are all unproven.
+- [ ] **14.9** Deep link handling on iOS via `scene(_:openURLContexts:)` → `Router`,
+      and an `<intent-filter>` for `tasktracker://` on the Android launcher activity.
+- [ ] **14.10** Port the 10 XCUITests once there are screens to drive.
+
+**Exit criteria**: `xcodegen generate` then an iPhone 17 Pro simulator build and run.
+
+---
+
+## Phase 15 — Verification and documentation
+
+- [ ] **15.1** `./gradlew check` green on all three targets (`jvmTest`,
+      `testAndroidHostTest`, `iosSimulatorArm64Test`), with `verifyArchitectureGraph`
+      and every `verifyModuleImports` passing.
+- [ ] **15.2** iOS simulator build + XCUITest run.
+- [ ] **15.3** Write `AGENTS.md` for the KMP project, recording the Kotlin-specific
+      boundaries and every decision that differs from the original: the accent is now
+      a real token (so the contrast test no longer reads a file off disk), glass has no
+      Compose equivalent, the hand-rolled router is pure state with no Compose types,
+      and `StreamObservation` was dropped.
+- [ ] **15.4** Update the test-count baseline in `AGENTS.md` in the same change as any
+      test addition. The baseline is the tripwire that notices a module whose tests
+      no longer compile — do not let it go stale.
+- [ ] **15.5** Delete the four empty scaffolds (`FeatureBacklog`, `FeatureBoard`,
+      `FeatureTaskEditor`, `FeatureWorkItems`) rather than carrying them over. They
+      were already listed as known gaps in the original's `AGENTS.md:538-539`.
+
+---
+
+## Known product gaps carried over from the original
+
+Do not treat these as regressions.
+
+1. The API host is `https://api.tasktracker.invalid`, so server sync cannot succeed.
+   Mitigated by `MockSyncTransport` (task 6.7), which is an addition, not a port.
+2. **The local store is not user-partitioned.** Outbox rows carry a `userID` and the
+   engine claims only the signed-in account's, but synced entities remain on disk, so
+   a different account signing in sees the previous account's projects. Full
+   multi-user isolation is a schema decision, not a teardown fix. Flagged, not fixed.
+3. No typography or spacing scale in the original; added in Phase 10.
+4. Dark mode recolours the accent only; surfaces stay semantic by decision, so there
+   is no charcoal surface treatment.
+
+## Highest-risk items
+
+1. **Sync engine `settle` logic** (6.5) — id-matched verdicts, duplicate
+   invalidation, unmentioned-as-retry. Short code that looks like an optimisation and
+   encodes several hard-won lessons.
+2. **Converter field completeness** (8.8) — has already silently dropped two fields
+   in the original.
+3. **`resolvedAt` read-path reconciliation** (8.3) — port the write path, miss the
+   read path, and a live task is filed in the archive forever. The symptom looks like
+   nothing at all.
+4. **Compiler-enforced boundaries become convention.** Kotlin cannot enforce
+   Domain-has-no-Data. `tasktracker.architecture` is the substitute and must be kept
+   green, or the layering erodes the first time someone is in a hurry.
+5. **Session ordering** (9.3) — a `launch` instead of an awaited call silently
+   reorders, and the resulting bug is a sign-in that appears to work.

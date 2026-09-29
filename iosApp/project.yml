@@ -1,0 +1,115 @@
+name: TaskTracker
+
+# XcodeGen manifest for the iOS shell. The generated `TaskTracker.xcodeproj` is never
+# hand-edited and is not committed - run `xcodegen generate` from this directory.
+#
+# This mirrors `project.yml` in the original Swift project, with one structural
+# difference: there, the app was built from SwiftPM packages resolved by path. Here the
+# app is a thin shell over a Kotlin Multiplatform static framework that Gradle builds
+# (`ComposeApp`, declared in `shared-ui/build.gradle.kts`) and that this project links
+# as a binary. The script phase below is what makes `xcodebuild` and Gradle agree; see
+# the note on its ordering.
+
+options:
+  bundleIdPrefix: com.tasktracker
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+# Root files worth opening from the navigator but belonging to no target. Xcode only
+# shows what the project file references, so without this the repo's own documentation
+# and this manifest are invisible in Xcode, and the first sign of it is a hand-edit to
+# project.pbxproj that the next `xcodegen generate` silently discards. The original
+# project records the same lesson at project.yml:10-15.
+fileGroups:
+  - ../PLAN.md
+  - project.yml
+
+targets:
+  TaskTracker:
+    type: application
+    platform: iOS
+    sources:
+      - path: TaskTracker
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      # The KMP framework. XcodeGen cannot express "the output of a Gradle task", so
+      # this is a framework search path plus the script phase below that produces it.
+      # The path is the one `shared-ui/build.gradle.kts` writes to; if baseName changes,
+      # it changes here too.
+      - framework: ../shared-ui/build/xcode-frameworks/ComposeApp.framework
+        embed: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tasktracker.app
+        PRODUCT_NAME: TaskTracker
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "6.0"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        # The framework is resolved from a path outside any standard search path, so
+        # both the linker and the Swift importer have to be told where to look.
+        FRAMEWORK_SEARCH_PATHS:
+          - $(inherited)
+          - $(SRCROOT)/../shared-ui/build/xcode-frameworks
+      configs:
+        Debug:
+          # Only arm64 is built: the Kotlin convention plugin deliberately omits iosX64
+          # because Compose Multiplatform 1.12.1 publishes no Intel simulator variants.
+          # Building for both would make every native dependency unresolvable.
+          ONLY_ACTIVE_ARCH: YES
+        Release:
+          ONLY_ACTIVE_ARCH: NO
+    preBuildScripts:
+      # Runs before compilation so the framework the linker is about to read exists.
+      #
+      # `basedOnDependencyAnalysis: false` is required, not a nicety. Xcode would
+      # otherwise decide from the script's declared inputs that it has nothing to do
+      # and skip it, leaving a stale or missing framework for the build to fail on in a
+      # way that points at the linker rather than at Gradle. The only input that matters
+      # is the Kotlin source tree, and Gradle decides for itself what to recompile.
+      #
+      # `--console=plain` keeps the log free of carriage returns, which is what makes
+      # `xcodegen generate && xcodebuild` readable in a terminal.
+      - name: Build ComposeApp
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 --console=plain
+        inputFiles: []
+  TaskTrackerUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: TaskTrackerUITests
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - target: TaskTracker
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tasktracker.app.uitests
+        SWIFT_VERSION: "6.0"
+        # The app target's Info.plist is written by hand, so it sets
+        # GENERATE_INFOPLIST_FILE to NO. A test bundle has nothing to point at and needs
+        # the generated one or it cannot be signed.
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: TaskTracker
+
+schemes:
+  TaskTracker:
+    build:
+      targets:
+        TaskTracker: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      # Booting a simulator costs far more than the unit tests, so the UI bundle is a
+      # deliberate step rather than part of every run - the same reasoning the original
+      # records at project.yml:152-158.
+      targets:
+        - TaskTrackerUITests

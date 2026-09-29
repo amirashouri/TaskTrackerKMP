@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The app's user-facing text.
+
+  This file exists because the original had no string layer at all: every label,
+  placeholder, empty state and error message in the SwiftUI sources is a hardcoded
+  English literal, which `AGENTS.md` in that project records as a known gap. Porting
+  the literals verbatim would carry the gap across, so the text is extracted here
+  instead and every screen reads it through `Res.string`.
+
+  It lives in :packages:design-system rather than in each feature because that is the
+  only module allowed to configure `compose.resources`. Every module that configures
+  it emits its own `*ResourceCollectors` class, and two of those fail Android's dex
+  merge with "defined multiple times". A feature that needs a new string adds it here.
+
+  Values are grouped by who owns the wording, not by screen, because the same string
+  is read from more than one place and a per-screen grouping would invite a second
+  copy. The parameters are positional (`%1$s`) so a translator can reorder them.
+
+  Strings that are genuinely part of the wire contract - a status enum value, a deep
+  link path segment - are NOT here. Those are code, and they live with the type that
+  defines them.
+-->
+<resources>
+    <string name="app_name" translatable="false">TaskTracker</string>
+
+    <!-- Work item status. The six names a user reads, in board order. -->
+    <string name="status_backlog">Backlog</string>
+    <string name="status_todo">To Do</string>
+    <string name="status_in_progress">In Progress</string>
+    <string name="status_in_review">In Review</string>
+    <string name="status_done">Done</string>
+    <string name="status_closed">Closed</string>
+
+    <!-- Priority. -->
+    <string name="priority_low">Low</string>
+    <string name="priority_medium">Medium</string>
+    <string name="priority_high">High</string>
+    <string name="priority_urgent">Urgent</string>
+
+    <!-- Top-level tabs. -->
+    <string name="tab_projects">Projects</string>
+    <string name="tab_board">Board</string>
+    <string name="tab_backlog">Backlog</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Connectivity, as the Settings Connection section reports it. -->
+    <string name="connectivity_online">Online</string>
+    <string name="connectivity_offline">Offline</string>
+    <string name="connectivity_needs_connection">Needs connection</string>
+    <string name="connectivity_unknown">Unknown</string>
+
+    <!--
+      Sync activity. Seven states rather than a boolean and a message, because
+      "waiting for a connection" is not a failure and "signed out" is not something
+      to retry. Collapsing them would force the screen to invent the distinction back
+      out of the report.
+    -->
+    <string name="sync_idle">Not synced yet</string>
+    <string name="sync_waiting_for_connection">Waiting for a connection</string>
+    <string name="sync_syncing">Syncing</string>
+    <string name="sync_up_to_date">Up to date</string>
+    <string name="sync_retrying">Retrying</string>
+    <string name="sync_failed">Sync failed</string>
+    <string name="sync_signed_out">Signed out</string>
+
+    <!-- What a manual sync actually did. -->
+    <string name="sync_outcome_already_running">A sync is already running.</string>
+    <string name="sync_outcome_offline">There is no connection. Your edits are queued and will go out when you are back online.</string>
+
+    <!--
+      No `error_*` strings here, deliberately. Error text is hardcoded in
+      `AppError` in `:packages:core`, because that module is allowed no project
+      dependencies at all and therefore cannot read `Res`. Duplicating the wording
+      here would create a second source of truth that no module is able to consume,
+      and the copy that drifted would be the one a view picked up.
+    -->
+</resources>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Mirrors the original's CanvasBackground() behaviour: the window starts on the
+      same colour the Compose root will paint, so there is no white flash between
+      the launcher and the first frame.
+
+      ?android:attr/colorBackground rather than @android:color/system_background_*:
+      the latter only exists from API 34 and minSdk is 26. colorBackground is the
+      themed equivalent, so it follows the device's light/dark setting the same way
+      the original's UIColor.systemBackground does, and it resolves on every
+      supported API level. The Compose design system resolves the matching
+      semantic colour in commonMain, so both surfaces stay adaptive.
+    -->
+    <style name="Theme.TaskTracker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">?android:attr/colorBackground</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>
