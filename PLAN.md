@@ -13,13 +13,13 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
-`:packages:routing`, `build-logic`. **Empty**: the other 15 modules plus most of
-`:iosApp`.
+`:packages:routing`, `:packages:keychain`, `:packages:user-defaults`, `build-logic`.
+**Empty**: the other 13 modules plus most of `:iosApp`.
 
-**Progress: Phases 0-2 complete, `./gradlew check` green on all three targets.**
-Phases 3-15 outstanding. Test baseline **162 unique** (core 42, domain 43, routing 49,
-di 19, design-system 6, composition-root 3), each run on `jvmTest`,
-`testAndroidHostTest` and `iosSimulatorArm64Test` — 486 executions.
+**Progress: Phases 0-3 complete, `./gradlew check` green on all three targets.**
+Phases 4-15 outstanding. Test baseline **183 unique** (core 42, domain 43, routing 49,
+keychain 12, user-defaults 12, di 19, design-system 6, composition-root 3), each run on
+`jvmTest`, `testAndroidHostTest` and `iosSimulatorArm64Test` — 549 executions.
 
 ## Decisions taken
 
@@ -341,28 +341,61 @@ the original's early return.
 
 ### `:packages:keychain`
 
-- [ ] **3.1** `KeychainAccess.kt` — `expect` interface. Every operation suspends so
-      the production implementation stays the single serialisation point.
-- [ ] **3.2** Actuals: `iosMain` (Security framework, generic-password items scoped
-      to a service name), `androidMain` (Android Keystore),
-      `jvmMain` (in-memory — this is a test-only host target).
-- [ ] **3.3** `KeychainStore.kt` — `KeychainKey` enum plus a typed store with
-      `Codable` get/set and `removeAll`.
-- [ ] **3.4** `InMemoryKeychain.kt` — test/preview stand-in that also supports
+- [x] **3.1** `KeychainAccess.kt` — interface over raw bytes. Every operation suspends so
+      the production implementation stays the single serialisation point. A plain
+      `interface`, not `expect interface`: [InMemoryKeychain] has to be implementable
+      outside this module. `KeychainError` keeps the raw platform `status` as an `Int`
+      because neither `OSStatus` nor an Android exception name exists in common code,
+      and the reason string is resolved by the platform actual before construction.
+- [x] **3.2** Actuals: `iosMain` (`SystemKeychain`, Security framework),
+      `androidMain` (`AndroidKeychain`, AES-GCM via `AndroidKeyStore`),
+      `jvmMain` (in-memory — this is a test-only host target). Selected by
+      `expect fun systemKeychain(host: Any? = null)` rather than an `expect interface`,
+      so the compiler proves every target can actually produce a store. `host` is the
+      `Context` Android needs and is `Any?` because common code cannot name it; the
+      Android actual throws an `IllegalArgumentException` naming the fix rather than
+      letting a bare `ClassCastException` out of the cast.
+- [x] **3.3** `KeychainStore.kt` — `KeychainKey` enum plus a typed store with
+      `Codable` get/set and `removeAll`. The `Codable` conveniences are `reified`
+      extensions rather than members, which is why `data`/`setBytes` are public — an
+      `inline` function cannot reach a private member.
+- [x] **3.4** `InMemoryKeychain.kt` — test/preview stand-in that also supports
       **fault injection**, because the interesting auth paths are the ones where the
-      keychain fails.
-- [ ] **3.5** `commonTest` — 6 tests: round-trips, removal, fault injection.
+      keychain fails. Guarded by a `Mutex`: the `suspend` contract lets two coroutines be
+      inside `data` at once, so a plain `MutableMap` would be a data race that only
+      shows up on a device. Bytes are copied on the way in and out, so a caller mutating
+      the array it passed cannot rewrite what the store holds.
+- [x] **3.5** `commonTest` — 12 tests: round-trips, removal, fault injection.
+- [x] **3.6** `DefaultsKey.kt` — `LastSeenProject`, `BoardShowsBacklog`,
+      `HasSeenSyncHint`, `NetworkSimulation`, `CachedProfile`, with `com.tasktracker.`
+      namespacing. `CachedProfile` is explicitly non-sensitive, and a test asserts it
+      stays clear of the two credential key names.
+- [x] **3.7** `UserDefaultsStore.kt` + a `PreferencesBackend` byte layer with four
+      actuals (`NSUserDefaults` / `SharedPreferences` / `Properties` / in-memory). The
+      backend split is not in the original: its tests ran on macOS against a throwaway
+      `UserDefaults` suite, and there is no equivalent of that in `commonTest`. With a
+      byte layer the typed store is testable on every target. `hasValue` asks the
+      *backend*, not the decoder, so a value that no longer decodes still counts as
+      present — settings needs to tell "chose the default" from "never touched it".
+- [x] **3.8** `commonTest` — 12 tests: namespacing, `Codable` round-trips, `hasValue`,
+      the corrupt-value path, and a `false` boolean surviving the round trip as a real
+      value rather than reading back as an absence.
 
-### `:packages:user-defaults`
+**Exit criteria**: met — 183 unique tests green (was 162).
 
-- [ ] **3.6** `DefaultsKey.kt` — `lastSeenProject`, `boardShowsBacklog`,
-      `hasSeenSyncHint`, `networkSimulation`, `cachedProfile`, with
-      `com.tasktracker.` namespacing. `cachedProfile` is explicitly non-sensitive.
-- [ ] **3.7** `UserDefaultsStore.kt` + 4 actuals (NSUserDefaults /
-      SharedPreferences / JVM Properties). Typed get/set/remove/removeAll.
-- [ ] **3.8** `commonTest` — 4 tests: namespacing, `Codable` round-trips, `hasValue`.
+Two asymmetries that are deliberate and each have a test pinning it:
 
-**Exit criteria**: 106 tests green.
+- **A corrupt keychain payload throws; a corrupt preference returns `null`.** A keychain
+  entry exists only because the app wrote it, so unreadable bytes are a real fault and
+  the auth layer must see them — returning `null` would sign the user out silently and
+  look like a session that merely expired. A UI preference, by contrast, is recoverable
+  from its default.
+- **The platform factories are not behaviourally testable from `commonTest`**, because
+  the three actuals deliberately differ (JVM in-memory, iOS real, Android needs a
+  `Context`). What is asserted everywhere is only that the wiring exists and that a
+  missing `Context` is reported usefully. The iOS and Android backends are
+  **compile-verified only**; their runtime behaviour is unproven until Phase 14 runs a
+  real build.
 
 ---
 
