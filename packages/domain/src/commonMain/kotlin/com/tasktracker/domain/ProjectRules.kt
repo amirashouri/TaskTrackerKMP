@@ -209,4 +209,14 @@ object WorkItemGrouping {
 data class BoardColumn(
     val status: WorkItemStatus,
     val items: List<WorkItem>,
-)
+) {
+    /**
+     * Whether this lane has no cards.
+     *
+     * Distinct from the column being absent: every lane is present even when empty, and a
+     * board that dropped them would give the drag-and-drop no target to drop into.
+     */
+    val isEmpty: Boolean get() = items.isEmpty()
+
+    val count: Int get() = items.size
+}

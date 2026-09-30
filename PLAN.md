@@ -14,16 +14,17 @@ Original: iOS 26, Swift 6 strict concurrency, SwiftData, Swift Testing, XcodeGen
 Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:di`, `:packages:design-system` (colour tokens, accent, strings),
 `:packages:routing`, `:packages:keychain`, `:packages:user-defaults`,
-`:packages:database`, `:packages:network`, `:packages:sync`, `build-logic`. **Empty**:
-the nine feature modules plus most of `:androidApp` and `:iosApp`.
+`:packages:database`, `:packages:network`, `:packages:sync`,
+`:packages:feature-projects-domain`, `build-logic`. **Empty**:
+the eight remaining feature modules plus most of `:androidApp` and `:iosApp`.
 
-**Progress: Phases 0-6 complete, `./gradlew check` green on all three targets.**
-Phases 7-15 outstanding. Test baseline **404 unique in commonTest** (sync 70, network 88,
-database 60, core 42, domain 43, routing 49, di 19, keychain 12, user-defaults 12,
-design-system 6, composition-root 3) plus **14 in `jvmTest`** (database 6: reflection and
-filesystem; sync 8: a real SQLite-backed outbox, which has no common equivalent): 418 on
-`jvmTest`, 404 on `iosSimulatorArm64Test`, and 344 on `testAndroidHostTest` — see the
-Phase 4 note on why the database's 60 do not run there.
+**Progress: Phases 0-7 complete, `./gradlew check` green on all three targets.**
+Phases 8-15 outstanding. Test baseline **484 unique in commonTest** (feature-projects-domain
+80, sync 70, network 88, database 60, core 42, domain 43, routing 49, di 19, keychain 12,
+user-defaults 12, design-system 6, composition-root 3) plus **14 in `jvmTest`** (database 6:
+reflection and filesystem; sync 8: a real SQLite-backed outbox, which has no common
+equivalent): **498 on `jvmTest`, 484 on `iosSimulatorArm64Test`, and 424 on
+`testAndroidHostTest`** — see the Phase 4 note on why the database's 60 do not run there.
 
 ## Decisions taken
 
@@ -82,6 +83,12 @@ rules. Each has already caused a real bug when broken in the original.
   SIGSEGV at teardown from exactly this.
 - Every `expect` needs a `jvm` actual, because the convention plugin adds a `jvm()`
   host target and runs `commonTest` there.
+- **`@Throws` on a `suspend` declaration must list `CancellationException`.** Kotlin/Native
+  rejects the annotation otherwise, and only Native rejects it — so this reaches
+  `./gradlew check` and not the module you are working in, which is the expensive way to
+  find it. The second class is also the honest contract: a suspended save that was
+  cancelled is not a failed one, and a `catch (e: AppError)` that swallowed it would
+  report a user-facing error for a screen the user already closed.
 
 ## How to build
 
@@ -94,10 +101,19 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew verifyModuleImports          # 22 modules, one task each
 ```
 
-Current test baseline: **37** (`:packages:core` 9, `:packages:di` 19,
-`:packages:design-system` 6, `:composition-root` 3), each run on `jvmTest`,
-`testAndroidHostTest` and `iosSimulatorArm64Test` — 111 executions. Update this
-number in the same change as any test addition.
+Current test baseline: **484** unique tests in `commonTest` (`:packages:feature-projects-domain`
+80, `:packages:sync` 70, `:packages:network` 88, `:packages:database` 60,
+`:packages:core` 42, `:packages:domain` 43, `:packages:routing` 49, `:packages:di` 19,
+`:packages:keychain` 12, `:packages:user-defaults` 12, `:packages:design-system` 6,
+`:composition-root` 3), plus 14 more in `jvmTest` only. That is **498** executions on
+`jvmTest`, **484** on `iosSimulatorArm64Test` and **424** on `testAndroidHostTest`. Update
+this number in the same change as any test addition.
+
+The exit criteria in Phases 8-13 are forecasts off this baseline, and they were written
+against a 222-test baseline that the port passed in Phase 4 — so they have been rebased
+once, upward, by the same 182 tests the earlier phases actually added. They are counts to
+check a phase against, not targets to hit exactly; the per-phase notes record what was
+really written where it differs.
 
 ### Kotlin/Native constraints hit while writing tests
 
@@ -693,13 +709,13 @@ architecture table was corrected to match rather than a dependency invented to s
 
 ## Phase 7 — `:packages:feature-projects-domain`
 
-- [ ] **7.1** `ProjectRepositoryPort.kt` — the port presentation depends on. Every
+- [x] **7.1** `ProjectRepositoryPort.kt` — the port presentation depends on. Every
       value crossing it is immutable. **Every write returns the value it produced.**
       `ProjectChange` is a **typed, scoped** invalidation event (`.projects` /
       `.workItems` + optional `ProjectID`), not `Unit`, so a view model re-reads only
       when it cares. `statusChanges` returns newest-first. `seedSampleDataIfNeeded` is
       idempotent and writes through the normal outbox path.
-- [ ] **7.2** `ProjectUseCases.kt` — six use cases, each owning a decision the data
+- [x] **7.2** `ProjectUseCases.kt` — six use cases, each owning a decision the data
       layer cannot:
       - `CreateProject`
       - `UpdateProject` — deliberately **cannot** change `keyPrefix` (that would
@@ -713,21 +729,50 @@ architecture table was corrected to match rather than a dependency invented to s
         what makes the move easy to forget.
       - `RemoveProject` — deletes only when nothing `isComplete`; otherwise
         **archives**, so a project's record of closed decisions survives.
-- [ ] **7.3** `Projections.kt` — `BoardProjection` (one column per board status, in
+- [x] **7.3** `Projections.kt` — `BoardProjection` (one column per board status, in
       `boardOrder`), `BacklogProjection` (flat, only `.backlog`, so it can never
       re-list a board card), `ArchiveProjection` (months keyed by month start, with an
-      injectable calendar), `ProjectSummary`. Grouping lives here, not in a
-      composable, so board/backlog/archive cannot disagree.
-- [ ] **7.4** `ArchiveWorkItem.kt` — the guarded move to `.closed`. Refuses an
+      injectable `TimeZone`), `ProjectSummary`. Grouping lives here, not in a
+      composable, so board/backlog/archive cannot disagree. `BoardColumn.isEmpty` and
+      `.count` moved **onto** the domain's own `BoardColumn` rather than wrapping it in
+      a presentation-local copy with the same two fields.
+- [x] **7.4** `ArchiveWorkItem.kt` — the guarded move to `.closed`. Refuses an
       already-terminal item rather than no-op'ing, because `done` and `closed` are
       not interchangeable and rewriting one into the other would lie in the history.
-- [ ] **7.5** `WorkItemPreview.kt` — "is there anything worth expanding to on this
+- [x] **7.5** `WorkItemPreview.kt` — "is there anything worth expanding to on this
       card", trimming first so a whitespace-only description cannot produce a
       disclosure that opens onto nothing.
-- [ ] **7.6** `FakeProjectRepository` + `commonTest` — ~30 of the 95: use-case
-      refusals, projections, archive, preview, and the fake itself.
+- [x] **7.6** `FakeProjectRepository` + `commonTest` — **80** of the 95, in five
+      suites: `ProjectUseCasesTest` (26), `ProjectionsTest` (23), `WorkItemPreviewTest`
+      (7), `ArchiveWorkItemTest` (7) and `FakeProjectRepositoryTest` (17). The last two
+      are the ones that were missing when this phase was picked back up: grouping had no
+      tests at all, and the fake's own contract was assumed by the use-case suites rather
+      than asserted.
 
-**Exit criteria**: 252 tests green.
+### Phase 7 notes
+
+Three things surfaced here that the original never had to answer.
+
+1. **`@Throws` on a `suspend` declaration is a Kotlin/Native error unless
+   `CancellationException` is listed** — and only on Native. `jvmTest` and
+   `testAndroidHostTest` compiled all seven use cases without complaint, so the
+   annotation looked fine until `iosSimulatorArm64Test` rejected the module. Now a rule
+   under **Rules that apply to every task**; every suspend declaration in the module
+   carries both classes.
+2. **"Newest first" history is not a total order until the tie is broken.** A card
+   created and triaged inside one clock tick produces two `StatusChange` rows with the
+   same `changedAt`, and a stable sort on the timestamp alone hands those back in
+   insertion order — the *oldest* order. The fake breaks the tie on insertion order, and
+   the port's KDoc now says so, because Phase 8's Room query has to break it the same way
+   (rowid). A test names the case rather than leaving it to whichever sort an
+   implementation reached for.
+3. **The backlog and the archive are disjoint; the board and the archive are not.**
+   `done` is a column *and* archived, deliberately. The first test written for the three
+   projections together asserted they partitioned the items, which is false and would have
+   been a wrong test that passed nothing useful. The overlap is now asserted instead.
+
+**Exit criteria**: met — **484** unique tests in `commonTest` green on all three targets
+(498 on `jvmTest`, 424 on `testAndroidHostTest`), both architecture guards passing.
 
 ---
 
@@ -769,7 +814,7 @@ architecture table was corrected to match rather than a dependency invented to s
       throw leaving the cursor put, status history surviving its item, a sync round
       trip.
 
-**Exit criteria**: 317 tests green. `:composition-root` still compiles with an empty
+**Exit criteria**: 549 tests green. `:composition-root` still compiles with an empty
 graph.
 
 ---
@@ -809,7 +854,7 @@ graph.
       JWTs, sign-in use case normalisation, bus teardown. Use a `BoundedStream` helper;
       never an unbounded `for (x in flow)`.
 
-**Exit criteria**: 363 tests green.
+**Exit criteria**: 595 tests green.
 
 ---
 
@@ -836,7 +881,7 @@ graph.
 - [ ] **10.6** `commonTest` — 9 tests: accent contrast against the real token value,
       theme fallback, `colorScheme` nil-ness for system.
 
-**Exit criteria**: 372 tests green.
+**Exit criteria**: 604 tests green.
 
 ---
 
@@ -855,7 +900,7 @@ graph.
 - [ ] **11.6** 5 Compose UI tests: sign-in, session restore, sign-out, auth-gate
       return.
 
-**Exit criteria**: 372 tests + 5 UI tests green.
+**Exit criteria**: 604 tests + 5 UI tests green.
 
 ---
 
@@ -955,7 +1000,7 @@ The largest presentation surface: 24 files.
       `openProject`, never a raw push.
 - [ ] **13.14** Delete `ShellPlaceholder()` from `TaskTrackerApp.kt`.
 
-**Exit criteria**: ~381 tests green, Android app runs end to end.
+**Exit criteria**: ~613 tests green, Android app runs end to end.
 
 ---
 
