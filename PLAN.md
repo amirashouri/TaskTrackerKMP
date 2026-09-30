@@ -18,13 +18,15 @@ Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:feature-projects-domain`, `build-logic`. **Empty**:
 the eight remaining feature modules plus most of `:androidApp` and `:iosApp`.
 
-**Progress: Phases 0-7 complete, `./gradlew check` green on all three targets.**
-Phases 8-15 outstanding. Test baseline **484 unique in commonTest** (feature-projects-domain
-80, sync 70, network 88, database 60, core 42, domain 43, routing 49, di 19, keychain 12,
-user-defaults 12, design-system 6, composition-root 3) plus **14 in `jvmTest`** (database 6:
-reflection and filesystem; sync 8: a real SQLite-backed outbox, which has no common
-equivalent): **498 on `jvmTest`, 484 on `iosSimulatorArm64Test`, and 424 on
-`testAndroidHostTest`** — see the Phase 4 note on why the database's 60 do not run there.
+**Progress: Phases 0-8 complete, `./gradlew check` green on all three targets.**
+Phases 9-15 outstanding. Test baseline **636 unique in commonTest** (feature-projects-data
+152, feature-projects-domain 80, sync 70, network 88, database 60, core 42, domain 43,
+routing 49, di 19, keychain 12, user-defaults 12, design-system 6, composition-root 3)
+plus **14 in `jvmTest`** (database 6: reflection and filesystem; sync 8: a real
+SQLite-backed outbox, which has no common equivalent): **650 on `jvmTest`, 636 on
+`iosSimulatorArm64Test`, and 424 on `testAndroidHostTest`** — see the Phase 4 note on
+why the database's 60 do not run there, and the Phase 8 note on why the feature's 152 do
+not.
 
 ## Decisions taken
 
@@ -101,13 +103,14 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew verifyModuleImports          # 22 modules, one task each
 ```
 
-Current test baseline: **484** unique tests in `commonTest` (`:packages:feature-projects-domain`
-80, `:packages:sync` 70, `:packages:network` 88, `:packages:database` 60,
-`:packages:core` 42, `:packages:domain` 43, `:packages:routing` 49, `:packages:di` 19,
-`:packages:keychain` 12, `:packages:user-defaults` 12, `:packages:design-system` 6,
-`:composition-root` 3), plus 14 more in `jvmTest` only. That is **498** executions on
-`jvmTest`, **484** on `iosSimulatorArm64Test` and **424** on `testAndroidHostTest`. Update
-this number in the same change as any test addition.
+Current test baseline: **636** unique tests in `commonTest` (`:packages:feature-projects-data`
+152, `:packages:feature-projects-domain` 80, `:packages:sync` 70, `:packages:network` 88,
+`:packages:database` 60, `:packages:core` 42, `:packages:domain` 43,
+`:packages:routing` 49, `:packages:di` 19, `:packages:keychain` 12,
+`:packages:user-defaults` 12, `:packages:design-system` 6, `:composition-root` 3), plus 14
+more in `jvmTest` only. That is **650** executions on `jvmTest`, **636** on
+`iosSimulatorArm64Test` and **424** on `testAndroidHostTest`. Update this number in the
+same change as any test addition.
 
 The exit criteria in Phases 8-13 are forecasts off this baseline, and they were written
 against a 222-test baseline that the port passed in Phase 4 — so they have been rebased
@@ -778,44 +781,115 @@ Three things surfaced here that the original never had to answer.
 
 ## Phase 8 — `:packages:feature-projects-data`
 
-- [ ] **8.1** `RoomProjectRepository.kt` — the only way to change a project or work
+- [x] **8.1** `RoomProjectRepository.kt` — the only way to change a project or work
       item. Every mutation writes the record **and** its outbox row inside a single
       `inTransaction`. Re-reads affected rows after commit and publishes the matching
       `ProjectChange`. Includes `seedSampleDataIfNeeded` with **relative** due dates,
       so the sample board does not become a wall of overdue cards.
-- [ ] **8.2** `LocalDataSyncSink.kt` — `SyncApplySink` over the same container.
-      **Never writes to the outbox.** Idempotent by construction. A project change
-      publishes **both** `.projects` and `.workItems`, because deleting a project
-      takes its items with it and a board left open would show a column of items that
-      no longer exist.
-- [ ] **8.3** `WorkItemRecord.kt` — `projectID` is a plain string, not a
+- [x] **8.2** `LocalDataSyncSink.kt` — `SyncApplySink` over the same container.
+      **Never writes to the outbox.** Idempotent by construction. A project **delete**
+      publishes **both** `.projects` and `.workItems`, because it takes its items with
+      it and a board left open would show a column of items that no longer exist — the
+      one case where an event being *nearly* right shows something stale rather than
+      merely costing a re-read. Every other write announces one kind; see the table
+      below.
+- [x] **8.3** `WorkItemRecord.kt` — `projectID` is a plain string, not a
       relationship: the cascade has to be written explicitly anyway, and a
       relationship could make a deleted project's items vanish before their delete
       rows are written. `domainValue` reconciles `resolvedAt` on the **read** path, so
       a row written before the column existed heals on first read. `isOverdue`
       excludes terminal items.
-- [ ] **8.4** `ProjectRecord.kt` — carries `nextItemNumber`, which is **never
+- [x] **8.4** `ProjectRecord.kt` — carries `nextItemNumber`, which is **never
       derived by counting rows**: counting is wrong the moment an item is deleted,
       and two offline devices need a counter to merge.
-- [ ] **8.5** `StatusChangeRecord.kt` — append-only, deliberately **not** related to
+- [x] **8.5** `StatusChangeRecord.kt` — append-only, deliberately **not** related to
       the work item: cascade deletes must be explicit, and a history row must never
       reattach itself to a reused id.
-- [ ] **8.6** `ProjectChangeBus.kt` — the one invalidation channel the repository and
+- [x] **8.6** `ProjectChangeBus.kt` — the one invalidation channel the repository and
       the sink publish on. Fresh stream per subscriber; `send` is a no-op when nobody
       listens (a screen opened later re-reads on start).
-- [ ] **8.7** `SampleData.kt` — the first-launch board.
-- [ ] **8.8** **Converter field-completeness test.** Both record↔domain converters in
+- [x] **8.7** `SampleData.kt` — the first-launch board.
+- [x] **8.8** **Converter field-completeness test.** Both record↔domain converters in
       the original silently dropped a field (`resolvedAt`, `nextItemNumber`) because
       the compiler fills in a default. Write a test that reflects over each entity's
       fields and asserts each one appears in **both** converters. This is the single
-      highest-value new test in the port.
-- [ ] **8.9** `commonTest` — ~65 of the 95: outbox atomicity, sink idempotency and
+      highest-value new test in the port. Written with explicit constructors instead,
+      because reflection is unavailable on Kotlin/Native; see below.
+- [x] **8.9** `commonTest` — ~65 of the 95: outbox atomicity, sink idempotency and
       no-echo, pull invalidation reaching the same channel a local edit does, a sink
       throw leaving the cursor put, status history surviving its item, a sync round
-      trip.
+      trip. **152 written** — see the note below.
 
-**Exit criteria**: 549 tests green. `:composition-root` still compiles with an empty
-graph.
+**Exit criteria**: met — **636** unique tests in `commonTest` green on `jvmTest` and
+`iosSimulatorArm64Test` (was 484; the forecast was 549), `424` on `testAndroidHostTest`
+unchanged, `./gradlew check verifyArchitectureGraph` green, and `:composition-root` still
+compiles with an empty graph.
+
+### What was written, and where it differs from the plan above
+
+**152 tests, against a forecast of 65** — `RoomProjectRepositoryTest` 51,
+`RecordMappingTest` 27, `LocalDataSyncSinkTest` 24, `SeedingTest` 20,
+`StatusChangeHistoryTest` 14, `RecordCompletenessTest` 8, `ProjectChangeBusTest` 8. The count is well over the forecast because the two suites the forecast named
+outright — history and seeding — turned out to carry the properties with the most
+independent failure modes, and because every port method got its own normalisation,
+outbox, announcement and error cases rather than one happy path each. Recorded as the
+baseline is 636 common / 650 `jvmTest`; the later phases' forecasts are left as written
+and are read against the new baseline.
+
+**8.2 and 8.6: announcements are per-write-kind, not per-entity.** As written above
+8.2 says a project change publishes both kinds. That was followed for a *delete* and
+narrowed for everything else, in both the sink and the repository, because the original
+announced both kinds from all seven of its write paths — which is precisely the
+over-broadcast `ProjectChange`'s `kind` exists to prevent: a board woken by a project
+rename re-reads every card in it for nothing, and a test cannot distinguish a board that
+woke for the right reason from one that woke by accident. The rule now, and the one
+`ProjectChangeBus`'s helpers encode:
+
+| write | announces |
+| --- | --- |
+| create work item | `.projects` + `.workItems` (the counter moved) |
+| delete project | `.projects` + `.workItems` (the items went with it) |
+| create / update / archive project | `.projects` |
+| edit / move / delete work item | `.workItems` |
+| seed | both, unscoped — several projects at once, so there is no one to name |
+
+**8.8: explicit constructors, not reflection.** `KClass.constructors` is unavailable on
+Kotlin/Native, so the completeness test cannot reflect and still run on iOS. It instead
+constructs each record through its full constructor with a non-default value per column
+and asserts the domain value reads all of them back, which is stronger: a *missing*
+parameter is a compile error rather than something a test has to notice. `RecordMappingTest`
+(27 tests) covers the same ground from the other direction. The original's
+`nextItemNumber` went missing because every sample value it was tested with had the
+counter at 1, so the fixture here is deliberately unlike the defaults in every column.
+
+**8.3 and 8.5, two corrections rather than ports.** A pulled work item cannot change
+its `projectID` — a payload naming a different parent is a server bug, and applying it
+would move a card between projects with no delete and nothing in the history. And a pulled
+project cannot lower `nextItemNumber`, because the server's copy is whatever was true when
+an *earlier* offline edit was pushed and honouring a lower counter reissues a key that is
+already in use. Both are asserted.
+
+**History ordering needed a column the original did not have.** `changedAt DESC` alone is
+not a total order: a card created and triaged inside one clock tick gives two rows with the
+same instant, and a stable sort then returns them in *insertion* order — so the history
+reads backwards. `StatusChangeRecord.sequence` (the database-assigned insertion
+tie-breaker) is the fix, and the query decides the whole order in one place rather than
+being re-sorted in Kotlin.
+
+**A bad payload and a bad column are handled in opposite directions, deliberately.** A
+column this build cannot parse is dropped, so one unreadable row does not empty a history
+or hide a project. A *payload* it cannot parse throws `AppError.Decoding`, aborting the page
+and leaving the cursor where it was: a bad payload is the only copy of somebody's edit, and
+dropping it loses that permanently, whereas version skew is better served by a later
+release that understands the shape.
+
+**Outbox ordering has a known gap.** The queue is `ORDER BY createdAt ASC, id ASC` and ids
+are random, so two rows written at the same instant order arbitrarily. A sequence column
+here, as in the history, would close it; the tests that would trip over it give their
+writes distinct instants rather than asserting on `Uuid.random()`. Also deferred:
+`kotlin.time.Instant` is stored with the serializer's built-in format rather than a
+whole-second wire format of this project's own, and the v1→v2 Room migration is
+Android-only and has no runtime test.
 
 ---
 

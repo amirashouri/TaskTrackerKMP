@@ -239,6 +239,26 @@ data class WorkItem(
     val archivedOn: Instant get() = resolvedAt ?: updatedAt
 
     /**
+     * Whether this item is past its due date and still live.
+     *
+     * `now` is a parameter rather than a clock read, for the reason every write in this
+     * project takes its instant from its caller: a rule that reads the wall clock is a rule
+     * whose tests can only be run on a particular day. A due date of exactly [now] is not
+     * overdue — the day is not over until it is.
+     *
+     * **Terminal items are never overdue**, which is the part that is easy to get wrong. A
+     * task that shipped last Tuesday is not late, and colouring it as though it were is a
+     * claim about work that has already been delivered. `isTerminal` and the archive's
+     * membership are the same predicate, so this and [archivedOn] cannot disagree about
+     * which items are finished.
+     */
+    fun isOverdue(now: Instant): Boolean {
+        if (status.isTerminal) return false
+        val due = dueDate ?: return false
+        return due < now
+    }
+
+    /**
      * Puts `resolvedAt` back in step with [status].
      *
      * Enforces the invariant in both directions, which is what makes it worth having as
