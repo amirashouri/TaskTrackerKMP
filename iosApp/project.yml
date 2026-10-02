@@ -39,7 +39,7 @@ targets:
       # this is a framework search path plus the script phase below that produces it.
       # The path is the one `shared-ui/build.gradle.kts` writes to; if baseName changes,
       # it changes here too.
-      - framework: ../shared-ui/build/xcode-frameworks/ComposeApp.framework
+      - framework: ../shared-ui/build/bin/iosSimulatorArm64/debugFramework/ComposeApp.framework
         embed: false
     settings:
       base:
@@ -50,11 +50,12 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "6.0"
         ENABLE_USER_SCRIPT_SANDBOXING: NO
-        # The framework is resolved from a path outside any standard search path, so
-        # both the linker and the Swift importer have to be told where to look.
+        # The Kotlin link task writes the simulator framework here. Keeping both Xcode's
+        # framework reference and search path aligned with that output lets Swift resolve
+        # `import ComposeApp` after the pre-build Gradle task completes.
         FRAMEWORK_SEARCH_PATHS:
           - $(inherited)
-          - $(SRCROOT)/../shared-ui/build/xcode-frameworks
+          - $(SRCROOT)/../shared-ui/build/bin/iosSimulatorArm64/debugFramework
       configs:
         Debug:
           # Only arm64 is built: the Kotlin convention plugin deliberately omits iosX64
@@ -77,8 +78,40 @@ targets:
       - name: Build ComposeApp
         basedOnDependencyAnalysis: false
         script: |
+          # Android Studio's KMP run configuration builds the framework before invoking Xcode.
+          # Skip this phase there to avoid starting a second Gradle build from Xcode.
+          if [ "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" = "YES" ]; then
+            exit 0
+          fi
           cd "$SRCROOT/.."
-          ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 --console=plain
+          export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
+          # `syncComposeResourcesForIos` is not optional and is not about tests. Linking the
+          # framework is only half of what this phase exists for: the other half is copying the
+          # `.cvr` blobs into the app bundle, which the linker does nothing for and which is why
+          # its absence is invisible until the first frame.
+          #
+          # Without it the app crashed on launch with
+          #
+          #   MissingResourceException: Missing resource with path:
+          #   <app>/compose-resources/composeResources/com.tasktracker.resources/values/strings.commonMain.cvr
+          #
+          # thrown from `stringResource` during composition, i.e. an uncaught Kotlin exception on
+          # the main thread. The bundle had no `compose-resources` directory in it at all, and the
+          # message names only that absent path - nothing about a build phase, so the crash points
+          # nowhere near the cause.
+          #
+          # The plugin derives the destination from `BUILT_PRODUCTS_DIR` and
+          # `UNLOCALIZED_RESOURCES_FOLDER_PATH`, both exported to script phases by Xcode, and picks
+          # the Kotlin target from `PLATFORM_NAME`/`ARCHS`. So this task only works *here*, in a
+          # phase Xcode runs, with those variables in the environment - which is also why the
+          # Android Studio path above may skip this script: that path supplies them itself as
+          # `compose.ios.resources.platform` / `compose.ios.resources.archs` Gradle properties.
+          #
+          # It resolves resources transitively from `:packages:design-system`, the single module
+          # that configures `compose.resources`, so it is also the only place `:shared-ui` has to
+          # be named.
+          ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 \
+                    :shared-ui:syncComposeResourcesForIos --console=plain
         inputFiles: []
   TaskTrackerUITests:
     type: bundle.ui-testing

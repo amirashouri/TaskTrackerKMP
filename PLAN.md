@@ -2052,17 +2052,52 @@ What remains is verifying the link and filling in the behaviours.
       assertions keep passing while every tap is silently discarded) and the simulator
       keeping its container between launches (sign-out is a one-way door through the
       keychain, and uninstalling to reset would discard the seeded-data store).
-- [ ] **14.7** Build script phase running
-      `./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64`. Written in
-      `project.yml` as a `preBuildScript` with `basedOnDependencyAnalysis: false` —
+- [x] **14.7** Build script phase running
+      `./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 :shared-ui:syncComposeResourcesForIos`.
+      Written in `project.yml` as a `preBuildScript` with `basedOnDependencyAnalysis: false` —
       without that flag Xcode decides the script has nothing to do and skips it, leaving
       a stale or missing framework for the build to fail on in a way that points at the
-      linker rather than at Gradle. **Not yet verified end to end.**
-- [ ] **14.8** Verify the link on an iPhone 17 Pro simulator: `xcodegen generate`,
-      then `xcodebuild -project TaskTracker.xcodeproj -scheme TaskTracker -destination
-      'platform=iOS Simulator,name=iPhone 17 Pro' build`. Expect a first failure here —
-      the framework output path, the `xcode-frameworks` copy task, and the `Info.plist`
-      are all unproven.
+      linker rather than at Gradle. Verified end to end in 14.8.
+- [x] **14.8** Verified on an **iPhone 18 Pro** simulator: `xcodegen generate`, then
+      `xcodebuild -project TaskTracker.xcodeproj -scheme TaskTracker -destination
+      'platform=iOS Simulator,name=iPhone 18 Pro' build` → `** BUILD SUCCEEDED **`, and the
+      app launches to `routing -> main` with no exception. The three unproven things all held:
+      the framework output path, the linker against it, and the `Info.plist`.
+
+      ### The one thing the phase was missing: the resources
+
+      The first launch **crashed**, every time, on the first frame:
+
+      ```
+      org.jetbrains.compose.resources.MissingResourceException: Missing resource with path:
+      <app>/compose-resources/composeResources/com.tasktracker.resources/values/strings.commonMain.cvr
+      ```
+
+      A `stringResource` in composition threw, on the main thread, inside `setContent` — so the
+      crash log's faulting stack is Compose and the message names only an absent path. Nothing in
+      either points at a build phase, which is why it reads as a resource bug rather than the
+      packaging gap it is. `ls` on the built `.app` confirmed it: no `compose-resources`
+      directory in the bundle at all.
+
+      `linkDebugFrameworkIosSimulatorArm64` builds a framework and copies no assets. Compose
+      Multiplatform puts the `.cvr` blobs in the bundle through a *separate* task,
+      `syncComposeResourcesForIos`, and the only thing that wires it up on the Xcode path is the
+      plugin making `embedAndSignAppleFrameworkForXcode` depend on it. This project never calls
+      that task — it calls `linkDebugFrameworkIosSimulatorArm64` — so the sync was simply never
+      in the graph.
+
+      The destination is not configurable: the task reads `BUILT_PRODUCTS_DIR` and
+      `UNLOCALIZED_RESOURCES_FOLDER_PATH` from the environment and writes
+      `$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/compose-resources`, and it picks
+      the Kotlin target from `PLATFORM_NAME`/`ARCHS`. So the fix has to live in a phase Xcode
+      runs — there is no Gradle-side alternative. That is also why the Android Studio run
+      configuration is unaffected: it supplies the same values as the
+      `compose.ios.resources.platform` / `compose.ios.resources.archs` Gradle properties, which is
+      what the `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` early exit above exists to let it do.
+
+      This is the same class of defect as Phase 12's on Android and as
+      `copyComposeResourcesIntoAndroidHostTestAssets` on the Android *test* host: three hosts,
+      three wirings, one missing each until something rendered a string.
 - [ ] **14.9** Deep link handling on iOS via `scene(_:openURLContexts:)` → `Router`,
       and an `<intent-filter>` for `tasktracker://` on the Android launcher activity.
 - [ ] **14.10** Port the 10 XCUITests once there are screens to drive.

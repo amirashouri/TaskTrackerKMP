@@ -33,7 +33,7 @@ struct MainViewControllerContainer: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         // Kotlin owns the graph and hands back a hosted Compose tree. Nothing is passed
         // in: see MainViewController.kt for why the entry point takes no arguments.
-        mainViewController()
+        MainViewControllerKt.mainViewController()
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {

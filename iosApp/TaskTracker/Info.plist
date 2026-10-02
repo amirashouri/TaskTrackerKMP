@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 
 	<!-- The system's own launch screen, drawn before the app's first frame and unable to
 	     be animated. It is deliberately the plain canvas: the Kotlin splash then draws the
