@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
@@ -95,6 +97,7 @@ fun ProjectArchiveScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().testTag(ProjectArchiveListTag),
+                contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
             ) {
                 projection.months.forEach { month ->

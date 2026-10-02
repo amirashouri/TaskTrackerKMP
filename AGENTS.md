@@ -60,9 +60,23 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | green — 1052 tests |
-| iOS simulator | `iosSimulatorArm64Test` | green — 1031 tests |
-| Android host | `testAndroidHostTest` | **red** — 10 failures of 818 |
+| JVM | `jvmTest` | **red** — see below; `:shared-ui` is 24 tests, 2 failures |
+| iOS simulator | `iosSimulatorArm64Test` | **red** — same; `:shared-ui` is 24 tests, 2 failures |
+| Android host | `testAndroidHostTest` | **red** — 10 failures of 820; `:shared-ui` is 24 tests, 4 failures |
+
+The tree-wide totals from Phase 13 (1052 / 1031 / 818) are **stale and cannot be
+re-measured today**: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` call
+`ttTheme(ThemeScheme.Dark, content)` and `ttTheme` now takes an `AccentPalette` second, so
+`:feature-projects-presentation` and `:feature-settings-presentation` test *compilation*
+fails and those modules report no executions at all. Fixing it is one argument in each file,
+but it was not this change's work — do not fold it into a UI change, and do not report it
+as one.
+
+On top of that, and also confirmed pre-existing by stashing:
+
+- `SeedingTest` — 3 failures in `:feature-projects-data`, on the JVM and iOS hosts.
+- `aChosenThemeOutlivesTheProcess` and `theBoardReturnsToTheList` in `:shared-ui`, on all
+  three hosts.
 
 The Compose resource packaging that used to fail 61 of these is **fixed** — see
 `tasktracker.kmp.compose.gradle.kts`, which copies the resources into the merged assets

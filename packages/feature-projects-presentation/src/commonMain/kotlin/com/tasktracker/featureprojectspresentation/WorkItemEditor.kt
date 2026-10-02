@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
@@ -128,6 +129,11 @@ fun WorkItemEditorScreen(
             .fillMaxSize()
             .padding(ttSpacing.screenGutterLarge)
             .verticalScroll(rememberScrollState())
+            // After the scroll, so it is range and not viewport: this form's save and cancel
+            // buttons are its last children, and they are the reason the screen is a scroll at
+            // all. `LocalTabBarScrollUnderInset` — the floating tab bar covers this screen's
+            // bottom edge like it covers the four tabs'.
+            .padding(bottom = LocalTabBarScrollUnderInset.current)
             .testTag(WorkItemEditorScreenTag),
     )
 }

@@ -18,6 +18,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttGlassButton
@@ -81,13 +82,20 @@ fun BoardColumnView(
             .ttGlassCard()
             .testTag(BoardColumnTag(column.status)),
     ) {
+        // Inside the scroll, so it is scroll *range* rather than viewport inset: the lane is
+        // full height and now reaches the bottom of the screen, behind the floating tab bar, and
+        // this is what lets the last card in a lane be scrolled up out from under the glass.
+        val tabBarInset = LocalTabBarScrollUnderInset.current
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
                 .padding(ttSpacing.xl)
-                .padding(bottom = if (onAddTask == null) ttSpacing.xl else ttSpacing.boardBottomInset),
+                .padding(
+                    bottom = (if (onAddTask == null) ttSpacing.xl else ttSpacing.boardBottomInset) +
+                        tabBarInset,
+                ),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
             Row(

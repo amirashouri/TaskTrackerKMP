@@ -1,7 +1,9 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +23,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
@@ -98,87 +101,107 @@ fun ProjectsListScreen(
     // rather than captured when the button was drawn.
     var pendingRemovalID by remember { mutableStateOf<ProjectID?>(null) }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
-            .testTag(ProjectsListScreenTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+    // How much of the bottom of this screen the floating tab bar covers, published by the shell
+    // in `shared-ui`. It goes into the list's `contentPadding` below and into the add button's
+    // offset, and in neither place is it interchangeable with a root padding: that would stop the
+    // screen short of the glass, which is the layout this screen is leaving.
+    val tabBarInset = LocalTabBarScrollUnderInset.current
+
+    Box(
+        modifier = modifier.fillMaxSize().testTag(ProjectsListScreenTag),
     ) {
-        ttText(
-            text = stringResource(Res.string.tab_projects),
-            style = ttTypography.largeTitle,
-            color = ttLabel(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        errorMessage?.let { message ->
-            ProjectsErrorBanner(message = message, onDismiss = onDismissError)
-        }
-        notice?.let { outcome ->
-            ProjectsErrorBanner(
-                message = when (outcome) {
-                    is RemovalNotice.ArchivedInstead -> stringResource(
-                        Res.string.project_archived_notice_counted,
-                        outcome.projectName,
-                        outcome.outstandingCount,
-                    )
-                    is RemovalNotice.Deleted -> stringResource(
-                        Res.string.project_deleted_notice,
-                        outcome.projectName,
-                    )
-                    is RemovalNotice.AlreadyArchived -> stringResource(
-                        Res.string.project_already_archived,
-                        outcome.projectName,
-                    )
-                },
-                onDismiss = onDismissNotice,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        ) {
+            ttText(
+                text = stringResource(Res.string.tab_projects),
+                style = ttTypography.largeTitle,
+                color = ttLabel(),
+                modifier = Modifier.fillMaxWidth(),
             )
-        }
-        if (rows.isEmpty() && !isLoading) {
-            ProjectsEmptyState(
-                title = stringResource(Res.string.projects_empty_title),
-                body = stringResource(Res.string.projects_empty_body),
-                // `weight`, not `fillMaxWidth`: the new-project button below has to keep its
-                // height, and a child that fills the column takes all of it. With `fillMaxSize`
-                // here or on the list below, that button is measured at zero height and drawn
-                // past the bottom of the screen — present in the tree, hittable by nothing.
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-            )
-        } else {
-            LazyColumn(
-                // `weight(1f)` for the same reason, and it is what makes the button stay put
-                // while the list scrolls under it rather than being squeezed off the end.
-                modifier = Modifier.weight(1f).testTag(ProjectsListTag),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-            ) {
-                items(rows, key = { it.summary.id.stringValue }) { row ->
-                    // The swipe and the button are the same gesture, offered twice. The
-                    // swipe is the fast path a thumb finds without looking, and the button
-                    // is the one that is reachable by keyboard and screen reader and can be
-                    // aimed deliberately - so they share `onRemove`, and share the
-                    // confirmation behind it, rather than being two actions that could
-                    // disagree about what removing a project means.
-                    TTSwipeToRevealRow(
-                        revealLabel = stringResource(Res.string.common_delete),
-                        isRevealed = pendingRemovalID == row.summary.id,
-                        onRevealed = { pendingRemovalID = row.summary.id },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        ProjectRowView(
-                            project = row.summary,
-                            onOpen = { onOpen(row.summary.id) },
-                            onRemove = { pendingRemovalID = row.summary.id },
-                            onEdit = { onEditProject(row.summary.id) },
+            errorMessage?.let { message ->
+                ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+            }
+            notice?.let { outcome ->
+                ProjectsErrorBanner(
+                    message = when (outcome) {
+                        is RemovalNotice.ArchivedInstead -> stringResource(
+                            Res.string.project_archived_notice_counted,
+                            outcome.projectName,
+                            outcome.outstandingCount,
                         )
+                        is RemovalNotice.Deleted -> stringResource(
+                            Res.string.project_deleted_notice,
+                            outcome.projectName,
+                        )
+                        is RemovalNotice.AlreadyArchived -> stringResource(
+                            Res.string.project_already_archived,
+                            outcome.projectName,
+                        )
+                    },
+                    onDismiss = onDismissNotice,
+                )
+            }
+            if (rows.isEmpty() && !isLoading) {
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.projects_empty_title),
+                    body = stringResource(Res.string.projects_empty_body),
+                    // `weight`, not `fillMaxSize`: a child that fills the column is measured
+                    // against the column's full height, which leaves the title above it at zero.
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+            } else {
+                LazyColumn(
+                    // `weight(1f)` so the list takes the column's remaining height and its own
+                    // `contentPadding` is measured against that — padding is laid out inside the
+                    // viewport, so a viewport that stopped at the bar would reserve nothing useful.
+                    modifier = Modifier.weight(1f).testTag(ProjectsListTag),
+                    contentPadding = PaddingValues(bottom = tabBarInset),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    items(rows, key = { it.summary.id.stringValue }) { row ->
+                        // The swipe and the button are the same gesture, offered twice. The
+                        // swipe is the fast path a thumb finds without looking, and the button
+                        // is the one that is reachable by keyboard and screen reader and can be
+                        // aimed deliberately - so they share `onRemove`, and share the
+                        // confirmation behind it, rather than being two actions that could
+                        // disagree about what removing a project means.
+                        TTSwipeToRevealRow(
+                            revealLabel = stringResource(Res.string.common_delete),
+                            isRevealed = pendingRemovalID == row.summary.id,
+                            onRevealed = { pendingRemovalID = row.summary.id },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            ProjectRowView(
+                                project = row.summary,
+                                onOpen = { onOpen(row.summary.id) },
+                                onRemove = { pendingRemovalID = row.summary.id },
+                                onEdit = { onEditProject(row.summary.id) },
+                            )
+                        }
                     }
                 }
             }
         }
+
+        // Floats over the list rather than sitting under it in the column, which is what lets the
+        // list scroll all the way to the bottom edge of the screen. In the column it was the last
+        // child, so the list's viewport ended at the button and no row could ever reach the glass
+        // — which is the same arrangement the backlog's add button already uses.
         if (onNewProject != null) {
             ttGlassAddButton(
                 contentDescription = stringResource(Res.string.project_new),
                 onClick = onNewProject,
-                modifier = Modifier.align(Alignment.End).testTag(ProjectsListNewTag),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    // The gutter, then the bar's footprint: this button used to be measured from
+                    // the bar's top edge because the column ended there. It is measured from the
+                    // bottom of the screen now, and the two offsets are the same distance apart.
+                    .padding(end = ttSpacing.xxl, bottom = ttSpacing.screenGutterLarge + tabBarInset)
+                    .testTag(ProjectsListNewTag),
             )
         }
     }

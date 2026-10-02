@@ -3,7 +3,6 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -16,6 +15,9 @@ import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.designsystem.ThemeScheme
@@ -25,15 +27,23 @@ import com.tasktracker.featureauthpresentation.PasswordFieldTag
 import com.tasktracker.featureauthpresentation.PrimaryButtonTag
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.ProjectSummary
+import com.tasktracker.domain.Project
+import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
 import com.tasktracker.featureprojectspresentation.NewProjectSheetTag
+import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
+import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTag
+import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
+import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
+import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.SettingsForceOfflineTag
@@ -52,6 +62,7 @@ import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.CompletableDeferred
 import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -932,6 +943,266 @@ object ShellScenarios {
             "expected forced-offline to survive the sign-out teardown",
         )
     }
+
+    /**
+     * Every tab's scrolling region reaches *behind* the floating tab bar.
+     *
+     * ## What was wrong
+     *
+     * The bar used to be the second child of the shell's `Column`, so the content box ended
+     * exactly where the bar began and the four lists stopped at its top edge. Nothing could
+     * pass under the glass, which is the whole point of a floating capsule: a bar with an
+     * opaque band of canvas under it is a band with a capsule on top of it. This is the
+     * geometry of that, and it is the assertion the user's report is really about.
+     *
+     * ## Why `>` and not `>=`
+     *
+     * `>=` is what the old layout satisfied exactly — the content box bottom *was* the bar's
+     * top. So an assertion that passes when the two merely touch cannot tell the fix from the
+     * defect it fixes, and would have gone green on the very first run. `>` is the difference
+     * between "stops above the bar" and "reaches behind it", and it is the only bit of the two
+     * numbers that means anything.
+     *
+     * ## Why the board is measured on its row and not on a lane
+     *
+     * The board scrolls sideways; what goes under the bar is the lane's own height. The row
+     * that holds the lanes is the node carrying that height, so measuring it measures the same
+     * edge without depending on which statuses happen to be drawn — and a lane-only assertion
+     * would have passed on a board with one lane and said nothing about the other three.
+     *
+     * Both numbers go in the failure message: a bare "expected true" here is unreadable,
+     * because "the scroll region" and "the bar" are four different measurements and the
+     * interesting question is always by how much they missed.
+     */
+    val everyTabScrollsBehindTheTabBar: suspend ComposeUiTest.() -> Unit = {
+        val repository = FakeProjectRepository()
+        val seeded = seedOverflowingLists(repository)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = repository,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        openSeededProject(seeded)
+
+        for ((tab, regionTag) in scrollRegionUnderTheBar) {
+            onNodeWithTag(TabButtonTag(tab)).performClick()
+            waitForIdle()
+
+            val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
+            val region = onNodeWithTag(regionTag).getBoundsInRoot()
+            assertTrue(
+                region.bottom > bar.top,
+                "expected the $tab scroll region to reach behind the tab bar, but it ends at " +
+                    "${region.bottom.value} and the bar starts at ${bar.top.value} — the scroll " +
+                    "region has to end *below* the bar's top edge for content to pass under the glass",
+            )
+        }
+    }
+
+    /**
+     * The last row of each list can be scrolled up *out* from under the tab bar.
+     *
+     * ## Why this is a second assertion and not part of the one above
+     *
+     * They guard against opposite mistakes. Extending the scroll region is what the user asked
+     * for; reserving room at the end of the scroll is what stops the extension from costing
+     * reachability. A viewport that reaches the bottom of the screen with no content padding
+     * puts its last row permanently under the glass — present, scrollable, and impossible to
+     * read or tap. Deleting the [Modifier] that does the reserving takes nothing away from the
+     * geometry above, so one assertion cannot see it and the other cannot.
+     *
+     * This is also the one that fails on the *interesting* platform. On a host with no bottom
+     * inset the bar is short and the gutter alone clears it; on a device with a home indicator
+     * the bar is taller and the same gutter does not. The number in the message is the overlap
+     * the row ended up with, which is the value that has to be negative.
+     *
+     * The board's per-lane scroll is not here: its scrolling `Column` carries no tag, and
+     * adding one to assert a padding would be testing the padding through a proxy that has to
+     * be trusted separately. The lane's extent under the bar *is* covered, by
+     * [everyTabScrollsBehindTheTabBar].
+     */
+    val theLastRowOfEachListScrollsClearOfTheTabBar: suspend ComposeUiTest.() -> Unit = {
+        val repository = FakeProjectRepository()
+        val seeded = seedOverflowingLists(repository)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = repository,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        openSeededProject(seeded)
+        // Opening a project lands on the Board tab, so the Projects list has to be asked for.
+        onNodeWithTag(TabButtonTag(AppTab.Projects)).performClick()
+        waitForIdle()
+
+        // Projects: scrolled by index, because the number of rows is known here and an index
+        // scrolls to the *true* end of the scroll rather than to "far enough to see this row".
+        // The last row is then read off the tree rather than assumed, because the summary
+        // order the repository returns is not the order the seeds were written in.
+        onNodeWithTag(ProjectsListTag).performScrollToIndex(seeded.projects.lastIndex)
+        waitForIdle()
+        assertBottomMostRowClearsTheBar(AppTab.Projects, ProjectRowTagPrefix)
+
+        onNodeWithTag(TabButtonTag(AppTab.Backlog)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectBacklogListTag).performScrollToIndex(seeded.backlogItems.lastIndex)
+        waitForIdle()
+        assertBottomMostRowClearsTheBar(AppTab.Backlog, WorkItemBacklogRowTagPrefix)
+
+        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
+        waitForIdle()
+        assertLastRowClearsTheBar(
+            tab = AppTab.Settings,
+            rowTag = SettingsSignOutTag,
+        )
+    }
+
+    /**
+     * Asserts one row's bottom edge is above the tab bar's top edge, and says by how much if not.
+     *
+     * The overlap is the number worth printing: "expected the last backlog row to clear the tab
+     * bar, but it ends 18.0px below the bar's top edge" points at the padding being short, where
+     * a bare failure leaves the reader to go and measure it themselves.
+     */
+    /**
+     * The bottom-most row still composed in a list that has been scrolled to its end.
+     *
+     * Read from the semantics tree rather than recomputed from the seeds, which is the only way
+     * to name the last row without duplicating the repository's sort: the summaries are seeded
+     * with one shared `updatedAt`, so `projects.last()` is not the row the list ends on. A row
+     * scrolled past is not composed, so once the scroll is at `maxValue` the lowest node left
+     * in the list *is* its final row.
+     *
+     * [rowTagPrefix] rather than a full tag because a row owns sub-tags -- a project's edit and
+     * delete buttons, a backlog item's "put on board" and "file away" -- and the lowest of those
+     * would be an action inside the last row rather than the row.
+     */
+    private fun ComposeUiTest.assertBottomMostRowClearsTheBar(tab: AppTab, rowTagPrefix: String) {
+        val rows = onAllNodes(hasRowTagUnder(rowTagPrefix)).fetchSemanticsNodes()
+        val lastRow = rows.maxByOrNull { it.boundsInRoot.bottom }
+        assertNotNull(
+            lastRow,
+            "expected at least one row tagged `$rowTagPrefix.*` on $tab, so its last row could " +
+                "be measured against the tab bar",
+        )
+        assertLastRowClearsTheBar(tab, lastRow.config.getOrElseNullable(SemanticsProperties.TestTag) { null }!!)
+    }
+
+    /**
+     * Matches a row of [prefix] but not the actions inside it, which read `<row>.edit` and so on.
+     *
+     * "No further dot" rather than "one dot": both prefixes here already contain one
+     * (`projects.row`, `backlog.row`), so a project row is `projects.row.P4` and counting dots
+     * from the start would reject every real row. The test is on the *remainder*, which is where
+     * the difference shows up — and it is cheap to get wrong in the other direction, because a
+     * prefix match alone also returns a delete button, which is laid out inside the row and so
+     * could quietly become the bottom-most match.
+     */
+    private fun hasRowTagUnder(prefix: String): SemanticsMatcher =
+        SemanticsMatcher("TestTag = '$prefix.<key>'") { node ->
+            val tag = node.config.getOrElseNullable(SemanticsProperties.TestTag) { null }
+            tag != null &&
+                tag.startsWith("$prefix.") &&
+                !tag.removePrefix("$prefix.").contains('.')
+        }
+
+    private fun ComposeUiTest.assertLastRowClearsTheBar(tab: AppTab, rowTag: String) {
+        val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
+        val row = onNodeWithTag(rowTag).getBoundsInRoot()
+        val overlap = row.bottom.value - bar.top.value
+        assertTrue(
+            overlap <= 0.0,
+            "expected the last $tab row to scroll clear of the tab bar, but it ends " +
+                "${overlap}px below the bar's top edge (row ${row.bottom.value}, bar top " +
+                "${bar.top.value}) — the list reaches the bottom of the screen but reserves " +
+                "nothing at the end of its scroll, so this row is stranded under the glass",
+        )
+    }
+
+    /**
+     * Enough projects and backlog items that every list overflows its viewport.
+     *
+     * Both lists need this for the same reason, which is that the property under test is a
+     * *scroll* property: a list that fits entirely on screen has no end to scroll to and would
+     * make [theLastRowOfEachListScrollsClearOfTheTabBar] pass without any padding at all.
+     *
+     * The items go to one project only, [opened], and the other [OVERFLOWING_ROWS] - 1 projects
+     * exist to make the *Projects* list overflow. Seeding every project instead would make the
+     * board's lanes overflow for the wrong reason: the board scrolls horizontally, so its rows
+     * are what has to overflow, and their count does not depend on how many projects exist.
+     *
+     * Seeded rather than left to `seedSampleDataIfNeeded`, so the row count is exactly
+     * [OVERFLOWING_ROWS] and the index the scroll is aimed at is the last row.
+     */
+    private suspend fun seedOverflowingLists(repository: FakeProjectRepository): SeededLists {
+        val opened = shellTestProject(name = "Opened", keyPrefix = "OP")
+        val projects = listOf(opened) + (1 until OVERFLOWING_ROWS).map { index ->
+            shellTestProject(name = "Project $index", keyPrefix = "P$index")
+        }
+        projects.forEach { repository.seed(it) }
+        val backlogItems = (1..OVERFLOWING_ROWS).map { index ->
+            shellTestWorkItem(
+                projectID = opened.id,
+                number = index,
+                title = "Task $index",
+                status = WorkItemStatus.Backlog,
+            )
+        }
+        backlogItems.forEach { repository.seed(it) }
+        return SeededLists(
+            projects = projects,
+            backlogItems = backlogItems,
+            openedSummary = ProjectSummary(opened, itemCount = OVERFLOWING_ROWS),
+        )
+    }
+
+    private class SeededLists(
+        val projects: List<Project>,
+        val backlogItems: List<WorkItem>,
+        /**
+         * The summary the Projects list draws for [projects]' first entry.
+         *
+         * [ProjectRowTag] keys on the key prefix, so the row could be addressed without the
+         * [itemCount] — but a tag assembled from a summary the list would never draw is a tag
+         * that stops matching the moment the projection changes, so it is built from the count
+         * that was seeded.
+         */
+        val openedSummary: ProjectSummary,
+    )
+
+    /**
+     * Opens [SeededLists.openedSummary]'s project by clicking its row, as a user's first tap
+     * would.
+     *
+     * There is no other way to reach a scoped tab's content: [com.tasktracker.routing.Router]
+     * keeps a per-tab path and only `openProject` pushes onto the Board one, so a test that
+     * seeds a project and clicks straight to `AppTab.Board` gets the scoped *empty state* —
+     * correctly drawn, and a test of the picker's copy rather than of scroll geometry.
+     */
+    private fun ComposeUiTest.openSeededProject(seeded: SeededLists) {
+        onNodeWithTag(ProjectRowTag(seeded.openedSummary)).performClick()
+        waitForIdle()
+    }
+
+    /**
+     * Each tab and the tag on the node whose bottom edge is its scroll region's reach.
+     *
+     * The board is measured on its lane row, so see [everyTabScrollsBehindTheTabBar] for why.
+     */
+    private val scrollRegionUnderTheBar: List<Pair<AppTab, String>> = listOf(
+        AppTab.Projects to ProjectsListTag,
+        AppTab.Board to ProjectBoardColumnsTag,
+        AppTab.Backlog to ProjectBacklogListTag,
+        AppTab.Settings to SettingsScreenTag,
+    )
+
+    /** Rows seeded per list: enough to overflow a tall viewport at the row heights in use. */
+    private const val OVERFLOWING_ROWS = 40
 
     /**
      * Which tabs the semantics tree is currently claiming as selected, in [AppTab] order.

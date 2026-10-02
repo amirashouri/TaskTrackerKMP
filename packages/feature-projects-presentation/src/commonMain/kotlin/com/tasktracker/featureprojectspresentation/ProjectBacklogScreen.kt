@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -15,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlassAddButton
 import com.tasktracker.designsystem.ttSpacing
@@ -59,6 +61,8 @@ fun ProjectBacklogScreen(
     onSelectProject: ((ProjectID) -> Unit)? = null,
     onAddTask: (() -> Unit)? = null,
 ) {
+    val tabBarInset = LocalTabBarScrollUnderInset.current
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -90,6 +94,7 @@ fun ProjectBacklogScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag(ProjectBacklogListTag),
+                    contentPadding = PaddingValues(bottom = tabBarInset),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
                     items(projection.untriaged, key = { it.id.stringValue }) { item ->
@@ -109,7 +114,10 @@ fun ProjectBacklogScreen(
                 onClick = addTask,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(end = ttSpacing.xxl, bottom = ttSpacing.boardBottomInset)
+                    .padding(
+                        end = ttSpacing.xxl,
+                        bottom = ttSpacing.boardBottomInset + tabBarInset,
+                    )
                     .testTag(BacklogAddTaskTag),
             )
         }

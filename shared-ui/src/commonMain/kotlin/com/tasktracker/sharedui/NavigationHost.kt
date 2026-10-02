@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -19,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -40,10 +41,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassTabBar
 import com.tasktracker.designsystem.ThemeScheme
@@ -147,61 +150,86 @@ fun NavigationHost(
     // modifier ordering rather than on anything readable. There was a `NavigationHostTag` here
     // that was therefore present in no semantics tree at all, and the only reason it was found
     // is that a test finally asked for it. The container is identified by the caller's tag.
-    Column(modifier = modifier.fillMaxSize()) {
-        Box(modifier = Modifier.weight(1f)) {
-            val path = navigation.pathFor(tab)
-            val pushed = path.lastOrNull()
-            val previousRoute = path.dropLast(1).lastOrNull()
-            val editorOverProjectRoot = pushed is AppRoute.WorkItemEditor &&
-                previousRoute == null && (tab == AppTab.Board || tab == AppTab.Backlog)
+    //
+    // The bar is *overlaid*, not a second child of a `Column`. It used to be, which meant the
+    // content box ended where the bar began and no list could ever put an item behind the glass —
+    // a floating capsule with an opaque band of canvas under it reads as a band with a capsule on
+    // top, not as glass. So the content takes the whole window and the bar is aligned over it,
+    // and the one thing that has to be given back is reachability: `tabBarInset` below.
+    //
+    // That measurement is also the whole cost of the overlay. Anything drawn in the content box
+    // now reaches the bottom of the screen, so a surface that used to be *above* the bar by
+    // accident is now *under* it and the bar takes the touch. `TTBottomSheetScaffold` is the one
+    // that bit: a sheet's action row sat on the bar and clicking Create dismissed the form
+    // instead of submitting it, which is why the sheet reads this inset too.
+    val tabBarInset = remember { mutableStateOf(0.dp) }
+    // Read here rather than inside the `onSizeChanged` lambda, which is not a composable scope.
+    val tabBarDensity = LocalDensity.current
+    CompositionLocalProvider(LocalTabBarScrollUnderInset provides tabBarInset.value) {
+        Box(modifier = modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                val path = navigation.pathFor(tab)
+                val pushed = path.lastOrNull()
+                val previousRoute = path.dropLast(1).lastOrNull()
+                val editorOverProjectRoot = pushed is AppRoute.WorkItemEditor &&
+                    previousRoute == null && (tab == AppTab.Board || tab == AppTab.Backlog)
 
-            // Keep the root in this same composition slot while a task editor is shown over
-            // a project tab. Routing into a separate PushedRoute branch used to dispose and
-            // rebuild BacklogDestination, replaying its repository load and flashing the list.
-            if (pushed == null || editorOverProjectRoot) {
-                TabRoot(
-                    tab = tab,
-                    router = router,
-                    environment = environment,
-                    settings = settings,
-                    preferences = preferences,
-                    themeScheme = themeScheme,
-                    scope = scope,
-                )
+                // Keep the root in this same composition slot while a task editor is shown over
+                // a project tab. Routing into a separate PushedRoute branch used to dispose and
+                // rebuild BacklogDestination, replaying its repository load and flashing the list.
+                if (pushed == null || editorOverProjectRoot) {
+                    TabRoot(
+                        tab = tab,
+                        router = router,
+                        environment = environment,
+                        settings = settings,
+                        preferences = preferences,
+                        themeScheme = themeScheme,
+                        scope = scope,
+                    )
+                }
+
+                if (editorOverProjectRoot) {
+                    val editorRoute = pushed
+                    WorkItemEditorDestination(
+                        projectID = editorRoute.projectID,
+                        workItemID = editorRoute.workItemID,
+                        initialStatus = editorRoute.initialStatus,
+                        repository = environment.repository,
+                        dateProvider = environment.dateProvider,
+                        scope = scope,
+                        onDismiss = {
+                            val currentPath = router.path(tab)
+                            if (currentPath.lastOrNull() == editorRoute) {
+                                router.setPath(currentPath.dropLast(1), tab)
+                            }
+                        },
+                    )
+                } else if (pushed != null) {
+                    PushedRoute(
+                        route = pushed,
+                        tab = tab,
+                        previousRoute = previousRoute,
+                        router = router,
+                        environment = environment,
+                        settings = settings,
+                        preferences = preferences,
+                        themeScheme = themeScheme,
+                        scope = scope,
+                    )
+                }
             }
 
-            if (editorOverProjectRoot) {
-                val editorRoute = pushed
-                WorkItemEditorDestination(
-                    projectID = editorRoute.projectID,
-                    workItemID = editorRoute.workItemID,
-                    initialStatus = editorRoute.initialStatus,
-                    repository = environment.repository,
-                    dateProvider = environment.dateProvider,
-                    scope = scope,
-                    onDismiss = {
-                        val currentPath = router.path(tab)
-                        if (currentPath.lastOrNull() == editorRoute) {
-                            router.setPath(currentPath.dropLast(1), tab)
-                        }
+            TabBar(
+                selected = tab,
+                onSelect = router::selectTab,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .onSizeChanged { size: IntSize ->
+                        tabBarInset.value = with(tabBarDensity) { size.height.toDp() }
                     },
-                )
-            } else if (pushed != null) {
-                PushedRoute(
-                    route = pushed,
-                    tab = tab,
-                    previousRoute = previousRoute,
-                    router = router,
-                    environment = environment,
-                    settings = settings,
-                    preferences = preferences,
-                    themeScheme = themeScheme,
-                    scope = scope,
-                )
-            }
+            )
         }
-
-        TabBar(selected = tab, onSelect = router::selectTab)
     }
 }
 /** The tab's own root, with nothing pushed onto it. Exhaustive over [AppTab]. */
@@ -517,7 +545,12 @@ private fun ProjectPicker(
             projects = model.projects,
             selectedProjectID = model.selectedProjectID ?: selectedProjectID,
             onSelect = onPick,
-            modifier = Modifier.padding(ttSpacing.md),
+            modifier = Modifier.padding(
+                top = ttSpacing.md,
+                start = ttSpacing.md,
+                end = ttSpacing.md,
+                bottom = ttSpacing.md + LocalTabBarScrollUnderInset.current,
+            ),
         )
     }
 }

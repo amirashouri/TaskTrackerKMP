@@ -10,6 +10,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
@@ -143,6 +145,10 @@ fun SettingsScreen(
             .fillMaxSize()
             .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xl)
             .testTag(SettingsScreenTag),
+        // Scroll range under the floating tab bar, not viewport inset — see
+        // `LocalTabBarScrollUnderInset`. This is the list whose last row is the sign-out button,
+        // so an inset that is a few dp short is a sign-out button parked under the glass.
+        contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
         item {

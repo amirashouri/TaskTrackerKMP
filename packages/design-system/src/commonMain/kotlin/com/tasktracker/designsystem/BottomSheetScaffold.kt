@@ -91,6 +91,10 @@ fun TTBottomSheetScaffold(
                     // Apply one bottom inset at a time: the keyboard already covers the
                     // navigation area, and adding both shortens the form's viewport.
                     .then(if (keyboardVisible) Modifier.imePadding() else Modifier.navigationBarsPadding())
+                    // The shell draws its tab bar over the top of this surface, so a sheet
+                    // that does not clear it puts its action row behind the bar — and the bar
+                    // takes the touch, which silently dismissed the form instead of submitting.
+                    .padding(bottom = LocalTabBarScrollUnderInset.current)
                     .animateEnterExit(
                         enter = slideInVertically(
                             animationSpec = SHEET_SPRING,

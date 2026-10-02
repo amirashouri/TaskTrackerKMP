@@ -78,13 +78,19 @@ targets:
       - name: Build ComposeApp
         basedOnDependencyAnalysis: false
         script: |
-          # Android Studio's KMP run configuration builds the framework before invoking Xcode.
-          # Skip this phase there to avoid starting a second Gradle build from Xcode.
-          if [ "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" = "YES" ]; then
-            exit 0
-          fi
           cd "$SRCROOT/.."
           export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
+          # Android Studio's KMP run configuration builds the framework before invoking Xcode,
+          # so the (expensive) link below is redundant on that path and is skipped. The resource
+          # sync is *not* redundant and must still run: the task reads BUILT_PRODUCTS_DIR and
+          # UNLOCALIZED_RESOURCES_FOLDER_PATH, which Android Studio does not supply to its own
+          # Gradle invocation, so this script phase is the only place the .cvr blobs can land in
+          # the bundle. Skipping it here is why the IDE run crashed on the first frame with
+          # MissingResourceException while a plain Xcode run worked.
+          if [ "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" = "YES" ]; then
+            ./gradlew :shared-ui:syncComposeResourcesForIos --console=plain
+            exit $?
+          fi
           # `syncComposeResourcesForIos` is not optional and is not about tests. Linking the
           # framework is only half of what this phase exists for: the other half is copying the
           # `.cvr` blobs into the app bundle, which the linker does nothing for and which is why
@@ -100,12 +106,12 @@ targets:
           # message names only that absent path - nothing about a build phase, so the crash points
           # nowhere near the cause.
           #
-          # The plugin derives the destination from `BUILT_PRODUCTS_DIR` and
-          # `UNLOCALIZED_RESOURCES_FOLDER_PATH`, both exported to script phases by Xcode, and picks
-          # the Kotlin target from `PLATFORM_NAME`/`ARCHS`. So this task only works *here*, in a
-          # phase Xcode runs, with those variables in the environment - which is also why the
-          # Android Studio path above may skip this script: that path supplies them itself as
-          # `compose.ios.resources.platform` / `compose.ios.resources.archs` Gradle properties.
+          # The task's output directory is not configurable: it reads `BUILT_PRODUCTS_DIR` and
+          # `UNLOCALIZED_RESOURCES_FOLDER_PATH` from the environment, and its Kotlin target from
+          # `PLATFORM_NAME`/`ARCHS`. Those are exactly what Xcode exports to a script phase, so
+          # this task only works *here*; do not move it to a Gradle invocation Xcode does not run,
+          # and do not pin the platform/arch with `-Pcompose.ios.resources.*`, which would hardcode
+          # the simulator and break any device build.
           #
           # It resolves resources transitively from `:packages:design-system`, the single module
           # that configures `compose.resources`, so it is also the only place `:shared-ui` has to
@@ -113,6 +119,7 @@ targets:
           ./gradlew :shared-ui:linkDebugFrameworkIosSimulatorArm64 \
                     :shared-ui:syncComposeResourcesForIos --console=plain
         inputFiles: []
+
   TaskTrackerUITests:
     type: bundle.ui-testing
     platform: iOS

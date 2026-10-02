@@ -71,13 +71,19 @@ Phases 14-15 outstanding. Test baseline **969 unique in `commonTest`** (projects
 projects-presentation 117, network 88, projects-domain 81, sync 70, database 61, design-system
 70, feature-auth-data 53, routing 52, domain 43, core 42, composition-root 35,
 feature-auth-presentation 13, feature-auth-domain 13, keychain 12, settings-domain 12,
-settings-presentation 11, di 19, user-defaults 19, settings-data 5) plus the **21 shell
+settings-presentation 11, di 19, user-defaults 19, settings-data 5) plus the **25 shell
 scenarios** in `shared-ui`'s `commonTest`, which are `fun`s the target entry points call
 rather than `@Test`s, and are counted per target below. The remainder is target-only:
-`jvmTest` currently reports **1058 executions** in JUnit XML; the current iOS simulator XML
-reports **1036**. These totals include the five new common tests, two of which are iOS-only
-execution differences in this suite. This full run is not green; the existing failures are listed in the current
-verification note under [test-count baseline](#test-count-baseline).
+`jvmTest` reported **1058 executions** and the iOS simulator XML **1036** as of Phase 13.2.
+Phase 14.9 adds **2 shell scenarios, so 24 per host** (`TaskTrackerAppJvmTest` 24,
+`TaskTrackerAppIosTest` 24, `TaskTrackerAppAndroidHostTest` 24, all measured). The
+tree-wide totals are **not** re-stated here because they cannot be produced today:
+`WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` no longer compile against
+`ttTheme`'s current signature, so `:feature-projects-presentation` and
+`:feature-settings-presentation` report no executions at all — see
+[Scroll-under: the two assertions](#scroll-under-the-two-assertions). This full run is not
+green; the existing failures are listed in the current verification note under
+[test-count baseline](#test-count-baseline).
 `testAndroidHostTest` is **not green** — see the Android-host note below.
 
 ## Decisions taken
@@ -1753,7 +1759,7 @@ explicit rather than left looking wired.
 | suite | target | tests |
 | --- | --- | --- |
 | `design-system` | JVM / iOS | 73 / 70 |
-| `shared-ui` (shell scenarios) | JVM / iOS / Android host | 18 / 18 / 18 |
+| `shared-ui` (shell scenarios) | JVM / iOS / Android host | 24 / 24 / 24 |
 | `feature-projects-presentation` | JVM / iOS | 146 / 146 |
 | `feature-projects-domain` | JVM | 80 |
 | `composition-root` | JVM / iOS | 37 / 35 |
@@ -2098,9 +2104,78 @@ What remains is verifying the link and filling in the behaviours.
       This is the same class of defect as Phase 12's on Android and as
       `copyComposeResourcesIntoAndroidHostTestAssets` on the Android *test* host: three hosts,
       three wirings, one missing each until something rendered a string.
-- [ ] **14.9** Deep link handling on iOS via `scene(_:openURLContexts:)` → `Router`,
+- [x] **14.9** The four top-level views scroll **under** the floating tab bar, and the
+      last row of each is still reachable. Recorded in full under
+      [Scroll-under: the two assertions](#scroll-under-the-two-assertions).
+- [ ] **14.10** Deep link handling on iOS via `scene(_:openURLContexts:)` → `Router`,
       and an `<intent-filter>` for `tasktracker://` on the Android launcher activity.
-- [ ] **14.10** Port the 10 XCUITests once there are screens to drive.
+- [ ] **14.11** Port the 10 XCUITests once there are screens to drive.
+
+### Scroll-under: the two assertions
+
+The bar was the second child of a `Column`, so the content box ended where the bar began. A
+floating capsule with an opaque band of canvas under it reads as a band with a capsule on top of
+it, not as glass — and no list could put an item behind the glass, because there was nowhere
+behind it. `NavigationHost` now overlays the bar (`align(Alignment.BottomCenter)` over a
+full-height content box) and publishes the bar's laid-out height as
+`LocalTabBarScrollUnderInset` in `:packages:design-system`.
+
+**Measured, not a token.** The bar carries `navigationBarsPadding()` and its labels scale with
+the font setting, so its height is not derivable from the spacing scale: on the JVM host
+(1024x768, density 1) it is **60px** tall, top edge at y=708. The shell reads that with
+`onSizeChanged`, and the cost is one recomposition per consumer, once — the first composition
+reads `0.dp` because the bar has not been measured yet.
+
+**Content inset, never viewport inset.** Eight consumers read it: the scroll ranges of Projects,
+Backlog, Settings, Archive and each board lane, the Projects and Backlog add buttons, the
+project picker, and `TTBottomSheetScaffold`. Applying it to a screen's *root* would stop the
+screen short of the glass, which is the layout being replaced; it belongs in `contentPadding`,
+which moves the end of the content under the bar while the viewport still runs to the screen
+edge. Projects' add button had to be moved out of its `Column` and floated over the list for the
+same reason — as a `Column` child it sat *on* the list's last item.
+
+**The overlay has one sharp edge, and it cost a test to find.** Content that used to stop above
+the bar now reaches the bottom of the screen, so anything drawn there is under the glass and the
+bar takes the touch. `TTBottomSheetScaffold`'s action row sat exactly on the bar: clicking
+**Create** in the new-project sheet dismissed the form instead of submitting, and the sheet's
+own tag disappearing is the only trace. `creatingAProjectAddsItToTheList` went red on this and
+is the regression test — it is not a new test, it is an existing one that stopped being about the
+sheet. `TTBottomSheetScaffold` now reads the same inset, so every sheet clears the bar on all
+three hosts with no per-caller change.
+
+**Two assertions, because they fail in opposite directions.** Extending the scroll region is the
+ask; reserving room at the end of the scroll is what stops the extension from costing
+reachability. Deleting the reserving `Modifier` takes nothing away from the first and cannot be
+seen by it.
+
+| scenario | asserts | mutation that must redden it | measured on red |
+| --- | --- | --- | --- |
+| `everyTabScrollsBehindTheTabBar` | each tab's scroll region ends **below** the bar's top edge | pad the content box's bottom (the old `Column`) | region ends 664.0, bar top 708.0 |
+| `theLastRowOfEachListScrollsClearOfTheTabBar` | each list's last row scrolls **above** the bar's top edge | `contentPadding = PaddingValues(bottom = 0.dp)` on Projects | row bottom 736.0, bar top 708.0 — 28.0px overlap |
+
+Both mutations were run and both caught. Green on all three hosts: `jvmTest`,
+`iosSimulatorArm64Test`, `testAndroidHostTest` (24 shell scenarios, 24 on iOS, 24 on the Android
+host; the Android host's four failures are the documented `LazyColumn`-viewport gap and are
+unchanged by this phase).
+
+**Two shell scenarios were already red** — `theBoardReturnsToTheList` and
+`aChosenThemeOutlivesTheProcess`, on every host — and are unrelated: confirmed by stashing this
+phase and re-running. Two `commonTest` files also no longer compile against `ttTheme`'s current
+signature (`WorkItemCardScenarios.kt:142`, `SettingsScenarios.kt:234`, both `AccentPalette`),
+which is why `:feature-projects-presentation` and `:feature-settings-presentation` test
+compilation fails on the decision command; also pre-existing, and left alone.
+
+**Looked at, not just measured.** The bounds assertions are structural, so a pixel check was run
+once on the JVM host to confirm the *composite*: mid-scroll, the row fill reads through the bar's
+translucent lens — `rgb(50,53,57)` at y=735 against `rgb(22,24,26)` for the same pixel with the
+list scrolled to its end, where the reserved gutter leaves only canvas behind the glass. Those two
+frames are what "content passes under the bar" looks like, and neither number is reachable from
+the modifier chain.
+
+**Not asserted:** the first frame, before the bar has been measured, lays out with a `0.dp`
+inset, and the board lane's end padding has no test — its scrolling `Column` carries no tag and
+adding one to assert a padding would test the padding through a proxy. The lane's extent under
+the bar *is* covered, by the first scenario.
 
 **Exit criteria**: `xcodegen generate` then an iPhone 17 Pro simulator build and run.
 
