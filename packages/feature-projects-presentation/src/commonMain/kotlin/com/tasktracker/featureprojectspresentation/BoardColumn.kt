@@ -1,11 +1,15 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -27,6 +32,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_empty_column
+import com.tasktracker.resources.board_add_task
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -55,6 +61,7 @@ fun BoardColumnView(
     column: BoardColumn,
     onSelect: (WorkItem) -> Unit,
     modifier: Modifier = Modifier,
+    onAddTask: (() -> Unit)? = null,
     /**
      * The action slot for each card in this column.
      *
@@ -66,53 +73,69 @@ fun BoardColumnView(
      */
     cardTrailing: @Composable (WorkItem) -> Unit = {},
 ) {
-    Column(
+    Box(
         modifier = modifier
             .width(columnWidth)
+            .fillMaxHeight()
             .ttGlassCard()
-            .testTag(BoardColumnTag(column.status))
-            .padding(ttSpacing.xl),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            .testTag(BoardColumnTag(column.status)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(ttSpacing.xl)
+                .padding(bottom = if (onAddTask == null) ttSpacing.xl else ttSpacing.boardBottomInset),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
-            ttText(
-                text = statusLabel(column.status),
-                style = ttTypography.titleSmall,
-                color = ttLabel(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            ttText(
-                text = column.count.toString(),
-                style = ttTypography.caption,
-                color = ttLabelSecondary(),
-                modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
-            )
-        }
-        if (column.isEmpty) {
-            // Tagged because the wording is not unique on a board: every empty lane says the
-            // same thing, so a scenario that wants "this lane is empty" can only say it by
-            // finding this node. See `TestQueries` for why searching for the text instead
-            // fails.
-            ttText(
-                text = stringResource(Res.string.board_empty_column),
-                style = ttTypography.footnote,
-                color = ttLabelSecondary(),
-                modifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),
-            )
-        } else {
-            column.items.forEach { item ->
-                WorkItemCard(
-                    item = item,
-                    onClick = { onSelect(item) },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailing = { cardTrailing(item) },
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ttText(
+                    text = statusLabel(column.status),
+                    style = ttTypography.titleSmall,
+                    color = ttLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                ttText(
+                    text = column.count.toString(),
+                    style = ttTypography.caption,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
                 )
             }
+            if (column.isEmpty) {
+                ttText(
+                    text = stringResource(Res.string.board_empty_column),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),
+                )
+            } else {
+                column.items.forEach { item ->
+                    WorkItemCard(
+                        item = item,
+                        onClick = { onSelect(item) },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailing = { cardTrailing(item) },
+                    )
+                }
+            }
+        }
+        onAddTask?.let { addTask ->
+            ttGlassButton(
+                label = stringResource(Res.string.board_add_task),
+                onClick = addTask,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
+                    .testTag(BoardColumnAddTaskTag(column.status)),
+            )
         }
     }
 }
@@ -153,6 +176,8 @@ fun BoardColumnCountTag(status: WorkItemStatus): String = "${BoardColumnTag(stat
 
 fun BoardColumnEmptyTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.empty"
 
+fun BoardColumnAddTaskTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.add"
+
 /**
  * The lane's width.
  *
@@ -161,7 +186,7 @@ fun BoardColumnEmptyTag(status: WorkItemStatus): String = "${BoardColumnTag(stat
  * the same radius a card uses, which is what makes a column and a card read as the same
  * kind of floating surface.
  */
-internal val columnWidth = 264.dp
+internal val columnWidth = 300.dp
 
 /**
  * The distance from one lane's leading edge to the next one's.
@@ -169,7 +194,7 @@ internal val columnWidth = 264.dp
  * Internal rather than a public constant because it exists for one caller - the board row's
  * snap behaviour, which has to know where the lanes *land* - and it is deliberately defined
  * here, next to [columnWidth], rather than in the row that lays the lanes out. Two places
- * would each be free to say "264dp wide, 8dp apart" and disagree, and the disagreement would
+ * would each be free to say "300dp wide, 8dp apart" and disagree, and the disagreement would
  * not look like a disagreement: the row would look right and the snap would land a third of a
  * lane off.
  *

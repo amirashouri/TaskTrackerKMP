@@ -1,12 +1,7 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.tasktracker.di.Resolver
@@ -15,27 +10,9 @@ import com.tasktracker.di.Resolver
  * The Compose root shared by Android and the iOS `UIViewControllerRepresentable` shells.
  *
  * Both platforms call this same function, which is the point of `:shared-ui`: the screen tree,
- * its state and its navigation live in Kotlin, and the platform layer contributes only system
- * chrome — the window insets it *produces* — plus the entry point.
- *
- * ## It applies insets and nothing else
- *
- * `MainActivity` calls `enableEdgeToEdge()` and that is the whole of the platform's share: the
- * tree draws under the system bars, and this is what moves the content back below them. The
- * split is deliberate — a platform layer can only hand Compose the insets, and
- * `Modifier.windowInsetsPadding` is the same API on both platforms, so the padding belongs next
- * to the tree it protects rather than being written twice.
- *
- * `safeDrawing` rather than `systemBars`, because a camera cutout is *not* a system bar and on
- * the test device the cutout is the taller of the two: 156px against a 72px status bar. Asking
- * for `statusBars` would have left the content under the cutout anyway. Top only, because the
- * bottom inset is a separate question — a list should scroll *under* the gesture bar and only
- * its last row needs clearance, so the answer there is `contentPadding` on the scrolling
- * container, not padding on the root.
- *
- * On the root rather than per screen, because a per-screen inset is a per-screen bug waiting to
- * happen, and because `windowInsetsPadding` consumes: children see an inset already applied and
- * cannot double it.
+ * its state and its navigation live in Kotlin, and the platform layer contributes only the
+ * entry point. [RootScreen] paints the backdrop edge-to-edge and applies safe-area insets to
+ * foreground content, so a pinned dark appearance also paints the area behind the notch dark.
  *
  * ## Everything else moved to [RootScreen]
  *
@@ -50,7 +27,8 @@ import com.tasktracker.di.Resolver
  *    covers its own restore, which is inside the root rather than out here;
  *  - insets are a *window* property, and every screen inherits this one.
  *
- * What remains is the window's job: safe area, and the composable both platforms call.
+ * What remains is the shared entry point both platforms call. Insets are applied inside
+ * [RootScreen], after its full-window backdrop has been drawn.
  */
 @Composable
 fun TaskTrackerApp(
@@ -67,9 +45,7 @@ fun TaskTrackerApp(
     splashMinimumHoldMillis: Long = SPLASH_MINIMUM_HOLD_MILLIS,
 ) {
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+        modifier = modifier.fillMaxSize(),
     ) {
         RootScreen(
             resolver = resolver,

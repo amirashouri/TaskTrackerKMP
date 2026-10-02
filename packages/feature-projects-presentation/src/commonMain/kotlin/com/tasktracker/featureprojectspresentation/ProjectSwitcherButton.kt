@@ -4,30 +4,51 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSurface
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Project
+import com.tasktracker.core.ProjectID
 
 /**
  * The project name in the toolbar, with the key prefix beside it, and a chevron for the menu.
@@ -51,37 +72,121 @@ fun ProjectSwitcherButton(
     project: Project?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    projects: List<PickableProject> = emptyList(),
+    onSelectProject: ((ProjectID) -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(ttRadius.control)
+    var expanded by remember { mutableStateOf(false) }
+    var switcherWidthPx by remember { mutableStateOf(0) }
 
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .ttGlassSurface(shape = shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.sm)
-            .testTag(ProjectSwitcherTag),
-        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        project?.let {
-            SwitcherMonogram(keyPrefix = it.keyPrefix)
-        }
-        Column(modifier = Modifier.weight(1f, fill = false)) {
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { switcherWidthPx = it.size.width }
+                .clip(shape)
+                .ttGlassSurface(shape = shape)
+                .clickable {
+                    if (onSelectProject != null && projects.size > 1) expanded = !expanded
+                    else onClick()
+                }
+                .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
+                .testTag(ProjectSwitcherTag),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            project?.let {
+                SwitcherMonogram(keyPrefix = it.keyPrefix)
+            }
             ttText(
                 text = project?.name ?: noProjectLabel,
                 style = ttTypography.callout,
                 color = if (project == null) ttLabelSecondary() else ttLabel(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            ttText(
+                text = CHEVRON,
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+                modifier = Modifier.testTag(ProjectSwitcherChevronTag),
             )
         }
-        ttText(
-            text = CHEVRON,
-            style = ttTypography.footnote,
-            color = ttLabelSecondary(),
-            modifier = Modifier.testTag(ProjectSwitcherChevronTag),
-        )
+
+        if (expanded && onSelectProject != null && switcherWidthPx > 0) {
+            Popup(
+                popupPositionProvider = ProjectSwitcherDropdownPositionProvider(
+                    gapPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+                        ttSpacing.sm.roundToPx()
+                    }
+                ),
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(with(androidx.compose.ui.platform.LocalDensity.current) {
+                            switcherWidthPx.toDp()
+                        })
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState())
+                        .ttGlassSurface(
+                            shape = RoundedCornerShape(ttRadius.control),
+                            base = ttSurface().copy(alpha = 1f - ttGlass.LENS_ALPHA),
+                        )
+                        .padding(vertical = ttSpacing.xs)
+                        .testTag(ProjectSwitcherMenuTag),
+                ) {
+                    projects.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    expanded = false
+                                    onSelectProject(option.id)
+                                }
+                                .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
+                                .testTag(ProjectSwitcherOptionTag(option.id)),
+                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            SwitcherMonogram(keyPrefix = option.keyPrefix)
+                            ttText(
+                                text = option.name,
+                                style = ttTypography.callout,
+                                color = ttLabel(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private class ProjectSwitcherDropdownPositionProvider(
+    private val gapPx: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: androidx.compose.ui.unit.LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val x = when (layoutDirection) {
+            androidx.compose.ui.unit.LayoutDirection.Ltr -> anchorBounds.left.coerceIn(0, maxX)
+            androidx.compose.ui.unit.LayoutDirection.Rtl ->
+                (anchorBounds.right - popupContentSize.width).coerceIn(0, maxX)
+        }
+        val below = anchorBounds.bottom + gapPx
+        val above = anchorBounds.top - popupContentSize.height - gapPx
+        val y = if (below + popupContentSize.height <= windowSize.height) below else above.coerceAtLeast(0)
+        return IntOffset(x, y)
     }
 }
 
@@ -120,6 +225,8 @@ private fun ProjectSwitcherButtonEmptyPreview() = ProjectsPreview(ThemeScheme.Li
 
 const val ProjectSwitcherTag = "board.switcher"
 const val ProjectSwitcherChevronTag = "board.switcher.chevron"
+const val ProjectSwitcherMenuTag = "board.switcher.menu"
+fun ProjectSwitcherOptionTag(projectID: ProjectID): String = "board.switcher.option.${projectID.stringValue}"
 
 /**
  * What the switcher says when no project is chosen.

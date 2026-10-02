@@ -59,6 +59,7 @@ class WorkItemEditorModel(
      */
     private val repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
+    initialStatus: WorkItemStatus? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -75,13 +76,15 @@ class WorkItemEditorModel(
         private set
 
     /**
-     * The status. Defaults to [WorkItemStatus.Backlog] when creating.
+     * The requested board lane, or [WorkItemStatus.Backlog] for other creation paths.
      *
      * [WorkItemStatus.Closed] is not offered for a new task: it is the archive-only status,
      * and reaching it by picking it in a dropdown would make a status that is supposed to
      * be entered through the guarded move reachable by accident.
      */
-    var status: WorkItemStatus by mutableStateOf(existing?.status ?: WorkItemStatus.Backlog)
+    var status: WorkItemStatus by mutableStateOf(
+        existing?.status ?: initialStatus ?: WorkItemStatus.Backlog,
+    )
         private set
 
     /** The priority. */
@@ -124,14 +127,12 @@ class WorkItemEditorModel(
     /**
      * The statuses this editor offers.
      *
-     * Empty once the item is filed away, which is what [isFiledAway]'s own comment claims
-     * and what the board relies on: a closed item has left the flow, so offering it a lane
-     * would offer a move that undoes a decision somebody recorded. `ArchiveWorkItem`
-     * guards the same rule in the other direction, and a form that ignored it would be the
-     * one place in the feature that let a closed task come back.
+     * Hidden only for [WorkItemStatus.Closed], which is archive-only. [WorkItemStatus.Done]
+     * is terminal for due-date and archive rules but remains a board lane, so choosing it
+     * must not remove the status picker from the editor.
      */
     val selectableStatuses: List<WorkItemStatus>
-        get() = if (isFiledAway) {
+        get() = if (status == WorkItemStatus.Closed) {
             emptyList()
         } else {
             WorkItemStatus.entries.filterNot { it == WorkItemStatus.Closed }
@@ -170,9 +171,9 @@ class WorkItemEditorModel(
         details = value
     }
 
-    /** Sets the status. Ignored for a filed-away task, which has left the flow. */
+    /** Sets the status. Ignored for a closed task, which has left the workflow. */
     fun onStatusChanged(value: WorkItemStatus) {
-        if (isFiledAway) return
+        if (status == WorkItemStatus.Closed) return
         status = value
     }
 

@@ -1,40 +1,60 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.tasktracker.designsystem.TTGlassButtonStyle
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
-import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSettingsIconSize
+import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttMonospacedDigits
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -65,6 +85,7 @@ import com.tasktracker.resources.settings_sync_section
 import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
 import com.tasktracker.resources.settings_theme_label
+import com.tasktracker.resources.settings_title
 import com.tasktracker.resources.settings_version
 import org.jetbrains.compose.resources.stringResource
 
@@ -114,10 +135,18 @@ fun SettingsScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(ttSpacing.screenGutterLarge)
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xl)
             .testTag(SettingsScreenTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
+        item {
+            ttText(
+                text = stringResource(Res.string.settings_title),
+                style = ttTypography.largeTitle,
+                color = ttLabel(),
+                modifier = Modifier.padding(bottom = ttSpacing.xs),
+            )
+        }
         item {
             SettingsSection(title = stringResource(Res.string.settings_appearance_section)) {
                 ThemePickerRow(
@@ -128,10 +157,12 @@ fun SettingsScreen(
         }
         item {
             SettingsSection(title = stringResource(Res.string.settings_connection_section)) {
-                SettingsLabeledRow(
+                SettingsIconRow(
                     label = stringResource(Res.string.settings_status_label),
                     value = connectivityLabel(connectivity),
+                    icon = ttSettingsIcons.connectivity,
                 )
+                SettingsDivider()
                 SettingsToggleRow(
                     label = stringResource(Res.string.settings_force_offline),
                     isOn = isForceOffline,
@@ -141,35 +172,44 @@ fun SettingsScreen(
         }
         item {
             SettingsSection(title = stringResource(Res.string.settings_sync_section)) {
-                SettingsLabeledRow(
+                SettingsIconRow(
                     label = stringResource(Res.string.settings_status_label),
                     value = activityLabel(activity.phase),
+                    icon = ttSettingsIcons.sync,
                 )
                 // The queue depth is the number a user actually cares about: it is how many of
                 // their edits are still only on this device.
                 activity.outstandingCount?.let { outstanding ->
-                    SettingsLabeledRow(
+                    SettingsDivider()
+                    SettingsIconRow(
                         label = stringResource(Res.string.settings_sync_waiting),
                         value = outstanding.toString(),
+                        icon = ttSettingsIcons.sync,
                         modifier = Modifier.testTag(SettingsWaitingRowTag),
                     )
                 }
                 // Dead rows are kept rather than dropped, so this can be non-zero, and it is
                 // then the only sign that something is stuck.
                 activity.stuckCount?.let { stuck ->
-                    SettingsLabeledRow(
+                    SettingsDivider()
+                    SettingsIconRow(
                         label = stringResource(Res.string.settings_sync_stuck),
                         value = stuck.toString(),
+                        icon = ttSettingsIcons.sync,
                         valueColor = ttError(),
                         modifier = Modifier.testTag(SettingsStuckRowTag),
                     )
                 }
                 if (activity.failures.isNotEmpty()) {
+                    SettingsDivider()
                     ttText(
                         text = activity.failures.joinToString(separator = "\n"),
                         style = ttTypography.footnote,
                         color = ttLabelSecondary(),
-                        modifier = Modifier.testTag(SettingsFailuresTag),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = ttSpacing.sm)
+                            .testTag(SettingsFailuresTag),
                     )
                 }
                 // Only a request that could not start lands here. The button below is
@@ -177,23 +217,29 @@ fun SettingsScreen(
                 // user cannot see is how a dead button gets reported as a bug.
                 commandOutcome?.let { outcome ->
                     outcomeMessage(outcome)?.let { message ->
+                        SettingsDivider()
                         ttText(
                             text = message,
                             style = ttTypography.footnote,
                             color = ttError(),
-                            modifier = Modifier.testTag(SettingsOutcomeTag),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = ttSpacing.sm)
+                                .testTag(SettingsOutcomeTag),
                         )
                     }
                 }
-                ttGlassButton(
+                SettingsDivider()
+                SettingsActionRow(
                     label = stringResource(Res.string.settings_sync_now),
+                    icon = ttSettingsIcons.sync,
+                    tint = ttAccent(),
                     onClick = onSyncNow,
-                    modifier = Modifier.fillMaxWidth().testTag(SettingsSyncNowTag),
-                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
+                    enabled = !activity.isSyncing,
+                    modifier = Modifier.testTag(SettingsSyncNowTag),
                     // The one state that disables it: a cycle already running, which the status
                     // row above is already saying out loud. Offline is *not* a reason — that
                     // tap has to be answerable, and the answer is what lands above.
-                    enabled = !activity.isSyncing,
                 )
             }
         }
@@ -202,11 +248,12 @@ fun SettingsScreen(
                 // Through the port, which the app backs with the session coordinator: that is
                 // what forgets the credentials, ends the session-scoped state and routes back
                 // to sign-in. Tearing down from here would leave the tokens behind.
-                ttGlassButton(
+                SettingsActionRow(
                     label = stringResource(Res.string.settings_sign_out),
+                    icon = ttSettingsIcons.account,
+                    tint = ttError(),
                     onClick = onSignOut,
-                    modifier = Modifier.fillMaxWidth().testTag(SettingsSignOutTag),
-                    style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+                    modifier = Modifier.testTag(SettingsSignOutTag),
                 )
             }
         }
@@ -216,9 +263,10 @@ fun SettingsScreen(
         version.display?.let { displayed ->
             item {
                 SettingsSection(title = stringResource(Res.string.settings_about_section)) {
-                    SettingsLabeledRow(
+                    SettingsIconRow(
                         label = stringResource(Res.string.settings_version),
                         value = displayed,
+                        icon = ttSettingsIcons.about,
                         modifier = Modifier.testTag(SettingsVersionRowTag),
                     )
                 }
@@ -227,14 +275,7 @@ fun SettingsScreen(
     }
 }
 
-/**
- * The section frame, so all five read as the same kind of group.
- *
- * A labelled glass surface rather than a list `Section`, because this build has no Material3
- * and because the sections are not a `Form`: the rows inside are individually interactive and
- * the glass is what separates them from the ambient backdrop, which is the app's whole visual
- * language on every other surface.
- */
+/** A titled, inset group in the shared Settings list. */
 @Composable
 private fun SettingsSection(
     title: String,
@@ -245,49 +286,87 @@ private fun SettingsSection(
             text = title,
             style = ttTypography.caption,
             color = ttLabelSecondary(),
+            modifier = Modifier.padding(start = ttSpacing.xs, bottom = ttSpacing.xs),
         )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
-                .padding(ttSpacing.xl),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.surface))
+                .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.xs),
             content = { content() },
         )
     }
 }
 
-/** A label and a value on one line, the platform's own `LabeledContent` in this app's idiom. */
+/** A compact label/value row with the leading symbol and trailing setting value. */
 @Composable
-private fun SettingsLabeledRow(
+private fun SettingsIconRow(
     label: String,
     value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
-    valueColor: androidx.compose.ui.graphics.Color = ttLabel(),
+    valueColor: Color = ttLabelSecondary(),
+    iconTint: Color = ttAccent(),
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = ttSpacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ttText(text = label, style = ttTypography.body, color = ttLabelSecondary())
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f),
+        ) {
+            SettingsIconWell(icon = icon, tint = iconTint)
+            ttText(text = label, style = ttTypography.body, color = ttLabel())
+        }
         ttText(
             text = value,
-            style = ttTypography.body.ttMonospacedDigits(),
+            style = ttTypography.subheadline.ttMonospacedDigits(),
             color = valueColor,
             textAlign = TextAlign.End,
+            maxLines = 1,
         )
     }
 }
 
+@Composable
+private fun SettingsIconWell(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+) {
+    Box(
+        modifier = Modifier
+            .size(ttSettingsIconSize.tile)
+            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row), tint = tint),
+        contentAlignment = Alignment.Center,
+    ) {
+        ttIcon(
+            image = icon,
+            contentDescription = null,
+            tint = ttOnAccent,
+            modifier = Modifier.size(ttSettingsIconSize.glyph),
+        )
+    }
+}
+
+@Composable
+private fun SettingsDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = ttSettingsIconSize.tile + ttSpacing.md)
+            .height(1.dp)
+            .background(ttSeparator()),
+    )
+}
+
 /**
- * A switch, drawn rather than imported.
- *
- * There is no Material3 `Switch` in this build, and the alternative — a `Checkbox` from the
- * same library — would bring the dependency the design decision rejected. So the indicator is
- * a glass surface that fills with the accent when on, and the whole row is the hit target
- * rather than the 20dp box: a 20dp target is below the platform minimum, and this is a
- * setting a user reaches for with one hand.
+ * A capsule switch with a full-row accessible tap target.
  */
 @Composable
 private fun SettingsToggleRow(
@@ -298,32 +377,63 @@ private fun SettingsToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(ttRadius.row))
-            .clickable { onToggle(!isOn) }
+            .heightIn(min = 48.dp)
+            .toggleable(value = isOn, role = Role.Switch, onValueChange = onToggle)
             .testTag(SettingsForceOfflineTag),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ttText(text = label, style = ttTypography.body, color = ttLabel())
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIconWell(icon = ttSettingsIcons.offline, tint = ttAccent())
+            ttText(text = label, style = ttTypography.body, color = ttLabel())
+        }
         Box(
             modifier = Modifier
-                .size(20.dp)
+                .width(51.dp)
+                .height(31.dp)
                 .ttGlassSurface(
-                    shape = RoundedCornerShape(ttRadius.row),
-                    tint = if (isOn) ttAccent() else null,
+                    shape = CircleShape,
+                    tint = if (isOn) ttAccent() else ttLabelSecondary(),
                 ),
-            contentAlignment = Alignment.Center,
         ) {
-            if (isOn) {
-                // A plain fill, not a second glass surface: a lens over nothing is glass again,
-                // so the indicator would read as *unfilled* at exactly the moment the user needs
-                // to see that it is on. One dot, one fill, one meaning.
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(ttOnAccent, CircleShape),
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .align(if (isOn) Alignment.CenterEnd else Alignment.CenterStart)
+                    .padding(3.dp)
+                    .size(25.dp)
+                    .background(ttOnAccent, CircleShape),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(ttRadius.row))
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIconWell(icon = icon, tint = tint)
+            ttText(text = label, style = ttTypography.body, color = tint)
         }
     }
 }
@@ -340,36 +450,97 @@ private fun ThemePickerRow(
     selected: ThemeScheme,
     onSelect: (ThemeScheme) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
-        ttText(
-            text = stringResource(Res.string.settings_theme_label),
-            style = ttTypography.body,
-            color = ttLabelSecondary(),
-        )
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button) { expanded = !expanded }
+                .testTag(ThemeDropdownTag),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            ThemeScheme.all.forEach { scheme ->
-                val isSelected = scheme == selected
-                ttGlassButton(
-                    label = scheme.title,
-                    onClick = { onSelect(scheme) },
-                    // `alpha` rather than swapping the whole style for the unselected case:
-                    // the unselected segment stays glass and the selected one is filled, so
-                    // "which is on" is answered by the fill rather than by the text weight.
+            SettingsIconWell(icon = ttSettingsIcons.appearance, tint = ttAccent())
+            ttText(
+                text = stringResource(Res.string.settings_theme_label),
+                style = ttTypography.body,
+                color = ttLabel(),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            ttText(
+                text = selected.title,
+                style = ttTypography.subheadline,
+                color = ttLabelSecondary(),
+            )
+            ttText(text = "⌄", style = ttTypography.body, color = ttLabelSecondary())
+        }
+
+        if (expanded) {
+            Popup(
+                popupPositionProvider = SettingsDropdownPositionProvider,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .alpha(if (isSelected) 1f else 0.6f)
-                        .testTag(ThemeOptionTag(scheme)),
-                    style = if (isSelected) {
-                        TTGlassButtonStyle(tint = ttAccent(), prominent = true)
-                    } else {
-                        TTGlassButtonStyle()
-                    },
-                )
+                        .width(216.dp)
+                        .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+                        .padding(vertical = ttSpacing.xs),
+                ) {
+                    ThemeScheme.all.forEach { scheme ->
+                        val isSelected = scheme == selected
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = isSelected,
+                                    role = Role.RadioButton,
+                                ) {
+                                    onSelect(scheme)
+                                    expanded = false
+                                }
+                                .testTag(ThemeOptionTag(scheme))
+                                .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            ttText(
+                                text = scheme.title,
+                                style = ttTypography.body,
+                                color = if (isSelected) ttAccent() else ttLabel(),
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            if (isSelected) {
+                                ttText(text = "✓", style = ttTypography.body, color = ttAccent())
+                            }
+                        }
+                    }
+                }
             }
         }
+    }
+}
+
+private object SettingsDropdownPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        val maxX = (windowSize.width - popupContentSize.width).coerceAtLeast(0)
+        val preferredX = when (layoutDirection) {
+            LayoutDirection.Ltr -> anchorBounds.right - popupContentSize.width
+            LayoutDirection.Rtl -> anchorBounds.left
+        }
+        val below = anchorBounds.bottom
+        val above = anchorBounds.top - popupContentSize.height
+        val y = if (below + popupContentSize.height <= windowSize.height) below else above
+        return IntOffset(
+            x = preferredX.coerceIn(0, maxX),
+            y = y.coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0)),
+        )
     }
 }
 
@@ -423,6 +594,7 @@ const val SettingsStuckRowTag = "settings.stuckRow"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
+const val ThemeDropdownTag = "settings.themeDropdown"
 
 /** Per-scheme test tag, so a scenario can tap "Dark" without a positional matcher. */
 fun ThemeOptionTag(scheme: ThemeScheme): String = "settings.theme.${scheme.wireValue}"

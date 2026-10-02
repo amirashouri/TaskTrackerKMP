@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -70,8 +71,8 @@ import org.jetbrains.compose.resources.stringResource
  *
  * The screen gutter is applied *per child* rather than to the whole column, so that the lane
  * row's viewport is the full width of the screen. One gutter on the column looked correct and
- * was not: it shrank the scroll viewport by 32dp at each end, so a lane arriving from the
- * right stopped 32dp short of the edge with a strip of bare canvas beside it, and the page
+ * was not: it shrank the scroll viewport by 16dp at each end, so a lane arriving from the
+ * right stopped short of the edge with a strip of bare canvas beside it, and the page
  * background read as a panel sitting on top of the lanes instead of behind them. Inset the
  * content that is inset - the switcher, the error banner, the empty state - and leave the
  * thing that scrolls to run the whole way to the edge.
@@ -98,20 +99,23 @@ fun ProjectBoardScreen(
      * Whether each card also offers the move verbs as buttons.
      *
      * Off by default, and that default is the design rather than an omission: a card is
-     * 264dp wide, and one "File Away" button beside the card's own content already fills
+     * 300dp wide, and one "File Away" button beside the card's own content already fills
      * it. Dragging a card between lanes is the primary way to move work, and a row of three
-     * extra buttons on every card competes with the card's text for a 264dp column - so
+     * extra buttons on every card competes with the card's text for a 300dp column - so
      * they are opt-in for a host that cannot offer dragging at all, such as a keyboard-only
      * or screen-reader path, where "there is no other way to do this" outweighs the
      * crowding.
      */
     showMoveActions: Boolean = false,
+    projects: List<PickableProject> = emptyList(),
+    onSelectProject: ((ProjectID) -> Unit)? = null,
+    onAddTask: ((WorkItemStatus) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             // Vertically only. A horizontal gutter here became a *gap in the middle of the
-            // page* once the row could scroll: the viewport ended 32dp short of each edge, so
+            // page* once the row could scroll: the viewport ended short of each edge, so
             // a lane arriving from the right slid under a strip of empty canvas and stopped
             // there. The gutter belongs to the content that is inset from the edge, and the
             // row is not that - see [LaneRowSpacer].
@@ -124,6 +128,8 @@ fun ProjectBoardScreen(
                 project = projection.project,
                 onClick = openSwitcher,
                 modifier = Modifier.fillMaxWidth().horizontalGutter(),
+                projects = projects,
+                onSelectProject = onSelectProject,
             )
         }
         errorMessage?.let { message ->
@@ -147,6 +153,7 @@ fun ProjectBoardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
                     .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
                     .testTag(ProjectBoardColumnsTag),
                 verticalAlignment = Alignment.Top,
@@ -154,17 +161,18 @@ fun ProjectBoardScreen(
                 // The gutter is a *spacer in the content*, not a padding on this row, and the
                 // difference is the whole of the bug this replaced. Padding here would shrink
                 // the scroll viewport, so the viewport - rather than the content - would stop
-                // 32dp short of an edge and a lane arriving from the right would slide up to a
+                // 16dp short of an edge and a lane arriving from the right would slide up to a
                 // strip of bare canvas and stop there. A spacer is part of the content, so it
                 // scrolls away with the lanes, the viewport stays the full width of the screen,
                 // and lane 0 still rests with air at the left, which is what a `LazyRow`'s
                 // `contentPadding` would have given.
-                LaneRowSpacer(ttSpacing.screenGutterLarge)
+                LaneRowSpacer(ttSpacing.xxl)
                 projection.columns.forEachIndexed { index, column ->
                     if (index > 0) LaneRowSpacer(ttSpacing.md)
                     BoardColumnView(
                         column = column,
                         onSelect = { onSelect(it.id) },
+                        onAddTask = onAddTask?.let { addTask -> { addTask(column.status) } },
                         modifier = Modifier,
                         cardTrailing = { item ->
                             BoardCardActions(
@@ -181,7 +189,7 @@ fun ProjectBoardScreen(
                 // *away*: without it the last lane would rest flush against the right edge with
                 // the row unable to reach any position that gave it air. The near end's gutter
                 // is the one above - same width, and not because the ends are symmetric.
-                LaneRowSpacer(ttSpacing.screenGutterLarge)
+                LaneRowSpacer(ttSpacing.xxl)
             }
         }
     }
@@ -194,7 +202,7 @@ fun ProjectBoardScreen(
  *
  * Because a `Spacer` is a layout, and an arrangement puts its spacing between *every pair of
  * layouts* - including the spacers. `Arrangement.spacedBy(ttSpacing.md)` with a leading and a
- * trailing gutter therefore made the gutter 40dp rather than the 32dp the rest of the screen
+ * trailing gutter therefore made the gutter 24dp rather than the 16dp the rest of the screen
  * uses, and the row would have been inset by more than everything around it without anything
  * saying so. Spelling the gaps out costs one `if (index > 0)` and is the only way the content
  * adds up to the [boardLaneStride] the snap arithmetic assumes.
@@ -209,7 +217,7 @@ private fun LaneRowSpacer(width: Dp) {
 }
 
 /** The screen gutter on the horizontal axis, for content inset from the edge of the page. */
-private fun Modifier.horizontalGutter(): Modifier = padding(horizontal = ttSpacing.screenGutterLarge)
+private fun Modifier.horizontalGutter(): Modifier = padding(horizontal = ttSpacing.xxl)
 
 /**
  * The board row's fling: coast to just short of a lane, then snap onto it.

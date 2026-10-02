@@ -73,7 +73,7 @@ fun ProjectArchiveScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(ttSpacing.screenGutterLarge)
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
             .testTag(ProjectArchiveScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {

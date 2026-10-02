@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -15,9 +16,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.TTGlassSegmentedPicker
+import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
@@ -165,33 +168,43 @@ fun WorkItemEditorSheet(
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    visible: Boolean = true,
+    onDismissRequest: () -> Unit = {},
+    onDismissed: () -> Unit = {},
 ) {
-    WorkItemEditorForm(
-        title = title,
-        details = details,
-        status = status,
-        priority = priority,
-        assignee = assignee,
-        hasDueDate = hasDueDate,
-        isCreating = isCreating,
-        issuedKey = issuedKey,
-        selectableStatuses = selectableStatuses,
-        isFiledAway = isFiledAway,
-        canSave = canSave,
-        isBusy = isBusy,
-        errorMessage = errorMessage,
-        onTitleChanged = onTitleChanged,
-        onDetailsChanged = onDetailsChanged,
-        onStatusChanged = onStatusChanged,
-        onPriorityChanged = onPriorityChanged,
-        onAssigneeChanged = onAssigneeChanged,
-        onToggleDueDate = onToggleDueDate,
-        onFileAway = onFileAway,
-        onSave = onSave,
-        onCancel = onCancel,
-        onDismissError = onDismissError,
-        modifier = modifier.testTag(WorkItemEditorSheetTag),
-    )
+    TTBottomSheetScaffold(
+        visible = visible,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        onDismissed = onDismissed,
+    ) {
+        WorkItemEditorForm(
+            title = title,
+            details = details,
+            status = status,
+            priority = priority,
+            assignee = assignee,
+            hasDueDate = hasDueDate,
+            isCreating = isCreating,
+            issuedKey = issuedKey,
+            selectableStatuses = selectableStatuses,
+            isFiledAway = isFiledAway,
+            canSave = canSave,
+            isBusy = isBusy,
+            errorMessage = errorMessage,
+            onTitleChanged = onTitleChanged,
+            onDetailsChanged = onDetailsChanged,
+            onStatusChanged = onStatusChanged,
+            onPriorityChanged = onPriorityChanged,
+            onAssigneeChanged = onAssigneeChanged,
+            onToggleDueDate = onToggleDueDate,
+            onFileAway = onFileAway,
+            onSave = onSave,
+            onCancel = onCancel,
+            onDismissError = onDismissError,
+            modifier = Modifier.testTag(WorkItemEditorSheetTag),
+        )
+    }
 }
 
 @Suppress("LongParameterList")
@@ -266,7 +279,7 @@ private fun WorkItemEditorForm(
                     style = ttTypography.captionEmphasised,
                     color = ttLabelSecondary(),
                 )
-                TTGlassSegmentedPicker(
+                TTGlassFlowPicker(
                     options = selectableStatuses,
                     selection = status,
                     onSelect = onStatusChanged,
@@ -281,7 +294,7 @@ private fun WorkItemEditorForm(
                 style = ttTypography.captionEmphasised,
                 color = ttLabelSecondary(),
             )
-            TTGlassSegmentedPicker(
+            TTGlassFlowPicker(
                 options = Priority.entries,
                 selection = priority,
                 onSelect = onPriorityChanged,

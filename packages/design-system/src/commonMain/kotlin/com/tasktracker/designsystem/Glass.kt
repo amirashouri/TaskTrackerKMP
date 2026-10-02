@@ -2,6 +2,7 @@ package com.tasktracker.designsystem
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -9,17 +10,29 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -31,7 +44,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * Glass surfaces, shared by every feature that renders content over something.
@@ -444,10 +459,154 @@ fun <Option> TTGlassSegmentedPicker(
                 accent = accent,
                 canvas = canvas,
                 onClick = { onSelect(option) },
+                modifier = Modifier.weight(1f),
             )
         }
     }
 }
+
+/**
+ * A wrapping glass choice group for compact spaces and variable length labels.
+ *
+ * Use this design-system component when a fixed segmented row would squeeze labels or
+ * overflow at larger text sizes. Options keep their natural width, wrap onto another row,
+ * and share the same selected glass treatment as [TTGlassSegmentedPicker].
+ */
+@Composable
+fun <Option> TTGlassFlowPicker(
+    options: List<Option>,
+    selection: Option,
+    onSelect: (Option) -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color? = null,
+    title: @Composable (Option) -> String,
+) {
+    val accent = ttAccent()
+    val canvas = ttCanvas()
+    val density = LocalDensity.current
+    val positions = remember { mutableStateMapOf<Option, IntRect>() }
+    var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val selectedBounds = positions[selection]
+    val lensX by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "flowPickerLensX",
+    )
+    val lensY by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "flowPickerLensY",
+    )
+    val lensWidth by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "flowPickerLensWidth",
+    )
+    val lensHeight by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "flowPickerLensHeight",
+    )
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .ttGlassSurface(
+                shape = RoundedCornerShape(ttRadius.surface),
+                tint = tint,
+                borderWidth = ttGlass.hairlineWidth,
+            )
+            .padding(ttSpacing.sm)
+            .onGloballyPositioned { containerCoordinates = it },
+    ) {
+        if (selectedBounds != null) {
+            Box(
+                modifier = Modifier
+                    .offset(x = lensX, y = lensY)
+                    .size(lensWidth, lensHeight)
+                    .clip(CircleShape)
+                    .drawBehind {
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = ttGlass.TAB_LENS_ALPHA),
+                                    Color.White.copy(
+                                        alpha = ttGlass.TAB_LENS_ALPHA * (1f - ttGlass.TAB_LENS_FADE),
+                                    ),
+                                ),
+                            ),
+                        )
+                    }
+                    .border(
+                        width = ttGlass.hairlineWidth,
+                        color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
+                        shape = CircleShape,
+                    ),
+            )
+        }
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            options.forEach { option ->
+                FlowPickerChip(
+                    label = title(option),
+                    isSelected = option == selection,
+                    accent = accent,
+                    onClick = { onSelect(option) },
+                    onPositioned = { coordinates ->
+                        val parent = containerCoordinates
+                        if (parent != null) {
+                            val position = parent.localPositionOf(coordinates, Offset.Zero)
+                            val left = position.x.roundToInt()
+                            val top = position.y.roundToInt()
+                            val measured = IntRect(
+                                left = left,
+                                top = top,
+                                right = left + coordinates.size.width,
+                                bottom = top + coordinates.size.height,
+                            )
+                            if (positions[option] != measured) positions[option] = measured
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FlowPickerChip(
+    label: String,
+    isSelected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+    onPositioned: (LayoutCoordinates) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .onGloballyPositioned(onPositioned)
+            .clickable(role = Role.Tab, onClick = onClick)
+            .padding(vertical = ttSpacing.xs, horizontal = ttSpacing.sm)
+            .semantics {
+                contentDescription = label
+                selected = isSelected
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        ttText(
+            text = label,
+            style = if (isSelected) ttTypography.subheadlineSelected else ttTypography.subheadline,
+            color = if (isSelected) ttLabel() else lerp(accent, Color.White, FLOW_PICKER_INACTIVE_LIGHTENING),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private const val FLOW_PICKER_INACTIVE_LIGHTENING = 0.18f
 
 @Composable
 private fun Segment(
@@ -456,10 +615,11 @@ private fun Segment(
     accent: Color,
     canvas: Color,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
-    // One shared animation rather than one per segment: the pill slides *between* the
-    // segments, so a per-segment alpha would fade each in and out while the geometry moved,
-    // and the two would disagree at the midpoint.
+    // One shared animation drives the selected pill's fill. The label stays opaque while the
+    // fill moves, so inactive options remain readable throughout the transition.
     val selectionAlpha by animateFloatAsState(
         targetValue = if (isSelected) 1f else 0f,
         animationSpec = ttGlass.selectionSpring,
@@ -467,20 +627,16 @@ private fun Segment(
     )
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(CircleShape)
             .background(
-                color = if (isSelected) accent else canvas.copy(alpha = 0f),
+                color = if (isSelected) accent.copy(alpha = selectionAlpha) else canvas.copy(alpha = 0f),
                 shape = CircleShape,
             )
-            // The pill is the accent at full strength underneath its own alpha, so the
-            // fade animates a *transparency* rather than a colour and the accent underneath
-            // is the same colour `ttOnAccent` was contrast-checked against.
-            .alpha(selectionAlpha)
             .then(
                 Modifier.padding(
-                    vertical = ttSpacing.controlPaddingV,
-                    horizontal = ttSpacing.controlPaddingH,
+                    vertical = if (compact) ttSpacing.xs else ttSpacing.controlPaddingV,
+                    horizontal = if (compact) ttSpacing.sm else ttSpacing.controlPaddingH,
                 ),
             )
             .clickable(role = Role.Tab, onClick = onClick)

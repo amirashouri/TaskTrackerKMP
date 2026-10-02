@@ -14,11 +14,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectspresentation.NewProjectModel
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectBoardModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
 import com.tasktracker.featureprojectspresentation.ProjectEnvironment
+import com.tasktracker.featureprojectspresentation.ProjectPickerModel
 import com.tasktracker.featureprojectspresentation.ProjectsListModel
 import com.tasktracker.featureprojectspresentation.ProjectsListScreen
 import com.tasktracker.routing.AppRoute
@@ -53,11 +55,11 @@ import kotlinx.coroutines.launch
  * [Router.popToRoot] on this tab — which is also what [onOpenSwitcher] does, so the
  * project's own name in the toolbar is the control that returns to the list.
  *
- * ## The sheets are local, and the reason is scope rather than preference
+ * ## The project creation sheet is local, and the reason is scope rather than preference
  *
- * Creating a project and editing a task are both *sheets* in the design system's own terms,
- * drawn over whatever is underneath with the content still visible behind them. Neither is a
- * route in this host, and both are therefore plain local state. That is a deliberate limit:
+ * Creating a project is a *sheet* drawn over this tab and is therefore local state. Task
+ * editing is a routed sheet so saves and dismissals return to the destination that opened it.
+ * That is a deliberate limit:
  * the tab bar, the Backlog and Archive destinations and a routable editor are Phase 13.13,
  * and a half-built navigation host that claims to render the Projects tab while quietly
  * swallowing a deep link to the Archive is worse than a host that draws what it can reach.
@@ -79,6 +81,7 @@ fun ProjectsHost(
     // list being replaced by a board behind it: the sheet is a modal over the *tab*, not over
     // one screen, and a state that lived in the list would take the sheet down with it.
     var isNewProjectOpen by remember { mutableStateOf(false) }
+    var newProjectModel by remember(environment) { mutableStateOf<NewProjectModel?>(null) }
 
     Box(
         modifier = modifier
@@ -99,7 +102,18 @@ fun ProjectsHost(
                 projectID = route.projectID,
                 environment = environment,
                 scope = scope,
+                onSelectProject = { router.openProject(it, AppTab.Projects) },
                 onBackToProjects = { router.popToRoot(AppTab.Projects) },
+                onAddTask = { status ->
+                    router.push(
+                        AppRoute.WorkItemEditor(
+                            projectID = route.projectID,
+                            workItemID = null,
+                            initialStatus = status,
+                        ),
+                        AppTab.Projects,
+                    )
+                },
             )
 
             null,
@@ -111,31 +125,37 @@ fun ProjectsHost(
                 environment = environment,
                 scope = scope,
                 onOpenProject = { router.openProject(it, AppTab.Projects) },
-                onNewProject = { isNewProjectOpen = true },
+                onNewProject = {
+                    newProjectModel = NewProjectModel(environment.repository, environment.dateProvider)
+                    isNewProjectOpen = true
+                },
             )
         }
-    }
 
-    if (isNewProjectOpen) {
-        // `remember(environment)` and not `remember`: the model's constructor takes the
-        // repository and the clock, and a sheet that survived a different environment would
-        // be writing into a repository the rest of the app can no longer read.
-        val newProject = remember(environment) {
-            NewProjectModel(environment.repository, environment.dateProvider)
+        newProjectModel?.let { newProject ->
+            NewProjectSheet(
+                name = newProject.name,
+                keyPrefix = newProject.keyPrefix,
+                details = newProject.details,
+                canCreate = newProject.canCreate,
+                onNameChanged = newProject::onNameChanged,
+                onKeyPrefixChanged = newProject::onKeyPrefixChanged,
+                onDetailsChanged = newProject::onDetailsChanged,
+                onCreate = {
+                    scope.launch {
+                        if (newProject.create() != null) isNewProjectOpen = false
+                    }
+                },
+                onCancel = { isNewProjectOpen = false },
+                visible = isNewProjectOpen,
+                onDismissRequest = { isNewProjectOpen = false },
+                onDismissed = {
+                    isNewProjectOpen = false
+                    newProjectModel = null
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
-        NewProjectSheet(
-            name = newProject.name,
-            keyPrefix = newProject.keyPrefix,
-            details = newProject.details,
-            canCreate = newProject.canCreate,
-            onNameChanged = newProject::onNameChanged,
-            onKeyPrefixChanged = newProject::onKeyPrefixChanged,
-            onDetailsChanged = newProject::onDetailsChanged,
-            // Closes only on success, so a rejected create leaves the sheet up with the
-            // model's error banner rather than silently discarding what was typed.
-            onCreate = { scope.launch { if (newProject.create() != null) isNewProjectOpen = false } },
-            onCancel = { isNewProjectOpen = false },
-        )
     }
 }
 
@@ -193,7 +213,9 @@ private fun ProjectBoardDestination(
     projectID: ProjectID,
     environment: ProjectEnvironment,
     scope: CoroutineScope,
+    onSelectProject: (ProjectID) -> Unit,
     onBackToProjects: () -> Unit,
+    onAddTask: (WorkItemStatus) -> Unit,
 ) {
     val model = remember(projectID, environment) {
         ProjectBoardModel(projectID, environment.repository, environment.dateProvider)
@@ -201,6 +223,11 @@ private fun ProjectBoardDestination(
     DisposableEffect(model) {
         model.observe(scope)
         onDispose { model.stopObserving() }
+    }
+    val picker = remember(environment) { ProjectPickerModel(environment.repository) }
+    DisposableEffect(picker) {
+        picker.observe(scope)
+        onDispose { picker.stopObserving() }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -216,10 +243,10 @@ private fun ProjectBoardDestination(
             onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
             onMove = { itemID, status -> scope.launch { model.move(itemID, status) } },
             onDismissError = model::dismissError,
-            // The switcher is the project's own name in the toolbar, so repurposing it as
-            // "go back to the list" is the one reading that needs no new control: it names
-            // where you are, and it is how you leave.
             onOpenSwitcher = onBackToProjects,
+            projects = picker.projects,
+            onSelectProject = onSelectProject,
+            onAddTask = onAddTask,
         )
     }
 }

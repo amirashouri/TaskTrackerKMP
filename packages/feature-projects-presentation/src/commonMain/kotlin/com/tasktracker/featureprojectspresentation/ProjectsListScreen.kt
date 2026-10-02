@@ -48,6 +48,7 @@ import com.tasktracker.resources.project_remove_archive
 import com.tasktracker.resources.project_remove_body_clear
 import com.tasktracker.resources.project_remove_body_outstanding
 import com.tasktracker.resources.project_remove_title
+import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.projects_empty_body
 import com.tasktracker.resources.projects_empty_title
 import org.jetbrains.compose.resources.stringResource
@@ -98,10 +99,16 @@ fun ProjectsListScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(ttSpacing.screenGutterLarge)
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
             .testTag(ProjectsListScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
+        ttText(
+            text = stringResource(Res.string.tab_projects),
+            style = ttTypography.largeTitle,
+            color = ttLabel(),
+            modifier = Modifier.fillMaxWidth(),
+        )
         errorMessage?.let { message ->
             ProjectsErrorBanner(message = message, onDismiss = onDismissError)
         }

@@ -3,7 +3,12 @@ package com.tasktracker.sharedui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -102,6 +107,11 @@ import kotlinx.coroutines.delay
  * instead would mean repainting a gradient on every frame of a transition that is only ever
  * between two states of the same theme — the same pixels, so the cost buys nothing.
  *
+ * The backdrop fills the full window, while one foreground container applies the top safe-drawing
+ * inset to both content and splash. Applying the inset before this screen shrinks the backdrop
+ * too, exposing the window's light background behind a notch when the app is pinned dark.
+ * `windowInsetsPadding` consumes the inset, so child screens cannot apply it twice.
+ *
  * The fade is [CONTENT_FADE_MILLIS] on both layers, and equal on purpose: a fade that started
  * before the splash finished moving its own content, or outlasted it, would show two things at
  * once, which is the flash the gate exists to prevent reappearing as a gentler version of
@@ -199,39 +209,45 @@ fun RootScreen(
             // *over* the backdrop rather than a change of the backdrop.
             AmbientBackdrop()
 
-            if (isContentMounted) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .alpha(contentAlpha.value)
-                        .testTag(RootContentTag),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    when (navigation.root) {
-                        RootDestination.Auth -> ProvideAuthSession(session) {
-                            SignInView(onAuthenticated = {})
-                        }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
+            ) {
+                if (isContentMounted) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .alpha(contentAlpha.value)
+                            .testTag(RootContentTag),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        when (navigation.root) {
+                            RootDestination.Auth -> ProvideAuthSession(session) {
+                                SignInView(onAuthenticated = {})
+                            }
 
-                        RootDestination.Main -> ProvideAuthSession(session) {
-                            SignedInArea(
-                                environment = environment,
-                                settings = settings,
-                                preferences = preferences,
-                                router = router,
-                            )
+                            RootDestination.Main -> ProvideAuthSession(session) {
+                                SignedInArea(
+                                    environment = environment,
+                                    settings = settings,
+                                    preferences = preferences,
+                                    router = router,
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Still composed while it fades, which is the other half of a cross-fade. Taken out
-            // at zero rather than left at `alpha(0f)`, so a splash that has faded is also a
-            // splash that is no longer in the tree.
-            if (showsSplash || splashAlpha.value > 0f) {
-                SplashScreen(
-                    isWorking = navigation.isRestoringSession,
-                    modifier = Modifier.alpha(splashAlpha.value),
-                )
+                // Still composed while it fades, which is the other half of a cross-fade. Taken
+                // out at zero rather than left at `alpha(0f)`, so a splash that has faded is
+                // also a splash that is no longer in the tree.
+                if (showsSplash || splashAlpha.value > 0f) {
+                    SplashScreen(
+                        isWorking = navigation.isRestoringSession,
+                        modifier = Modifier.alpha(splashAlpha.value),
+                    )
+                }
             }
         }
     }

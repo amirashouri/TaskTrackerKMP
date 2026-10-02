@@ -4,8 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -15,12 +13,11 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -73,17 +70,20 @@ fun NewProjectSheet(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
+    visible: Boolean = true,
+    onDismissRequest: () -> Unit = {},
+    onDismissed: () -> Unit = {},
 ) {
-    val shape = RoundedCornerShape(ttRadius.surface)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .ttGlassSurface(shape = shape)
-            .padding(ttSpacing.formStack)
-            .testTag(NewProjectSheetTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+    TTBottomSheetScaffold(
+        visible = visible,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        onDismissed = onDismissed,
     ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().testTag(NewProjectSheetTag),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+        ) {
         ttText(
             text = stringResource(Res.string.project_new),
             style = ttTypography.title,
@@ -135,6 +135,7 @@ fun NewProjectSheet(
                     TTGlassButtonStyle()
                 },
             )
+        }
         }
     }
 }

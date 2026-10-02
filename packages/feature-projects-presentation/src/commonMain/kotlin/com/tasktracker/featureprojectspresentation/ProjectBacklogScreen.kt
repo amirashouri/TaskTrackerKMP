@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
@@ -50,11 +51,13 @@ fun ProjectBacklogScreen(
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSwitcher: (() -> Unit)? = null,
+    projects: List<PickableProject> = emptyList(),
+    onSelectProject: ((ProjectID) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(ttSpacing.screenGutterLarge)
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
             .testTag(ProjectBacklogScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
@@ -63,6 +66,8 @@ fun ProjectBacklogScreen(
                 project = projection.project,
                 onClick = openSwitcher,
                 modifier = Modifier.fillMaxWidth(),
+                projects = projects,
+                onSelectProject = onSelectProject,
             )
         }
         errorMessage?.let { message ->

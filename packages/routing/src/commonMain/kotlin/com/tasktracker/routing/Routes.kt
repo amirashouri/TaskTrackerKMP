@@ -2,6 +2,7 @@ package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.WorkItemStatus
 
 /**
  * The top-level split. A session is in exactly one of these, and only the session
@@ -68,7 +69,11 @@ sealed interface AppRoute {
     /** The month-grouped history of a project's finished and closed work. */
     data class Archive(val projectID: ProjectID) : AppRoute
 
-    data class WorkItemEditor(val projectID: ProjectID, val workItemID: WorkItemID?) : AppRoute
+    data class WorkItemEditor(
+        val projectID: ProjectID,
+        val workItemID: WorkItemID?,
+        val initialStatus: WorkItemStatus? = null,
+    ) : AppRoute
 
     data object Settings : AppRoute
 }

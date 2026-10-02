@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
  *
  * ## The numbers
  *
- * Four 264dp lanes 8dp apart on a 3x screen, so a stride of 816px - the geometry measured on
+ * Four 300dp lanes 8dp apart on a 3x screen, so a stride of 924px - the geometry measured on
  * the emulator. Named constants rather than inlined numbers, so each test reads as "half a
  * stride past a boundary" rather than as arithmetic someone has to re-derive.
  */
@@ -217,11 +217,11 @@ class BoardLaneSnapTest {
 }
 
 private const val LANES = 4
-private const val STRIDE = 816f
+private const val STRIDE = 924f
 private const val SCREEN_WIDTH = 1280f
 
-/** Two 32dp gutters either side of four 264dp lanes with 8dp between them, at 3x. */
-private const val CONTENT_WIDTH = 96f + LANES * 792f + (LANES - 1) * 24f + 96f
+/** Two 16dp gutters either side of four 300dp lanes with 8dp between them, at 3x. */
+private const val CONTENT_WIDTH = 48f + LANES * 900f + (LANES - 1) * 24f + 48f
 private const val MAX_SCROLL = CONTENT_WIDTH - SCREEN_WIDTH
 private const val MIN_FLING = 1200f
 private const val FORWARD_FLING = 4000f

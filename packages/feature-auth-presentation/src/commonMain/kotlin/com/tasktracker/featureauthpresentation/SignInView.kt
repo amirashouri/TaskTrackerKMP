@@ -110,7 +110,7 @@ fun SignInView(
                 // Without this the keyboard covers the password field on a short window, and
                 // the field being covered is the one the user is typing into.
                 .imePadding()
-                .padding(horizontal = ttSpacing.screenGutterLarge),
+                .padding(horizontal = ttSpacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(ttSpacing.signInTopInset))

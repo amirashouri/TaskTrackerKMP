@@ -10,7 +10,7 @@ import kotlin.math.sign
 /**
  * How far the board's lane row still has to travel to come to rest on a lane boundary.
  *
- * A free fling across four 264dp lanes lands anywhere, including half-hidden at both ends of the
+ * A free fling across four 300dp lanes lands anywhere, including half-hidden at both ends of the
  * row, and a board that has to be *aimed* at is a board the user stops trusting. So the row
  * settles with one lane's leading edge against the row's own gutter.
  *

@@ -91,7 +91,7 @@ fun ProjectEditorScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(ttSpacing.formStack)
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.formStack)
             .testTag(ProjectEditorTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
     ) {

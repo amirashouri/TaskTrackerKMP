@@ -10,14 +10,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -37,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -64,6 +63,7 @@ import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
@@ -107,9 +107,8 @@ import org.jetbrains.compose.resources.stringResource
  * to one and not the other. So the stack is read, the top of it is rendered, and every
  * navigation goes back through the router.
  *
- * Only the **top** of a stack is drawn. A pushed route replaces what is under it rather than
- * compositing over it, because these screens own the full frame: a board with another board
- * behind it is two boards' worth of scrolling surface and one of them's state.
+ * The **top** of a stack decides the active destination. The task editor is the exception to
+ * replacement: it keeps the prior project screen as its backdrop and presents as a sheet.
  *
  * ## Board and Backlog are tabs, not pushes
  *
@@ -166,6 +165,8 @@ fun NavigationHost(
 
                 else -> PushedRoute(
                     route = pushed,
+                    tab = tab,
+                    previousRoute = navigation.pathFor(tab).dropLast(1).lastOrNull(),
                     router = router,
                     environment = environment,
                     settings = settings,
@@ -245,6 +246,8 @@ private fun TabRoot(
 @Composable
 private fun PushedRoute(
     route: AppRoute,
+    tab: AppTab,
+    previousRoute: AppRoute?,
     router: Router,
     environment: ProjectEnvironment,
     settings: SettingsPort?,
@@ -277,14 +280,57 @@ private fun PushedRoute(
             scope = scope,
         )
 
-        is AppRoute.WorkItemEditor -> WorkItemEditorDestination(
-            projectID = route.projectID,
-            workItemID = route.workItemID,
-            router = router,
-            repository = environment.repository,
-            dateProvider = environment.dateProvider,
-            scope = scope,
-        )
+        is AppRoute.WorkItemEditor -> Box(modifier = Modifier.fillMaxSize()) {
+            val backgroundRoute = previousRoute ?: when (tab) {
+                AppTab.Board -> AppRoute.Board(route.projectID)
+                AppTab.Backlog -> AppRoute.Backlog(route.projectID)
+                else -> AppRoute.Board(route.projectID)
+            }
+            when (backgroundRoute) {
+                is AppRoute.Board -> BoardDestination(
+                    projectID = backgroundRoute.projectID,
+                    router = router,
+                    environment = environment,
+                    scope = scope,
+                )
+
+                is AppRoute.Backlog -> BacklogDestination(
+                    projectID = backgroundRoute.projectID,
+                    router = router,
+                    environment = environment,
+                    scope = scope,
+                )
+
+                is AppRoute.Archive -> ArchiveDestination(
+                    projectID = backgroundRoute.projectID,
+                    router = router,
+                    repository = environment.repository,
+                    dateProvider = environment.dateProvider,
+                    scope = scope,
+                )
+
+                is AppRoute.WorkItemEditor,
+                AppRoute.Settings,
+                -> BoardDestination(
+                    projectID = route.projectID,
+                    router = router,
+                    environment = environment,
+                    scope = scope,
+                )
+            }
+            WorkItemEditorDestination(
+                projectID = route.projectID,
+                workItemID = route.workItemID,
+                initialStatus = route.initialStatus,
+                repository = environment.repository,
+                dateProvider = environment.dateProvider,
+                scope = scope,
+                onDismiss = {
+                    val path = router.path(tab)
+                    if (path.lastOrNull() == route) router.setPath(path.dropLast(1), tab)
+                },
+            )
+        }
 
         // The Settings tab root *is* the settings screen, so pushing `AppRoute.Settings` onto
         // the Settings stack renders the same screen again. That is kept on purpose: a deep
@@ -332,7 +378,11 @@ private fun ProjectScopedTabScreen(
         runCatching { repository.seedSampleDataIfNeeded() }
     }
 
-    val activeProjectID = router.activeProjectID
+    // Read the active id from Compose-observed router state. Reading Router.activeProjectID
+    // directly is only a snapshot; with stable parameters Compose may skip this destination
+    // when the selected project changes, leaving the prior project's model on screen.
+    val routerState by router.state.collectAsState()
+    val activeProjectID = routerState.activeProjectID
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (activeProjectID == null) {
@@ -463,6 +513,11 @@ private fun BoardDestination(
         model.observe(scope)
         onDispose { model.stopObserving() }
     }
+    val picker = remember(environment.repository) { ProjectPickerModel(environment.repository) }
+    DisposableEffect(picker) {
+        picker.observe(scope)
+        onDispose { picker.stopObserving() }
+    }
 
     ProjectBoardScreen(
         projection = model.projection,
@@ -475,10 +530,21 @@ private fun BoardDestination(
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
         onMove = { itemID, status -> scope.launch { model.move(itemID, status) } },
         onDismissError = model::dismissError,
+        onAddTask = { status ->
+            router.push(
+                AppRoute.WorkItemEditor(
+                    projectID = projectID,
+                    workItemID = null,
+                    initialStatus = status,
+                ),
+            )
+        },
         // Leaving the board is `popToRoot`, which on the Board tab is a no-op - the tab's root
         // *is* the board, and there is nothing to pop to. Kept wired on the deep-link path,
         // where `AppRoute.Board` can sit on a stack that does have something below it.
         onOpenSwitcher = { router.popToRoot() },
+        projects = picker.projects,
+        onSelectProject = { router.openProject(it, AppTab.Board) },
     )
 }
 
@@ -497,6 +563,11 @@ private fun BacklogDestination(
         model.observe(scope)
         onDispose { model.stopObserving() }
     }
+    val picker = remember(environment.repository) { ProjectPickerModel(environment.repository) }
+    DisposableEffect(picker) {
+        picker.observe(scope)
+        onDispose { picker.stopObserving() }
+    }
 
     ProjectBacklogScreen(
         projection = model.projection,
@@ -510,6 +581,8 @@ private fun BacklogDestination(
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
         onDismissError = model::dismissError,
         onOpenSwitcher = { router.popToRoot() },
+        projects = picker.projects,
+        onSelectProject = { router.openProject(it, AppTab.Backlog) },
     )
 }
 
@@ -556,10 +629,11 @@ private fun ArchiveDestination(
 private fun WorkItemEditorDestination(
     projectID: ProjectID,
     workItemID: WorkItemID?,
-    router: Router,
+    initialStatus: WorkItemStatus?,
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     scope: CoroutineScope,
+    onDismiss: () -> Unit,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -578,18 +652,18 @@ private fun WorkItemEditorDestination(
     // the only work involved is a local store read on a route the user just navigated to.
     val existing = loaded ?: return
 
-    val model = remember(projectID, workItemID, repository, existing) {
-        WorkItemEditorModel(projectID, existing.item, repository, dateProvider)
+    val model = remember(projectID, workItemID, repository, existing, initialStatus) {
+        WorkItemEditorModel(projectID, existing.item, repository, dateProvider, initialStatus)
     }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
     // editor without one answers a double tap with two writes. Named rather than defaulted at
     // the call site so the omission is visible: adding a flag is a model change.
     var isBusy by remember(model) { mutableStateOf(false) }
+    var isSheetVisible by remember(projectID, workItemID, initialStatus) { mutableStateOf(true) }
 
-    Box(modifier = Modifier.fillMaxSize().testTag(WorkItemEditorDestinationTag)) {
-        WorkItemEditorSheet(
-            title = model.title,
+    WorkItemEditorSheet(
+        title = model.title,
             details = model.details,
             status = model.status,
             priority = model.priority,
@@ -615,20 +689,23 @@ private fun WorkItemEditorDestination(
                 }
             },
             onFileAway = { scope.launch { model.fileAway() } },
-            // Popped only after a save that actually succeeded: a failed save must leave the
-            // draft on screen, which is the whole point of the editor's error banner.
+            // The route stays mounted through the sheet's exit transition, and a failed save
+            // leaves the draft visible with its error banner.
             onSave = {
                 scope.launch {
                     isBusy = true
                     val outcome = model.save()
                     isBusy = false
-                    if (outcome != null) router.popToRoot()
+                    if (outcome != null) isSheetVisible = false
                 }
             },
-            onCancel = { router.popToRoot() },
+            onCancel = { isSheetVisible = false },
             onDismissError = model::dismissError,
-        )
-    }
+            visible = isSheetVisible,
+            onDismissRequest = { if (!isBusy) isSheetVisible = false },
+            onDismissed = onDismiss,
+        modifier = Modifier.fillMaxSize().testTag(WorkItemEditorDestinationTag),
+    )
 }
 
 /**
@@ -737,13 +814,16 @@ private fun TabBar(
     modifier: Modifier = Modifier,
 ) {
     val tabs = AppTab.entries
+    val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             // Inset and safe area outside the glass, not inside it. See this function's KDoc:
             // on a floating capsule the two do opposite jobs, and only this one floats.
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+            // Keep the capsule above the system navigation area when the keyboard is closed;
+            // when the IME is open, let the keyboard cover its bottom area.
+            .then(if (keyboardVisible) Modifier else Modifier.navigationBarsPadding())
             .padding(horizontal = ttSpacing.tabBarEdgeInset)
             // The tag is on the wrapper rather than on the bar, so that it measures the capsule
             // itself. Were it on the bar, the test would measure the same box either way and

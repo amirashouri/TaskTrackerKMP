@@ -62,7 +62,7 @@ fun WorkItemBacklogRow(
             .clickable(enabled = !isBusy, onClick = onPutOnBoard)
             .padding(ttSpacing.xl)
             .testTag(WorkItemBacklogRowTag(item)),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
