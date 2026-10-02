@@ -17,6 +17,30 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 Without it the build dies immediately with `Unable to locate a Java Runtime`.
 
+## Token-Saving & Execution Scope (CRITICAL)
+
+To optimize token usage and prevent infinite tool loops, you must tightly scope your operational boundaries.
+
+### 1. The Single-File Context Rule
+* **Constraint:** Do not read or scan modules outside the explicit scope of your task.
+* **Action:** If adding a feature or fixing a bug, request context *only* for the specific `shared` domain logic or the target UI file. Never run repository-wide string replacements or mass directory indexing.
+
+### 2. KMP Structural Isolation
+* **Constraint:** KMP features cross multiple source sets (`commonMain`, `androidMain`, `iosMain`).
+* **Action:** Do not generate or modify native platform-specific wrapper files unless a platform abstraction (`expect`/`actual`) is explicitly missing.
+
+### 3. Plan-First Execution Mode (Two-Phase Protocol)
+For any task requiring modifications across more than one file, you must execute in two phases:
+* **Phase 1 (Token-Light):** Output a short, maximum 3-bullet plan detailing exactly which files will be modified and why. Stop and wait for user acknowledgment (`ACK`).
+* **Phase 2 (Code Generation):** Write the implementation only *after* receiving an `ACK`. Never write complete files from scratch if editing a single function; emit minimal unified diff patches.
+
+## Liquid Glass Design Tokens
+
+"Liquid Glass" layouts feature heavily saturated fluid background gradients, deep backdrop blurs, and glossy reflective borders. **Do not guess or invent styling primitives.** This burns tokens through endless cosmetic iterations.
+
+* **Constraint:** All UI components mimicking glassmorphism must strictly bind to the repository's established design primitives found in `:packages:design-system`.
+* **Action:** Use existing styling modifiers instead of raw rendering logic. If styling a surface, reuse the predefined mapping tokens (e.g., `Modifier.liquidGlassCard()`). If a primitive is missing, map it using immutable shared values inside your initial Phase 1 plan before writing UI layout code.
+
 ## The command that decides whether you are done
 
 ```bash
@@ -31,9 +55,9 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | green — 1051 tests |
-| iOS simulator | `iosSimulatorArm64Test` | green — 1029 tests |
-| Android host | `testAndroidHostTest` | **red** — 10 failures of 817 |
+| JVM | `jvmTest` | green — 1052 tests |
+| iOS simulator | `iosSimulatorArm64Test` | green — 1031 tests |
+| Android host | `testAndroidHostTest` | **red** — 10 failures of 818 |
 
 The Compose resource packaging that used to fail 61 of these is **fixed** — see
 `tasktracker.kmp.compose.gradle.kts`, which copies the resources into the merged assets
@@ -57,6 +81,42 @@ Consequence for new tests: a test that renders Compose and reads pixels must cal
 actuals in `jvmTest`, `iosTest`, `androidHostTest`) or it will fail on that host. Be aware
 the skip registers as a *pass* there, not a skip.
 
+## When a UI change needs a rendered-pixel test
+
+Default to a structural assertion. Render pixels only when the property does not survive
+being read off the modifier chain.
+
+One question decides it: **can you write the failing assertion without rendering anything?**
+
+| The property | Assert it |
+| --- | --- |
+| a fill clipped to the shape its own outline uses | structural |
+| a modifier present, absent, or ordered | structural |
+| a token's value, or a relationship between two | structural |
+| shown or hidden in the tree | structural |
+| ink's contrast over a translucent fill | **pixels** |
+| a value composited *under another translucent layer* | **pixels** |
+| a silhouette, a blur, a hairline, antialiasing | **pixels** |
+| anything a second rasteriser might disagree about | **pixels, both hosts** |
+
+Mandatory whatever the table says: a change to a colour, an alpha, a fill ramp, or any
+number a test already holds to an exact value. Those are the four things a source-level
+assertion provably cannot see, and two of the real defects in this repo were one of them.
+
+Structural does not mean unverified. Rule 1 still applies, in its cheap form — delete or
+invert the modifier and confirm the assertion goes red. That is seconds of editing rather
+than a build cycle, and it is the entire reason to prefer a structural assertion. The
+expensive form of the same ritual is what the `rendered-ui-measurement` skill is for.
+
+Know what you are giving up. A structural assertion is a **proxy**: it asserts the intent is
+spelled, not that the pixels came out. Reimplement the lens's wash as a `drawOutline` with the
+right shape and delete the `.clip(CircleShape)`, and a structural test goes red on correct
+pixels. That is a false red rather than a missed defect, which is the cheap direction to
+fail, but it is not free either.
+
+If the honest answer to "can I assert this without rendering?" is no, render it. Do not use
+this section to justify skipping a measurement you cannot make any other way.
+
 ## Four rules
 
 These exist because each one has already cost real time here.
@@ -72,13 +132,16 @@ assertion you wrote:
 4. Restore the fix. Run again. Green.
 
 If step 3 is green, the test is not measuring what you fixed. Throw it away and write a
-different one. PLAN.md records 22 mutations run and 22 caught, and specifically two that
+different one. PLAN.md records 23 mutations run and 23 caught, and specifically two that
 were missed on the first pass — both because the *test* was at fault.
 
 Write the failure message as part of the test. Put the measured number and both colours in
 it. That message is frequently how the real bug gets found.
 
 ### 2. Measure rendered pixels, never model the composite
+
+**Scope first**: [when a UI change needs a rendered-pixel test](#when-a-ui-change-needs-a-rendered-pixel-test),
+above. This rule says *how* to measure once you have decided to; that one says *whether* to.
 
 A correct token in the wrong compositing is a real and recurring defect in this codebase —
 the sign-in button (see `GlassFillContrastTest`) and the tab bar captions were both

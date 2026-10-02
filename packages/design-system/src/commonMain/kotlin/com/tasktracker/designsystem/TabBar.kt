@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -337,6 +338,27 @@ private fun TabLens(
             // lens sat flush against the row's first pixel and floated six points clear of the
             // last, which is a lens leaning, not a lens inset.
             .offset(x = left, y = ttSpacing.tabBarLensInset)
+            // The wash is clipped to the very same [CircleShape] the rim below is drawn with, and
+            // that is the whole point: the two are the same object, so the fill and the outline
+            // cannot disagree about where the lens ends. Without this the `drawRect` below fills
+            // all four corners of its own bounding box and the rim is drawn *around* the parts
+            // that stick out, which is a rectangle wearing a capsule's outline — the indicator
+            // showed two squared blocks at its top corners. The top two are the visible ones
+            // because the gradient is strongest at `startY = 0` and the bottom wedges, at a
+            // quarter of that alpha, went unnoticed.
+            //
+            // Measured off the rendered frames by `TabLensCornerTest`, unclipped: the wash reached
+            // `#09` past the bar's glass in the top-left corner on the light bar and `#21` on the
+            // dark one. The two hosts agree on both to the byte, which is the one thing this
+            // component's other measurements do not do — a hard-edged geometric overhang is not a
+            // stroke-coverage question, so unlike the captions it does not need two rasterisers
+            // to see it.
+            //
+            // A clip layer rather than a `drawOutline` inside the same `drawBehind`, because the
+            // lens already remeasures and redraws every frame of its travel and settle and this
+            // adds no allocation to that path. The rim is unaffected: `border` draws its own
+            // outline and does not read the clip.
+            .clip(CircleShape)
             .drawBehind {
                 // `endY` spelled out, for the reason documented on `ttGlassSurface`: an
                 // unbounded `Brush.verticalGradient` collapses onto its last stop, and this

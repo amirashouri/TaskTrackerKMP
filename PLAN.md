@@ -77,7 +77,7 @@ rather than `@Test`s, and are counted per target below. The remainder is target-
 `jvmTest` adds 18 (shared-ui entry points) + 32 (projects-presentation) + 8 (sync) + 7
 (auth-presentation) + 7 (settings-presentation) + 6 (database) + 3 (design-system) + 2
 (composition-root) and `iosTest` adds the same minus the 15 that need a JVM or an Android
-`Context`: **1051 on `jvmTest` and 1029 on `iosSimulatorArm64Test`**, both green.
+`Context`: **1052 on `jvmTest` and 1031 on `iosSimulatorArm64Test`**, both green.
 `testAndroidHostTest` is **not green** — see the Android-host note below.
 
 ## Decisions taken
@@ -181,11 +181,11 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 Current test baseline: **962** `@Test`s in `commonTest`, plus **21** shell scenarios in
 `:shared-ui` that are shared `fun`s rather than `@Test`s (see
 [test-count baseline](#test-count-baseline) for the per-module split). Adding the
-target-only entry points and platform suites gives **1051** executions on `jvmTest` and
-**1029** on `iosSimulatorArm64Test`, both green.
+target-only entry points and platform suites gives **1052** executions on `jvmTest` and
+**1031** on `iosSimulatorArm64Test`, both green.
 
 `testAndroidHostTest` was **red for three** stacked reasons. Reason 1 is now fixed; reasons 2
-and 3 remain, at **10 failures of 817** (was 66).
+and 3 remain, at **10 failures of 818** (was 66).
 
 1. ~~The Compose resource-packaging failure below~~ — **fixed**, in
    `tasktracker.kmp.compose.gradle.kts`. It had taken every presentation suite that reads a
@@ -236,7 +236,7 @@ updated this section and not that one: two copies of one number, one of which no
 reading. Both now say the same thing, and the Phase 11 addition is recorded in both.
 
 The count is taken from the JUnit XML the build actually writes and cross-checked against
-`@Test` annotations in the source tree: 1051 / 1029, both matching exactly. Note that a
+`@Test` annotations in the source tree: 1052 / 1031, both matching exactly. Note that a
 naive `grep -c @Test` over-counts, because KDoc mentions the string in backticks — so the XML
 is the source of truth and the grep is the cross-check, never the reverse. A second trap: the
 modules at the repo root (`composition-root`, `shared-ui`) are one directory deep while the
@@ -1237,13 +1237,14 @@ that the two named spacing values that alias the ramp still alias it.
   backend's key list rather than round-tripping, because a round trip cannot tell a right
   key from a consistently wrong one.
 
-**22 mutations run, 22 caught** — across the design system and user defaults: a
+**23 mutations run, 23 caught** — across the design system and user defaults: a
 case-insensitive theme parse, `opposite` returning itself, a dark label turned black
 (white-on-white), the separator alpha reverted, a ramp reordered, a radius duplicated, a
 control padding moved, the key retyped, the raw key re-namespaced, the raw value
 JSON-encoded, `removeAll` extended to raw keys, a checkmark drawn upside down, a glyph too
 big for its tile, a shadow offset to zero, a tint raised above the fill, an opaque
-prominent tint, a press scale above 1, a hairline rounded to a point. Two mutations were
+prominent tint, a press scale above 1, a hairline rounded to a point, the tab lens's wash
+unclipped. Two mutations were
 **missed** on the first pass and are worth recording because both were the *test's* fault
 rather than the code's: a change to a control's horizontal padding passed a test whose
 name said it pinned "the relationship between the two halves of a pair" and which only
@@ -1876,7 +1877,7 @@ task's output directory is an implicit dependency that Gradle 9 rejects outright
 
 **Verified from a clean build** (`:shared-ui:clean` first, because a stale directory would
 pass for the wrong reason): 22 tests, 21 pass, 1 failure — down from 22 failures. Across the
-whole target, **10 failures of 817**, down from 66. The exit command
+whole target, **10 failures of 818**, down from 66. The exit command
 `jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports
 :androidApp:compileDebugKotlin` is green.
 
@@ -2004,7 +2005,7 @@ it was originally filed, because it is the only thing allowed to call `Router.be
 rule unenforceable rather than merely stated.
 
 **Exit criteria**: `./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph
-verifyModuleImports :androidApp:compileDebugKotlin` green — **1051 `jvmTest`, 1029
+verifyModuleImports :androidApp:compileDebugKotlin` green — **1052 `jvmTest`, 1031
 `iosSimulatorArm64Test`**. `testAndroidHostTest` is **not** green and is documented above and
 in [test-count baseline](#test-count-baseline); it was already red before this phase, and this
 phase's contribution to it is a real capability gap rather than a new fault.
@@ -2081,6 +2082,83 @@ What remains is verifying the link and filling in the behaviours.
 - [ ] **15.5** Delete the four empty scaffolds (`FeatureBacklog`, `FeatureBoard`,
       `FeatureTaskEditor`, `FeatureWorkItems`) rather than carrying them over. They
       were already listed as known gaps in the original's `AGENTS.md:538-539`.
+
+---
+
+## Follow-up — the tab lens drew its corners square
+
+The bottom navigation's selection indicator is the lens: a translucent wash and a rim. A user
+reported "a strange top-right and top-left squared shadow" on it.
+
+It was not a shadow. The lens has never had one — `Modifier.shadow` appears twice in the whole
+tree, on the bar and on the app mark. It was the lens's own fill, drawn as a plain `drawRect`
+while only the *rim* was drawn with `CircleShape`. So the four corner wedges of the rectangle were
+filled with white and nothing cut them back to the capsule, and the rim was drawn around the parts
+that stuck out: a rectangle wearing a capsule's outline. `TAB_LENS_FADE` puts the gradient's bottom
+stop at a quarter of the top one, so the top two wedges — the ones at `startY = 0`, where the
+gradient is at full strength — are the ones you can see, and the bottom two had gone unnoticed.
+
+The fix is `.clip(CircleShape)` immediately before the `drawBehind`, one modifier, chosen so the
+fill and the rim are the *same shape object* and cannot disagree about where the lens ends.
+
+### What it measured
+
+`packages/design-system/src/commonTest/…/TabLensCornerTest.kt`, written against the *unfixed*
+component first so that it could never be a test that has never failed. Unclipped, the wash
+reached past the bar's glass into the top-left corner of its own bounding box by:
+
+| appearance | JVM | iOS simulator |
+| --- | --- | --- |
+| light | `#09` | `#09` |
+| dark | `#21` | `#21` |
+
+**Both hosts agree to the byte, which is the opposite of every other measurement on this
+component.** The captions differ between the JVM and iOS by most of a point of contrast because a
+stroke's coverage is a rasteriser's business; this is a hard-edged rectangle overdrawing its own
+silhouette, and both rasterisers agree exactly how much white lands in the corner. It is still
+worth having run on two hosts rather than one — "the hosts agree" is a result, not an assumption.
+
+### The part that took the work: a pixel diff can be green for the wrong reason
+
+The test renders two bars in one frame with the lens on tab 1 in one and tab 3 in the other, and
+everything else blank, and differences them. That construction has a vacuous-green regime, and
+the `test-reviewer` subagent found it:
+
+- The only structural guard was "some pixels differed". If anything *other* than the lens ever
+  differs in the window, the bounding box becomes the whole window, the four corner probes land on
+  bare glass three points outside the lens, **both bars agree there, and the test passes with the
+  lens's corners as square as you like.** That is not hypothetical here: `TabBar.kt` already
+  records an empty child darkening its backdrop by 0.14 of luminance as a defect that shipped,
+  and the selection *does* rescale the tab cell, so the two bars really do differ in ways that
+  have nothing to do with the lens.
+  → Fixed by asserting the footprint does not touch an edge of the window. That also converts the
+  KDoc's load-bearing premise from a comment into a checked property: a lens at rest is inset
+  `tabBarLensInset` on every side of its segment, and at the peak of its stretch it is
+  `TAB_LENS_WIDEN` wider and would overhang the window.
+- The corner probe was a fixed 4 pixels, justified by a clearance figure that only holds at density
+  3. At density 1 the arc is ~7.9 pixels from the corner and a 4×4 block reaches ~4.2, leaving
+  ~2.7 pixels — so any future failure would have been a flake indistinguishable from the defect.
+  → Fixed by deriving the block from the footprint's own implied radius, `sqrt(2) - 1` of it,
+  capped.
+- The threshold pair had a two-step dead band: an overhang of five colour steps entered neither the
+  footprint (floor 5.1) nor the ceiling (6.4). `NOISE_FLOOR` came down to three steps — still 3×
+  the compositing phase it rejects — which widens the visible band to six.
+- The two bars' geometry was assumed equal rather than checked, so a one-row misalignment would
+  have made the diff an edge detector of the glass ramp. Now asserted.
+- The stated reason the empty `ImageVector` preserves the bar's height was wrong (`ttIcon` sizes the
+  image from `ttIconSize.tab`, not from the vector's intrinsic size). The conclusion held; the
+  reason did not.
+
+**Exit criteria**: `TabLensCornerTest` green on `jvmTest` and `iosSimulatorArm64Test`; removing
+`.clip(CircleShape)` fails both.
+
+**On the baseline this moved**: `jvmTest` went 1051 → 1052 and `testAndroidHostTest` 817 → 818,
+both exactly this one test. `iosSimulatorArm64Test` went 1029 → 1031, and the extra one was not
+mine — the recorded 1029 was already a stale figure. Counted from the XML and cross-checked
+against `@Test` declarations, the iOS total before this change was 1030. No stale or duplicate
+result files were involved: every XML in the tree was written by the same run. Recorded here
+because this is the third time these two numbers have drifted apart, and the drift was in the
+baseline rather than in a count taken from the build.
 
 ---
 
