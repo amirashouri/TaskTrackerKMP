@@ -127,22 +127,32 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:sync",
         ":packages:network",
         ":packages:keychain",
+        ":packages:user-defaults",
         ":packages:feature-auth-domain",
     ),
     ":packages:feature-auth-presentation" to setOf(
         ":packages:core",
-        ":packages:domain",
         ":packages:design-system",
-        ":packages:routing",
-        ":packages:di",
         ":packages:feature-auth-domain",
     ),
 
     ":packages:feature-settings-domain" to setOf(":packages:core", ":packages:domain"),
+    // `:packages:network` is here for `LiveSettingsService`, which is the adapter between the
+    // platform connectivity watcher and the settings feature's own vocabulary, and so names
+    // `NetworkMonitor` and `Connectivity` directly. It was missing when this table was written
+    // in Phase 0, because the module had no code yet — the other two data modules both listed
+    // it for the same reason, and the omission was an oversight rather than a decision.
+    //
+    // The alternative was to re-export connectivity through `:packages:sync`, which already
+    // depends on `:packages:network`, so that this module would not need the edge. That was
+    // rejected: it would put a second vocabulary for connectivity in the sync module, owned by
+    // nobody, purely to satisfy a table — and the monitor's four states are already a sealed
+    // enum that the data module maps exhaustively, which is the guarantee the port depends on.
     ":packages:feature-settings-data" to setOf(
         ":packages:core",
         ":packages:domain",
         ":packages:database",
+        ":packages:network",
         ":packages:sync",
         ":packages:feature-settings-domain",
     ),
@@ -170,6 +180,14 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
 
         // The shared screen tree: the presentation modules and the graph, never a data
         // module, so it cannot assemble its own data.
+        //
+        // `:packages:feature-projects-domain` is here for the same reason
+        // `:packages:feature-auth-domain` is: the shell resolves `ProjectRepositoryPort` to
+        // build the `ProjectEnvironment` the projects screens read, and naming the port
+        // requires its module. It is still the *only* projects thing it may see — the
+        // Room repository and the store live in data and database, neither of which appears
+        // here, so the shell can ask for projects but cannot construct one. Auth got the
+        // same treatment when the shell began resolving `AuthSessionPort`.
         ":shared-ui" to setOf(
             ":packages:core",
             ":packages:domain",
@@ -178,8 +196,19 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
             ":packages:di",
             ":composition-root",
             ":packages:feature-projects-presentation",
+            ":packages:feature-projects-domain",
+            ":packages:feature-auth-domain",
             ":packages:feature-auth-presentation",
+            // For `SettingsPort` alone, which the settings screen is handed. The shell
+            // resolves the port and passes it down; it cannot construct a live service,
+            // because `:packages:feature-settings-data` is not an edge either.
+            ":packages:feature-settings-domain",
             ":packages:feature-settings-presentation",
+            // For `UserDefaultsStore`, which the shell reads the appearance and the
+            // last-visited project through. Cross-cutting rather than a feature's own data,
+            // and the two keys it reads are deliberately device-scoped: sign-out calls
+            // `removeAll`, and an appearance or a project preference has to survive it.
+            ":packages:user-defaults",
         ),
 
         // The Android shell sits above the architecture and names what it needs directly.

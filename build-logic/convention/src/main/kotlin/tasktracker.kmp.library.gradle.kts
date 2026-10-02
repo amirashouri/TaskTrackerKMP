@@ -64,7 +64,13 @@ kotlin {
         // commonTest exists so the same test runs on the JVM and on iOS; without this the
         // Android target would silently skip it, and an expect/actual pair that is wrong on
         // Android would only fail on the two other hosts.
-        withHostTest {}
+        withHostTest {
+            // Robolectric resolves the host's resources through the merged test APK, and
+            // without them a Compose UI test on this target cannot render. Harmless for the
+            // plain JVM unit tests that make up the rest of the host suite: they read no
+            // resources, so the merged manifest simply sits unused.
+            isIncludeAndroidResources = true
+        }
     }
 
     // A JVM target is not part of the shipped app; it exists so commonTest runs

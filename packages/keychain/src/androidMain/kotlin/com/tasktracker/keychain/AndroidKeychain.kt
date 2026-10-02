@@ -118,6 +118,20 @@ class AndroidKeychain(
                 )
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    // Required, and not optional hardening. `KeyGenParameterSpec` defaults
+                    // `randomizedEncryptionRequired` to true, which tells the platform to
+                    // generate the IV itself and forbids the caller from supplying one. This
+                    // class supplies its own IV — it has to, because the IV is prepended to
+                    // the stored blob so `data` can reverse the operation without the
+                    // keystore keeping any per-write state. Leaving the default makes every
+                    // `set` throw `InvalidAlgorithmParameterException: Caller-provided IV
+                    // not permitted` on a real device.
+                    //
+                    // Turning it off is only sound because a fresh IV is generated per write,
+                    // from `SecureRandom`, and never persisted separately. GCM IV reuse under
+                    // one key leaks the authentication subkey, so the per-write IV is the
+                    // property that makes this safe, not the flag.
+                    .setRandomizedEncryptionRequired(false)
                     // The iOS side reads tokens after the first unlock following a
                     // reboot so background sync works; `setUserAuthenticationRequired(false)`
                     // is the Android equivalent — do not add it without checking that

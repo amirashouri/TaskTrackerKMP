@@ -1,0 +1,136 @@
+# AGENTS.md
+
+Agent instructions for this repository. Read this before running anything.
+
+`PLAN.md` is the project's design record — 2000 lines of phase history, decisions, and
+measured justifications. It is the source of truth for *why* things are the way they are.
+This file is the short version of *how to work here*, and it points at the rest.
+
+## Setup
+
+The build needs JDK 25. This machine has exactly one JDK and `java_home` cannot find it,
+so every Gradle invocation needs:
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+Without it the build dies immediately with `Unable to locate a Java Runtime`.
+
+## The command that decides whether you are done
+
+```bash
+./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+```
+
+`./gradlew check` is that plus `testAndroidHostTest`, which is **red for documented,
+pre-existing reasons** (see below). Do not fix it as a side effect of other work, and do
+not report it as a regression you caused — check whether it was already failing.
+
+## Test hosts
+
+| Host | Task | State |
+| --- | --- | --- |
+| JVM | `jvmTest` | green — 1051 tests |
+| iOS simulator | `iosSimulatorArm64Test` | green — 1029 tests |
+| Android host | `testAndroidHostTest` | **red** — 10 failures of 817 |
+
+The Compose resource packaging that used to fail 61 of these is **fixed** — see
+`tasktracker.kmp.compose.gradle.kts`, which copies the resources into the merged assets
+Robolectric reads. What remains is two distinct things:
+
+1. **Five `:composition-root` assertions need a `Context`** — Room's
+   `inMemoryDatabaseBuilder` refuses to open without one, so `testPlatformHost()` returns
+   `Unit` and the graph never builds. A real `Context` needs
+   `@RunWith(RobolectricTestRunner::class)`, which cannot be written in `commonTest`. The fix
+   is the split `shared-ui` already uses: bodies in `commonTest`, entry points per host.
+2. **Five Compose UI assertions fail on layout, not behaviour.** Robolectric's default
+   viewport is far smaller than the other two hosts, so content inside a `LazyColumn`
+   (`settings.versionRow`) or a `horizontalScroll` row (`board.column.in_review`) exists but
+   is not displayed. `theVersionRowHidesItselfWithNoVersion` has a second, independent
+   problem: it calls `setContent` twice, which Android's `ComponentActivity` rejects with
+   *"has already set content"*, so making that scenario portable means changing shared
+   assertions that the JVM and iOS hosts currently pass.
+
+Consequence for new tests: a test that renders Compose and reads pixels must call
+`thisHostRasterisesText()` (an `expect` in `:packages:design-system`'s `commonTest` with
+actuals in `jvmTest`, `iosTest`, `androidHostTest`) or it will fail on that host. Be aware
+the skip registers as a *pass* there, not a skip.
+
+## Four rules
+
+These exist because each one has already cost real time here.
+
+### 1. Mutation-check before you trust a green
+
+A new test that has never failed is not evidence of anything. Before believing any
+assertion you wrote:
+
+1. Run it. Green.
+2. Revert the fix in the production file.
+3. Run it again. **It must fail**, and the message must name the actual defect.
+4. Restore the fix. Run again. Green.
+
+If step 3 is green, the test is not measuring what you fixed. Throw it away and write a
+different one. PLAN.md records 22 mutations run and 22 caught, and specifically two that
+were missed on the first pass — both because the *test* was at fault.
+
+Write the failure message as part of the test. Put the measured number and both colours in
+it. That message is frequently how the real bug gets found.
+
+### 2. Measure rendered pixels, never model the composite
+
+A correct token in the wrong compositing is a real and recurring defect in this codebase —
+the sign-in button (see `GlassFillContrastTest`) and the tab bar captions were both
+instances. You cannot catch it by computing an alpha blend in a test; the blend is not what
+the compositor does.
+
+Render the real component and read pixels. `tools/inspect_frame.py` reads a PNG with no
+third-party dependencies and prints geometry, contrast, and an ASCII map.
+
+Run the measurement on **both** the JVM and the iOS simulator before believing a number.
+They disagree: the same token on the same backdrop measured 5.37:1 on the JVM and 3.98:1 on
+iOS, because iOS rasterizes a small glyph's stroke at roughly 85% coverage. Tuning to the
+JVM number alone ships a defect to the platform that matters.
+
+### 3. One complete diagnostic, never incremental
+
+When a measurement is wrong, add **one** diagnostic that dumps everything you might need —
+token values, per-row counts, per-row extremes, bounding boxes — then read it once. Adding
+one `println` per hypothesis and rebuilding is the same as having no diagnostic, only
+slower. Partial diagnostics send you theorising for cycles instead of looking.
+
+### 4. Prose last, with numbers frozen
+
+Do not write explanatory comments while the numbers are still moving. Investigate first,
+freeze the numbers, then write the rationale once. Comments rewritten three times as a
+figure changes are how contradictory comments get left behind in the tree.
+
+## Skills
+
+Load these when the task matches; they carry the detail this file deliberately omits.
+
+- **`kmp-compose-tests`** — adding or running tests in this multiplatform Compose project:
+  the host matrix, source-set layout, the rasterisation skip, screenshot capture.
+- **`rendered-ui-measurement`** — proving a UI assertion: the mutation ritual, twin-frame
+  diffing and its contamination traps, contrast measurement on two rasterisers.
+
+There is also a `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) that reviews
+a proposed test adversarially, specifically for whether it can fail.
+
+## Conventions
+
+- **Comments explain why, and carry the measurement.** This house style is not decoration;
+  a change to a non-obvious value is expected to arrive with the number that justifies it.
+  Routine tuning does not need a paragraph.
+- **`PLAN.md` is updated in the same change as any test addition**, including the test-count
+  baseline. It says so twice and has been wrong three times. Counts come from the JUnit XML
+  the build writes, cross-checked against `@Test` in the source — never from `grep -c`
+  alone, which over-counts because KDoc mentions the string in backticks.
+- **`NavigationHost.kt` and most of `shared-ui` are untracked.** Git cannot recover an
+  accidental edit. Do not use broad scripted search-and-replace in this tree; read the file
+  and edit deliberately.
+- **Compose Multiplatform 1.12.1 specifics** bite regularly: `BasicText` has no `textAlign`
+  parameter (it goes in the style), `TextStyle` has no `overflow` property, and
+  `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it
+  renders nothing at all, silently, even with a `ColorFilter` tint.

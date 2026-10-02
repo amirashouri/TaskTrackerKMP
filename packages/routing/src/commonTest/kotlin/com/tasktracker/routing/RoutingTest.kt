@@ -181,6 +181,53 @@ class RouterTest {
     }
 
     @Test
+    fun `switching tabs moves the selection and nothing else`() {
+        val router = Router()
+        router.enterMain()
+        router.openProject(projectID)
+
+        router.selectTab(AppTab.Settings)
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        // The point of the test: a tab bar must not be able to clean up as it switches. The
+        // board the user pushed is still on the Projects stack for when they switch back, and
+        // the active project is shared by Board and Backlog precisely so switching between
+        // them lands on the same work.
+        assertEquals(listOf(AppRoute.Board(projectID)), router.path(AppTab.Projects))
+        assertEquals(projectID, router.activeProjectID)
+    }
+
+    @Test
+    fun `switching to the tab already selected emits nothing`() {
+        val router = Router()
+        router.enterMain()
+        router.openProject(projectID)
+
+        val before = router.state.value
+        router.selectTab(AppTab.Projects)
+
+        // Same *instance*, not just an equal value: `update` returns before the CAS when the
+        // transform is a no-op, so a collector upstream of this cannot be woken by a switch
+        // that did not switch.
+        assertTrue(before === router.state.value)
+        assertEquals(listOf(AppRoute.Board(projectID)), router.path(AppTab.Projects))
+    }
+
+    @Test
+    fun `selecting a tab before the session answers is allowed but does not sign anyone in`() {
+        val router = Router()
+
+        router.selectTab(AppTab.Backlog)
+
+        assertEquals(AppTab.Backlog, router.selectedTab)
+        assertEquals(
+            RootDestination.Auth,
+            router.root,
+            "expected a tab switch to be unable to move the root out of the auth gate",
+        )
+    }
+
+    @Test
     fun `pushing the same route twice pops instead of stacking a duplicate`() {
         val router = Router()
         router.enterMain()

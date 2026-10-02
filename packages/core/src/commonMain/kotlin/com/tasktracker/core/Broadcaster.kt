@@ -96,7 +96,21 @@ class Broadcaster<Element> {
      */
     fun finish() {
         finished = true
-        subscribers.values.forEach { it.close() }
-        subscribers.clear()
+        // Snapshotted, and the map emptied, *before* any channel is closed. Closing a channel
+        // completes the collector, whose `finally` removes its own entry from `subscribers` —
+        // so iterating the live map while closing throws ConcurrentModificationException on the
+        // JVM, the moment a collector is actually parked on its channel. Clearing first also
+        // makes the unregistering `remove` a no-op rather than a rehash.
+        //
+        // `try { } finally { }` because a close that throws must not leave the broadcaster
+        // looking finished while its queues are still open.
+        val open = subscribers.values.toList()
+        try {
+            subscribers.clear()
+            open.forEach { it.close() }
+        } catch (failure: Exception) {
+            open.forEach { runCatching { it.close() } }
+            throw failure
+        }
     }
 }

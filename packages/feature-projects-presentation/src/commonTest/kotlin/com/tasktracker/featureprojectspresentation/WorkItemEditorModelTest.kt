@@ -1,0 +1,357 @@
+package com.tasktracker.featureprojectspresentation
+
+import com.tasktracker.core.AppError
+import com.tasktracker.core.TestDateProvider
+import com.tasktracker.domain.Priority
+import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
+
+/**
+ * The work item create/edit form.
+ *
+ * The test that earns its keep here is
+ * [the key the project issues is read back rather than composed locally] - a fake that
+ * numbered from 1 every time would make a naive implementation pass.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class WorkItemEditorModelTest {
+
+    // MARK: Creating
+
+    @Test
+    fun `a new item starts untriaged and unsaveable`() = runTest {
+        val model = newItem()
+
+        assertTrue(model.isCreating)
+        assertEquals(WorkItemStatus.Backlog, model.status)
+        assertEquals(Priority.Medium, model.priority)
+        assertEquals("", model.title)
+        assertFalse(model.canSave)
+    }
+
+    @Test
+    fun `a title makes a new item saveable`() = runTest {
+        val model = newItem()
+        model.onTitleChanged("Write the spec")
+        assertTrue(model.canSave)
+    }
+
+    @Test
+    fun `whitespace is not a title`() = runTest {
+        val model = newItem()
+        model.onTitleChanged("   ")
+        assertFalse(model.canSave)
+    }
+
+    /**
+     * The key the project issues is read back rather than composed locally.
+     *
+     * A key is `prefix-number`, and the number depends on what the project has already
+     * handed out - so a new item in a project that is on its tenth task is `AP-11`, not
+     * `AP-1`. The project is seeded at `nextItemNumber = 4` and the fake is told to issue
+     * rank 7, so an implementation that computed the key as `prefix-1`, or that used the
+     * project's counter rather than the one it was handed, would fail here.
+     */
+    @Test
+    fun `the key the project issues is read back rather than composed locally`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(keyPrefix = "AP", nextItemNumber = 4)
+        repository.seed(project)
+        repository.nextItemRank = 7
+
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+        assertNotNull(model.save())
+
+        assertEquals("AP-7", model.issuedKey?.toString())
+        assertEquals("AP-7", repository.workItems(project.id).single().key.toString())
+        // The project's counter moved past what it issued, so the next item cannot collide.
+        assertEquals(8, repository.project(project.id)!!.nextItemNumber)
+    }
+
+    @Test
+    fun `a created item reports the new id`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+
+        val outcome = model.save()
+
+        val created = assertIs<WorkItemSaveOutcome.Created>(outcome)
+        assertEquals(created.workItemID, model.savedWorkItemID)
+    }
+
+    // MARK: Editing
+
+    @Test
+    fun `an existing item starts with its fields and no changes`() = runTest {
+        val item = testWorkItem(
+            projectID = testProject().id,
+            title = "Ship it",
+            details = "Notes",
+            status = WorkItemStatus.InProgress,
+            priority = Priority.High,
+            assignee = "Sam",
+        )
+        val model = editing(item)
+
+        assertFalse(model.isCreating)
+        assertEquals("Ship it", model.title)
+        assertEquals("Notes", model.details)
+        assertEquals(WorkItemStatus.InProgress, model.status)
+        assertEquals(Priority.High, model.priority)
+        assertEquals("Sam", model.assignee)
+        assertEquals(item.key, model.issuedKey)
+        assertFalse(model.hasChanges)
+    }
+
+    @Test
+    fun `a field edit is a change`() = runTest {
+        val model = editing(testWorkItem(projectID = testProject().id, title = "Ship it"))
+
+        model.onTitleChanged("Ship it properly")
+
+        assertTrue(model.hasChanges)
+    }
+
+    @Test
+    fun `an unchanged field is not a change`() = runTest {
+        val model = editing(testWorkItem(projectID = testProject().id, title = "Ship it", details = "Notes"))
+
+        model.onTitleChanged("Ship it")
+        model.onDetailsChanged("Notes")
+
+        assertFalse(model.hasChanges)
+    }
+
+    /**
+     * A status change and a field change are reported differently, because the view says so.
+     *
+     * A form that only edited a typo does not want a "moved to In Progress" confirmation,
+     * and one that dragged a card into a new column does. `SaveWorkItem` decides which, and
+     * this checks the model passes the answer through rather than flattening it.
+     */
+    @Test
+    fun `a status change is reported as a move and a field edit is not`() = runTest {
+        val project = testProject()
+        val item = testWorkItem(projectID = project.id, status = WorkItemStatus.Todo)
+
+        val moved = FakeProjectRepository().apply { seed(item) }
+        val moving = editing(item, moved)
+        moving.onStatusChanged(WorkItemStatus.InProgress)
+        val movedOutcome = moving.save()
+        assertIs<WorkItemSaveOutcome.Updated>(movedOutcome)
+        assertTrue(movedOutcome.moved, "the card changed column, so the view should say so")
+
+        val edited = FakeProjectRepository().apply { seed(item) }
+        val editing_ = editing(item, edited)
+        editing_.onTitleChanged("A better title")
+        val editedOutcome = editing_.save()
+        assertIs<WorkItemSaveOutcome.Updated>(editedOutcome)
+        assertFalse(editedOutcome.moved, "a typo fix is not a move")
+    }
+
+    @Test
+    fun `a status change is itself a change`() = runTest {
+        val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Todo)
+        val model = editing(item)
+
+        model.onStatusChanged(WorkItemStatus.InProgress)
+
+        assertTrue(model.hasChanges)
+    }
+
+    // MARK: Terminal statuses
+
+    /** Closed is reached by filing away, not by choosing it. */
+    @Test
+    fun `closed is not offered as a status to choose`() = runTest {
+        val model = newItem()
+
+        assertFalse(WorkItemStatus.Closed in model.selectableStatuses)
+        assertTrue(WorkItemStatus.Backlog in model.selectableStatuses)
+        assertTrue(WorkItemStatus.Done in model.selectableStatuses)
+    }
+
+    @Test
+    fun `an item that has been filed away offers no statuses`() = runTest {
+        val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Closed)
+        val model = editing(item)
+
+        assertTrue(model.isFiledAway)
+        assertEquals(emptyList(), model.selectableStatuses)
+    }
+
+    @Test
+    fun `choosing a status that is already filed away is ignored`() = runTest {
+        val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Closed)
+        val model = editing(item)
+
+        model.onStatusChanged(WorkItemStatus.Closed)
+
+        assertEquals(WorkItemStatus.Closed, model.status)
+        assertFalse(model.hasChanges)
+    }
+
+    // MARK: File away
+
+    @Test
+    fun `filing away archives the item and marks it filed`() = runTest {
+        val repository = FakeProjectRepository()
+        val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Todo)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        assertTrue(model.fileAway())
+
+        assertTrue(repository.writes.any { it == "moveWorkItem:Closed" })
+        assertTrue(model.isFiledAway)
+    }
+
+    @Test
+    fun `filing away an unsaved new item does nothing`() = runTest {
+        val model = newItem()
+
+        assertFalse(model.fileAway(), "there is no id to archive yet")
+    }
+
+    /**
+     * Filing away something already filed away is a no-op, not a mistake to report.
+     *
+     * The form knows the item is closed, so it does not offer the action and a second press
+     * is not something the user can get wrong. The backlog has no such knowledge - it will
+     * accept any id - so it lets `ArchiveWorkItem` refuse and surfaces that wording. The
+     * difference is what the surface knows, not a difference in policy.
+     */
+    @Test
+    fun `filing away an item that is already filed away does nothing quietly`() = runTest {
+        val repository = FakeProjectRepository()
+        val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Closed)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        assertFalse(model.fileAway())
+        assertNull(model.errorMessage, "a no-op is not a failure to report")
+        assertEquals(emptyList(), repository.writes)
+    }
+
+    // MARK: Clearing fields
+
+    /**
+     * Clearing a field has to reach the store as a *clear*, not as an ignored write.
+     *
+     * `updateWorkItem` takes `Patch<String?>`, precisely because a nullable field cannot
+     * otherwise tell "leave this alone" from "set this to nothing". A screen that sent the
+     * assignee as `null` on save would silently keep the old assignee.
+     */
+    @Test
+    fun `clearing the assignee reaches the store as a clear`() = runTest {
+        val repository = FakeProjectRepository()
+        val item = testWorkItem(projectID = testProject().id, assignee = "Sam")
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onAssigneeChanged("")
+        assertNotNull(model.save())
+
+        assertEquals(null, repository.workItem(item.id)?.assignee)
+    }
+
+    @Test
+    fun `clearing the due date reaches the store as a clear`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(projectID = project.id, dueDate = Instant.parse("2026-04-01T00:00:00Z"))
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onDueDateChanged(null)
+        assertNotNull(model.save())
+
+        assertNull(repository.workItem(item.id)?.dueDate)
+    }
+
+    @Test
+    fun `setting a due date reaches the store`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        repository.seed(testWorkItem(projectID = project.id))
+        val model = editing(repository.workItems(project.id).single(), repository)
+        val due = Instant.parse("2026-05-05T00:00:00Z")
+
+        model.onDueDateChanged(due)
+        assertNotNull(model.save())
+
+        assertEquals(due, repository.workItems(project.id).single().dueDate)
+    }
+
+    // MARK: Failure
+
+    @Test
+    fun `a failed save reports the failure and changes nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+
+        repository.failure = AppError.Offline
+
+        assertNull(model.save())
+        assertEquals(AppError.Offline.message, model.errorMessage)
+        assertEquals(0, repository.writes.count { it == "createWorkItem" })
+    }
+
+    @Test
+    fun `a failed save does not claim a key`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+        repository.failure = AppError.Offline
+
+        model.save()
+
+        // A key displayed for an item that was never created is a promise the store cannot
+        // keep - the number may well have been taken by the retry.
+        assertNull(model.issuedKey)
+    }
+
+    @Test
+    fun `dismissing the error clears it`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+        repository.failure = AppError.Offline
+        model.save()
+        assertNotNull(model.errorMessage)
+
+        model.dismissError()
+        assertNull(model.errorMessage)
+    }
+
+    // MARK: Helpers
+
+    private fun newItem(repository: FakeProjectRepository = FakeProjectRepository()) =
+        WorkItemEditorModel(testProject().id, null, repository, TestDateProvider())
+
+    private fun editing(item: com.tasktracker.domain.WorkItem, repository: FakeProjectRepository = FakeProjectRepository()) =
+        WorkItemEditorModel(item.projectID, item, repository, TestDateProvider())
+}

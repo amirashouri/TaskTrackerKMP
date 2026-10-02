@@ -20,18 +20,61 @@ import androidx.compose.ui.platform.LocalContext
  * the dependency the design decision removed.
  */
 @Composable
-actual fun ttCanvas(): Color = themeColor(android.R.attr.colorBackground)
+actual fun ttCanvas(): Color = dynamicOrPinned(
+    pinned = { ttFixedColours.canvas(it) },
+    dynamic = { themeColor(android.R.attr.colorBackground) },
+)
 
 @Composable
-actual fun ttSurface(): Color = themeColor(android.R.attr.colorBackgroundFloating)
+actual fun ttSurface(): Color = dynamicOrPinned(
+    pinned = { ttFixedColours.surface(it) },
+    dynamic = { themeColor(android.R.attr.colorBackgroundFloating) },
+)
 
 /**
  * Android has no `separator` resource, so the hairline is derived from the theme's
  * secondary text colour at low alpha. That keeps it adapting with the theme, which a
  * fixed grey would not: on a dark canvas a hardcoded divider is a visible white line.
  */
+/**
+ * Android's own error colour, so a failure banner follows the platform theme the way every
+ * other token here does. Material's `colorError` is the attribute Android has always had
+ * for this role, and reading it costs nothing — no Material *dependency*, only the theme
+ * attribute.
+ */
 @Composable
-actual fun ttSeparator(): Color = themeColor(android.R.attr.textColorSecondary, alpha = 0.20f)
+actual fun ttError(): Color = dynamicOrPinned(
+    pinned = { ttFixedColours.error(it) },
+    dynamic = { themeColor(android.R.attr.colorError) },
+)
+
+@Composable
+actual fun ttLabel(): Color = dynamicOrPinned(
+    pinned = { ttFixedColours.label(it) },
+    dynamic = { themeColor(android.R.attr.textColorPrimary) },
+)
+
+/**
+ * Android's `textColorSecondary` is an opaque colour where iOS's `secondaryLabel` is the
+ * label at 60%, so the pinned entry cannot be this attribute's value — a dark appearance
+ * would paint a mid-grey that is lighter than the dark label it is supposed to subordinate
+ * to. `ttFixedColours` holds the iOS-shaped pair instead, which is what makes a pinned
+ * appearance identical on both platforms.
+ */
+@Composable
+actual fun ttLabelSecondary(): Color = dynamicOrPinned(
+    pinned = { ttFixedColours.labelSecondary(it) },
+    dynamic = { themeColor(android.R.attr.textColorSecondary) },
+)
+
+@Composable
+actual fun ttSeparator(): Color = dynamicOrPinned(
+    // The pinned values are UIKit's `separator` pair, not a darkening of Android's
+    // `textColorSecondary`: a pinned appearance has to resolve to the same colour the other
+    // two targets paint, and the two platforms disagree about what a hairline is.
+    pinned = { ttFixedColours.separator(it) },
+    dynamic = { themeColor(android.R.attr.textColorSecondary, alpha = 0.20f) },
+)
 
 @Composable
 private fun themeColor(attr: Int, alpha: Float = 1f): Color {

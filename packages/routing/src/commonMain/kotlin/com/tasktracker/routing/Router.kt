@@ -164,6 +164,30 @@ class Router {
     /** The navigation stack belonging to [onTab]. */
     fun path(onTab: AppTab): List<AppRoute> = _state.value.pathFor(onTab)
 
+    /**
+     * Switches tabs, and nothing else.
+     *
+     * The original's `selectedTab` was a public `var` with a `didSet` that logged, so the
+     * only rule it could state was "don't log a no-op". Here the field has no setter at all,
+     * which makes this the *only* way to move between tabs — and that is the property worth
+     * having: a tab bar that wrote the field could also write it while wiping a stack or
+     * changing the active project, which is how a tab and its stack drift apart.
+     *
+     * Deliberately does not touch any stack or [activeProjectID]. Flipping tabs is a
+     * question about *which* surface, not about what is on it: Board and Backlog are scoped
+     * to the shared active project precisely so that switching between them lands on the same
+     * work, and switching to Projects must leave the board the user pushed still on the
+     * Projects stack for when they switch back.
+     *
+     * A no-op switch returns without touching the flow, so `distinctUntilChanged` upstream
+     * of a tab switch does not see an emission that says nothing.
+     */
+    fun selectTab(tab: AppTab) = update { state ->
+        if (state.selectedTab == tab) return@update state
+        logDebug("tab -> ${tab.wireValue}")
+        state.copy(selectedTab = tab)
+    }
+
     /** Replaces [onTab]'s stack wholesale. Used by the shell to restore persisted state. */
     fun setPath(path: List<AppRoute>, onTab: AppTab) = update { it.withPath(onTab, path) }
 
@@ -284,6 +308,11 @@ class Router {
         AppTab.Board -> copy(boardPath = path)
         AppTab.Backlog -> copy(backlogPath = path)
         AppTab.Settings -> copy(settingsPath = path)
+    }
+
+    /** A tab switch is routine navigation rather than a session boundary, so it is a debug. */
+    private fun logDebug(text: String) {
+        TTLogger.routing.debug { logMessage { append(text) } }
     }
 
     private fun logNotice(text: String) {

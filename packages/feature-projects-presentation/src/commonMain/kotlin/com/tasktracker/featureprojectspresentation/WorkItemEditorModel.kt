@@ -1,0 +1,283 @@
+package com.tasktracker.featureprojectspresentation
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.tasktracker.core.DateProvider
+import com.tasktracker.core.ProjectID
+import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.WorkItemKey
+import com.tasktracker.domain.Priority
+import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
+import com.tasktracker.featureprojectsdomain.ProjectChange
+import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.SaveWorkItem
+import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
+import kotlin.time.Instant
+
+/**
+ * The work item editor, for both creating and editing.
+ *
+ * ## A draft, never a stored record
+ *
+ * The fields are plain Compose state and the original values are snapshotted at
+ * construction, exactly as [ProjectEditorModel] does. The rule is not stylistic. A form
+ * bound directly to the persisted `WorkItem` would save through the sync sink's own object:
+ * a save that failed halfway would leave the edited values already written to the store
+ * with no outbox row to send them, so the edit would exist on this device and nowhere else.
+ * A draft cannot do that, because nothing in the form is the record - the record only
+ * comes into being inside `SaveWorkItem`.
+ *
+ * `WorkItem` is also a data class of `var`s, so holding one and reading it for `hasChanges`
+ * would answer about the store rather than about the draft, and a concurrent remote edit
+ * would move the goalposts under a form mid-edit.
+ *
+ * ## A status change is a move, and this model does not pretend otherwise
+ *
+ * [SaveWorkItem] is one use case rather than two precisely because a status change is also
+ * a re-rank: the card has to land in its new column, which a field update deliberately does
+ * not do. Left in a view model, a status change eventually saves without re-ordering,
+ * which looks fine on one device and puts two cards in the same slot on another. So the
+ * status is an ordinary field here and the use case is what knows it is two writes.
+ */
+class WorkItemEditorModel(
+    private val projectID: ProjectID,
+    /**
+     * The work item being edited, or `null` when creating. Read once, for the initial field
+     * values and the change snapshot; never read again - see the class comment.
+     */
+    private val existing: WorkItem?,
+    /**
+     * Held for exactly one read: the key the project issues on create.
+     *
+     * `WorkItemSaveOutcome.Created` carries the new id but not the key, and the key is
+     * `prefix-number` with the number depending on what that project has already handed
+     * out. So the editor shows the key it was given rather than composing one locally -
+     * a locally composed `TT-1` would be right for a new project and wrong for the tenth.
+     */
+    private val repository: ProjectRepositoryPort,
+    dateProvider: DateProvider,
+) : ProjectModel() {
+
+    private val saveWorkItem = SaveWorkItem(repository, dateProvider)
+    private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
+
+    private val original: Draft? = existing?.let { Draft.of(it) }
+
+    /** The title. Raw text as typed; `WorkItemRules` trims and refuses on save. */
+    var title: String by mutableStateOf(existing?.title.orEmpty())
+        private set
+
+    /** The description. The card shows at most a couple of lines of this. */
+    var details: String by mutableStateOf(existing?.details.orEmpty())
+        private set
+
+    /**
+     * The status. Defaults to [WorkItemStatus.Backlog] when creating.
+     *
+     * [WorkItemStatus.Closed] is not offered for a new task: it is the archive-only status,
+     * and reaching it by picking it in a dropdown would make a status that is supposed to
+     * be entered through the guarded move reachable by accident.
+     */
+    var status: WorkItemStatus by mutableStateOf(existing?.status ?: WorkItemStatus.Backlog)
+        private set
+
+    /** The priority. */
+    var priority: Priority by mutableStateOf(existing?.priority ?: Priority.Medium)
+        private set
+
+    /** The assignee, or `null` for unassigned. Held raw, as typed. */
+    var assignee: String by mutableStateOf(existing?.assignee.orEmpty())
+        private set
+
+    /** The due date, or `null` for none. */
+    var dueDate: Instant? by mutableStateOf(existing?.dueDate)
+        private set
+
+    /** The id and key of the task once a save has succeeded. */
+    var savedWorkItemID: WorkItemID? by mutableStateOf(existing?.id)
+        private set
+
+    /** Whether this editor is creating rather than editing. */
+    val isCreating: Boolean get() = existing == null
+
+    /**
+     * The work item's key, which the editor shows but never lets the user change.
+     *
+     * `null` when creating, because the key does not exist until the project issues it -
+     * which is also why the create path cannot show one and the save result can.
+     */
+    var issuedKey: WorkItemKey? by mutableStateOf(existing?.key)
+        private set
+
+    /**
+     * Whether this task is already filed away, which hides every action that would move it.
+     *
+     * A terminal task has left the flow, so "file away" has nothing left to do and the
+     * board has nowhere to move it to. [WorkItemStatus.isTerminal] is the test, and
+     * `ArchiveWorkItem` enforces the same one.
+     */
+    val isFiledAway: Boolean get() = status.isTerminal
+
+    /**
+     * The statuses this editor offers.
+     *
+     * Empty once the item is filed away, which is what [isFiledAway]'s own comment claims
+     * and what the board relies on: a closed item has left the flow, so offering it a lane
+     * would offer a move that undoes a decision somebody recorded. `ArchiveWorkItem`
+     * guards the same rule in the other direction, and a form that ignored it would be the
+     * one place in the feature that let a closed task come back.
+     */
+    val selectableStatuses: List<WorkItemStatus>
+        get() = if (isFiledAway) {
+            emptyList()
+        } else {
+            WorkItemStatus.entries.filterNot { it == WorkItemStatus.Closed }
+        }
+
+    /**
+     * Whether the draft differs from what it started as.
+     *
+     * Trims before comparing for the same reason [ProjectEditorModel.hasChanges] does: the
+     * use case trims on the way in, so saving whitespace-only differences would bump
+     * `updatedAt` and reorder the board without changing anything.
+     */
+    val hasChanges: Boolean
+        get() {
+            val current = Draft(
+                title = title.trim(),
+                details = details.trim(),
+                status = status,
+                priority = priority,
+                assignee = assignee.trim(),
+                dueDate = dueDate,
+            )
+            return original == null || current != original
+        }
+
+    /** Whether save is available. A task needs a title; everything else has a default. */
+    val canSave: Boolean get() = title.isNotBlank()
+
+    /** Sets the title. */
+    fun onTitleChanged(value: String) {
+        title = value
+    }
+
+    /** Sets the description. */
+    fun onDetailsChanged(value: String) {
+        details = value
+    }
+
+    /** Sets the status. Ignored for a filed-away task, which has left the flow. */
+    fun onStatusChanged(value: WorkItemStatus) {
+        if (isFiledAway) return
+        status = value
+    }
+
+    /** Sets the priority. */
+    fun onPriorityChanged(value: Priority) {
+        priority = value
+    }
+
+    /** Sets the assignee. Blank is stored as unassigned, not as an empty name. */
+    fun onAssigneeChanged(value: String) {
+        assignee = value
+    }
+
+    /** Sets or clears the due date. */
+    fun onDueDateChanged(value: Instant?) {
+        dueDate = value
+    }
+
+    /**
+     * Saves, creating or updating as appropriate, and returns the outcome.
+     *
+     * `null` when the save did not happen, so a caller can stay on the editor. The key is
+     * captured from the result rather than being composed locally, because the project
+     * issues it and the number depends on what the project has already handed out.
+     */
+    suspend fun save(): WorkItemSaveOutcome? {
+        if (!canSave) return null
+        val outcome = reporting {
+            saveWorkItem(
+                id = savedWorkItemID,
+                projectID = projectID,
+                title = title,
+                status = status,
+                details = details,
+                priority = priority,
+                assignee = assignee,
+                dueDate = dueDate,
+            )
+        } ?: return null
+
+        when (outcome) {
+            is WorkItemSaveOutcome.Created -> {
+                savedWorkItemID = outcome.workItemID
+                issuedKey = repository.workItem(outcome.workItemID)?.key
+            }
+
+            is WorkItemSaveOutcome.Updated -> savedWorkItemID = outcome.workItemID
+        }
+        return outcome
+    }
+
+    /**
+     * Files the task away, and reports whether it did.
+     *
+     * A no-op returning `false` for a task that is already filed away, rather than an
+     * error: the editor is showing a terminal task, the "file away" action is hidden, and
+     * reaching it at all means some call site is out of step with the state.
+     */
+    /**
+     * Files the item away, and reports whether it did.
+     *
+     * Returns `false` without an error when the item is already filed away. That is a
+     * local guard rather than a failure: the form knows the item is closed, so it does not
+     * offer the action, and a second press is a no-op rather than a mistake to report. The
+     * backlog has no such knowledge - anything can be handed to it - so it lets
+     * `ArchiveWorkItem` refuse, and surfaces that refusal's wording. Two surfaces, two
+     * behaviours, because the information they have differs.
+     */
+    suspend fun fileAway(): Boolean {
+        val id = savedWorkItemID ?: return false
+        if (isFiledAway) return false
+        val archived = reporting { archiveWorkItem(id = id) } ?: return false
+        // Adopt the status the store just decided on. This form does not observe the
+        // store - a form is a snapshot, so that a change elsewhere cannot rewrite what the
+        // user is typing - which means nothing would otherwise update it. Without this,
+        // filing away succeeds and the form keeps offering statuses for a closed item, and
+        // `selectableStatuses` stays non-empty because it is derived from [status].
+        status = archived.status
+        return true
+    }
+
+    /**
+     * The draft's comparable state.
+     *
+     * A private value class rather than comparing the live fields against the live
+     * `WorkItem`, for the reason in the class comment: the record is mutable and re-read
+     * from under a form, and "has this changed" has to be a question about the draft.
+     */
+    private data class Draft(
+        val title: String,
+        val details: String,
+        val status: WorkItemStatus,
+        val priority: Priority,
+        val assignee: String,
+        val dueDate: Instant?,
+    ) {
+        companion object {
+            fun of(item: WorkItem) = Draft(
+                title = item.title.trim(),
+                details = item.details.trim(),
+                status = item.status,
+                priority = item.priority,
+                assignee = item.assignee.orEmpty().trim(),
+                dueDate = item.dueDate,
+            )
+        }
+    }
+}

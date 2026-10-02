@@ -35,6 +35,24 @@ fun mainViewController(): UIViewController = ComposeUIViewController {
  * free from the Android process lifecycle; iOS has no equivalent hook that runs exactly
  * once before any view controller exists, so a lazily initialised holder is the honest
  * equivalent rather than pretending `AppDelegate` is that hook.
+ *
+ * ## Why there is no matching `stop`
+ *
+ * The asymmetry with `TaskTrackerApplication.onTerminate` is deliberate, and it is the
+ * difference between a platform that has a teardown hook and one that does not. Android has
+ * `onTerminate`, so the graph's three service loops are stopped before the container goes.
+ *
+ * iOS has no such hook. There is no `applicationWillTerminate` — it is not called for a
+ * suspended app — and the last scene disconnecting is not process death, so a `stop` hung off
+ * it would cancel the coordinator, the sync engine and the network monitor of an app the user
+ * was about to resume. The consequence is the reverse of the Android one and is worth stating
+ * plainly rather than leaving to be discovered: on iOS the loops are released by the process
+ * exiting, which is the only event after which releasing them would be correct.
+ *
+ * The alternative — exposing a `stop` for Swift to call from a lifecycle callback it does not
+ * reliably receive — would be an API whose correct use is unavailable and whose incorrect use
+ * is silent. So there is no such symbol here. If iOS ever grows a real teardown signal, this
+ * holder is where `AppGraph.stop(resolver)` belongs, and the doc above is what to replace.
  */
 private object IosGraph {
     val resolver: Resolver by lazy { AppGraph.start() }

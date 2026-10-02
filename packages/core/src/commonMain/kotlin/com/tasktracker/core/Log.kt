@@ -101,6 +101,36 @@ class TTLogger internal constructor(private val category: String) {
     fun warning(block: () -> LogMessage) = emit(LogLevel.Warning, block)
     fun error(block: () -> LogMessage) = emit(LogLevel.Error, block)
 
+    /**
+     * Replaces the process-wide sink.
+     *
+     * Exists for two callers, and the second is the reason it is public rather than `internal`:
+     *
+     *  - a platform, to route to `os_log` or `android.util.Log` instead of [println]. The
+     *    default sink is stdout on *every* target including release builds, so without this
+     *    there is no way for a device build to log anywhere a person can read.
+     *  - a test, to assert on what a subsystem reported. A log line is an observable effect,
+     *    and "the reason a session ended was recorded" is a claim about an effect — the same
+     *    kind of claim as "the session cache was cleared", which *is* asserted against a real
+     *    collaborator. Without a seam the only alternative is a public mutable field for the
+     *    assertion, which is strictly worse: it is state a caller can corrupt, and it cannot
+     *    be narrowed to a single install.
+     *
+     * [revert] returns the previous sink so a caller can put it back. A test that installs
+     * one and does not restore it would silently change the logging of every test that runs
+     * after it, which is the kind of leak that makes a suite order-dependent.
+     */
+    fun install(sink: LogSink): Revert {
+        val previous = Companion.sink
+        Companion.sink = sink
+        return Revert { Companion.sink = previous }
+    }
+
+    /** Puts back the sink [install] replaced. See [install]. */
+    class Revert internal constructor(private val undo: () -> Unit) {
+        operator fun invoke() = undo()
+    }
+
     companion object {
         /** The one place the sink and the threshold are configured. */
         internal var sink: LogSink = LogSink { level, category, text ->

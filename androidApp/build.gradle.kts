@@ -3,6 +3,55 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+// ---------------------------------------------------------------------------
+// Compose resources, packaged by hand because the plugin does not.
+//
+// `stringResource` reads its value at runtime out of the APK's assets, at
+//
+//     assets/composeResources/<packageOfResClass>/values/<file>.<qualifier>.cvr
+//
+// and :packages:design-system — the only module that configures `compose.resources`,
+// and therefore the only one that produces these files — never gets them packaged
+// here. Compose Multiplatform 1.12.1 registers a task to do it
+// (`copyAndroidMainComposeResourcesToAndroidAssets`) and wires it with
+// `variant.sources.assets?.addGeneratedSourceDirectory(...)`. That `?.` is the bug:
+// on this AGP the assets source is null, so the wiring is silently skipped, the task
+// is left with an unset `outputDirectory`, and it never appears in any task graph.
+//
+// The result is an APK with no Compose resources at all, and the failure surfaces at
+// runtime rather than at build time: the first `stringResource` in the first frame
+// throws `MissingResourceException` and the process dies on launch, with a stack trace
+// that points at Compose rather than at the build. Every Android-host UI test in this
+// build fails the same way, which is how this was found.
+//
+// So the copy is done here, from the one directory that is produced
+// (`preparedResources/commonMain`), re-rooted under the resource package name. The
+// `strings.commonMain.cvr` qualifier is correct for Android: it is the *common* set,
+// and there is no Android-specific one to prefer.
+// ---------------------------------------------------------------------------
+val composeResourceOwner = project(":packages:design-system")
+val generatedComposeAssets = layout.buildDirectory.dir("generated/composeAssets")
+
+val packageComposeResourcesIntoAssets = tasks.register<Sync>("packageComposeResourcesIntoAssets") {
+    description = "Copies the shared Compose resources into assets, which the Compose " +
+        "Multiplatform plugin leaves unwired on this AGP version."
+    group = "compose resources"
+
+    // `preparedResources/<sourceSet>/composeResources` is the root the plugin stops at, so
+    // every file below it is already relative to `composeResources` — which is why the
+    // destination can simply re-root it under the package name.
+    from(
+        composeResourceOwner.layout.buildDirectory.dir(
+            "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
+        ),
+    )
+    into(generatedComposeAssets.map { it.dir("composeResources/com.tasktracker.resources") })
+
+    // A plain build-directory path carries no task dependency, so a clean build would copy
+    // whatever happened to be there (nothing) and package an APK with no resources in it.
+    dependsOn(":packages:design-system:prepareComposeResourcesTaskForCommonMain")
+}
+
 android {
     namespace = "com.tasktracker.android"
 
@@ -28,6 +77,42 @@ android {
 
     kotlin {
         jvmToolchain(25)
+    }
+}
+
+/**
+ * Hands the generated resources to AGP through the variant API.
+ *
+ * The older `android.sourceSets` route is not available here: AGP 9 refuses a `Provider` on
+ * that API outright ("You cannot add Provider instances to the Android SourceSet API"),
+ * because it cannot tell a read-only generated directory from a read-write static one. The
+ * variant API can, which is the same reason the Compose plugin's own wiring — the `?.` in
+ * `AndroidResources.kt` that silently did nothing — is written against `Sources`.
+ *
+ * `addStaticSourceDirectory` rather than `addGeneratedSourceDirectory` because the latter
+ * wants the producing task's `DirectoryProperty`, and `Sync` exposes a plain `File` as its
+ * destination. The cost is that the dependency is not inferred, so it is declared below.
+ */
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addStaticSourceDirectory(
+            generatedComposeAssets.get().asFile.path,
+        )
+    }
+}
+
+/**
+ * Orders the asset merge after the copy.
+ *
+ * Without this the merge is free to run first, because nothing in its inputs mentions the
+ * copy task — and the failure mode of getting it wrong is a *build that succeeds* and an APK
+ * with no resources in it, which then crashes on the first string read. Named rather than
+ * matched by type because the merge task's type is internal to AGP and moves between
+ * versions; `merge<Variant>Assets` is the name AGP has used throughout.
+ */
+tasks.configureEach {
+    if (name.startsWith("merge") && name.endsWith("Assets")) {
+        dependsOn(packageComposeResourcesIntoAssets)
     }
 }
 

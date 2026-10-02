@@ -70,7 +70,14 @@ class UserDefaultsStore(
 
     suspend fun remove(key: DefaultsKey) = backend.remove(namespaced(key))
 
-    /** Clears every [DefaultsKey] this store owns, and nothing else. */
+    /**
+     * Clears every [DefaultsKey] this store owns, and nothing else.
+     *
+     * The "and nothing else" is load-bearing, and it is the whole reason the appearance
+     * scheme is not a [DefaultsKey]. Sign-out calls this, and the enum is what it walks —
+     * so a key outside the enum survives, by construction rather than by a rule somebody has
+     * to remember. See [value] for the one key that is deliberately outside.
+     */
     suspend fun removeAll() {
         DefaultsKey.entries.forEach { backend.remove(namespaced(it)) }
     }
@@ -80,4 +87,67 @@ class UserDefaultsStore(
 
     /** The exact plist key for [key], exposed so tests can poison an entry directly. */
     fun namespaced(key: DefaultsKey): String = "$namespace.${key.wireValue}"
+
+    // MARK: - Keys outside DefaultsKey
+
+    /**
+     * Reads a key that is deliberately **not** in [DefaultsKey], as a plain string.
+     *
+     * Exactly one key is stored this way: the appearance scheme, which
+     * `com.tasktracker.designsystem.ThemeScheme` owns. It has to live outside the enum
+     * because [removeAll] runs on sign-out and an enum member would be wiped with it —
+     * someone's light/dark choice is a property of the device, not of the session, and
+     * silently reverting it at every sign-out is the bug this overload exists to prevent.
+     *
+     * Plain strings rather than the JSON encoding [value] uses, so the stored bytes are
+     * `system` and not `"system"`. That is also what makes the value readable by anything
+     * that has to resolve the appearance before the async store is available — see
+     * `ThemeScheme.defaultsKey`.
+     *
+     * No such-value return for an unreadable entry either: the callers are appearance
+     * resolution, which has its own fallback (`system`) and must not have two.
+     *
+     * ## The key is used **verbatim**, unlike a [DefaultsKey]
+     *
+     * Every other key in this store is a [DefaultsKey], whose values are *relative* —
+     * `navigation.lastSeenProject` — and which [namespaced] prefixes with `com.tasktracker.`
+     * to get the real plist key. This overload does not, and that difference is the whole
+     * reason it exists.
+     *
+     * `ThemeScheme.defaultsKey` is `com.tasktracker.settings.themeScheme`: already absolute,
+     * because the original reads it with `@AppStorage`, which uses the key exactly as given
+     * and never applies the store's namespace. So the value here is a plist key that some
+     * other component — the original, or anything else using `UserDefaults` directly — may
+     * already have written.
+     *
+     * Prefixing it would have produced
+     * `com.tasktracker.com.tasktracker.settings.themeScheme`, and every symptom would have
+     * been invisible: the read and the write would both use the doubled key, so the setting
+     * would work perfectly for anyone who set it *in this build*, and silently come back
+     * as `system` for anyone whose value was written by the original. A doubled prefix is a
+     * key that no other tool looks at, so nothing would ever find it.
+     */
+    suspend fun value(key: String): String? {
+        val bytes = backend.bytes(key) ?: return null
+        return bytes.decodeToString()
+    }
+
+    /** Stores a raw string under a key outside [DefaultsKey]. The key is used verbatim. */
+    suspend fun set(value: String, key: String): Boolean {
+        backend.put(value.encodeToByteArray(), key)
+        return true
+    }
+
+    /** Removes a key outside [DefaultsKey]. The key is used verbatim. */
+    suspend fun remove(key: String) = backend.remove(key)
+
+    /**
+     * The plist key for an un-enummed key — which is [key], unchanged.
+     *
+     * Kept for the same reason as [namespaced] takes a [DefaultsKey]: so a test can poison
+     * an entry directly and the key it poisons is visibly the one production uses. The
+     * identity is the assertion — that this does *not* prepend the namespace is the
+     * behaviour [RawKeyTest] exists to hold.
+     */
+    fun plistKey(key: String): String = key
 }

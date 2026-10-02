@@ -20,6 +20,20 @@
   Strings that are genuinely part of the wire contract - a status enum value, a deep
   link path segment - are NOT here. Those are code, and they live with the type that
   defines them.
+
+  READING ONE. A generated accessor is an *extension property* on `Res.string`, not a
+  member of it, so it needs its own import:
+
+      import com.tasktracker.resources.status_backlog
+      ...
+      ttText(text = stringResource(Res.string.status_backlog))
+
+  Two of the three imports above are the non-obvious half. `Res` alone does not bring
+  the string names into scope, and the error for a forgotten one is
+  "Unresolved reference" on the *name* while `Res` and `stringResource` both resolve -
+  which reads like a generation failure rather than a missing import. The `Res` class is
+  generated even when the file above is empty, so a generated-but-empty `Res` is not
+  evidence that the strings are missing.
 -->
 <resources>
     <string name="app_name" translatable="false">TaskTracker</string>
@@ -32,11 +46,24 @@
     <string name="status_done">Done</string>
     <string name="status_closed">Closed</string>
 
-    <!-- Priority. -->
+    <!--
+      Priority. Five strings for five cases, matching `Priority` in `:packages:domain`
+      one for one, because that enum is the wire contract: `Priority.wireValue` is
+      `name.lowercase()`, so "lowest" and "critical" are values a server can send and a
+      pulled record can carry. The label mapping the board's badge performs is required
+      to be an exhaustive `when` - which a five-case enum and a four-entry table cannot
+      both honour without silently collapsing a real level onto a neighbouring one.
+
+      This replaces a four-entry Low/Medium/High/Urgent group, and "Urgent" is gone
+      because nothing corroborated it: `Critical` is the enum's own name for the top
+      level, and a badge that reads "Urgent" for a level the model calls "critical"
+      invites exactly the sort of drift the rest of this file is written to prevent.
+    -->
+    <string name="priority_lowest">Lowest</string>
     <string name="priority_low">Low</string>
     <string name="priority_medium">Medium</string>
     <string name="priority_high">High</string>
-    <string name="priority_urgent">Urgent</string>
+    <string name="priority_critical">Critical</string>
 
     <!-- Top-level tabs. -->
     <string name="tab_projects">Projects</string>
@@ -67,6 +94,160 @@
     <!-- What a manual sync actually did. -->
     <string name="sync_outcome_already_running">A sync is already running.</string>
     <string name="sync_outcome_offline">There is no connection. Your edits are queued and will go out when you are back online.</string>
+
+    <!--
+      Shared across more than one screen's dialog, so it is grouped by meaning rather than
+      repeated per screen. `%1$s` is a project name or a work item key.
+    -->
+    <string name="common_cancel">Cancel</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_save">Save</string>
+
+    <!--
+      The project list, and the row under it.
+
+      A count rather than a fixed noun, because "1 tasks" is the kind of thing a port
+      lets through when the count is only ever formatted in one place.
+    -->
+    <string name="projects_empty_title">No projects yet</string>
+    <string name="projects_empty_body">A project holds the work and gives every task in it a key.</string>
+    <string name="project_new">New Project</string>
+    <plurals name="project_task_count">
+        <item quantity="one">%1$d task</item>
+        <item quantity="other">%1$d tasks</item>
+    </plurals>
+
+    <!--
+      Removing a project. The two bodies are the point of this group: the decision is
+      archive-or-delete, so the confirmation has to say which one is about to happen
+      before it happens. `project_remove_body_outstanding` takes the number of unfinished
+      tasks, because that count is what decides the outcome.
+    -->
+    <string name="project_remove_title">Delete %1$s?</string>
+    <string name="project_remove_body_outstanding">%1$d unfinished tasks will be filed in the archive instead of deleted.</string>
+    <string name="project_remove_body_clear">This project has no unfinished work, so deleting it removes it and its tasks for good.</string>
+    <string name="project_remove_archive">Archive</string>
+    <string name="project_archived_notice">%1$s was archived instead of deleted, because it still had unfinished work.</string>
+    <!--
+      The two outcomes a removal can report. `project_archived_notice` is the
+      explanation offered *before* the press; these two are the confirmation *after* it,
+      and they are different sentences because the outcomes are different facts - one
+      project's work still exists, the other's does not. The counted variant repeats the
+      count the confirmation used, because a user who archived six tasks and then reads
+      "archived" with no number has to go and check.
+    -->
+    <string name="project_archived_notice_counted">%1$s was archived instead of deleted. Its %2$d unfinished tasks are in the archive.</string>
+    <string name="project_deleted_notice">%1$s was deleted, along with its tasks.</string>
+    <string name="project_already_archived">%1$s is already archived.</string>
+
+    <!--
+      The project editor. The key prefix is a creation-time field and is shown read-only
+      afterwards, so the read-only note names the reason rather than just disabling the
+      control.
+    -->
+    <string name="project_editor_new_title">New Project</string>
+    <string name="project_editor_edit_title">Edit %1$s</string>
+    <string name="project_name_label">Name</string>
+    <string name="project_key_prefix_label">Key Prefix</string>
+    <string name="project_key_prefix_placeholder">2-10 letters or digits</string>
+    <string name="project_key_prefix_read_only">The key prefix is fixed once set. Every task key in this project is built from it.</string>
+    <string name="project_details_label">Details</string>
+    <string name="project_create">Create</string>
+    <string name="project_delete">Delete Project</string>
+
+    <!-- The work item editor, and the card's own affordances. -->
+    <string name="work_item_editor_new_title">New Task</string>
+    <string name="work_item_editor_edit_title">Edit %1$s</string>
+    <string name="work_item_title_label">Title</string>
+    <string name="work_item_details_label">Details</string>
+    <string name="work_item_status_label">Status</string>
+    <string name="work_item_priority_label">Priority</string>
+    <string name="work_item_assignee_label">Assignee</string>
+    <string name="work_item_due_label">Due</string>
+    <string name="work_item_due_set">Set a due date</string>
+    <string name="work_item_due_clear">Clear the due date</string>
+    <string name="work_item_delete">Delete Task</string>
+    <string name="work_item_archive">File Away</string>
+    <string name="work_item_key_read_only">%1$s is issued by the project and cannot be changed.</string>
+    <string name="work_item_overdue">Overdue</string>
+
+    <!-- The board, the backlog, and the archive. -->
+    <string name="board_empty_column">Nothing here yet</string>
+    <string name="board_no_project_title">No project chosen</string>
+    <string name="board_no_project_body">Choose a project to see the work on its board.</string>
+    <string name="backlog_empty_title">The backlog is empty</string>
+    <string name="backlog_empty_body">Tasks that have not been put on a board yet collect here.</string>
+    <string name="backlog_put_on_board">Put on board</string>
+    <string name="archive_empty_title">Nothing filed away</string>
+    <string name="archive_empty_body">Tasks you file away appear here, grouped by the month they left the flow.</string>
+    <string name="archive_reopen">Reopen</string>
+
+    <!-- The project picker and the new-project sheet. -->
+    <string name="picker_title">Choose a Project</string>
+    <string name="picker_empty">There are no projects to choose from.</string>
+
+    <!--
+      The launch screen. Both live here rather than in `:shared-ui` for the same reason every
+      other string in this file does: `:packages:design-system` owns Compose resources for the
+      whole build, and a second owner generates a second `ResourceCollectors` class, which
+      fails Android's dex merge. The tagline is `translatable=false` in spirit only - it is
+      user-visible copy, so it is translated like any other.
+    -->
+    <string name="splash_title">TaskTracker</string>
+    <string name="splash_tagline">Your work, wherever you left it.</string>
+
+    <!--
+      The "no project yet" state shared by the Board and Backlog tabs, because it is one
+      state with two callers rather than two states that happen to read the same. The body
+      names both ways out of it, since a user who lands here first may not know the tabs are
+      scoped to a project at all.
+    -->
+    <string name="scoped_no_project_title">No project selected</string>
+    <string name="scoped_no_project_body">Pick a project to see its work here. Open one from Projects, or choose it now.</string>
+    <string name="scoped_choose_project">Choose a Project</string>
+
+    <!--
+      Settings. One string per `ConnectivitySummary` case and per `SyncActivity.Phase`,
+      rather than a single format string with a code substituted into it: the phase is what
+      a user reads to decide whether to tap Sync Now, so each is a sentence that has to make
+      sense on its own, and a format string would force one of them to read as a fragment.
+      These live here rather than beside their types because `:packages:feature-settings-domain`
+      may not depend on this module - see the note on `ConnectivitySummary` in
+      `SettingsVocabulary.kt`.
+    -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_connection_section">Connection</string>
+    <string name="settings_status_label">Status</string>
+    <string name="settings_force_offline">Force Offline</string>
+    <string name="settings_connectivity_online">Online</string>
+    <string name="settings_connectivity_offline">Offline</string>
+    <string name="settings_connectivity_needs_connection">Needs connection</string>
+    <string name="settings_connectivity_unknown">Unknown</string>
+    <string name="settings_sync_section">Sync</string>
+    <string name="settings_sync_waiting">Waiting to sync</string>
+    <string name="settings_sync_stuck">Could not be sent</string>
+    <string name="settings_sync_now">Sync Now</string>
+    <string name="settings_activity_idle">Not synced yet</string>
+    <string name="settings_activity_waiting">Waiting for a connection</string>
+    <string name="settings_activity_syncing">Syncing</string>
+    <string name="settings_activity_up_to_date">Up to date</string>
+    <string name="settings_activity_retrying">Retrying</string>
+    <string name="settings_activity_failed">Sync failed</string>
+    <string name="settings_activity_signed_out">Signed out</string>
+    <string name="settings_outcome_already_running">A sync is already running.</string>
+    <!--
+      The reassurance is the part that matters: a user tapping Sync Now with no network
+      needs to know their work is safe, not merely that the tap did nothing.
+    -->
+    <string name="settings_outcome_offline">There is no connection. Your edits are queued and will go out when you are back online.</string>
+    <string name="settings_account_section">Account</string>
+    <string name="settings_sign_out">Sign Out</string>
+    <string name="settings_about_section">About</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_missing_title">Nothing to configure</string>
+    <string name="settings_missing_body">The app was built without a settings service, so this screen has nothing to read.</string>
 
     <!--
       No `error_*` strings here, deliberately. Error text is hardcoded in

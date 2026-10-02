@@ -4,6 +4,7 @@ import androidx.room.TypeConverter
 import com.tasktracker.core.AppError
 import androidx.room.immediateTransaction
 import androidx.room.useWriterConnection
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /**
@@ -52,6 +53,20 @@ suspend fun <T> inTransaction(
 ): T = try {
     database.useWriterConnection { connection -> connection.immediateTransaction { body() } }
 } catch (failure: Throwable) {
+    // Cancellation is not a database failure, and wrapping it says it is. A cancelled
+    // coroutine is the *caller* going away — a screen dismissed, a test ending, a sign-out
+    // tearing a session scope down — and it arrives here as a `Throwable` because
+    // `useWriterConnection` suspends on the connection. Turning that into
+    // `AppError.Storage` reports a working store as broken, and it does the most damaging
+    // thing available: a `runCatching` on the other side of it, or any handler that treats
+    // a storage error as retryable, will now do work on behalf of a coroutine that has
+    // already been cancelled. That is not a hypothetical — it is how a session teardown
+    // ends up writing to a store whose caller is gone.
+    //
+    // Rethrown before the `when`, and identically to how `HttpErrorMapping` and
+    // `SignInUseCase` treat it, so cancellation means the same thing at every layer.
+    if (failure is CancellationException) throw failure
+
     // This module's own errors are meaningful to callers and are allowed through
     // untouched — `SyncService` needs to tell "this one queued row cannot be understood"
     // apart from "the database is broken", and flattening both into a storage failure

@@ -1,6 +1,5 @@
 package com.tasktracker.designsystem
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
@@ -72,7 +71,14 @@ object TaskTrackerAccent {
  * `@Composable` for the same reason [ttCanvas] is: the answer depends on the current
  * configuration, and a `val` read once keeps painting the light accent through a
  * dark-mode switch.
+ *
+ * Reads [ttIsDarkTheme] rather than calling `isSystemInDarkTheme` directly, which is the
+ * whole difference between a pinned appearance and no pinned appearance: a direct call
+ * would ignore `ThemeScheme` entirely, and `Light` and `Dark` would be settings that save
+ * and change nothing. The contrast bars in the class docs are stated per appearance for
+ * the same reason — an accent has to clear them against the canvas it is actually on, and
+ * "actually on" is now something the user can choose.
  */
 @Composable
 fun ttAccent(): Color =
-    if (isSystemInDarkTheme()) TaskTrackerAccent.Dark else TaskTrackerAccent.Light
+    if (ttIsDarkTheme()) TaskTrackerAccent.Dark else TaskTrackerAccent.Light

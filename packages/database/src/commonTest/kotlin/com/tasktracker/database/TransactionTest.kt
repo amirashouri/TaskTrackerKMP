@@ -3,6 +3,8 @@ package com.tasktracker.database
 import com.tasktracker.core.AppError
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -111,6 +113,41 @@ class TransactionTest {
         }
 
         assertEquals("something that is not ours", failure.detail)
+    }
+
+    /**
+     * A cancelled body stays a cancellation.
+     *
+     * The write before the throw is real, and it is not committed — but that is beside the
+     * point. The point is what comes *out*. A `CancellationException` means the caller is
+     * gone: a screen dismissed, a session scope torn down, a `runTest` body finished. Reported
+     * as `AppError.Storage` it becomes a claim that the *store* is broken, and every caller
+     * that treats a storage error as retryable will then do work for a coroutine that has
+     * already been cancelled. A sign-out would retry writes into a scope it just reset.
+     *
+     * Asserted as a `CancellationException` and not as `AppError.Storage`, which is the whole
+     * distinction. *Identity* is deliberately not asserted: Room's transaction machinery
+     * recovers a failure out of the transaction and rethrows it, so the instance that leaves
+     * is a copy carrying the same message. A test demanding the original object would be
+     * asserting Room's internals rather than this function's contract, and it would fail for
+     * a reason that has nothing to do with the bug.
+     */
+    @Test
+    fun aCancelledBodyIsNotTurnedIntoAStorageFailure() = runTest {
+        val database = TaskTrackerDatabase.inMemory()
+        val queue = RoomOutboxQueue(database)
+
+        val thrown = assertFailsWith<CancellationException> {
+            inTransaction(database) {
+                queue.enqueue(queued("change-1"))
+                throw CancellationException("the caller went away")
+            }
+        }
+
+        assertEquals("the caller went away", thrown.message)
+        // And nothing was committed by a body that never finished, so the cancellation did
+        // not leave a row behind for a reader to trip over.
+        assertEquals(0, queue.count(null))
     }
 
     @Test

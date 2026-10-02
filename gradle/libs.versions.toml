@@ -34,6 +34,7 @@ androidxCoreKtx = "1.19.0"
 
 junit = "4.13.2"
 turbine = "1.2.1"
+robolectric = "4.16.1"
 
 androidCompileSdk = "37"
 androidMinSdk = "26"
@@ -79,7 +80,13 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMul
 compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 compose-uiTest = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "composeMultiplatform" }
-compose-testManifest = { module = "org.jetbrains.compose.ui:ui-test-manifest", version.ref = "composeMultiplatform" }
+# `androidx`, not `org.jetbrains.compose.ui`. The JetBrains coordinate was never published
+# for any version -- `org.jetbrains.compose.ui:ui-test-manifest` 404s on Maven Central -- so
+# the `org.jetbrains.compose.ui:ui-test` dependency is a dead end for the Android host's
+# manifest. The androidx artifact is the one Compose Multiplatform's `ui-test-android`
+# itself builds on, and 1.12.1 lines up with `composeMultiplatform`.
+compose-testManifest = { module = "androidx.compose.ui:ui-test-manifest", version.ref = "composeMultiplatform" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 compose-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 
 androidx-lifecycle-runtime = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime", version.ref = "androidxLifecycle" }
