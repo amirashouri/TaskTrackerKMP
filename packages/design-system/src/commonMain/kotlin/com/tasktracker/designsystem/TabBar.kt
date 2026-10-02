@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -412,7 +413,25 @@ private fun TabCell(
 
     Column(
         modifier = modifier
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(
+                // No indication, and this is the same call the picker scrim makes. The default
+                // one paints the pressed cell as a *rectangle* — the cell has no clip, so the
+                // indication is not bounded by the lens's capsule — and on a bar this light it
+                // darkens the segment by 0.14 of relative luminance, which is more than twice
+                // what the lens itself contributes. The measured number is in
+                // `TabBarScreenshotTest`: a pressed tab read as *darker* than its unselected
+                // neighbours in every frame, and `advanceTimeBy` does not clear it, because a
+                // resting pointer is not an animation in flight. So it sat there after the lens
+                // had already moved, which is the opposite of what the indicator is for.
+                //
+                // What replaces it is the lens itself: travel, the settle, and the glyph's
+                // recolour and scale all start on click, so the selection is confirmed by the
+                // same motion that carries it there.
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                role = Role.Tab,
+                onClick = onClick,
+            )
             // The label carries the selected state for accessibility, because a tint and a
             // translucent wash are not states: without this a screen reader user has no way to
             // tell the selected tab from the other three, and neither has anyone who cannot

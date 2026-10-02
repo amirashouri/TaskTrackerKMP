@@ -26,13 +26,18 @@ To optimize token usage and prevent infinite tool loops, you must tightly scope 
 * **Action:** If adding a feature or fixing a bug, request context *only* for the specific `shared` domain logic or the target UI file. Never run repository-wide string replacements or mass directory indexing.
 
 ### 2. KMP Structural Isolation
-* **Constraint:** KMP features cross multiple source sets (`commonMain`, `androidMain`, `iosMain`).
-* **Action:** Do not generate or modify native platform-specific wrapper files unless a platform abstraction (`expect`/`actual`) is explicitly missing.
+* **Constraint:** Shared behavior belongs in `commonMain`; platform code belongs in a platform source set only when an API or behavior is genuinely platform-specific.
+* **Action:** Keep app features and Compose UI shared across Android and iOS. Add or change `expect`/`actual` declarations only for real platform seams, and provide every required host implementation (including `jvm` when the convention plugin requires it). Do not add thin native wrappers that only forward calls.
 
 ### 3. Plan-First Execution Mode (Two-Phase Protocol)
 For any task requiring modifications across more than one file, you must execute in two phases:
 * **Phase 1 (Token-Light):** Output a short, maximum 3-bullet plan detailing exactly which files will be modified and why. Stop and wait for user acknowledgment (`ACK`).
 * **Phase 2 (Code Generation):** Write the implementation only *after* receiving an `ACK`. Never write complete files from scratch if editing a single function; emit minimal unified diff patches.
+
+### 4. Clean Architecture and Package Boundaries
+* **Constraint:** Gradle modules are the architecture boundary. Domain modules hold business rules and ports; data modules implement those ports; presentation modules depend on their own domain and render UI; `:composition-root` binds implementations; `:shared-ui` assembles the shared screen tree.
+* **Action:** Before adding a dependency or module, inspect `allowedLibraryTable` and `packageOwnersTable` in `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts`. Keep presentation independent of feature data modules and keep domain free of UI and infrastructure. Update the checked tables deliberately when the intended graph changes; never work around `verifyArchitectureGraph` or `verifyModuleImports`.
+* **Action:** Put shared visual tokens and Compose resources in `:packages:design-system`. It is the only module that configures `compose.resources`.
 
 ## Liquid Glass Design Tokens
 
@@ -171,12 +176,19 @@ figure changes are how contradictory comments get left behind in the tree.
 
 ## Skills
 
-Load these when the task matches; they carry the detail this file deliberately omits.
+At session start, discover the repository skills under `.opencode/skills/*/SKILL.md` and
+read each skill's frontmatter description. Before starting task work, read the full
+instructions for every skill whose description matches the task; follow its referenced
+resources as needed. This applies to every agent using this repository, not only tasks
+that explicitly mention a skill. These skills carry the detail this file deliberately omits.
 
 - **`kmp-compose-tests`** — adding or running tests in this multiplatform Compose project:
   the host matrix, source-set layout, the rasterisation skip, screenshot capture.
 - **`rendered-ui-measurement`** — proving a UI assertion: the mutation ritual, twin-frame
   diffing and its contamination traps, contrast measurement on two rasterisers.
+- **`kmp-architecture-workflow`** — placing feature logic and platform-specific behavior in
+  this project's KMP module/source-set structure, checking dependency edges, and preserving
+  shared Android/iOS UI.
 
 There is also a `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) that reviews
 a proposed test adversarially, specifically for whether it can fail.
