@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
@@ -39,6 +40,20 @@ class ProjectUseCasesTest {
         assertEquals("Apollo", project.name)
         assertEquals("APOLLO", project.keyPrefix)
         assertEquals(1, repository.projectCount())
+    }
+
+    @Test
+    fun `create project keeps selected member identifiers`() = runTest {
+        val repository = FakeProjectRepository()
+        val member = UserID("10000000-0000-4000-8000-000000000001")
+        val project = CreateProject(repository, TestDateProvider(now))(
+            name = "Apollo",
+            keyPrefix = "AP",
+            memberIDs = listOf(member),
+        )
+
+        assertEquals(listOf(member), project.memberIDs)
+        assertEquals(listOf(member), repository.project(project.id)?.memberIDs)
     }
 
     @Test

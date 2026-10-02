@@ -165,6 +165,26 @@ object ttTabIcons {
 
 /** Compact action glyphs, separate from the app's tab navigation symbols. */
 object ttActionIcons {
+    /** A compact horizontal minus for removing one item from a selected set. */
+    val remove: ImageVector = icon("Remove") {
+        solidRoundRect(4.0f, 10.5f, 20.0f, 13.5f, radius = 1.5f)
+    }
+
+    /** A diagonal pencil, drawn as one compact filled silhouette. */
+    val edit: ImageVector = icon("Edit") {
+        moveTo(4.0f, 16.5f)
+        lineTo(15.8f, 4.7f)
+        lineTo(19.3f, 8.2f)
+        lineTo(7.5f, 20.0f)
+        lineTo(3.5f, 20.5f)
+        close()
+        moveTo(17.2f, 3.3f)
+        lineTo(18.6f, 1.9f)
+        lineTo(22.1f, 5.4f)
+        lineTo(20.7f, 6.8f)
+        close()
+    }
+
     /** A lidded wastebasket with two interior slats. */
     val trash: ImageVector = icon("Delete") {
         // Outer body and inner contour form an outlined basket with the shared even-odd fill.
@@ -185,7 +205,7 @@ object ttActionIcons {
     }
 
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(trash)
+    val all: List<ImageVector> = listOf(edit, trash, remove)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */

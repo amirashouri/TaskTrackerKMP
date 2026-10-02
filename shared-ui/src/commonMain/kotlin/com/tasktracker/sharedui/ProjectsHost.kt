@@ -15,8 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
 import com.tasktracker.domain.WorkItemStatus
-import com.tasktracker.featureprojectspresentation.NewProjectModel
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
+import com.tasktracker.featureprojectspresentation.ProjectEditorModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
 import com.tasktracker.featureprojectspresentation.ProjectEnvironment
@@ -80,8 +80,8 @@ fun ProjectsHost(
     // Held here rather than inside the list destination, so opening the sheet survives the
     // list being replaced by a board behind it: the sheet is a modal over the *tab*, not over
     // one screen, and a state that lived in the list would take the sheet down with it.
-    var isNewProjectOpen by remember { mutableStateOf(false) }
-    var newProjectModel by remember(environment) { mutableStateOf<NewProjectModel?>(null) }
+    var isProjectEditorOpen by remember { mutableStateOf(false) }
+    var projectEditorModel by remember(environment) { mutableStateOf<ProjectEditorModel?>(null) }
 
     Box(
         modifier = modifier
@@ -126,32 +126,42 @@ fun ProjectsHost(
                 scope = scope,
                 onOpenProject = { router.openProject(it, AppTab.Board) },
                 onNewProject = {
-                    newProjectModel = NewProjectModel(environment.repository, environment.dateProvider)
-                    isNewProjectOpen = true
+                    projectEditorModel = ProjectEditorModel(null, environment.repository, environment.dateProvider)
+                    isProjectEditorOpen = true
+                },
+                onEditProject = { id ->
+                    scope.launch {
+                        val project = environment.repository.project(id) ?: return@launch
+                        projectEditorModel = ProjectEditorModel(project, environment.repository, environment.dateProvider)
+                        isProjectEditorOpen = true
+                    }
                 },
             )
         }
 
-        newProjectModel?.let { newProject ->
+        projectEditorModel?.let { editor ->
             NewProjectSheet(
-                name = newProject.name,
-                keyPrefix = newProject.keyPrefix,
-                details = newProject.details,
-                canCreate = newProject.canCreate,
-                onNameChanged = newProject::onNameChanged,
-                onKeyPrefixChanged = newProject::onKeyPrefixChanged,
-                onDetailsChanged = newProject::onDetailsChanged,
-                onCreate = {
+                name = editor.name,
+                keyPrefix = editor.keyPrefix,
+                details = editor.details,
+                canSave = editor.canSave,
+                isCreating = editor.isCreating,
+                selectedMemberIDs = editor.memberIDs,
+                onMemberIDsChanged = editor::onMemberIDsChanged,
+                onNameChanged = editor::onNameChanged,
+                onKeyPrefixChanged = editor::onKeyPrefixChanged,
+                onDetailsChanged = editor::onDetailsChanged,
+                onSave = {
                     scope.launch {
-                        if (newProject.create() != null) isNewProjectOpen = false
+                        if (editor.save()) isProjectEditorOpen = false
                     }
                 },
-                onCancel = { isNewProjectOpen = false },
-                visible = isNewProjectOpen,
-                onDismissRequest = { isNewProjectOpen = false },
+                onCancel = { isProjectEditorOpen = false },
+                visible = isProjectEditorOpen,
+                onDismissRequest = { isProjectEditorOpen = false },
                 onDismissed = {
-                    isNewProjectOpen = false
-                    newProjectModel = null
+                    isProjectEditorOpen = false
+                    projectEditorModel = null
                 },
                 modifier = Modifier.fillMaxSize(),
             )
@@ -175,6 +185,7 @@ private fun ProjectsListDestination(
     scope: CoroutineScope,
     onOpenProject: (ProjectID) -> Unit,
     onNewProject: () -> Unit,
+    onEditProject: (ProjectID) -> Unit,
 ) {
     val model = remember(environment) {
         ProjectsListModel(environment.repository, environment.dateProvider)
@@ -198,6 +209,7 @@ private fun ProjectsListDestination(
         onDismissNotice = model::dismissNotice,
         onDismissError = model::dismissError,
         onNewProject = onNewProject,
+        onEditProject = onEditProject,
     )
 }
 

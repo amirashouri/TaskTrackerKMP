@@ -37,12 +37,13 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_delete
 import com.tasktracker.resources.project_archived_notice
+import com.tasktracker.resources.project_edit
 import com.tasktracker.resources.project_task_count
 import org.jetbrains.compose.resources.stringResource
 import org.jetbrains.compose.resources.pluralStringResource
 
 /**
- * A project in the list: its name, its task count, and the delete action.
+ * A project in the list: its name, its task count, and its edit and delete actions.
  *
  * It takes a [ProjectSummary] rather than a [com.tasktracker.domain.Project] because the
  * summary is a *copy* - `Project` is mutable, and a row bound to one would keep changing
@@ -69,6 +70,7 @@ fun ProjectRowView(
     project: ProjectSummary,
     onOpen: () -> Unit,
     onRemove: () -> Unit,
+    onEdit: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -129,11 +131,17 @@ fun ProjectRowView(
         }
         // No "open" button: the whole row is the open target, and a button labelled "Open"
         // next to a row that is also tappable says the row is not tappable. Deleting gets an
-        // explicit button because it is the one action on the row that is *not* the row.
+        // explicit buttons because these are actions on the row that are *not* opening it.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
         ) {
+            ttGlassIconButton(
+                image = ttActionIcons.edit,
+                contentDescription = stringResource(Res.string.project_edit),
+                onClick = onEdit,
+                modifier = Modifier.testTag(ProjectEditTag(project)),
+            )
             ttGlassIconButton(
                 image = ttActionIcons.trash,
                 contentDescription = stringResource(Res.string.common_delete),
@@ -203,6 +211,8 @@ const val ProjectRowTagPrefix = "projects.row"
 fun ProjectRowTag(project: ProjectSummary): String = "$ProjectRowTagPrefix.${project.keyPrefix}"
 
 fun ProjectRemoveTag(project: ProjectSummary): String = "${ProjectRowTag(project)}.remove"
+
+fun ProjectEditTag(project: ProjectSummary): String = "${ProjectRowTag(project)}.edit"
 
 private const val PROJECT_DETAILS_MAX_LINES = 2
 private const val MONOGRAM_CHARACTERS = 2

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Project
 import com.tasktracker.featureprojectsdomain.CreateProject
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -49,6 +50,8 @@ class ProjectEditorModel(
 
     private val originalName: String? = existing?.name
     private val originalDetails: String? = existing?.details
+    private val originalMemberIDs: List<UserID> = existing?.memberIDs.orEmpty()
+    private var isKeyPrefixEdited: Boolean = existing != null
 
     /** The project's name. Raw text, as typed - normalisation happens in the use case. */
     var name: String by mutableStateOf(existing?.name.orEmpty())
@@ -60,6 +63,10 @@ class ProjectEditorModel(
 
     /** Free-text notes. */
     var details: String by mutableStateOf(existing?.details.orEmpty())
+        private set
+
+    /** Selected members, kept as stable identifiers rather than display names. */
+    var memberIDs: List<UserID> by mutableStateOf(originalMemberIDs)
         private set
 
     /** The id of the project this editor saves into, once a save has succeeded. */
@@ -84,7 +91,7 @@ class ProjectEditorModel(
         get() = if (isCreating) {
             name.isNotBlank() || keyPrefix.isNotBlank() || details.isNotBlank()
         } else {
-            name.trim() != originalName || details.trim() != originalDetails
+            name.trim() != originalName || details.trim() != originalDetails || memberIDs != originalMemberIDs
         }
 
     /**
@@ -105,16 +112,25 @@ class ProjectEditorModel(
     /** Sets the name. */
     fun onNameChanged(value: String) {
         name = value
+        if (isCreating && !isKeyPrefixEdited) keyPrefix = suggestKeyPrefix(value)
     }
 
     /** Sets the key prefix. Ignored while editing, so no call site can set an illegal one. */
     fun onKeyPrefixChanged(value: String) {
-        if (isKeyPrefixEditable) keyPrefix = value
+        if (isKeyPrefixEditable) {
+            keyPrefix = value
+            isKeyPrefixEdited = true
+        }
     }
 
     /** Sets the details. */
     fun onDetailsChanged(value: String) {
         details = value
+    }
+
+    /** Replaces the selected project members while preserving selection order. */
+    fun onMemberIDsChanged(value: List<UserID>) {
+        memberIDs = value.distinct()
     }
 
     /**
@@ -128,16 +144,25 @@ class ProjectEditorModel(
         if (!canSave) return false
         val saved = reporting {
             if (isCreating) {
-                createProject(name = name, keyPrefix = keyPrefix, details = details)
+                createProject(name = name, keyPrefix = keyPrefix, details = details, memberIDs = memberIDs)
             } else {
                 updateProject(
                     id = requireNotNull(savedProjectID),
                     name = name,
                     details = details,
+                    memberIDs = memberIDs.takeIf { it != originalMemberIDs },
                 )
             }
         } ?: return false
         savedProjectID = saved.id
         return true
+    }
+
+    private fun suggestKeyPrefix(value: String): String {
+        val words = value.split(' ', '-', '_').filter(String::isNotBlank)
+        val initials = words.take(2).mapNotNull { it.firstOrNull(Char::isLetterOrDigit) }
+            .joinToString("").uppercase()
+        if (initials.length >= 2) return initials
+        return words.firstOrNull()?.filter(Char::isLetterOrDigit)?.take(2)?.uppercase().orEmpty()
     }
 }

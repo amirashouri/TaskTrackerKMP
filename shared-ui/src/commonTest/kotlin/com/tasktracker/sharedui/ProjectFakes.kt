@@ -3,6 +3,7 @@ package com.tasktracker.sharedui
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -115,11 +116,13 @@ class FakeProjectRepository : ProjectRepositoryPort {
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project = writing(ProjectChange.Kind.Projects) {
         val project = Project(
             keyPrefix = keyPrefix,
             name = name,
             details = details,
+            memberIDs = memberIDs,
             createdAt = now,
             updatedAt = now,
         )
@@ -165,6 +168,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project = unused("updateProject")
 
     override suspend fun deleteProject(id: ProjectID): Unit = unused("deleteProject")

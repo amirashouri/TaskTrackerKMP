@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -35,12 +36,11 @@ class ProjectEditorModelTest {
     }
 
     @Test
-    fun `a name and a prefix make a new form saveable`() = runTest {
+    fun `a new project derives its prefix from the name`() = runTest {
         val model = ProjectEditorModel(null, FakeProjectRepository(), TestDateProvider())
 
         model.onNameChanged("Apollo")
-        assertFalse(model.canSave, "a name alone is not enough - the prefix is not derivable yet")
-        model.onKeyPrefixChanged("AP")
+        assertEquals("AP", model.keyPrefix)
         assertTrue(model.canSave)
     }
 
@@ -69,6 +69,40 @@ class ProjectEditorModelTest {
         assertEquals("AP", created.keyPrefix)
         assertEquals("Launch work", created.details)
         assertEquals(created.id, model.savedProjectID)
+    }
+
+    @Test
+    fun `members are saved on create and can be searched by name or email`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = ProjectEditorModel(null, repository, TestDateProvider())
+        val ada = MockProjectMembers.members.first()
+        model.onNameChanged("Apollo")
+        model.onMemberIDsChanged(listOf(ada.id, ada.id))
+
+        assertTrue(model.save())
+        assertEquals(listOf(ada.id), repository.storedProjects().single().memberIDs)
+    }
+
+    @Test
+    fun `mock member search filters names and emails without case sensitivity`() {
+        val ada = MockProjectMembers.members.first()
+        assertEquals(listOf(ada), MockProjectMembers.search("ada"))
+        assertEquals(listOf(ada), MockProjectMembers.search("ADA@EXAMPLE"))
+        assertEquals(emptyList(), MockProjectMembers.search("nobody"))
+    }
+
+    @Test
+    fun `editing member selection marks the draft changed and persists it`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(name = "Apollo")
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+        val grace = MockProjectMembers.members[2]
+
+        model.onMemberIDsChanged(listOf(grace.id))
+        assertTrue(model.hasChanges)
+        assertTrue(model.save())
+        assertEquals(listOf(grace.id), repository.storedProjects().single().memberIDs)
     }
 
     /**

@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomStatusChangeID
@@ -170,6 +171,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project {
         var projectID: ProjectID? = null
         return writing({ ProjectChange(ProjectChange.Kind.Projects, projectID!!) }) {
@@ -178,6 +180,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             keyPrefix = keyPrefix,
             name = name,
             details = details,
+            memberIDs = memberIDs,
             createdAt = now,
             updatedAt = now,
         )
@@ -194,11 +197,13 @@ class FakeProjectRepository : ProjectRepositoryPort {
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project = writing({ ProjectChange(ProjectChange.Kind.Projects, id) }) {
         failIfSet()
         val existing = storedProjects.first { it.id == id }
         if (name != null) existing.name = name
         if (details != null) existing.details = details
+        if (memberIDs != null) existing.memberIDs = memberIDs
         existing.updatedAt = now
         writes += "updateProject"
         existing.copy()

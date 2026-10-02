@@ -67,17 +67,17 @@ Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 the eight remaining feature modules plus most of `:androidApp` and `:iosApp`.
 
 **Progress: Phases 0-11 complete, `./gradlew check` green on all three targets.**
-Phases 14-15 outstanding. Test baseline **962 unique in `commonTest`** (projects-data 152,
-projects-presentation 114, network 88, projects-domain 80, sync 70, database 61, design-system
-68, feature-auth-data 53, routing 52, domain 43, core 42, composition-root 35,
+Phases 14-15 outstanding. Test baseline **969 unique in `commonTest`** (projects-data 154,
+projects-presentation 117, network 88, projects-domain 81, sync 70, database 61, design-system
+70, feature-auth-data 53, routing 52, domain 43, core 42, composition-root 35,
 feature-auth-presentation 13, feature-auth-domain 13, keychain 12, settings-domain 12,
 settings-presentation 11, di 19, user-defaults 19, settings-data 5) plus the **21 shell
 scenarios** in `shared-ui`'s `commonTest`, which are `fun`s the target entry points call
 rather than `@Test`s, and are counted per target below. The remainder is target-only:
-`jvmTest` adds 18 (shared-ui entry points) + 32 (projects-presentation) + 8 (sync) + 7
-(auth-presentation) + 7 (settings-presentation) + 6 (database) + 3 (design-system) + 2
-(composition-root) and `iosTest` adds the same minus the 15 that need a JVM or an Android
-`Context`: **1052 on `jvmTest` and 1031 on `iosSimulatorArm64Test`**, both green.
+`jvmTest` currently reports **1058 executions** in JUnit XML; the current iOS simulator XML
+reports **1036**. These totals include the five new common tests, two of which are iOS-only
+execution differences in this suite. This full run is not green; the existing failures are listed in the current
+verification note under [test-count baseline](#test-count-baseline).
 `testAndroidHostTest` is **not green** — see the Android-host note below.
 
 ## Decisions taken
@@ -178,11 +178,16 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew verifyModuleImports          # 22 modules, one task each
 ```
 
-Current test baseline: **962** `@Test`s in `commonTest`, plus **21** shell scenarios in
+Current test baseline: **969** `@Test`s in `commonTest`, plus **21** shell scenarios in
 `:shared-ui` that are shared `fun`s rather than `@Test`s (see
 [test-count baseline](#test-count-baseline) for the per-module split). Adding the
-target-only entry points and platform suites gives **1052** executions on `jvmTest` and
-**1031** on `iosSimulatorArm64Test`, both green.
+target-only entry points and platform suites gave **1058** executions on `jvmTest` and
+**1036** on `iosSimulatorArm64Test` in the latest JUnit XML.
+
+The focused new project member tests passed on JVM and iOS. The full run still reports
+pre-existing failures: three project data seeding assertions, three project presentation
+assertions, and two shared UI assertions on JVM; three project presentation assertions on iOS. The
+Android host was not rerun; its last recorded baseline is 10 failures of 818.
 
 `testAndroidHostTest` was **red for three** stacked reasons. Reason 1 is now fixed; reasons 2
 and 3 remain, at **10 failures of 818** (was 66).
@@ -236,7 +241,7 @@ updated this section and not that one: two copies of one number, one of which no
 reading. Both now say the same thing, and the Phase 11 addition is recorded in both.
 
 The count is taken from the JUnit XML the build actually writes and cross-checked against
-`@Test` annotations in the source tree: 1052 / 1031, both matching exactly. Note that a
+`@Test` annotations in the source tree: 1058 JVM executions and 1036 iOS executions. Note that a
 naive `grep -c @Test` over-counts, because KDoc mentions the string in backticks — so the XML
 is the source of truth and the grep is the cross-check, never the reverse. A second trap: the
 modules at the repo root (`composition-root`, `shared-ui`) are one directory deep while the

@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -145,6 +146,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project {
         throwIfFailing()
         return lock.withLock {
@@ -152,6 +154,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 keyPrefix = keyPrefix,
                 name = name,
                 details = details,
+                memberIDs = memberIDs,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -166,6 +169,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project {
         throwIfFailing()
         return lock.withLock {
@@ -174,6 +178,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val project = storedProjects[index]
             if (name != null) project.name = name
             if (details != null) project.details = details
+            if (memberIDs != null) project.memberIDs = memberIDs
             project.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.Projects, id))
             project

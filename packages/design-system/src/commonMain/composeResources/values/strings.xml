@@ -112,6 +112,11 @@
     <string name="projects_empty_title">No projects yet</string>
     <string name="projects_empty_body">A project holds the work and gives every task in it a key.</string>
     <string name="project_new">New Project</string>
+    <string name="project_edit">Edit Project</string>
+    <string name="project_members_label">Members</string>
+    <string name="project_members_placeholder">Search people by name or email</string>
+    <string name="project_members_empty">No matching people</string>
+    <string name="project_member_remove">Remove member</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>

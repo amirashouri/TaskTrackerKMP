@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -49,6 +50,7 @@ class CreateProject(
         name: String,
         keyPrefix: String,
         details: String = "",
+        memberIDs: List<UserID> = emptyList(),
     ): Project {
         // Normalised here, before the port is touched. The data layer checks the same rules
         // again, and that is not duplication: this is the layer the UI actually goes
@@ -62,6 +64,7 @@ class CreateProject(
             keyPrefix = keyPrefix,
             details = details,
             now = dateProvider.now(),
+            memberIDs = memberIDs,
         )
     }
 }
@@ -89,10 +92,11 @@ class UpdateProject(
         id: ProjectID,
         name: String? = null,
         details: String? = null,
+        memberIDs: List<UserID>? = null,
     ): Project {
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
         val normalisedDetails = details?.let { ProjectRules.normaliseDetails(it) }
-        if (normalisedName == null && normalisedDetails == null) {
+        if (normalisedName == null && normalisedDetails == null && memberIDs == null) {
             // Nothing to change: reading beats writing, because a write would bump
             // `updatedAt` and reorder the dashboard without changing anything.
             return repository.project(id)
@@ -103,6 +107,7 @@ class UpdateProject(
             name = normalisedName,
             details = normalisedDetails,
             now = dateProvider.now(),
+            memberIDs = memberIDs,
         )
     }
 }

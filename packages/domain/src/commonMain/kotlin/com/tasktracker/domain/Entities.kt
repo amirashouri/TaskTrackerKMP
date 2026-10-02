@@ -2,8 +2,8 @@ package com.tasktracker.domain
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.StatusChangeID
-import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomStatusChangeID
@@ -161,6 +161,8 @@ data class Project(
     var keyPrefix: String,
     var name: String,
     var details: String = "",
+    /** Stable member identifiers assigned to this project. */
+    var memberIDs: List<UserID> = emptyList(),
     /**
      * Archived projects keep their history and their work items but leave the default
      * list. Deleting them would cascade into work items that may already have shipped.

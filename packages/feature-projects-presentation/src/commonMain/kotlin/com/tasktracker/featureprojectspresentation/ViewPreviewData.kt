@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomWorkItemID
@@ -292,10 +293,12 @@ private class PreviewRepository(
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project = Project(
         keyPrefix = keyPrefix,
         name = name,
         details = details,
+        memberIDs = memberIDs,
         createdAt = now,
         updatedAt = now,
     ).also {
@@ -308,9 +311,11 @@ private class PreviewRepository(
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project = storedProjects.first { it.id == id }.also {
         if (name != null) it.name = name
         if (details != null) it.details = details
+        if (memberIDs != null) it.memberIDs = memberIDs
         it.updatedAt = now
     }.also {
         broadcaster.send(ProjectChange(ProjectChange.Kind.Projects, id))

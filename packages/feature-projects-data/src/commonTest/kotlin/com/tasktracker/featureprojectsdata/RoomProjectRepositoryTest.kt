@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.projects
@@ -226,6 +227,23 @@ class RoomProjectRepositoryTest {
         assertEquals(Moments.start, updated.createdAt)
         assertEquals(2, harness.queueDepth())
         assertEquals(updated, harness.queuedProject(index = 1))
+    }
+
+    @Test
+    fun projectMembersPersistAcrossCreateAndUpdate() = runTest {
+        val harness = Harness()
+        val ada = UserID("10000000-0000-4000-8000-000000000001")
+        val grace = UserID("10000000-0000-4000-8000-000000000003")
+        val project = harness.repository.createProject(
+            "Apollo", "APO", "", Moments.start, memberIDs = listOf(ada),
+        )
+        assertEquals(listOf(ada), harness.repository.project(project.id)?.memberIDs)
+
+        harness.repository.updateProject(
+            project.id, name = null, details = null, now = Moments.later, memberIDs = listOf(grace),
+        )
+
+        assertEquals(listOf(grace), harness.repository.project(project.id)?.memberIDs)
     }
 
     @Test

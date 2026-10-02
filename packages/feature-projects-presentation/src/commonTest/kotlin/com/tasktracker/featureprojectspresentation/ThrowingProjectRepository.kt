@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.StatusChange
@@ -54,6 +55,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project = boom()
 
     override suspend fun updateProject(
@@ -61,6 +63,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project = boom()
 
     override suspend fun setArchived(id: ProjectID, isArchived: Boolean, now: Instant): Project = boom()

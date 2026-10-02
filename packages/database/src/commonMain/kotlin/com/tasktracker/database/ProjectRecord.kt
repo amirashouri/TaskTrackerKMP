@@ -1,6 +1,7 @@
 package com.tasktracker.database
 
 import androidx.room.Dao
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -38,6 +39,8 @@ data class ProjectRecord(
     val keyPrefix: String,
     val name: String,
     val details: String,
+    /** Comma-separated stable UUIDs; the migration default leaves existing projects unassigned. */
+    @ColumnInfo(defaultValue = "''") val memberIDs: String = "",
     val isArchived: Boolean,
     /**
      * The next number to hand out for a work item key.

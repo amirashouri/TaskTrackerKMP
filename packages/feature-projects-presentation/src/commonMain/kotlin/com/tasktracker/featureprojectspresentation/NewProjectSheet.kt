@@ -1,10 +1,22 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -16,23 +28,35 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttGlassSurface
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
+import com.tasktracker.resources.common_save
 import com.tasktracker.resources.project_create
 import com.tasktracker.resources.project_details_label
 import com.tasktracker.resources.project_key_prefix_label
 import com.tasktracker.resources.project_key_prefix_placeholder
 import com.tasktracker.resources.project_name_label
-import com.tasktracker.resources.project_new
+import com.tasktracker.resources.project_editor_edit_title
+import com.tasktracker.resources.project_editor_new_title
+import com.tasktracker.resources.project_members_empty
+import com.tasktracker.resources.project_members_label
+import com.tasktracker.resources.project_members_placeholder
+import com.tasktracker.resources.project_member_remove
 import org.jetbrains.compose.resources.stringResource
+import com.tasktracker.core.UserID
 
 /**
- * The form for making a project: a name, a key prefix, and details.
+ * The shared project form: project details and member search, in create or edit mode.
  *
  * ## The prefix is shown, not chosen
  *
@@ -62,18 +86,22 @@ fun NewProjectSheet(
     name: String,
     keyPrefix: String,
     details: String,
-    canCreate: Boolean,
+    canSave: Boolean,
     onNameChanged: (String) -> Unit,
     onKeyPrefixChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
-    onCreate: () -> Unit,
+    onSave: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
+    isCreating: Boolean = true,
+    selectedMemberIDs: List<UserID> = emptyList(),
+    onMemberIDsChanged: (List<UserID>) -> Unit = {},
 ) {
+    var memberQuery by remember { mutableStateOf("") }
     TTBottomSheetScaffold(
         visible = visible,
         onDismissRequest = onDismissRequest,
@@ -85,7 +113,8 @@ fun NewProjectSheet(
             verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
         ) {
         ttText(
-            text = stringResource(Res.string.project_new),
+            text = if (isCreating) stringResource(Res.string.project_editor_new_title)
+                else stringResource(Res.string.project_editor_edit_title, name),
             style = ttTypography.title,
             color = ttLabel(),
         )
@@ -111,9 +140,89 @@ fun NewProjectSheet(
             onValueChange = onDetailsChanged,
             singleLine = false,
             minLines = DETAILS_MIN_LINES,
-            imeAction = ImeAction.Done,
-            onImeAction = { if (canCreate) onCreate() },
+            imeAction = ImeAction.Next,
         )
+        ProjectsTextField(
+            title = stringResource(Res.string.project_members_label),
+            value = memberQuery,
+            onValueChange = { memberQuery = it },
+            placeholder = stringResource(Res.string.project_members_placeholder),
+            imeAction = ImeAction.Search,
+        )
+        if (memberQuery.isNotBlank()) {
+            val matches = MockProjectMembers.search(memberQuery)
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
+                    .padding(ttSpacing.md)
+                    .testTag(ProjectMembersDropdownTag),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+            ) {
+                if (matches.isEmpty()) {
+                    ttText(
+                        text = stringResource(Res.string.project_members_empty),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                } else {
+                    matches.forEach { member ->
+                        val selected = member.id in selectedMemberIDs
+                        Column(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable {
+                                    onMemberIDsChanged(
+                                        if (selected) selectedMemberIDs - member.id
+                                        else selectedMemberIDs + member.id,
+                                    )
+                                }
+                                .testTag(ProjectMemberOptionTag(member)),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                        ) {
+                            ttText(
+                                text = if (selected) "${member.name} ✓" else member.name,
+                                style = ttTypography.callout,
+                                color = if (selected) ttAccent() else ttLabel(),
+                            )
+                            ttText(text = member.email, style = ttTypography.captionSmall, color = ttLabelSecondary())
+                        }
+                    }
+                }
+            }
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            MockProjectMembers.members.forEach { member ->
+                AnimatedVisibility(
+                    visible = member.id in selectedMemberIDs,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
+                            .padding(start = ttSpacing.md, end = ttSpacing.sm, top = ttSpacing.sm, bottom = ttSpacing.sm),
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                        ) {
+                            ttText(text = member.name, style = ttTypography.callout, color = ttLabel())
+                            ttText(text = member.email, style = ttTypography.captionSmall, color = ttLabelSecondary())
+                        }
+                        ttGlassIconButton(
+                            image = ttActionIcons.remove,
+                            contentDescription = stringResource(Res.string.project_member_remove),
+                            onClick = { onMemberIDsChanged(selectedMemberIDs - member.id) },
+                            modifier = Modifier.testTag(ProjectMemberRemoveTag(member)),
+                        )
+                    }
+                }
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
@@ -124,12 +233,13 @@ fun NewProjectSheet(
                 modifier = Modifier.testTag(NewProjectCancelTag),
             )
             ttGlassButton(
-                label = stringResource(Res.string.project_create),
+                label = if (isCreating) stringResource(Res.string.project_create)
+                    else stringResource(Res.string.common_save),
                 // Same reasoning as the backlog's busy rows: a button that looks inert and
                 // is not is worse than one that looks live and briefly does nothing.
-                onClick = { if (canCreate && !isBusy) onCreate() },
+                onClick = { if (canSave && !isBusy) onSave() },
                 modifier = Modifier.testTag(NewProjectCreateTag),
-                style = if (canCreate && !isBusy) {
+                style = if (canSave && !isBusy) {
                     TTGlassButtonStyle(tint = ttAccent(), prominent = true)
                 } else {
                     TTGlassButtonStyle()
@@ -147,11 +257,11 @@ private fun NewProjectSheetPreview() = ProjectsPreview(ThemeScheme.Dark) {
         name = "Apollo Programme",
         keyPrefix = "AP",
         details = "",
-        canCreate = true,
+        canSave = true,
         onNameChanged = {},
         onKeyPrefixChanged = {},
         onDetailsChanged = {},
-        onCreate = {},
+        onSave = {},
         onCancel = {},
     )
 }
@@ -163,11 +273,11 @@ private fun NewProjectSheetDisabledPreview() = ProjectsPreview(ThemeScheme.Light
         name = "",
         keyPrefix = "",
         details = "",
-        canCreate = false,
+        canSave = false,
         onNameChanged = {},
         onKeyPrefixChanged = {},
         onDetailsChanged = {},
-        onCreate = {},
+        onSave = {},
         onCancel = {},
     )
 }
@@ -175,5 +285,8 @@ private fun NewProjectSheetDisabledPreview() = ProjectsPreview(ThemeScheme.Light
 const val NewProjectSheetTag = "projects.newSheet"
 const val NewProjectCreateTag = "projects.newSheet.create"
 const val NewProjectCancelTag = "projects.newSheet.cancel"
+const val ProjectMembersDropdownTag = "projects.editor.members.dropdown"
+fun ProjectMemberOptionTag(member: ProjectMember): String = "projects.editor.members.option.${member.id}"
+fun ProjectMemberRemoveTag(member: ProjectMember): String = "projects.editor.members.remove.${member.id}"
 
 private const val DETAILS_MIN_LINES = 3

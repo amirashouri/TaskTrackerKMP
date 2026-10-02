@@ -91,6 +91,7 @@ fun ProjectsListScreen(
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onNewProject: (() -> Unit)? = null,
+    onEditProject: (ProjectID) -> Unit = {},
 ) {
     // The *id*, not the row. The row is a snapshot of a moment ago, and the count in it is
     // what the confirmation is worded from - so it has to be re-read when the dialog opens
@@ -167,6 +168,7 @@ fun ProjectsListScreen(
                             project = row.summary,
                             onOpen = { onOpen(row.summary.id) },
                             onRemove = { pendingRemovalID = row.summary.id },
+                            onEdit = { onEditProject(row.summary.id) },
                         )
                     }
                 }

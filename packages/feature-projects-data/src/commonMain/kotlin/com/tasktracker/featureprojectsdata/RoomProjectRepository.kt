@@ -177,12 +177,14 @@ class RoomProjectRepository(
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID>,
     ): Project {
         val project = Project(
             id = randomProjectID(),
             keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix),
             name = ProjectRules.normaliseName(name),
             details = ProjectRules.normaliseDetails(details),
+            memberIDs = memberIDs.distinct(),
             createdAt = now,
             updatedAt = now,
         )
@@ -201,6 +203,7 @@ class RoomProjectRepository(
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>?,
     ): Project {
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
         val normalisedDetails = details?.let { ProjectRules.normaliseDetails(it) }
@@ -213,6 +216,7 @@ class RoomProjectRepository(
             // column name inside `RecordMapping`.
             normalisedName?.let { project.name = it }
             normalisedDetails?.let { project.details = it }
+            memberIDs?.let { project.memberIDs = it.distinct() }
             project.updatedAt = now
             database.projectDao().update(project.toRecord())
             // The project *is* the payload, not the record. Encoding the record instead would

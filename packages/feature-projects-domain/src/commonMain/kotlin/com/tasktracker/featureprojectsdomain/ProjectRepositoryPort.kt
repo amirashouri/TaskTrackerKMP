@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.StatusChange
@@ -89,16 +90,18 @@ interface ProjectRepositoryPort {
         keyPrefix: String,
         details: String,
         now: Instant,
+        memberIDs: List<UserID> = emptyList(),
     ): Project
 
     /**
      * Applies a partial edit to a project.
      *
-     * A `null` [name] or [details] means "leave this field alone", never "set it to
-     * null" — neither field is nullable on [Project], so there is nothing to clear and
-     * the only honest reading of an absent argument is an absent intention. The
+     * A `null` [name], [details] or [memberIDs] means "leave this field alone", never "set it to
+     * null" — project fields are non-nullable, so an absent argument means no intention to
+     * change that field. The
      * "clear the notes" affordance is therefore spelled as an empty string, which
-     * [com.tasktracker.domain.ProjectRules.normaliseDetails] accepts.
+     * [com.tasktracker.domain.ProjectRules.normaliseDetails] accepts. An empty member list
+     * explicitly removes all members.
      *
      * The project key is deliberately absent. It is the prefix every work item key in the
      * project is built from, so rewriting it would orphan keys that other devices and
@@ -109,6 +112,7 @@ interface ProjectRepositoryPort {
         name: String?,
         details: String?,
         now: Instant,
+        memberIDs: List<UserID>? = null,
     ): Project
 
     suspend fun setArchived(id: ProjectID, isArchived: Boolean, now: Instant): Project
