@@ -149,11 +149,17 @@ fun NavigationHost(
     // is that a test finally asked for it. The container is identified by the caller's tag.
     Column(modifier = modifier.fillMaxSize()) {
         Box(modifier = Modifier.weight(1f)) {
-            // The pushed route wins over the tab root when there is one, and this is the only
-            // place that decides it. A screen asking "am I pushed?" would be a second
-            // navigation state, and the two would disagree the moment a deep link arrived.
-            when (val pushed = navigation.pathFor(tab).lastOrNull()) {
-                null -> TabRoot(
+            val path = navigation.pathFor(tab)
+            val pushed = path.lastOrNull()
+            val previousRoute = path.dropLast(1).lastOrNull()
+            val editorOverProjectRoot = pushed is AppRoute.WorkItemEditor &&
+                previousRoute == null && (tab == AppTab.Board || tab == AppTab.Backlog)
+
+            // Keep the root in this same composition slot while a task editor is shown over
+            // a project tab. Routing into a separate PushedRoute branch used to dispose and
+            // rebuild BacklogDestination, replaying its repository load and flashing the list.
+            if (pushed == null || editorOverProjectRoot) {
+                TabRoot(
                     tab = tab,
                     router = router,
                     environment = environment,
@@ -162,11 +168,29 @@ fun NavigationHost(
                     themeScheme = themeScheme,
                     scope = scope,
                 )
+            }
 
-                else -> PushedRoute(
+            if (editorOverProjectRoot) {
+                val editorRoute = pushed
+                WorkItemEditorDestination(
+                    projectID = editorRoute.projectID,
+                    workItemID = editorRoute.workItemID,
+                    initialStatus = editorRoute.initialStatus,
+                    repository = environment.repository,
+                    dateProvider = environment.dateProvider,
+                    scope = scope,
+                    onDismiss = {
+                        val currentPath = router.path(tab)
+                        if (currentPath.lastOrNull() == editorRoute) {
+                            router.setPath(currentPath.dropLast(1), tab)
+                        }
+                    },
+                )
+            } else if (pushed != null) {
+                PushedRoute(
                     route = pushed,
                     tab = tab,
-                    previousRoute = navigation.pathFor(tab).dropLast(1).lastOrNull(),
+                    previousRoute = previousRoute,
                     router = router,
                     environment = environment,
                     settings = settings,
@@ -583,6 +607,16 @@ private fun BacklogDestination(
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Backlog) },
+        onAddTask = {
+            router.push(
+                AppRoute.WorkItemEditor(
+                    projectID = projectID,
+                    workItemID = null,
+                    initialStatus = WorkItemStatus.Backlog,
+                ),
+                AppTab.Backlog,
+            )
+        },
     )
 }
 
@@ -671,7 +705,11 @@ private fun WorkItemEditorDestination(
             hasDueDate = model.dueDate != null,
             isCreating = model.isCreating,
             issuedKey = model.issuedKey,
-            selectableStatuses = model.selectableStatuses,
+            selectableStatuses = if (workItemID == null && initialStatus == WorkItemStatus.Backlog) {
+                emptyList()
+            } else {
+                model.selectableStatuses
+            },
             isFiledAway = model.isFiledAway,
             canSave = model.canSave,
             isBusy = isBusy,
@@ -737,6 +775,7 @@ private fun SettingsDestination(
     // entire reason `restoreForceOffline` exists: the monitor is already overridden, and this
     // only stops a rebuilt model from rendering the switch off while the app is offline.
     val forceOffline by preferences.forceOffline.collectAsState()
+    val accentPalette by preferences.accentPalette.collectAsState()
     LaunchedEffect(model, forceOffline) { model.restoreForceOffline(forceOffline) }
 
     SettingsScreen(
@@ -744,9 +783,13 @@ private fun SettingsDestination(
         activity = model.activity,
         isForceOffline = model.isForceOffline,
         themeScheme = themeScheme,
+        accentPalette = accentPalette,
         version = model.version,
         commandOutcome = model.commandOutcome,
         onThemeChange = { scheme -> scope.launch { preferences.setThemeScheme(scheme) } },
+        onAccentPaletteChange = { palette ->
+            scope.launch { preferences.setAccentPalette(palette) }
+        },
         // Both halves, and neither alone: the model drives the switch, and the remembered
         // intent is what the next rebuilt model reads. Recording only one of them is how a
         // switch ends up disagreeing with the thing it controls.

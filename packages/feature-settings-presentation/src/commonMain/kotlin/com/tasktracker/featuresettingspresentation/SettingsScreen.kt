@@ -1,6 +1,7 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -40,6 +42,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassSurface
@@ -51,6 +54,7 @@ import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSettingsIconSize
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttMonospacedDigits
 import com.tasktracker.designsystem.ttTypography
@@ -131,6 +135,8 @@ fun SettingsScreen(
     onSyncNow: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
+    accentPalette: AccentPalette = AccentPalette.Classic,
+    onAccentPaletteChange: (AccentPalette) -> Unit = {},
 ) {
     LazyColumn(
         modifier = modifier
@@ -152,6 +158,11 @@ fun SettingsScreen(
                 ThemePickerRow(
                     selected = themeScheme,
                     onSelect = onThemeChange,
+                )
+                SettingsDivider()
+                AccentPalettePickerRow(
+                    selected = accentPalette,
+                    onSelect = onAccentPaletteChange,
                 )
             }
         }
@@ -268,6 +279,59 @@ fun SettingsScreen(
                         value = displayed,
                         icon = ttSettingsIcons.about,
                         modifier = Modifier.testTag(SettingsVersionRowTag),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccentPalettePickerRow(
+    selected: AccentPalette,
+    onSelect: (AccentPalette) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = ttSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        ttText(
+            text = AccentPalette.pickerTitle,
+            style = ttTypography.subheadline,
+            color = ttLabel(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
+            AccentPalette.all.forEach { palette ->
+                val isSelected = palette == selected
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(ttRadius.control))
+                        .selectable(selected = isSelected, role = Role.RadioButton) {
+                            onSelect(palette)
+                        }
+                        .padding(vertical = ttSpacing.sm),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.horizontalGradient(listOf(palette.light, palette.dark)),
+                            )
+                            .border(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) ttAccent() else ttSeparator(),
+                                shape = CircleShape,
+                            ),
+                    )
+                    ttText(
+                        text = palette.title,
+                        style = ttTypography.footnote,
+                        color = if (isSelected) ttAccent() else ttLabelSecondary(),
+                        maxLines = 1,
                     )
                 }
             }
@@ -478,6 +542,8 @@ private fun ThemePickerRow(
         }
 
         if (expanded) {
+            val isDarkTheme = ttIsDarkTheme()
+            val dropdownLabel = if (isDarkTheme) ttLabel() else Color.White
             Popup(
                 popupPositionProvider = SettingsDropdownPositionProvider,
                 onDismissRequest = { expanded = false },
@@ -486,7 +552,10 @@ private fun ThemePickerRow(
                 Column(
                     modifier = Modifier
                         .width(216.dp)
-                        .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+                        .ttGlassSurface(
+                            shape = RoundedCornerShape(ttRadius.control),
+                            fillAlpha = 0.81f,
+                        )
                         .padding(vertical = ttSpacing.xs),
                 ) {
                     ThemeScheme.all.forEach { scheme ->
@@ -508,11 +577,15 @@ private fun ThemePickerRow(
                             ttText(
                                 text = scheme.title,
                                 style = ttTypography.body,
-                                color = if (isSelected) ttAccent() else ttLabel(),
+                                color = if (isSelected && isDarkTheme) ttAccent() else dropdownLabel,
                             )
                             Spacer(modifier = Modifier.weight(1f))
                             if (isSelected) {
-                                ttText(text = "✓", style = ttTypography.body, color = ttAccent())
+                                ttText(
+                                    text = "✓",
+                                    style = ttTypography.body,
+                                    color = if (isDarkTheme) ttAccent() else dropdownLabel,
+                                )
                             }
                         }
                     }

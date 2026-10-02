@@ -1747,6 +1747,7 @@ explicit rather than left looking wired.
 
 | suite | target | tests |
 | --- | --- | --- |
+| `design-system` | JVM / iOS | 73 / 70 |
 | `shared-ui` (shell scenarios) | JVM / iOS / Android host | 18 / 18 / 18 |
 | `feature-projects-presentation` | JVM / iOS | 146 / 146 |
 | `feature-projects-domain` | JVM | 80 |

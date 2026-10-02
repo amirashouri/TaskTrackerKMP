@@ -19,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
@@ -130,6 +131,7 @@ fun BoardColumnView(
             ttGlassButton(
                 label = stringResource(Res.string.board_add_task),
                 onClick = addTask,
+                style = TTGlassButtonStyle(prominent = true),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()

@@ -132,6 +132,9 @@ enum class ttColorScheme {
  */
 val LocalThemeScheme = staticCompositionLocalOf { ThemeScheme.System }
 
+/** The accent palette selected for the current app composition. */
+val LocalAccentPalette = staticCompositionLocalOf { AccentPalette.Classic }
+
 /**
  * Whether the app is painting dark right now, in [scheme] terms.
  *
@@ -157,8 +160,16 @@ fun ttIsDarkTheme(scheme: ThemeScheme = LocalThemeScheme.current): Boolean = whe
  * also wraps.
  */
 @Composable
-fun ttTheme(scheme: ThemeScheme, content: @Composable () -> Unit) {
-    CompositionLocalProvider(LocalThemeScheme provides scheme, content = content)
+fun ttTheme(
+    scheme: ThemeScheme,
+    accentPalette: AccentPalette = AccentPalette.Classic,
+    content: @Composable () -> Unit,
+) {
+    CompositionLocalProvider(
+        LocalThemeScheme provides scheme,
+        LocalAccentPalette provides accentPalette,
+        content = content,
+    )
 }
 
 /**

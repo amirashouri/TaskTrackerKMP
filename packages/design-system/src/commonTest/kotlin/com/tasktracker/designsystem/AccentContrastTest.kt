@@ -63,6 +63,33 @@ class AccentContrastTest {
     }
 
     @Test
+    fun `every selectable palette clears text and canvas contrast in both appearances`() {
+        for (palette in AccentPalette.all) {
+            val variants = listOf(
+                Variant("${palette.title} light", palette.light),
+                Variant("${palette.title} dark", palette.dark),
+            )
+            for (variant in variants) {
+                val againstLabel = contrastRatio(variant.color, ttOnAccent)
+                assertTrue(
+                    againstLabel >= TEXT_CONTRAST_MINIMUM,
+                    "${variant.name} accent ${variant.color.hex()} against the label colour " +
+                        "is ${againstLabel.ratioText()} to 1, below the " +
+                        "${TEXT_CONTRAST_MINIMUM} to 1 needed for the label drawn on it",
+                )
+                assertTrue(
+                    variant.color.alpha == 1f,
+                    "${variant.name} accent ${variant.color.hex()} has alpha " +
+                        "${variant.color.alpha}, so its contrast depends on its backdrop",
+                )
+            }
+            assertBothBars(palette.light, CANVAS_LIGHT)
+            assertBothBars(palette.dark, CANVAS_DARK_IOS)
+            assertBothBars(palette.dark, CANVAS_DARK_ANDROID)
+        }
+    }
+
+    @Test
     fun `the light accent clears both bars on the light canvas`() {
         assertBothBars(TaskTrackerAccent.Light, CANVAS_LIGHT)
     }

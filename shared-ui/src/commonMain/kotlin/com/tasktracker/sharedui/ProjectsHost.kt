@@ -124,7 +124,7 @@ fun ProjectsHost(
             -> ProjectsListDestination(
                 environment = environment,
                 scope = scope,
-                onOpenProject = { router.openProject(it, AppTab.Projects) },
+                onOpenProject = { router.openProject(it, AppTab.Board) },
                 onNewProject = {
                     newProjectModel = NewProjectModel(environment.repository, environment.dateProvider)
                     isNewProjectOpen = true
@@ -156,6 +156,7 @@ fun ProjectsHost(
                 modifier = Modifier.fillMaxSize(),
             )
         }
+
     }
 }
 

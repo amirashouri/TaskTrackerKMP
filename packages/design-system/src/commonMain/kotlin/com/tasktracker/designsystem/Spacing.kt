@@ -106,6 +106,12 @@ object ttSpacing {
     /** 14dp — a glass button's horizontal padding. 2dp past [xl], for the same reason 7 is 1 past 6. */
     val buttonPaddingH: Dp = 14.dp
 
+    /** 56dp — the circular floating add action's visible and tappable diameter. */
+    val floatingActionSize: Dp = 56.dp
+
+    /** 44dp — a compact circular icon action's visible and tappable diameter. */
+    val iconButtonSize: Dp = 44.dp
+
     /** 18dp — the splash mark's distance to its title. */
     val splashStack: Dp = 18.dp
 

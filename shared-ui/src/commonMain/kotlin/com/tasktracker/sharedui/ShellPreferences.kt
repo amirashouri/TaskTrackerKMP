@@ -1,6 +1,7 @@
 package com.tasktracker.sharedui
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -11,13 +12,15 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * The preferences the *shell* owns, rather than any one feature.
  *
- * ## Why these three live here and not on a feature
+ * ## Why these device preferences live here and not on a feature
  *
  * Each of them outlives the session, and each of them is about the device rather than about
  * anything on screen:
  *
  *  - the appearance, because it has to be right on the first composed frame, which is before
  *    any feature screen — let alone the settings one — exists;
+ *  - the accent palette, for the same reason: design-system colours are read throughout the
+ *    tree and must resolve consistently on the first frame;
  *  - the forced-offline intent, because it is a *debugging* switch a person sets once before
  *    handing a device to somebody else to exercise a failing bug report;
  *  - the last visited project, because the Board and Backlog tabs are scoped to it and a
@@ -55,6 +58,9 @@ class ShellPreferences(
     private val _themeScheme = MutableStateFlow(ThemeScheme.System)
     val themeScheme: StateFlow<ThemeScheme> = _themeScheme.asStateFlow()
 
+    private val _accentPalette = MutableStateFlow(AccentPalette.Classic)
+    val accentPalette: StateFlow<AccentPalette> = _accentPalette.asStateFlow()
+
     /**
      * The remembered forced-offline intent.
      *
@@ -67,7 +73,7 @@ class ShellPreferences(
     val forceOffline: StateFlow<Boolean> = _forceOffline.asStateFlow()
 
     /**
-     * Loads all three, once, at launch.
+     * Loads the stored shell preferences once at launch.
      *
      * Idempotent and safe to call from a `LaunchedEffect`, because a recomposition cannot
      * re-run it: the effect is keyed on the store, which does not change.
@@ -79,6 +85,9 @@ class ShellPreferences(
     suspend fun restore() {
         _themeScheme.value = ThemeScheme.fromStoredValue(
             runCatching { store.value(THEME_KEY) }.getOrNull(),
+        )
+        _accentPalette.value = AccentPalette.fromStoredValue(
+            runCatching { store.value(ACCENT_PALETTE_KEY) }.getOrNull(),
         )
 
         val offline = runCatching { store.value(FORCE_OFFLINE_KEY) }.getOrNull()
@@ -108,6 +117,12 @@ class ShellPreferences(
     suspend fun setThemeScheme(scheme: ThemeScheme) {
         _themeScheme.value = scheme
         runCatching { store.set(scheme.wireValue, THEME_KEY) }
+    }
+
+    /** Applies and persists the selected accent palette. */
+    suspend fun setAccentPalette(palette: AccentPalette) {
+        _accentPalette.value = palette
+        runCatching { store.set(palette.wireValue, ACCENT_PALETTE_KEY) }
     }
 
     /**
@@ -141,6 +156,9 @@ class ShellPreferences(
          * therefore *not* namespaced. See the class note on why it is not a `DefaultsKey`.
          */
         const val THEME_KEY: String = ThemeScheme.defaultsKey
+
+        /** Verbatim to keep the device appearance choice outside sign-out clearing. */
+        const val ACCENT_PALETTE_KEY: String = "com.tasktracker.settings.accentPalette"
 
         /** Verbatim, and out of `DefaultsKey` for the same reason. */
         const val FORCE_OFFLINE_KEY: String = "com.tasktracker.settings.forceOffline"

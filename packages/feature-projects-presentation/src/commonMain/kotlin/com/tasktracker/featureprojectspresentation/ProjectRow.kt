@@ -21,11 +21,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
-import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -132,13 +132,14 @@ fun ProjectRowView(
         // explicit button because it is the one action on the row that is *not* the row.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            horizontalArrangement = Arrangement.End,
         ) {
-            ttGlassButton(
-                label = stringResource(Res.string.common_delete),
+            ttGlassIconButton(
+                image = ttActionIcons.trash,
+                contentDescription = stringResource(Res.string.common_delete),
                 onClick = onRemove,
                 modifier = Modifier.testTag(ProjectRemoveTag(project)),
-                style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+                tint = ttError(),
             )
         }
     }

@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -759,5 +760,54 @@ fun ttGlassButton(
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+/** A circular glass add action for a screen-level create affordance. */
+@Composable
+fun ttGlassAddButton(
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(ttSpacing.floatingActionSize)
+            .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        ttText(
+            text = "+",
+            style = ttTypography.title,
+            color = ttLabel(),
+        )
+    }
+}
+
+/** A compact circular glass action with an accessible label and a design-system glyph. */
+@Composable
+fun ttGlassIconButton(
+    image: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    tint: Color = ttLabel(),
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(ttSpacing.iconButtonSize)
+            .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        ttIcon(
+            image = image,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(ttIconSize.tab),
+        )
     }
 }

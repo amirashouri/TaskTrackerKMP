@@ -27,6 +27,7 @@ import com.tasktracker.designsystem.TTSwipeToRevealRow
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassAddButton
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -171,12 +172,11 @@ fun ProjectsListScreen(
                 }
             }
         }
-        onNewProject?.let { newProject ->
-            ttGlassButton(
-                label = stringResource(Res.string.project_new),
-                onClick = newProject,
-                modifier = Modifier.fillMaxWidth().testTag(ProjectsListNewTag),
-                style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
+        if (onNewProject != null) {
+            ttGlassAddButton(
+                contentDescription = stringResource(Res.string.project_new),
+                onClick = onNewProject,
+                modifier = Modifier.align(Alignment.End).testTag(ProjectsListNewTag),
             )
         }
     }

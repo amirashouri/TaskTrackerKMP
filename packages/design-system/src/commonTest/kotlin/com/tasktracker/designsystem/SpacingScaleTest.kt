@@ -85,6 +85,7 @@ class SpacingScaleTest {
             ttSpacing.controlPaddingV,
             ttSpacing.buttonPaddingV,
             ttSpacing.buttonPaddingH,
+            ttSpacing.iconButtonSize,
             ttSpacing.splashStack,
             ttSpacing.screenGutterLarge,
             ttSpacing.boardTopInset,

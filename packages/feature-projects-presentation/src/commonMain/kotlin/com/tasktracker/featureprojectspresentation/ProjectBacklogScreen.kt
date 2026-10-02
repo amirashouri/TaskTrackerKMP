@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,17 +9,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttGlassAddButton
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.BacklogProjection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_empty_body
 import com.tasktracker.resources.backlog_empty_title
+import com.tasktracker.resources.board_add_task
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -53,45 +57,61 @@ fun ProjectBacklogScreen(
     onOpenSwitcher: (() -> Unit)? = null,
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
+    onAddTask: (() -> Unit)? = null,
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
             .testTag(ProjectBacklogScreenTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
-        onOpenSwitcher?.let { openSwitcher ->
-            ProjectSwitcherButton(
-                project = projection.project,
-                onClick = openSwitcher,
-                modifier = Modifier.fillMaxWidth(),
-                projects = projects,
-                onSelectProject = onSelectProject,
-            )
-        }
-        errorMessage?.let { message ->
-            ProjectsErrorBanner(message = message, onDismiss = onDismissError)
-        }
-        if (projection.isEmpty && !isLoading) {
-            ProjectsEmptyState(
-                title = stringResource(Res.string.backlog_empty_title),
-                body = stringResource(Res.string.backlog_empty_body),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().testTag(ProjectBacklogListTag),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-            ) {
-                items(projection.untriaged, key = { it.id.stringValue }) { item ->
-                    WorkItemBacklogRow(
-                        item = item,
-                        onPutOnBoard = { onPutOnBoard(item.id) },
-                        onFileAway = { onFileAway(item.id) },
-                        isBusy = busyItemID == item.id,
-                    )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        ) {
+            onOpenSwitcher?.let { openSwitcher ->
+                ProjectSwitcherButton(
+                    project = projection.project,
+                    onClick = openSwitcher,
+                    modifier = Modifier.fillMaxWidth(),
+                    projects = projects,
+                    onSelectProject = onSelectProject,
+                )
+            }
+            errorMessage?.let { message ->
+                ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+            }
+            if (projection.isEmpty && !isLoading) {
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.backlog_empty_title),
+                    body = stringResource(Res.string.backlog_empty_body),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().testTag(ProjectBacklogListTag),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    items(projection.untriaged, key = { it.id.stringValue }) { item ->
+                        WorkItemBacklogRow(
+                            item = item,
+                            onPutOnBoard = { onPutOnBoard(item.id) },
+                            onFileAway = { onFileAway(item.id) },
+                            isBusy = busyItemID == item.id,
+                        )
+                    }
                 }
             }
+        }
+        onAddTask?.let { addTask ->
+            ttGlassAddButton(
+                contentDescription = stringResource(Res.string.board_add_task),
+                onClick = addTask,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = ttSpacing.xxl, bottom = ttSpacing.boardBottomInset)
+                    .testTag(BacklogAddTaskTag),
+            )
         }
     }
 }
@@ -128,3 +148,4 @@ private fun ProjectBacklogScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Lig
 
 const val ProjectBacklogScreenTag = "backlog.screen"
 const val ProjectBacklogListTag = "backlog.rows"
+const val BacklogAddTaskTag = "backlog.addTask"

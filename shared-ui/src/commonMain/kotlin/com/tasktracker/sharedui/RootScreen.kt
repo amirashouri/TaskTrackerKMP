@@ -180,6 +180,7 @@ fun RootScreen(
     }
 
     val themeScheme by preferences.themeScheme.collectAsState()
+    val accentPalette by preferences.accentPalette.collectAsState()
 
     // The two alphas are deliberately not each other's inverse. The splash fades out on a
     // timer and takes itself out of the composition when it reaches zero; the content is
@@ -203,7 +204,7 @@ fun RootScreen(
     var isContentMounted by remember { mutableStateOf(false) }
     LaunchedEffect(showsSplash) { if (!showsSplash) isContentMounted = true }
 
-    ttTheme(themeScheme) {
+    ttTheme(themeScheme, accentPalette) {
         Box(modifier = modifier.fillMaxSize().testTag(RootScreenTag)) {
             // Drawn once, outside both fading layers, so the transition is a change of what is
             // *over* the backdrop rather than a change of the backdrop.

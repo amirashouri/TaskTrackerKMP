@@ -42,7 +42,7 @@ class TabIconsGeometryTest {
 
     @Test
     fun `every glyph has path nodes`() {
-        for (icon in ttTabIcons.all) {
+        for (icon in ttTabIcons.all + ttActionIcons.all) {
             assertTrue(
                 icon.nodes().isNotEmpty(),
                 "${icon.name} has no path nodes, so it draws nothing at all",
@@ -52,7 +52,7 @@ class TabIconsGeometryTest {
 
     @Test
     fun `every glyph is drawn inside the viewport`() {
-        for (icon in ttTabIcons.all) {
+        for (icon in ttTabIcons.all + ttActionIcons.all) {
             for (point in icon.points()) {
                 assertTrue(
                     point.x in -SLACK..(VIEWPORT + SLACK) && point.y in -SLACK..(VIEWPORT + SLACK),
