@@ -120,3 +120,48 @@ tasks.withType<Test>().configureEach {
         showStackTraces = true
     }
 }
+
+/**
+ * A stale-framework guard, per iOS target, for any module that publishes a `framework`.
+ *
+ * A framework binary is a *build output that another build system consumes by path*, which is
+ * what makes it different from every other artifact here: Xcode finds it at a fixed location
+ * rather than asking Gradle for it. Nothing in either build fails when it is out of date, because
+ * linking an old binary is a successful link. `VerifyIosFrameworkFreshnessTask` is what turns that
+ * silence into a failure — see that file for why it compares timestamps rather than symbols.
+ *
+ * Registered per framework rather than once per module so the task name states the target
+ * (`verifyIosSimulatorArm64FrameworkIsFresh`), which is the thing a caller needs to name in a
+ * command and the thing that has to differ between simulator and device.
+ *
+ * Deliberately *not* attached to `check`. `check` runs on the JVM and Android hosts, where no
+ * framework is linked; wiring this into it would fail every non-iOS build by default and train
+ * people to ignore it.
+ *
+ * Registered once rather than by walking `binaries`, and for the same reason
+ * `tasktracker.kmp.library` names the executable rather than discovering it: a module declares
+ * its framework in its own build file, and a convention plugin cannot know that a given module
+ * has one. Walking the binary map from here asks each module's configuration for an entry that
+ * only some of them have, and the one that does not has is not a list — it is a build-wide
+ * `Key ... is missing in the map` during plugin application, which is a long way from a useful
+ * error message.
+ *
+ * `:shared-ui` is the module that publishes `ComposeApp`; it is named in the module's own build
+ * file, which is where this decision belongs. This registration is the *check*, not the
+ * declaration, and it is registered unconditionally so a module that stops publishing a
+ * framework fails this check rather than silently losing its guard.
+ */
+tasks.register<com.tasktracker.architecture.VerifyIosFrameworkFreshnessTask>(
+    "verifyIosSimulatorArm64FrameworkIsFresh"
+) {
+    group = "verification"
+    description =
+        "Fails if the linked simulator framework is older than :${project.name}'s Kotlin sources."
+    frameworkBinary.set(
+        layout.buildDirectory.file(
+            "bin/iosSimulatorArm64/debugFramework/ComposeApp.framework/ComposeApp",
+        ),
+    )
+    sourceRoot.set(layout.projectDirectory.dir("src"))
+    targetName.set("iosSimulatorArm64")
+}

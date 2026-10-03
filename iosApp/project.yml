@@ -80,17 +80,36 @@ targets:
         script: |
           cd "$SRCROOT/.."
           export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
-          # Android Studio's KMP run configuration builds the framework before invoking Xcode,
-          # so the (expensive) link below is redundant on that path and is skipped. The resource
-          # sync is *not* redundant and must still run: the task reads BUILT_PRODUCTS_DIR and
-          # UNLOCALIZED_RESOURCES_FOLDER_PATH, which Android Studio does not supply to its own
-          # Gradle invocation, so this script phase is the only place the .cvr blobs can land in
-          # the bundle. Skipping it here is why the IDE run crashed on the first frame with
-          # MissingResourceException while a plain Xcode run worked.
-          if [ "${OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED:-NO}" = "YES" ]; then
-            ./gradlew :shared-ui:syncComposeResourcesForIos --console=plain
-            exit $?
-          fi
+          # Both tasks below run on every path — Xcode, `xcodebuild`, and Android Studio alike.
+          #
+          # This used to skip the link when `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` was YES,
+          # on the assumption recorded here: that "Android Studio's KMP run configuration builds
+          # the framework before invoking Xcode, so the (expensive) link below is redundant on
+          # that path". That assumption was false, and it was false silently. The IDE run
+          # configuration at `.idea/runConfigurations/TaskTracker.xml` declares no Gradle
+          # before-run task at all — only Xcode's own `BuildBeforeRunTask` — so on the IDE path
+          # nothing linked the framework and the resource sync was all that ran.
+          #
+          # The result was an app built from a framework binary that predated the current
+          # sources. `shared-ui/build/bin/iosSimulatorArm64/debugFramework/ComposeApp` was hours
+          # older than the Kotlin it was supposed to contain, and contained no trace of it:
+          # `strings` for a resource added that afternoon found zero hits. Nothing said so,
+          # because a stale link is a successful link. Deleting the installed app and
+          # re-running `xcodegen generate` cannot change this — both rewrite things that sit
+          # downstream of the artifact that was actually stale, which is why that loop kept
+          # reproducing the same crash.
+          #
+          # The "expensive" saving is also smaller than it looks: Gradle's up-to-date checks
+          # make a link with no changed input close to free, and the link has to happen
+          # *somewhere* for the binary to be trustworthy. Doing it in one place that every
+          # path already runs is what makes it trustworthy.
+          #
+          # `syncComposeResourcesForIos` was always needed on the IDE path and still is: the
+          # task reads BUILT_PRODUCTS_DIR and UNLOCALIZED_RESOURCES_FOLDER_PATH, which Android
+          # Studio does not supply to its own Gradle invocation, so this script phase is the
+          # only place the .cvr blobs can land in the bundle. Skipping it is why the IDE run
+          # used to crash on the first frame with MissingResourceException while a plain Xcode
+          # run worked.
           # `syncComposeResourcesForIos` is not optional and is not about tests. Linking the
           # framework is only half of what this phase exists for: the other half is copying the
           # `.cvr` blobs into the app bundle, which the linker does nothing for and which is why
