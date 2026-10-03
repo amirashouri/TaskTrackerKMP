@@ -47,4 +47,29 @@ class SettingsViewJvmTest {
     @Test
     fun theVersionRowHidesItselfWithNoVersion() =
         runComposeUiTest(block = SettingsScenarios.theVersionRowHidesItselfWithNoVersion)
+
+    /**
+     * [GlassIntensityScenarios] on the JVM.
+     *
+     * The same six scenarios run on every host; these are entry points only, and every
+     * assertion lives in the scenarios object.
+     */
+
+    @Test
+    fun theSliderOpensAtTheAmountTheAppIsShowing() = runComposeUiTest(block = GlassIntensityScenarios.theSliderOpensAtTheAmountTheAppIsShowing)
+
+    @Test
+    fun theReadoutIsTheRoundedPercentage() = runComposeUiTest(block = GlassIntensityScenarios.theReadoutIsTheRoundedPercentage)
+
+    @Test
+    fun theBottomOfTheTravelIsNamedReduceTransparency() = runComposeUiTest(block = GlassIntensityScenarios.theBottomOfTheTravelIsNamedReduceTransparency)
+
+    @Test
+    fun assistiveTechnologyCanSetTheAmount() = runComposeUiTest(block = GlassIntensityScenarios.assistiveTechnologyCanSetTheAmount)
+
+    @Test
+    fun aDragPreviewsEveryStepAndPersistsOnce() = runComposeUiTest(block = GlassIntensityScenarios.aDragPreviewsEveryStepAndPersistsOnce)
+
+    @Test
+    fun aTapOnTheTrackMovesItWithoutADrag() = runComposeUiTest(block = GlassIntensityScenarios.aTapOnTheTrackMovesItWithoutADrag)
 }

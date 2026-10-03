@@ -1,7 +1,5 @@
 package com.tasktracker.featureprojectspresentation
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,12 +8,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,7 +38,10 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlass
-import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttGlassLensAlpha
+import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttIcon
+import com.tasktracker.designsystem.ttInitialsAvatar
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -79,10 +82,29 @@ fun ProjectSwitcherButton(
     var expanded by remember { mutableStateOf(false) }
     var switcherWidthPx by remember { mutableStateOf(0) }
 
+    // 0 open, 180 closed. A spring rather than a tween because the pill's own press already
+    // moves on [ttGlass.pressSpring], and a chevron that eased in over a different curve than
+    // the surface it sits on reads as two controls disagreeing about the same tap.
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) CHEVRON_ROTATION_CLOSED else 0f,
+        animationSpec = ttGlass.selectionSpring,
+        label = "switcherChevron",
+    )
+
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
+                // Content-width, and capped rather than filled.
+                //
+                // It used to be `fillMaxWidth`, which made a ~358dp glass slab holding 22dp of
+                // content: the name is ellipsised, so the extra width bought nothing and the
+                // control read as an empty bar rather than as something to press. A control that
+                // opens a menu should look like the size of the thing it names.
+                //
+                // The cap is what keeps a long project name from pushing the board's trailing
+                // content off the header, and it is the reason the row below carries a weight:
+                // without one, `widthIn` alone would let a 60-character name take the row.
+                .widthIn(max = switcherWidthMax)
                 .onGloballyPositioned { switcherWidthPx = it.size.width }
                 .clip(shape)
                 .ttGlassSurface(shape = shape)
@@ -96,7 +118,11 @@ fun ProjectSwitcherButton(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             project?.let {
-                SwitcherMonogram(keyPrefix = it.keyPrefix)
+                ttInitialsAvatar(
+                    initials = it.keyPrefix,
+                    size = switcherMonogramSize,
+                    modifier = Modifier.testTag(ProjectSwitcherMonogramTag),
+                )
             }
             ttText(
                 text = project?.name ?: noProjectLabel,
@@ -106,11 +132,19 @@ fun ProjectSwitcherButton(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            ttText(
-                text = CHEVRON,
-                style = ttTypography.footnote,
-                color = ttLabelSecondary(),
-                modifier = Modifier.testTag(ProjectSwitcherChevronTag),
+            ttIcon(
+                image = ttActionIcons.chevronDown,
+                contentDescription = null,
+                tint = ttLabelSecondary(),
+                modifier = Modifier
+                    .size(switcherChevronSize)
+                    .testTag(ProjectSwitcherChevronTag)
+                    .graphicsLayer {
+                        // Rotated rather than swapped for a second glyph, because the two
+                        // directions are the same mark and a mark that changes shape when a menu
+                        // opens reads as the control becoming something else.
+                        rotationZ = chevronRotation
+                    },
             )
         }
 
@@ -126,14 +160,21 @@ fun ProjectSwitcherButton(
             ) {
                 Column(
                     modifier = Modifier
-                        .width(with(androidx.compose.ui.platform.LocalDensity.current) {
-                            switcherWidthPx.toDp()
-                        })
+                        // At least the pill's width so the menu lines up with it, and up to a
+                        // cap so a short project name does not produce a menu too narrow to read
+                        // the other projects' names in. A menu narrower than its widest row is
+                        // the ellipsis, and an ellipsis in a menu of names is useless.
+                        .widthIn(
+                            min = with(androidx.compose.ui.platform.LocalDensity.current) {
+                                switcherWidthPx.toDp()
+                            },
+                            max = switcherMenuWidthMax,
+                        )
                         .heightIn(max = 240.dp)
                         .verticalScroll(rememberScrollState())
                         .ttGlassSurface(
                             shape = RoundedCornerShape(ttRadius.control),
-                            base = ttSurface().copy(alpha = 1f - ttGlass.LENS_ALPHA),
+                            base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
                         )
                         .padding(vertical = ttSpacing.xs)
                         .testTag(ProjectSwitcherMenuTag),
@@ -151,7 +192,7 @@ fun ProjectSwitcherButton(
                             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            SwitcherMonogram(keyPrefix = option.keyPrefix)
+                            ttInitialsAvatar(initials = option.keyPrefix, size = switcherMonogramSize)
                             ttText(
                                 text = option.name,
                                 style = ttTypography.callout,
@@ -190,25 +231,6 @@ private class ProjectSwitcherDropdownPositionProvider(
     }
 }
 
-@Composable
-private fun SwitcherMonogram(
-    keyPrefix: String,
-    modifier: Modifier = Modifier,
-) {
-    val shape = CircleShape
-    Column(
-        modifier = modifier
-            .size(switcherMonogramSize)
-            .clip(shape)
-            .background(ttAccent().copy(alpha = MONOGRAM_FILL_ALPHA))
-            .border(1.dp, ttAccent().copy(alpha = MONOGRAM_RIM_ALPHA), shape),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        ttText(text = keyPrefix, style = ttTypography.captionEmphasised, color = ttLabel())
-    }
-}
-
 @Preview
 @Composable
 private fun ProjectSwitcherButtonPreview() = ProjectsPreview(ThemeScheme.Dark) {
@@ -225,6 +247,7 @@ private fun ProjectSwitcherButtonEmptyPreview() = ProjectsPreview(ThemeScheme.Li
 
 const val ProjectSwitcherTag = "board.switcher"
 const val ProjectSwitcherChevronTag = "board.switcher.chevron"
+const val ProjectSwitcherMonogramTag = "board.switcher.monogram"
 const val ProjectSwitcherMenuTag = "board.switcher.menu"
 fun ProjectSwitcherOptionTag(projectID: ProjectID): String = "board.switcher.option.${projectID.stringValue}"
 
@@ -239,9 +262,30 @@ fun ProjectSwitcherOptionTag(projectID: ProjectID): String = "board.switcher.opt
  */
 private const val noProjectLabel = "No project"
 
-/** U+2303, not a Material icon: this module has no icon dependency. */
-private const val CHEVRON = "⌄"
+/**
+ * The key prefix's disc, at 26dp rather than [ttAvatarSize.avatar]'s 24dp.
+ *
+ * The switcher's monogram and a stack's avatar are the same shape, and they are deliberately
+ * not the same size: this one is alone in a pill with a name beside it, where 24dp reads as an
+ * afterthought, and the stack is four of them at once, where 26dp would crowd the header. One
+ * primitive, two sizes, and the reason written down - because "make these the same" is the
+ * obvious next change and it would be wrong.
+ */
+private val switcherMonogramSize = 26.dp
 
-private val switcherMonogramSize = 22.dp
-private const val MONOGRAM_FILL_ALPHA = 0.18f
-private const val MONOGRAM_RIM_ALPHA = 0.36f
+/** The chevron, at half [switcherMonogramSize] so it reads as an affordance and not a peer. */
+private val switcherChevronSize = 13.dp
+
+/**
+ * How far the pill may grow before it starts ellipsising the project name.
+ *
+ * 240dp is about two thirds of a phone and about half of a tablet's portrait width: past that a
+ * project name is long enough that the board's own trailing content matters more than reading
+ * the rest of it.
+ */
+internal val switcherWidthMax = 240.dp
+
+/** The menu's own cap, so a long project name does not make every row an ellipsis. */
+private val switcherMenuWidthMax = 320.dp
+
+private const val CHEVRON_ROTATION_CLOSED = 180f

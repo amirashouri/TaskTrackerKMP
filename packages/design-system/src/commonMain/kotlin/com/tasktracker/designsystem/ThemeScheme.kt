@@ -163,11 +163,18 @@ fun ttIsDarkTheme(scheme: ThemeScheme = LocalThemeScheme.current): Boolean = whe
 fun ttTheme(
     scheme: ThemeScheme,
     accentPalette: AccentPalette = AccentPalette.Classic,
+    glassIntensity: Float = 1f,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(
         LocalThemeScheme provides scheme,
         LocalAccentPalette provides accentPalette,
+        // Provided here rather than by the shell wrapping this call, because this is already
+        // the one place the three appearance inputs are assembled — a second provider around
+        // it would be a second place to forget. Defaulted to full glass so the splash, the
+        // previews and every test host that does not ask for a different amount keep painting
+        // the measured `ttGlass` values.
+        LocalGlassIntensity provides glassIntensity.coerceIn(0f, 1f),
         content = content,
     )
 }

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -27,8 +28,10 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -61,11 +64,12 @@ import org.jetbrains.compose.resources.stringResource
  *
  * ## Why filing away is on the card and not in a menu
  *
- * The backlog's row shows "File Away" as a button, and a card here shows the same button in
- * its action slot, rather than both hiding it behind a long-press menu. The two surfaces
- * have to agree about what filing away means - 12.5's test exists precisely because
- * archiving is a status move and a disagreement would be silent. Two visible buttons that
- * do the same thing are easier to keep in step than two menus.
+ * The backlog's row shows "File Away" as a button, and a card here shows the same verb in its
+ * action slot - as a glyph, because a 300dp card has no room for the label - rather than both
+ * hiding it behind a long-press menu. The two surfaces have to agree about what filing away
+ * means - 12.5's test exists precisely because archiving is a status move and a disagreement
+ * would be silent. Two always-visible controls that do the same thing are easier to keep in
+ * step than two menus.
  *
  * ## Why the row runs to the edges and the gutter is inside it
  *
@@ -99,10 +103,11 @@ fun ProjectBoardScreen(
      * Whether each card also offers the move verbs as buttons.
      *
      * Off by default, and that default is the design rather than an omission: a card is
-     * 300dp wide, and one "File Away" button beside the card's own content already fills
-     * it. Dragging a card between lanes is the primary way to move work, and a row of three
-     * extra buttons on every card competes with the card's text for a 300dp column - so
-     * they are opt-in for a host that cannot offer dragging at all, such as a keyboard-only
+     * 300dp wide, and filing away has already been given the card's bottom trailing corner -
+     * a labelled button in the badge row would have taken a quarter of that width. Dragging a
+     * card between lanes is the primary way to move work, and a row of three extra buttons
+     * beside the badge and the due date competes with the card's own text for the rest of it -
+     * so they are opt-in for a host that cannot offer dragging at all, such as a keyboard-only
      * or screen-reader path, where "there is no other way to do this" outweighs the
      * crowding.
      */
@@ -119,18 +124,47 @@ fun ProjectBoardScreen(
             // a lane arriving from the right slid under a strip of empty canvas and stopped
             // there. The gutter belongs to the content that is inset from the edge, and the
             // row is not that - see [LaneRowSpacer].
-            .padding(vertical = ttSpacing.screenGutterLarge)
+            // Top only, and for the same reason the horizontal gutter is a `LaneRowSpacer` rather than
+            // padding: padding on this Column shrinks the *lanes' viewport*, so the lanes stop
+            // 32dp short of the bottom of the screen and no card can ever reach the edge, the
+            // notch area, or the tab bar's glass. The clearance that keeps the last card clear of
+            // the glass is inside the lane's scroll instead - see `BoardColumnView`'s
+            // `padding(bottom = …)`.
+            .padding(top = ttSpacing.screenGutterLarge)
             .testTag(ProjectBoardScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
-        onOpenSwitcher?.let { openSwitcher ->
-            ProjectSwitcherButton(
-                project = projection.project,
-                onClick = openSwitcher,
-                modifier = Modifier.fillMaxWidth().horizontalGutter(),
-                projects = projects,
-                onSelectProject = onSelectProject,
-            )
+        // The header exists if *either* half of it has something to say, which is why this is
+        // not an `onOpenSwitcher?.let`. The stack reports who is on the board, and that is a fact
+        // about the board rather than about the switcher: a host that wires no switcher - a
+        // preview, a screenshot, a keyboard-only surface - would otherwise lose the one part of
+        // the header it had anything to say with.
+        val assignees = boardAssigneeNames(projection.items)
+        if (onOpenSwitcher != null || assignees.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalGutter()
+                    .testTag(ProjectBoardHeaderTag),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                onOpenSwitcher?.let { openSwitcher ->
+                    ProjectSwitcherButton(
+                        project = projection.project,
+                        onClick = openSwitcher,
+                        // Takes what is left, capped inside itself, so a long project name
+                        // ellipsises in the pill instead of pushing the stack off the header.
+                        modifier = Modifier.weight(1f, fill = false),
+                        projects = projects,
+                        onSelectProject = onSelectProject,
+                    )
+                }
+                AssigneeStack(
+                    names = assignees,
+                    modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                )
+            }
         }
         errorMessage?.let { message ->
             ProjectsErrorBanner(
@@ -278,7 +312,12 @@ private fun BoardCardActions(
 ) {
     if (item.status.isTerminal) return
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        // Wraps its content rather than filling the card, because the card's action slot puts
+        // this at its trailing edge: a full-width column here would take the whole row, and
+        // `Arrangement.End` would then have nothing to decide, so the glyph would sit at the
+        // card's leading edge instead of its bottom trailing corner.
+        modifier = Modifier.wrapContentWidth(),
+        horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
     ) {
         BoardFileAwayAction(
@@ -297,12 +336,25 @@ private fun BoardCardActions(
 }
 
 /**
- * The card action that files a task away, shown in a card's action slot.
+ * The card action that files a task away, shown as a glyph in a card's action slot.
  *
  * Hidden for a task that is already filed away. The board has no `Closed` column, so a
  * filed-away task is not on the board at all - which means this only ever shows for
  * `Todo`, `InProgress`, `InReview` and `Done`, and the guard is here so a future column
  * that *does* include `Closed` does not offer to close it again.
+ *
+ * ## Why a glyph and not the backlog's labelled button
+ *
+ * The card is 300dp wide and its own text - key, title, badges, assignee - is what the lane is
+ * scanned for. The backlog's row has a whole screen width of room for a "File Away" button
+ * beside its content; a card does not, and at that width the label took a quarter of the card
+ * to say what one drawn box says. So the card offers the archive glyph at its bottom trailing
+ * corner, keeps [Res.string.work_item_archive] as the control's accessible name, and keeps the
+ * error tint - a destructive verb should still look like one.
+ *
+ * The backlog row and the editor keep their buttons, and that is not an inconsistency to
+ * reconcile: the glyph and the label are the same verb on the same status move, which is what
+ * `ArchiveRoundTripScenarios` checks, rather than two independent implementations of it.
  */
 @Composable
 internal fun BoardFileAwayAction(
@@ -311,11 +363,14 @@ internal fun BoardFileAwayAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ttGlassButton(
-        label = stringResource(Res.string.work_item_archive),
+    ttGlassIconButton(
+        image = ttActionIcons.archive,
+        // The button's own accessible name, and the reason it cannot go: an icon-only control
+        // is announced by its content description or not at all.
+        contentDescription = stringResource(Res.string.work_item_archive),
         onClick = { if (!isBusy) onClick() },
+        tint = ttError(),
         modifier = modifier.testTag(BoardFileAwayTag(item)),
-        style = TTGlassButtonStyle(tint = ttError(), prominent = true),
     )
 }
 
@@ -373,6 +428,7 @@ private fun ProjectBoardScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light
 }
 
 const val ProjectBoardScreenTag = "board.screen"
+const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"

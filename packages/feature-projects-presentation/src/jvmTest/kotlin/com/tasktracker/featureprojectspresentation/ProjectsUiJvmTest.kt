@@ -63,7 +63,16 @@ class ProjectsUiJvmTest {
     fun theFirstLaneRestsAGutterFromTheLeftEdge() = runComposeUiTest(block = BoardLaneScenarios.theFirstLaneRestsAGutterFromTheLeftEdge)
 
     @Test
-    fun theSwitcherIsStillInsetFromTheEdges() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherIsStillInsetFromTheEdges)
+    fun theSwitcherIsInsetFromTheLeftEdge() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherIsInsetFromTheLeftEdge)
+
+    @Test
+    fun theSwitcherIsNoWiderThanItsContentAllows() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherIsNoWiderThanItsContentAllows)
+
+    @Test
+    fun theAssigneeStackOverlapsAndCountsWhatItHides() = runComposeUiTest(block = BoardLaneScenarios.theAssigneeStackOverlapsAndCountsWhatItHides)
+
+    @Test
+    fun anUnassignedBoardHasNoStack() = runComposeUiTest(block = BoardLaneScenarios.anUnassignedBoardHasNoStack)
 
     @Test
     fun everyLaneIsStillDrawn() = runComposeUiTest(block = BoardLaneScenarios.everyLaneIsStillDrawn)
@@ -104,6 +113,21 @@ class ProjectsUiJvmTest {
     /** The new-project button is reachable with rows present. It used to be measured at zero height and drawn off the bottom of the screen. */
     @Test
     fun theNewProjectButtonWorksWithRowsPresent() = runComposeUiTest(block = ProjectsListScenarios.theNewProjectButtonWorksWithRowsPresent)
+
+    /** The create action and the last row's delete action do not occupy the same pixels. It used to float over them and win the touch. */
+    @Test
+    fun theNewProjectActionDoesNotCoverTheLastRowsDelete() =
+        runComposeUiTest(block = ProjectsListScenarios.theNewProjectActionDoesNotCoverTheLastRowsDelete)
+
+    /** The backlog's add action and its rows' trailing actions do not occupy the same pixels. The button used to float over them and win the touch. */
+    @Test
+    fun theAddActionDoesNotCoverTheLastRow() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theAddActionDoesNotCoverTheLastRow)
+
+    /** The add action trails the switcher and sits above the list, rather than floating over it. */
+    @Test
+    fun theAddActionTrailsTheSwitcher() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theAddActionTrailsTheSwitcher)
 
     @Test
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)

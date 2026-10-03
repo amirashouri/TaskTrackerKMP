@@ -1758,15 +1758,33 @@ explicit rather than left looking wired.
 
 | suite | target | tests |
 | --- | --- | --- |
-| `design-system` | JVM / iOS | 73 / 70 |
+| `design-system` | JVM / iOS | 83 / 80 |
 | `shared-ui` (shell scenarios) | JVM / iOS / Android host | 24 / 24 / 24 |
-| `feature-projects-presentation` | JVM / iOS | 146 / 146 |
+| `feature-projects-presentation` | JVM / iOS / Android host | 159 / 159 / 159 |
+| `feature-settings-presentation` | JVM / iOS | 24 / 24 |
 | `feature-projects-domain` | JVM | 80 |
 | `composition-root` | JVM / iOS | 37 / 35 |
 
 Android-host UI tests remain blocked on the known Compose resource-packaging failure recorded
 below. Its composition-root model tests run, and five of them are additionally blocked on the
 Robolectric-sandbox gap described in [Where things stand](#where-things-stand).
+
+`design-system` and `feature-settings-presentation` were re-measured the same way for the glass
+slider (Phase 16): 83/80 and 24/24, both green, with the `ttTheme` signature workaround applied
+locally to `SettingsScenarios.kt` and reverted. The 8 new design-system tests are the 8 unit
+tests in `GlassIntensityTest` and the 1 rendered test in `GlassIntensityRenderTest`; the delta
+from the 73/70 previously recorded here is 10 per host, so two pre-existing tests had been added
+to that module since this table was written without the table being corrected.
+
+`GlassIntensityTest` and `GlassIntensityRenderTest` were both **rewritten** during Phase 16 after
+the slider shipped, because both were asserting the defect described in [16.7](#167-the-defect-the-feature-reported-on-itself).
+The count went up because the replacement assertions are two in the unit test and one rendered
+test measuring three panels rather than two.
+
+`feature-projects-presentation` is 159 on all three hosts, re-measured from the JUnit XML with the
+`ttTheme` signature workaround applied locally and reverted — see the floating-button follow-up
+above. It runs with one pre-existing failure on JVM and iOS (`BoardLaneSnapTest`) and four on the
+Android host (that one plus three lane scenarios that do not fit Robolectric's window).
 
 ---
 
@@ -2278,6 +2296,93 @@ baseline rather than in a count taken from the build.
 
 ---
 
+## Follow-up — the floating create buttons covered the rows underneath them
+
+A user reported that the `+` on the projects screen sat on top of the delete button on the last
+card, making it impossible to remove a project.
+
+It was true, and it was arithmetic rather than a rendering accident. `ProjectsListScreen` and
+`ProjectBacklogScreen` each drew a 56dp `ttGlassAddButton` at `align(BottomEnd)`, padded by
+`boardBottomInset`/`screenGutterLarge` + `tabBarInset`, while the `LazyColumn` under them declared
+`contentPadding = PaddingValues(bottom = tabBarInset)` and nothing else. The circle therefore sat
+in the band the list never reserved, and a floating control is drawn *after* its content, so it
+also won the touch.
+
+`ProjectRow` puts its own actions bottom trailing (`Arrangement.spacedBy(ttSpacing.sm,
+Alignment.End)`), which makes the collision exact: on the projects list the measured rectangles
+were the button at `(952, 680)–(1008, 736)` and the last row's delete action at
+`(952, 713)–(996, 736)` — the delete button **entirely** inside the circle.
+
+Both create actions moved into the flow: the projects one into a header `Row` trailing
+`tab_projects`, the backlog one trailing the project switcher. Neither screen needed a top app bar
+— there is none in the shell, and `LocalTabBarScrollUnderInset` has no top counterpart to mirror.
+
+### What it cost, stated plainly
+
+The action now scrolls away with the title. On a long list you scroll up to add. That is the iOS
+large-title behaviour rather than the pinned `navigationBar`, and it was chosen deliberately over a
+pinned bar, which would have needed a top inset threaded through every scrolling screen's
+`contentPadding`. The alternative was a permanent overlay over the list.
+
+### The backlog was not the same defect, and the first test said so
+
+The backlog carried a button in the same place over a list with the same missing reservation, and
+the obvious assumption is that it covered the same thing. It did not. `WorkItemBacklogRow` lays its
+action row out with `Arrangement.spacedBy(ttSpacing.sm)` and **no** `Alignment.End`, so "Put on
+board" and "File away" sit at the *leading* edge — measured at x 42..237 on a 1008px window, while
+a bottom trailing control sits at x 964..1008. The first version of the backlog test asserted the
+add action missed those two buttons and passed against a button that was genuinely floating over
+the list.
+
+What the floating button actually intercepted there was the **row**, which is
+`Modifier.clickable(onClick = onPutOnBoard)` across its full width: tapping the bottom right of a
+backlog did nothing instead of filing the task to the board. The test was rewritten against the
+row, and its KDoc records the measurement so the wrong version cannot be re-derived.
+
+### Two tests that could not have caught it
+
+`theNewProjectButtonWorksWithRowsPresent` already existed and passed throughout. It asks whether
+the button can be *pressed*; the defect was that pressing *it* pressed something else. Both nodes
+were present, displayed and hittable at the same time.
+
+Neither screen had any assertion about *where* its action was. The new ones sweep every composed
+row rather than naming the last one, because which rows a `LazyColumn` composes is the viewport's
+decision and Robolectric's window is far smaller than the other two hosts — a test that named "the
+ninth row" would either fail on the smallest host or pass against the bug on the others.
+
+The backlog test scrolls to the end first. At scroll position zero the final rows are clipped away
+by the bottom of the window and a corner control overlaps nothing.
+
+Both were mutation-checked by restoring the floating button in place of the header action:
+`theNewProjectActionDoesNotCoverTheLastRowsDelete` fails with `create=Rect.fromLTRB(952.0, 680.0,
+1008.0, 736.0) remove=Rect.fromLTRB(952.0, 713.0, 996.0, 736.0)`, and
+`theAddActionDoesNotCoverTheLastRow` with `add=Rect.fromLTRB(964.0, 676.0, 1008.0, 720.0)
+row=Rect.fromLTRB(16.0, 630.0, 1008.0, 736.0)`.
+
+The backlog's `+` also has a second scenario, `theAddActionTrailsTheSwitcher`, because the overlap
+assertion alone would pass for a button placed *anywhere* clear of the rows — a top bar, a bottom
+bar, anywhere — and so does not pin down what was asked for.
+
+### Left standing, deliberately
+
+`ttGlassAddButton` has lost both of its callers and is now unused, and
+`ttSpacing.boardBottomInset` has lost its last production caller — `SpacingScaleTest` still reads
+it. Neither was removed here: deleting a shared primitive and retuning a named token are separate
+decisions from moving two buttons.
+
+`ttGlassAddButton` was not restyled either. `ttGlassIconButton` at `ttSpacing.iconButtonSize`
+(44dp) is already the compact circular glass action, and `ttActionIcons.add` already exists as the
+plus — drawn as a single twelve-point contour precisely because two overlapping bars would fill as
+a hole under this file's even-odd rule. So the header actions are the existing component with the
+existing glyph.
+
+That leaves them on a 44dp touch target. There is no documented 48dp floor in this repository: the
+token is documented as a circle's "visible and tappable diameter" and every icon action in the app
+already ships 44dp. Raising the floor is a change to that shared convention affecting every icon
+button and its layout, and it is worth doing deliberately rather than as a side effect.
+
+---
+
 ## Known product gaps carried over from the original
 
 Do not treat these as regressions.
@@ -2307,3 +2412,187 @@ Do not treat these as regressions.
    green, or the layering erodes the first time someone is in a hurry.
 5. **Session ordering** (9.3) — a `launch` instead of an awaited call silently
    reorders, and the resulting bug is a sign-in that appears to work.
+
+---
+
+## Phase 16 — the glass slider (`ttGlassSurface` learns an intensity)
+
+The user asked for a slider in Settings that sets how much glass effect the app shows, like the
+iOS option. Two decisions were asked about rather than guessed, because neither is recoverable
+from the repository: **continuous 0-100%** over discrete stops, and the **bottom of the travel
+cross-fades toward Reduce Transparency** rather than being a plain alpha reduction.
+
+### 16.1 Why it lives in `ttTheme` and not in a settings port
+
+`ShellPreferences` already holds `themeScheme` and `accentPalette`, persists them through
+`UserDefaultsStore`, and `NavigationHost` passes them plus callbacks into `SettingsScreen`. The
+glass amount follows that path exactly, so **no module and no dependency edge changed** and
+`verifyArchitectureGraph` / `verifyModuleImports` are untouched. It is deliberately not a
+settings-*domain* port: it is not a business rule, nothing in the domain needs it, and every
+surface in the app resolves an alpha. `ttTheme` grew a defaulted `glassIntensity` parameter and
+provides `LocalGlassIntensity`, which keeps the splash, the previews and every test host that
+does not ask for an amount painting the glass that shipped.
+
+### 16.2 The mapping, and the direction that is easy to get backwards
+
+**More glass means a lower fill alpha**, because glass is see-through and a solid fill is what
+Reduce Transparency means. At `0f` the fill is `alpha = 1f`; at `1f` it is exactly the
+measured value. The lens, the hairline and the fill's ramp all scale to nothing at `0f` — a lens
+exists to lighten a translucent fill, and a ramp over an opaque one is a gradient over nothing.
+
+### 16.3 The defect the rendered test found, and the unit test could not
+
+The cross-fade was first written as a fade of the fill's **floor**, with `ttGlassSurface`'s
+`fillAlpha` multiplying the result. Those look equivalent and are not: `ttGlassSurface` defaults
+`fillAlpha = ttGlass.FILL_ALPHA`, so an untinted surface's shipped alpha is
+`FILL_ALPHA * FILL_ALPHA` = **0.3025**, and fading its floor toward 1 before that multiplication
+left the bottom of the slider at **0.55** — translucent, which is the one thing it must not be.
+Measured off a rendered frame: the 0-intensity panel painted `#90a1b6` where the accent is
+`#34537a`.
+
+`GlassIntensityTest` was green throughout, because it calls `ttGlass.fillRamp` with
+`fillAlpha = 1f` — not the value the shipping caller passes. **The test was measuring the
+arithmetic rather than the arrangement**, which is the trap `GlassFillRampTest`'s own header
+warns about. The fix interpolates the *finished* alpha instead:
+
+```
+shipped = ((tint?.alpha ?: FILL_ALPHA) * fillAlpha).coerceIn(0f, 1f)
+alpha   = lerp(1f, shipped, intensity)
+```
+
+which reaches a true opaque `1.0` and still puts intensity `1f` on the previous arithmetic to
+the bit. Confirmed rendered, both appearances, both rasterisers: the 0-intensity panel now
+paints **exactly** the accent (`#34537a` light, `#5f6873` dark) and the full-intensity panel is
+unchanged from the pixels that shipped (`#cdd5df`, `#15171a`).
+
+### 16.4 The slider control, and the two things it got wrong first
+
+`ttSlider` is a hand-written glass slider: `Material` is not used in this package and a feature
+may not hand-roll fill, rim and thumb out of glass tokens. Two real defects were found by the
+scenarios rather than by reading the code:
+
+- **A tap did nothing.** The gesture was first `detectHorizontalDragGestures`, whose
+  `onDragStart` fires only once the touch slop is exceeded — so the control needed a *drag* to
+  respond at all. It is now an explicit `awaitEachGesture` that acts on the press.
+- **One drag wrote three times.** The commit fired from the press, from the pointer-up branch
+  *and* from a `finally`, which the code comment had excused as "harmless". Caught by counting
+  commits rather than by reading a value. There is now exactly one, in the `finally`, so a
+  cancelled gesture still persists what the thumb did.
+- `onValueChangeFinished` **takes the value** rather than closing over the caller's. The no-arg
+  shape makes the write depend on the caller having already recomposed, which a `StateFlow`
+  caller does and a plain-parameter caller does not; the slider knows the last value it emitted.
+- `preview` and `commit` are separate `ShellPreferences` methods because the slider is
+  continuous: the appearance follows the thumb every frame and the store sees one write.
+
+### 16.5 Measurements and mutations
+
+`GlassIntensityTest` (8 tests, unit — the last two added by [16.7](#167-the-defect-the-feature-reported-on-itself),
+which is also where this list stops being the full story): full intensity is the fill that shipped;
+a caller's tint keeps its own floor; zero intensity is opaque with no ramp; zero intensity is the
+neutral and *not* the accent; a fifth of the way down is still nearer the neutral; alpha falls
+monotonically across 21 steps; out-of-range clamps; the ramp fades by the measured amount.
+
+`GlassIntensityRenderTest` (1 test, rendered on both rasterisers, three panels on one frame): the
+bottom of the travel is an opaque neutral rather than absent, the 20% mark has not crossed to the
+accent, and full glass sits between the accent and the page.
+
+| mutation | caught by |
+| --- | --- |
+| floor ignores `intensity` | `no intensity is opaque`, `clamped`, `monotonic` |
+| fade ignores `intensity` | `no intensity is opaque` |
+| commit fires on every move | `a drag previews every step and persists once` |
+| commit uses the gesture's first value | `a tap…`, `a drag…` |
+| floor-fade (the 16.3 defect) | `the bottom of the slider is an opaque neutral rather than absent` |
+
+5 mutations, 5 caught. One was **missed on the first pass**: `alpha falls monotonically` passed
+against the floor-ignoring mutation, because a *constant* alpha also satisfies non-increasing.
+The test was at fault and was strengthened with a strict end-to-end decrease; it then caught it.
+
+### 16.6 What is deliberately unverified
+
+The slider is continuous, so there are 101 values. **The ends and the arithmetic between them are
+measured; the intermediate positions are not.** That caveat was written before the user reported
+[16.7](#167-the-defect-the-feature-reported-on-itself), and it is worth noting that the value the
+user actually tried — 20% — was among the unmeasured ones. [16.9](#169-still-unverified) states
+where that stands after the fix.
+
+### 16.7 The defect the feature reported on itself
+
+The user set the slider to 20% and reported that the app "gets too dark" and that it "changes the
+colour saturation" — asking whether it should only change the glass properties. It should, and it
+did not. Both halves of the report were correct and the cause was a single line.
+
+**What the arithmetic did.** `fillRamp` cross-faded only the fill's **alpha** toward 1. At 20%
+intensity in Light appearance the fill became an 0.86-alpha `#34537a`, compositing to about
+`#506b8c` over the page — and the ramp fade had already dropped to 0.08, so it was a flat slab.
+A large flat area of the accent navy reads as *both* darker and more saturated, which is exactly
+the two symptoms reported. The full travel was 30% alpha; 20% was 86%. The mapping was
+monotone and smooth and completely wrong about what it was interpolating.
+
+**What Reduce Transparency actually is.** On iOS, reducing transparency makes materials opaque
+and drops vibrancy — the accent tint is part of the *glass* vocabulary, so it is what has to go.
+The destination is a neutral material colour. The app already had one and was already using it:
+`ttSurface()` (`#F2F2F7` / `#1C1C1E`), which is what the sheet and switcher capsule pass as their
+solid `base`. The cross-fade was aiming at the accent because "increase opacity" and "become the
+accent" felt like the same direction. They are opposite.
+
+**The fix** is that the fill's colour crosses over as well as its alpha: `lerp(reducedSurface,
+top, intensity)`. At `1f` both interpolations are the identity, so the top of the slider is still
+the arrangement that shipped, bit for bit.
+
+**Measured, both appearances, both rasterisers, identical to the channel:**
+
+| intensity | Light | Dark |
+| --- | --- | --- |
+| 1f (unchanged) | `#cdd5df` | `#15171a` |
+| 0.2f (was `#506b8c`) | `#d2d8e3` | `#202125` |
+| 0f | `#f2f2f7` = `ttSurface()`, 0 channels | `#1c1c1e` = `ttSurface()`, 0 channels |
+| distance from neutral at 0.2f | 31 channels (was 158) | 7 channels (was 77) |
+
+**Why it shipped, which is the part worth keeping.** Every test was green, because every test
+asserted the accent:
+
+- `GlassIntensityTest` checked alpha, direction, monotonicity, clamping and the ramp. Alpha-only,
+  so structurally blind to the colour. It passed with `reducedSurface` deleted.
+- `GlassIntensityRenderTest` asserted `distance(zero, accent) <= 3/255` — "an opaque fill lands on
+  its colour" — where "its colour" had been written as the accent. It was **passing on the
+  premise that produced the bug**, and read that agreement as confirmation.
+- Two further rendered assertions (`zeroToCanvas > zeroToAccent * 4`, `fullToCanvas <
+  zeroToCanvas`) inferred *opacity* from a colour's distance to the page. That only works while the
+  fill is the accent; against an opaque neutral it fails by arithmetic, because a solid neutral is
+  *supposed* to sit near the page it came from. Discarded rather than re-tuned.
+
+So the replacement assertions had to establish two different things by two different means.
+Opacity is now **direct** — an opaque fill of a solid colour lands on it, so the 0-intensity pixel
+must equal `ttSurface()` within 3 channels, and a translucent fill or a hole cannot. See-through
+is now an **ordering** — a translucent fill must land strictly between the accent and the page and
+nearer the page, which avoids predicting an alpha and modelling the composite in a test whose
+subject is the composite. The colour claim is its own assertion, at 0f and at the reported 0.2f,
+in both files.
+
+`reducedSurface` is a **required** parameter with no default. A default would have been silently
+wrong for every caller that omitted it, which is the exact shape of the bug; `fillRamp`'s five
+call sites in `GlassFillRampTest` now thread an appearance-matched neutral rather than relying on a
+default they do not care about.
+
+### 16.8 Two more mutations, and what the numbers would have been
+
+Total for the phase: **7 mutations run, 7 caught.** The colour crossing was mutated back to the
+defect twice, once against each file, and both went red:
+
+| mutation | caught by | reported |
+| --- | --- | --- |
+| `crossed = top` (the defect) | `no intensity is the neutral surface and not the accent` | `expected <[242, 242, 247]> but was <[82, 108, 142]>` |
+| `crossed = top` (the defect) | `a fifth of the way down is still nearer the neutral than the accent` | `160 channels from the neutral and 0 from the accent` |
+| `crossed = top` (the defect) | `the bottom of the slider is an opaque neutral rather than absent` | `painted #34537a but the neutral is #f2f2f7, which is 190 channels away` |
+
+The alpha-only assertions in `GlassIntensityTest` **stayed green** through all three, which is the
+demonstration that the pre-existing suite could not have caught this and the reason the new
+assertions had to be about colour rather than a stronger version of the same arithmetic.
+
+### 16.9 Still unverified
+
+The three panels are the travel's ends and the reported 20%. The other 98 positions are an
+unmeasured blend of the two interpolations, which is the accepted cost of a continuous control
+and is unchanged by this fix — but it now interpolates *two* quantities rather than one, so the
+"unverified intermediate" caveat covers a surface with two moving parts instead of one.

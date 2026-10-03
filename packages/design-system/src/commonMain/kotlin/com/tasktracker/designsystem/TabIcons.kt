@@ -170,6 +170,41 @@ object ttActionIcons {
         solidRoundRect(4.0f, 10.5f, 20.0f, 13.5f, radius = 1.5f)
     }
 
+    /**
+     * A compact plus, for adding one item to a set.
+     *
+     * The counterpart of [remove], and drawn to sit with it: the same 4..20 span on both axes
+     * and the same 3-unit arm thickness, so the two read as a pair rather than as a plus and a
+     * minus of different weights. The corners are left square where [remove]'s are rounded,
+     * because a radius that small on a cross needs twelve arcs to stay a cross and reads as
+     * flat at 22dp either way.
+     *
+     * ## Why one contour and not two bars
+     *
+     * A plus looks like two overlapping rounded bars, and drawing it that way is the natural
+     * first move. It is also wrong here, and wrong *silently*: this file fills every glyph
+     * even-odd, and the arms overlap in the exact centre of the glyph, so the overlap would be
+     * inside two contours and fill as a hole. A thick plus with a small square cut out of its
+     * middle still reads as a plus at 22dp, so nothing on screen would say so. The cross is
+     * therefore one twelve-point contour, where every interior point is inside one contour and
+     * the fill rule has nothing to disagree with.
+     */
+    val add: ImageVector = icon("Add") {
+        moveTo(10.5f, 4.0f)
+        lineTo(13.5f, 4.0f)
+        lineTo(13.5f, 10.5f)
+        lineTo(20.0f, 10.5f)
+        lineTo(20.0f, 13.5f)
+        lineTo(13.5f, 13.5f)
+        lineTo(13.5f, 20.0f)
+        lineTo(10.5f, 20.0f)
+        lineTo(10.5f, 13.5f)
+        lineTo(4.0f, 13.5f)
+        lineTo(4.0f, 10.5f)
+        lineTo(10.5f, 10.5f)
+        close()
+    }
+
     /** A diagonal pencil, drawn as one compact filled silhouette. */
     val edit: ImageVector = icon("Edit") {
         moveTo(4.0f, 16.5f)
@@ -204,8 +239,50 @@ object ttActionIcons {
         solidRoundRect(12.5f, 11.0f, 14.0f, 17.0f, radius = 0.75f)
     }
 
+    /**
+     * A lidded archive box: a lid bar over an outlined body, with a label slot inside it.
+     *
+     * The verb this stands in for is *file away*, and it is the one action here that moves work
+     * somewhere rather than changing or destroying it - so it gets its own glyph rather than
+     * borrowing [trash]. Reusing the basket would tell the user the card's task is being
+     * deleted, and the archive round-trip test exists because filing away is a status move to
+     * `Closed` and not a deletion.
+     *
+     * Drawn as three separate contours on purpose, and the even-odd rule does the joining:
+     * the [solidRoundRect] lid sits above the body outline without touching it (4..7 against
+     * 8..20), so neither cancels the other, and the slot is a third contour wholly inside the
+     * body's cut-out - one crossing, so it fills. Overlapping the lid onto the body would put
+     * their shared band inside two contours and hole it, the same failure [add] documents.
+     */
+    val archive: ImageVector = icon("Archive") {
+        solidRoundRect(3.0f, 4.0f, 21.0f, 7.0f, radius = 1.0f)
+        outlinedRoundRect(4.5f, 8.0f, 19.5f, 20.0f, radius = 2.0f, stroke = 1.6f)
+        solidRoundRect(9.5f, 11.0f, 14.5f, 12.8f, radius = 0.9f)
+    }
+
+    /**
+     * A chevron pointing down, for a control that opens something.
+     *
+     * One contour, walked as the upper edge out to the right and the lower edge back, rather than
+     * two arms. The arms of a chevron meet at the apex, so drawing them as two separate shapes
+     * either leaves a notch where they join or overlaps them - and this file fills every glyph
+     * even-odd, so an overlap at the apex would be inside two contours and fill as a hole. A
+     * 3.5-unit vertical thickness is about 2.5 units across the diagonal, which is the 1.2dp
+     * stroke this reads as at the 14dp the switcher draws it, and the flat ends are deliberate:
+     * a chevron's terminals are cut square by every system that draws one.
+     */
+    val chevronDown: ImageVector = icon("ChevronDown") {
+        moveTo(3.0f, 8.0f)
+        lineTo(12.0f, 17.0f)
+        lineTo(21.0f, 8.0f)
+        lineTo(21.0f, 11.5f)
+        lineTo(12.0f, 20.5f)
+        lineTo(3.0f, 11.5f)
+        close()
+    }
+
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(edit, trash, remove)
+    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */

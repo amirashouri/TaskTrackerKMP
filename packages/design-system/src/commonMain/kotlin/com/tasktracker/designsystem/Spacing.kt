@@ -136,7 +136,13 @@ object ttSpacing {
      */
     val fieldStack: Dp = 16.dp
 
-    /** 32dp — a screen's outer gutter, where the safe area is not already providing one. */
+    /**
+     * 32dp — a screen's *vertical* outer gutter, where the safe area is not already providing
+     * one. Vertical only, and deliberately not the horizontal one: 32dp across a phone leaves a
+     * third of the width inside a card, so a board's lanes and a header row that both use it are
+     * inset past the point where the screen edge reads as the boundary. The horizontal gutter
+     * is [xxl], which is what every screen and lane uses.
+     */
     val screenGutterLarge: Dp = 32.dp
 
     /** 44dp — the board's top inset, below the tab and project switcher. */

@@ -9,10 +9,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -20,9 +27,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -57,6 +65,26 @@ import org.jetbrains.compose.resources.stringResource
  * The count is the column's own summary and nothing else uses it. A badge would compete
  * with a card's priority badge for the same visual weight at a smaller size, and the two
  * are not comparable - one counts, one grades.
+ *
+ * ## Why the heading floats on its own glass, and why the add action lives in it
+ *
+ * The heading used to be the first child of the lane's scroll, so it scrolled away the
+ * moment a lane had more than a screenful, and the lane's only "Add" control was a
+ * full-width button pinned to the bottom of the box. Once the lane's scroll region was
+ * extended to the bottom of the screen (so its cards pass *under* the tab bar - see
+ * `LocalTabBarScrollUnderInset`), that bottom button ended up sitting in the same band the
+ * tab bar owns, which is what put it in the wrong place.
+ *
+ * So the heading is now an overlay: a translucent glass slab pinned to the top of the lane,
+ * with the cards scrolling *underneath* it. It carries its own [ttGlassSurface] rather than
+ * relying on the lane's, and that is load-bearing rather than decorative - a card passing
+ * behind plain text is unreadable, and the same material the tab bar uses for the same job
+ * is what keeps the title legible over it. The slab's measured height becomes the scroll's
+ * top inset, so the first card rests below it while later ones pass behind it.
+ *
+ * The add action is a compact circular "+" at the slab's trailing edge. The scroll's bottom
+ * inset is unchanged and still does not depend on whether [onAddTask] is given; it is
+ * reserved for the tab bar, not for the button that used to sit there.
  */
 @Composable
 fun BoardColumnView(
@@ -82,41 +110,26 @@ fun BoardColumnView(
             .ttGlassCard()
             .testTag(BoardColumnTag(column.status)),
     ) {
-        // Inside the scroll, so it is scroll *range* rather than viewport inset: the lane is
-        // full height and now reaches the bottom of the screen, behind the floating tab bar, and
-        // this is what lets the last card in a lane be scrolled up out from under the glass.
+        // The slab's laid-out height, so the scroll can reserve exactly the room it covers.
+        // Zero on the first frame - nothing has been measured yet - which is the same trade
+        // the tab-bar inset makes: one recomposition later the content starts below the slab.
+        var headerHeightPx by remember { mutableStateOf(0) }
         val tabBarInset = LocalTabBarScrollUnderInset.current
+        val headerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
+
+        // Underneath, and first in the box so it draws below the slab. Full height, so the
+        // cards reach the bottom of the screen and can be scrolled up out from under both the
+        // slab and the floating tab bar - that is scroll *range* rather than viewport inset.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
-                .padding(ttSpacing.xl)
-                .padding(
-                    bottom = (if (onAddTask == null) ttSpacing.xl else ttSpacing.boardBottomInset) +
-                        tabBarInset,
-                ),
+                .padding(horizontal = ttSpacing.xl)
+                .padding(top = headerHeight + ttSpacing.sm)
+                .padding(bottom = ttSpacing.xl + tabBarInset),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                ttText(
-                    text = statusLabel(column.status),
-                    style = ttTypography.titleSmall,
-                    color = ttLabel(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                ttText(
-                    text = column.count.toString(),
-                    style = ttTypography.caption,
-                    color = ttLabelSecondary(),
-                    modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
-                )
-            }
             if (column.isEmpty) {
                 ttText(
                     text = stringResource(Res.string.board_empty_column),
@@ -135,17 +148,51 @@ fun BoardColumnView(
                 }
             }
         }
-        onAddTask?.let { addTask ->
-            ttGlassButton(
-                label = stringResource(Res.string.board_add_task),
-                onClick = addTask,
-                style = TTGlassButtonStyle(prominent = true),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
-                    .testTag(BoardColumnAddTaskTag(column.status)),
+
+        // On top: the floating title, on its own glass so a card scrolling behind it cannot
+        // swallow it. `onSizeChanged` sits outside the padding chain, so the height it reports
+        // is the whole slab including its outer margin - exactly the inset the scroll wants.
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { headerHeightPx = it.height }
+                .padding(horizontal = ttSpacing.sm)
+                .padding(top = ttSpacing.sm)
+                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+                .padding(
+                    start = ttSpacing.md,
+                    end = ttSpacing.xs,
+                    top = ttSpacing.xs,
+                    bottom = ttSpacing.xs,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        ) {
+            ttText(
+                text = statusLabel(column.status),
+                style = ttTypography.titleSmall,
+                color = ttLabel(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // Takes the remaining width, which is what pins the count and the "+" to
+                // the trailing edge however long the title is.
+                modifier = Modifier.weight(1f),
             )
+            ttText(
+                text = column.count.toString(),
+                style = ttTypography.caption,
+                color = ttLabelSecondary(),
+                modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
+            )
+            onAddTask?.let { addTask ->
+                ttGlassIconButton(
+                    image = ttActionIcons.add,
+                    contentDescription = stringResource(Res.string.board_add_task),
+                    onClick = addTask,
+                    modifier = Modifier.testTag(BoardColumnAddTaskTag(column.status)),
+                )
+            }
         }
     }
 }

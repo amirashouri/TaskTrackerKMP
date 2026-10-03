@@ -55,7 +55,7 @@ class GlassFillRampTest {
         for (appearance in appearances) {
             for (fillAlpha in fillAlphas) {
                 for (tint in tints) {
-                    val stops = ttGlass.fillRamp(tint, appearance.canvas, appearance.accent, fillAlpha)
+                    val stops = ttGlass.fillRamp(tint, appearance.canvas, appearance.accent, fillAlpha, reducedSurface = appearance.surface)
                     val bottom = over(appearance.canvas, stops.last(), stops.last().alpha)
                     val separation = minChannelSeparation(bottom, appearance.canvas)
                     assertTrue(
@@ -84,7 +84,7 @@ class GlassFillRampTest {
     fun `the fill holds one alpha from its top edge to its bottom`() {
         for (fillAlpha in fillAlphas) {
             for (tint in tints) {
-                val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, fillAlpha)
+                val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, fillAlpha, reducedSurface = LIGHT_SURFACE)
                 assertEquals(
                     stops.first().alpha,
                     stops.last().alpha,
@@ -108,7 +108,7 @@ class GlassFillRampTest {
     @Test
     fun `the fill is lit at the top and calmer at the bottom`() {
         for (appearance in appearances) {
-            val stops = ttGlass.fillRamp(null, appearance.canvas, appearance.accent, FILL_ALPHA_RESTING)
+            val stops = ttGlass.fillRamp(null, appearance.canvas, appearance.accent, FILL_ALPHA_RESTING, reducedSurface = appearance.surface)
             val top = stops.first()
             val bottom = stops.last()
             val topDistance = minChannelSeparation(top, appearance.canvas)
@@ -138,7 +138,7 @@ class GlassFillRampTest {
     @Test
     fun `a caller's tint is used at its own alpha`() {
         val tint = TaskTrackerAccent.Light.copy(alpha = ttGlass.TINT_ALPHA)
-        val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, FILL_ALPHA_RESTING)
+        val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, FILL_ALPHA_RESTING, reducedSurface = LIGHT_SURFACE)
 
         assertEquals(
             channel(ttGlass.TINT_ALPHA),
@@ -164,6 +164,7 @@ class GlassFillRampTest {
             canvas = CANVAS_LIGHT,
             accent = TaskTrackerAccent.Light,
             fillAlpha = ttGlass.PROMINENT_TINT_ALPHA / ttGlass.FILL_ALPHA,
+            reducedSurface = LIGHT_SURFACE,
         )
 
         for (stop in stops) {
@@ -207,7 +208,14 @@ class GlassFillRampTest {
     /** One channel as the 0-255 integer it is stored as, because it is stored as one. */
     private fun channel(value: Float): Int = round(value * CHANNEL_SCALE).toInt()
 
-    private class Appearance(val name: String, val accent: Color, val canvas: Color)
+    /**
+     * Carries [surface] as well as the accent and canvas, because `fillRamp` now takes the
+     * neutral it arrives at when transparency is reduced. Every assertion in this file is made at
+     * full intensity, where that argument cannot affect the result — it is threaded through
+     * rather than defaulted because a defaulted neutral was how the accent became the end of the
+     * travel, and a signature that permits the omission repeats the mistake.
+     */
+    private class Appearance(val name: String, val accent: Color, val canvas: Color, val surface: Color)
 
     /**
      * Every pairing the app can actually paint, on the same reasoning as [AccentContrastTest]: an
@@ -215,9 +223,9 @@ class GlassFillRampTest {
      * so both are here rather than one representative value.
      */
     private val appearances = listOf(
-        Appearance("light", TaskTrackerAccent.Light, CANVAS_LIGHT),
-        Appearance("dark iOS", TaskTrackerAccent.Dark, CANVAS_DARK_IOS),
-        Appearance("dark Android", TaskTrackerAccent.Dark, CANVAS_DARK_ANDROID),
+        Appearance("light", TaskTrackerAccent.Light, CANVAS_LIGHT, LIGHT_SURFACE),
+        Appearance("dark iOS", TaskTrackerAccent.Dark, CANVAS_DARK_IOS, DARK_SURFACE),
+        Appearance("dark Android", TaskTrackerAccent.Dark, CANVAS_DARK_ANDROID, DARK_SURFACE),
     )
 
     /** No tint, a full-alpha tint, and a tint already knocked down to the floor. */
@@ -237,6 +245,10 @@ class GlassFillRampTest {
         const val FILL_ALPHA_RESTING = 1f
 
         const val CHANNEL_SCALE = 255f
+
+        /** The app's own neutral, which is where a glass fill arrives at zero intensity. */
+        val LIGHT_SURFACE = ttFixedColours.surface(false)
+        val DARK_SURFACE = ttFixedColours.surface(true)
 
         val CANVAS_LIGHT = Color(0xFFFFFFFF)
         val CANVAS_DARK_IOS = Color(0xFF000000)

@@ -75,7 +75,10 @@ fun ProjectArchiveScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
+            // Top only: bottom padding here would shrink the *list's viewport* and stop it short of the
+            // screen's bottom edge. The clearance is the list's `contentPadding`.
+            .padding(horizontal = ttSpacing.xxl)
+            .padding(top = ttSpacing.screenGutterLarge)
             .testTag(ProjectArchiveScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
@@ -97,7 +100,7 @@ fun ProjectArchiveScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().testTag(ProjectArchiveListTag),
-                contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current),
+                contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
             ) {
                 projection.months.forEach { month ->

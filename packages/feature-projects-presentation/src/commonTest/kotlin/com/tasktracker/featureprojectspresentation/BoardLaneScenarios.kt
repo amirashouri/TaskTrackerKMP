@@ -2,12 +2,20 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.Dp
+import com.tasktracker.designsystem.DISC_TAG
+import com.tasktracker.designsystem.OVERFLOW_TAG
+import com.tasktracker.designsystem.ttAvatarSize
+import com.tasktracker.designsystem.ttAvatarStackDefaults
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -63,13 +71,19 @@ object BoardLaneScenarios {
      * The counterpart to the scenario above, and the reason the row is not simply given
      * `padding(0.dp)`: reaching the edge is what the *viewport* should do, and lane 0 is not
      * the viewport's left edge. Without a leading spacer it would sit against the bezel.
+     *
+     * Held against [ttSpacing.xxl] and not against a literal, because the point is that the
+     * gutter is *the same token* the rest of the screen insets by - this used to be held at
+     * [ttSpacing.screenGutterLarge], which is the app's *vertical* inset, and was red for the
+     * whole of that drift. The assertion still has teeth: it fails if the gutter moves back
+     * onto the viewport as padding, or if the row's spacer is given a different token.
      */
     val theFirstLaneRestsAGutterFromTheLeftEdge: suspend ComposeUiTest.() -> Unit = {
         boardShowing()
 
         val row = onNodeWithTag(ProjectBoardColumnsTag).fetchSemanticsNode()
         val todo = onNodeWithTag(BoardColumnTag(WorkItemStatus.Todo)).fetchSemanticsNode()
-        val gutter = densityPixels(ttSpacing.screenGutterLarge)
+        val gutter = densityPixels(ttSpacing.xxl)
 
         assertEquals(
             gutter,
@@ -78,8 +92,15 @@ object BoardLaneScenarios {
         )
     }
 
-    /** The switcher, which is not the row, is still inset from both edges. */
-    val theSwitcherIsStillInsetFromTheEdges: suspend ComposeUiTest.() -> Unit = {
+    /**
+     * The switcher, which is not the row, is still inset from the left.
+     *
+     * It used to be asserted at both edges, which only made sense while the switcher was a
+     * full-width slab. It is a compact, content-width pill now - sized to the project name it
+     * names - so there is no trailing edge to hold 16dp clear, and asserting one would be
+     * asserting the stretch this change removed.
+     */
+    val theSwitcherIsInsetFromTheLeftEdge: suspend ComposeUiTest.() -> Unit = {
         setContent {
             Themed {
                 ProjectBoardScreen(
@@ -96,12 +117,113 @@ object BoardLaneScenarios {
             }
         }
 
-        val screen = onRoot().fetchSemanticsNode().size
         val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode()
-        val gutter = densityPixels(ttSpacing.screenGutterLarge)
 
-        assertEquals(gutter, switcher.boundsInRoot.left, "insets itself from the left")
-        assertEquals(screen.width.toFloat() - gutter, switcher.boundsInRoot.right, "and from the right")
+        assertEquals(
+            densityPixels(ttSpacing.xxl),
+            switcher.boundsInRoot.left,
+            "insets itself from the left by the screen's gutter",
+        )
+    }
+
+    /**
+     * The switcher is a pill around the project name, not a bar across the screen.
+     *
+     * The regression this holds: the switcher was `fillMaxWidth`, so a 390dp screen carried a
+     * ~358dp glass slab holding a 26dp monogram, a short name and a chevron - a surface that
+     * read as empty and left the board's own add-task action looking like the less important of
+     * the two. Asserted as a *bound* rather than as an appearance, because "does not look empty"
+     * is not a fact and "is 240dp or narrower" is.
+     */
+    val theSwitcherIsNoWiderThanItsContentAllows: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(onOpenSwitcher = {})
+
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode()
+
+        assertTrue(
+            switcher.boundsInRoot.width <= densityPixels(switcherWidthMax),
+            "the pill is capped, so a long project name cannot take the header's whole width",
+        )
+        assertTrue(
+            switcher.boundsInRoot.width <
+                onRoot().fetchSemanticsNode().size.width - 2 * densityPixels(ttSpacing.xxl),
+            "and it is content-width rather than filled: it does not span the screen's gutters",
+        )
+    }
+
+    /**
+     * The header's discs overlap, and each one keeps part of itself showing.
+     *
+     * The property is the *overlap*, asserted as geometry: each disc after the first must start
+     * before the one before it ends, or the "stack" is a row of separate circles and the feature
+     * is a list. `zIndex` is the other half and cannot be read off the tree, so what this holds
+     * is the spacing; the paint order is held by the pixels, in `BoardHeaderStackPixelTest`.
+     *
+     * Four discs is the cap, and the count chip is what makes the cap honest - a stack that
+     * quietly dropped names would be worse than one that admits it stopped, so the fifth
+     * assignee has to be visible *as a number*.
+     */
+    val theAssigneeStackOverlapsAndCountsWhatItHides: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(projection = BoardProjection(project = ViewPreviewData.seededProject, items = MANY_ASSIGNEES))
+
+        // Sorted by `left` before anything is compared, and that is not tidiness. The semantics
+        // tree hands these nodes back in an order this test does not control, and an unsorted
+        // list compared pairwise passes for *any* spacing: read right to left, every disc starts
+        // before the one to its right ends. This assertion was green with a 100dp gap between
+        // 24dp discs before the sort went in.
+        val discs = onAllNodesWithTag(DISC_TAG, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .map { it.boundsInRoot }
+            .sortedBy { it.left }
+
+        assertEquals(
+            ttAvatarStackDefaults.maxVisible,
+            discs.size,
+            "exactly maxVisible discs, whatever the project actually holds",
+        )
+        assertEquals(
+            1,
+            onAllNodesWithTag(OVERFLOW_TAG, useUnmergedTree = true).fetchSemanticsNodes().size,
+            "and one chip for the names it is not drawing",
+        )
+        // Six names, four drawn, so the chip has to say two. A stack that quietly dropped names
+        // would look correct and be wrong, and this is the only place that shows it.
+        onNodeWithText("+2").assertIsDisplayed()
+        discs.zipWithNext().forEach { (left, right) ->
+            assertTrue(
+                right.left < left.right,
+                "a disc starts at ${right.left} and the one before it ends at ${left.right}: the " +
+                    "stack is a row of separate circles, not a stack",
+            )
+        }
+        // The stride *is* the visible width, and that identity is the whole geometry: each disc
+        // covers the 8dp the next one starts inside it, so what is left showing is the distance
+        // between two lefts. A stack built with a positive gap has a stride of 24 and shows
+        // nothing, which is why this is asserted rather than assumed from the negative spacing.
+        val stride = discs[1].left - discs.first().left
+        assertEquals(
+            densityPixels(ttAvatarStackDefaults.overlapVisible),
+            stride,
+            absoluteTolerance = 1f,
+        )
+        assertEquals(
+            densityPixels(ttAvatarSize.avatar),
+            discs.first().width,
+            absoluteTolerance = 1f,
+        )
+    }
+
+    /**
+     * A board nobody has assigned anything to shows no stack at all.
+     *
+     * Not an empty one, and not a placeholder disc. The card's rule is the same one - "nobody" is
+     * not a fact worth the space - and an empty stack on the trailing end of the header would
+     * read as a rendering failure rather than as the absence of something.
+     */
+    val anUnassignedBoardHasNoStack: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(projection = BoardProjection(project = ViewPreviewData.seededProject, items = UNASSIGNED))
+
+        onAllNodesWithTag(ProjectBoardAssigneesTag).assertCountEquals(0)
     }
 
     /** Every lane is still drawn, edge-to-edge layout notwithstanding. */
@@ -120,7 +242,10 @@ object BoardLaneScenarios {
 }
 
 @OptIn(ExperimentalTestApi::class)
-private fun ComposeUiTest.boardShowing(projection: BoardProjection = ViewPreviewData.boardProjection()) {
+private fun ComposeUiTest.boardShowing(
+    projection: BoardProjection = ViewPreviewData.boardProjection(),
+    onOpenSwitcher: (() -> Unit)? = null,
+) {
     setContent {
         Themed {
             ProjectBoardScreen(
@@ -132,6 +257,7 @@ private fun ComposeUiTest.boardShowing(projection: BoardProjection = ViewPreview
                 onFileAway = {},
                 onMove = { _, _ -> },
                 onDismissError = {},
+                onOpenSwitcher = onOpenSwitcher,
             )
         }
     }
@@ -148,3 +274,22 @@ private fun ComposeUiTest.boardShowing(projection: BoardProjection = ViewPreview
  */
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.densityPixels(dp: Dp): Float = with(density) { dp.toPx() }
+/** Six names, because the cap is four and the count chip has to have something to count. */
+private val FIRST_NAMES = listOf("Amir", "Ana", "Priya", "Sam", "Wren", "Yusuf")
+
+/**
+ * Six named assignees on otherwise ordinary cards, for the cap.
+ *
+ * Drawn from [ViewPreviewData]'s own items with the assignee rewritten, rather than invented, so
+ * the cards stay the ones every other board scenario renders - the stack is then the only thing
+ * that differs between this and an ordinary board.
+ *
+ * Declared after [FIRST_NAMES] because these are top-level `val`s: initialisation order is the
+ * order they are written in, so a list that reads another top-level `val` has to come second or
+ * it reads it as null.
+ */
+private val MANY_ASSIGNEES: List<WorkItem> = ViewPreviewData.workItems
+    .mapIndexed { index, item -> item.copy(assignee = "${FIRST_NAMES[index % FIRST_NAMES.size]} Person") }
+
+/** The same cards with nothing assigned, which is a state a real project can be in. */
+private val UNASSIGNED: List<WorkItem> = ViewPreviewData.workItems.map { it.copy(assignee = null) }

@@ -30,7 +30,8 @@ import com.tasktracker.designsystem.TTSwipeToRevealRow
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassAddButton
+import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -45,9 +46,9 @@ import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_delete
 import com.tasktracker.resources.project_archived_notice_counted
 import com.tasktracker.resources.project_deleted_notice
-import com.tasktracker.resources.project_new
 import com.tasktracker.resources.project_already_archived
 import com.tasktracker.resources.project_archived_notice
+import com.tasktracker.resources.project_new
 import com.tasktracker.resources.project_remove_archive
 import com.tasktracker.resources.project_remove_body_clear
 import com.tasktracker.resources.project_remove_body_outstanding
@@ -113,15 +114,14 @@ fun ProjectsListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge),
+                // Top only: bottom padding here would shrink the *list's viewport* and stop it short of the
+                // screen's bottom edge, which is the bound the scroll is supposed to reach. The
+                // clearance that keeps the last row off the glass is the list's `contentPadding`.
+                .padding(horizontal = ttSpacing.xxl)
+                .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            ttText(
-                text = stringResource(Res.string.tab_projects),
-                style = ttTypography.largeTitle,
-                color = ttLabel(),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            ProjectsHeader(onNewProject = onNewProject)
             errorMessage?.let { message ->
                 ProjectsErrorBanner(message = message, onDismiss = onDismissError)
             }
@@ -159,7 +159,9 @@ fun ProjectsListScreen(
                     // `contentPadding` is measured against that — padding is laid out inside the
                     // viewport, so a viewport that stopped at the bar would reserve nothing useful.
                     modifier = Modifier.weight(1f).testTag(ProjectsListTag),
-                    contentPadding = PaddingValues(bottom = tabBarInset),
+                    contentPadding = PaddingValues(
+                        bottom = ttSpacing.xl + tabBarInset,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
                     items(rows, key = { it.summary.id.stringValue }) { row ->
@@ -185,24 +187,6 @@ fun ProjectsListScreen(
                     }
                 }
             }
-        }
-
-        // Floats over the list rather than sitting under it in the column, which is what lets the
-        // list scroll all the way to the bottom edge of the screen. In the column it was the last
-        // child, so the list's viewport ended at the button and no row could ever reach the glass
-        // — which is the same arrangement the backlog's add button already uses.
-        if (onNewProject != null) {
-            ttGlassAddButton(
-                contentDescription = stringResource(Res.string.project_new),
-                onClick = onNewProject,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    // The gutter, then the bar's footprint: this button used to be measured from
-                    // the bar's top edge because the column ended there. It is measured from the
-                    // bottom of the screen now, and the two offsets are the same distance apart.
-                    .padding(end = ttSpacing.xxl, bottom = ttSpacing.screenGutterLarge + tabBarInset)
-                    .testTag(ProjectsListNewTag),
-            )
         }
     }
 
@@ -236,6 +220,61 @@ fun ProjectsListScreen(
                 onDismissRemove()
             },
         )
+    }
+}
+
+/**
+ * The page title, with the create action in its trailing section.
+ *
+ * ## Why this is not a floating button
+ *
+ * It used to be one, in the bottom trailing corner, and that was a bug rather than a
+ * preference. The list's `contentPadding` reserves the tab bar and nothing else, so the last row
+ * was laid out *underneath* a 56dp circle that also won the touch. A row's own actions are
+ * bottom trailing, so the one thing the circle covered was the delete button on the last card -
+ * on exactly the cards long enough to reach the bottom of the viewport. The backlog's button had
+ * the same shape and the same consequence.
+ *
+ * A floating control has to be paid for twice: once in the layout that reserves space for it and
+ * once in the pointer target that has to be aimed past it. Every screen that carries one pays
+ * both costs eventually, and the reservation is the one that gets forgotten. An action in the
+ * header has neither cost, because there is nothing underneath it to cover.
+ *
+ * ## Why the action scrolls away with the title
+ *
+ * That is the trade this makes, and it is deliberate: on a long list you scroll up to add. It
+ * is the iOS large-title behaviour rather than the pinned navigation bar, and it is the right
+ * one here because a projects list is short and the alternative is a permanent overlay over the
+ * list. A pinned bar would need a `LocalTopBarScrollUnderInset` to mirror
+ * `LocalTabBarScrollUnderInset` and every scrolling screen's `contentPadding` updated with it.
+ */
+@Composable
+private fun ProjectsHeader(
+    onNewProject: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+    ) {
+        ttText(
+            text = stringResource(Res.string.tab_projects),
+            style = ttTypography.largeTitle,
+            color = ttLabel(),
+            modifier = Modifier.weight(1f),
+        )
+        // Absent rather than disabled when the host has no create action: a greyed-out circle
+        // with no explanation is worse than no circle, and the host already knows whether it can
+        // create a project.
+        if (onNewProject != null) {
+            ttGlassIconButton(
+                image = ttActionIcons.add,
+                contentDescription = stringResource(Res.string.project_new),
+                onClick = onNewProject,
+                modifier = Modifier.testTag(ProjectsListNewTag),
+            )
+        }
     }
 }
 

@@ -62,6 +62,23 @@ class ShellPreferences(
     val accentPalette: StateFlow<AccentPalette> = _accentPalette.asStateFlow()
 
     /**
+     * How much of the glass material the app shows, as a fraction in `0f..1f`.
+     *
+     * Lives beside the appearance preferences rather than in the settings *domain*, because it
+     * is not a business rule and nothing about the domain needs to know it exists: it is read
+     * by the design system at the point it resolves an alpha, and every surface in the app
+     * resolves one. `1f` is the default and the whole reason the measured glass numbers in
+     * `ttGlass` are still valid — see `LocalGlassIntensity`.
+     *
+     * Clamped on the way in and on the way out. A slider is the only writer, but the store is
+     * not: a hand-edited value, or a future caller that passes a percentage, must not be able
+     * to hand the design system an alpha outside `0f..1f`, which `lerp` past its endpoints
+     * without complaint.
+     */
+    private val _glassIntensity = MutableStateFlow(1f)
+    val glassIntensity: StateFlow<Float> = _glassIntensity.asStateFlow()
+
+    /**
      * The remembered forced-offline intent.
      *
      * Held separately from the settings model's own flag because the model is rebuilt every
@@ -89,6 +106,13 @@ class ShellPreferences(
         _accentPalette.value = AccentPalette.fromStoredValue(
             runCatching { store.value(ACCENT_PALETTE_KEY) }.getOrNull(),
         )
+        // Parsed rather than defaulted through a nullable: a stored value that will not parse
+        // is a user who gets full glass, which is the appearance they had before they ever
+        // touched the slider. Same reasoning as the reads above — one bad key must not cost
+        // them the others.
+        _glassIntensity.value = runCatching {
+            store.value(GLASS_INTENSITY_KEY)?.toFloatOrNull()
+        }.getOrNull()?.coerceIn(0f, 1f) ?: 1f
 
         val offline = runCatching { store.value(FORCE_OFFLINE_KEY) }.getOrNull()
         _forceOffline.value = offline == TRUTHY
@@ -126,6 +150,32 @@ class ShellPreferences(
     }
 
     /**
+     * Applies a new glass amount *without* persisting it.
+     *
+     * Split from [commitGlassIntensity] because the slider is continuous: the appearance has to
+     * follow the thumb on every frame of a drag, and the store has to see one write when the
+     * finger lifts. One method doing both would put a disk write behind every frame.
+     */
+    fun previewGlassIntensity(intensity: Float) {
+        _glassIntensity.value = intensity.coerceIn(0f, 1f)
+    }
+
+    /**
+     * Applies and persists the glass amount the user settled on.
+     *
+     * Clamped on the way in, because the store is not only written by the slider: a stored
+     * value that has been hand-edited, or a caller that passes a percentage, must not be able
+     * to hand the design system an alpha outside `0f..1f`, which `lerp` walks past its
+     * endpoints without complaint. State first, write regardless — same reasoning as
+     * [setThemeScheme]: a full disk should not make the slider inert.
+     */
+    suspend fun commitGlassIntensity(intensity: Float) {
+        val clamped = intensity.coerceIn(0f, 1f)
+        _glassIntensity.value = clamped
+        runCatching { store.set(clamped.toString(), GLASS_INTENSITY_KEY) }
+    }
+
+    /**
      * Records the forced-offline intent, keeping the state and the store in step.
      *
      * The caller dispatches the intent to the settings port; this only remembers it. Split
@@ -159,6 +209,17 @@ class ShellPreferences(
 
         /** Verbatim to keep the device appearance choice outside sign-out clearing. */
         const val ACCENT_PALETTE_KEY: String = "com.tasktracker.settings.accentPalette"
+
+        /**
+         * The glass amount, stored as the float's own `toString` rather than as an integer
+         * percentage.
+         *
+         * A fraction because that is what the design system interpolates on: rounding to a
+         * percentage at the storage layer would put a quantisation step between the user's
+         * thumb and the alpha, and the slider would visibly stick at the ends of every
+         * percent.
+         */
+        const val GLASS_INTENSITY_KEY: String = "com.tasktracker.settings.glassIntensity"
 
         /** Verbatim, and out of `DefaultsKey` for the same reason. */
         const val FORCE_OFFLINE_KEY: String = "com.tasktracker.settings.forceOffline"

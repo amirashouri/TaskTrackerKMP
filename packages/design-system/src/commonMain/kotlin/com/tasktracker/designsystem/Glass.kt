@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.util.lerp as lerpFloat
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -291,16 +292,66 @@ object ttGlass {
      * [fillAlpha] scales that floor, which is how [PROMINENT_TINT_ALPHA] is reached without a
      * second code path: the ratio is passed in and the product is clamped, so the stops are
      * legal colours even when the caller asks for more than the floor can carry.
+     *
+     * [intensity] is the user's glass setting, and it is a parameter rather than a
+     * `compositionLocalOf` read *inside* here for one reason: this function is pure, and the
+     * tests in `GlassFillRampTest` call it directly because two of the three defects that
+     * lived in this arithmetic were invisible to every other test in the package. A function
+     * that reads ambient composition cannot be called from a plain unit test without a
+     * composition, which would put the arithmetic back behind a renderer. Defaulted to `1f`,
+     * so every existing call and every existing assertion is unchanged.
+     *
+     * It enters as a cross-fade toward opaque rather than as a multiplier on the result,
+     * because "less glass" and "more transparent" are the same request but not the same
+     * arithmetic: multiplying `0.22` by a smaller number walks the fill toward *invisible*,
+     * which is a hole in the page. Interpolating the floor from `1f` down to the measured
+     * value walks it toward *solid*, which is Reduce Transparency.
      */
-    fun fillRamp(tint: Color?, canvas: Color, accent: Color, fillAlpha: Float): List<Color> {
+    fun fillRamp(
+        tint: Color?,
+        canvas: Color,
+        accent: Color,
+        fillAlpha: Float,
+        intensity: Float = 1f,
+        reducedSurface: Color,
+    ): List<Color> {
         val top = tint ?: accent
         // Clamped rather than left over 1: the unclamped product was how a prominent control
         // reached opacity, and it left the stops holding an alpha no other draw path in the
         // package produces. `coerceIn` also keeps a caller passing 0 from inverting the ramp.
-        val alpha = ((tint?.alpha ?: FILL_ALPHA) * fillAlpha).coerceIn(0f, 1f)
+        //
+        // This is the alpha the app painted before the slider existed, computed first and
+        // *then* cross-faded — which is the order that matters. Fading the floor and letting
+        // [fillAlpha] multiply the result looks equivalent and is not: `ttGlassSurface` defaults
+        // [fillAlpha] to [FILL_ALPHA], so an untinted surface's shipped alpha is
+        // `FILL_ALPHA * FILL_ALPHA` = 0.3025, and fading its floor toward 1 and then multiplying
+        // by 0.55 again left the bottom of the slider at 0.55 — translucent, which is the one
+        // thing it must not be. Measured: that version rendered #90a1b6 where the accent is
+        // #34537a. Interpolating the finished alpha reaches a true opaque 1.0 and still puts
+        // intensity 1 exactly on the arithmetic above, to the bit.
+        val shipped = ((tint?.alpha ?: FILL_ALPHA) * fillAlpha).coerceIn(0f, 1f)
+        val i = intensity.coerceIn(0f, 1f)
+        val alpha = lerpFloat(1f, shipped, i)
+        // The colour crosses over as well, and this is the second half of what Reduce
+        // Transparency means. Fading only the *alpha* toward 1 makes every surface an opaque
+        // slab of the **accent** — measured at 20% intensity in Light appearance, an 0.86-alpha
+        // #34537a compositing to #506b8c over the page, which reads as the whole app going
+        // dark and gaining a colour cast. That is the opposite of reducing transparency: the
+        // accent *is* the glass vocabulary, and it is what has to go. So the colour travels to
+        // [reducedSurface], the app's own neutral for a solid surface — the same colour
+        // `ttGlassSurface`'s `base` is given by the sheet and the switcher capsule.
+        //
+        // At `i = 1f` both interpolations are the identity, so the top of the slider is the
+        // arrangement that shipped, unchanged.
+        //
+        // `reducedSurface` has no default on purpose. A defaulted neutral would have been
+        // silently wrong for every caller that did not pass one — an omitted argument is exactly
+        // how the accent came to be the end of the travel in the first place, and a signature
+        // that permits the mistake is a signature that will repeat it.
+        val crossed = lerp(reducedSurface, top, i)
         return listOf(
-            top.copy(alpha = alpha),
-            lerp(top, canvas, FILL_FADE).copy(alpha = alpha),
+            crossed.copy(alpha = alpha),
+            lerp(crossed, canvas, FILL_FADE * i).copy(alpha = alpha),
         )
     }
 }
@@ -336,6 +387,7 @@ fun Modifier.ttGlassSurface(
 ): Modifier {
     val accent = ttAccent()
     val canvas = ttCanvas()
+    val intensity = LocalGlassIntensity.current
 
     // Two different washes, because there are two different things being modelled. Without a
     // base the fill *is* the glass, so it runs from the tint at the top to a calmer version of
@@ -345,10 +397,20 @@ fun Modifier.ttGlassSurface(
     // arrangement. In the second case `fillAlpha` does not apply, because the tint's job is done
     // by the base.
     val wash = if (base == null) {
-        ttGlass.fillRamp(tint = tint, canvas = canvas, accent = accent, fillAlpha = fillAlpha)
+        ttGlass.fillRamp(
+            tint = tint,
+            canvas = canvas,
+            accent = accent,
+            fillAlpha = fillAlpha,
+            intensity = intensity,
+            // Where the fill arrives as transparency is reduced: the app's neutral, not the
+            // accent. Resolved here rather than inside `fillRamp` so that stays a pure function
+            // of its arguments and the neutral is a token the caller can vary.
+            reducedSurface = ttSurface(),
+        )
     } else {
         listOf(
-            Color.White.copy(alpha = ttGlass.LENS_ALPHA),
+            Color.White.copy(alpha = ttGlassLensAlpha()),
             Color.Transparent,
         )
     }
@@ -388,7 +450,7 @@ fun Modifier.ttGlassSurface(
         // is true of white everywhere and is what makes the surface read as raised.
         .border(
             width = borderWidth,
-            color = Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA),
+            color = Color.White.copy(alpha = ttGlassHairlineAlpha()),
             shape = shape,
         )
 }
@@ -484,6 +546,7 @@ fun <Option> TTGlassFlowPicker(
 ) {
     val accent = ttAccent()
     val canvas = ttCanvas()
+    val intensity = LocalGlassIntensity.current
     val density = LocalDensity.current
     val positions = remember { mutableStateMapOf<Option, IntRect>() }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -521,21 +584,27 @@ fun <Option> TTGlassFlowPicker(
             .onGloballyPositioned { containerCoordinates = it },
     ) {
         if (selectedBounds != null) {
-            Box(
-                modifier = Modifier
-                    .offset(x = lensX, y = lensY)
-                    .size(lensWidth, lensHeight)
-                    .clip(CircleShape)
-                    .drawBehind {
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = ttGlass.TAB_LENS_ALPHA),
-                                    Color.White.copy(
-                                        alpha = ttGlass.TAB_LENS_ALPHA * (1f - ttGlass.TAB_LENS_FADE),
-                                    ),
-                                ),
+Box(
+        modifier = Modifier
+            .offset(x = lensX, y = lensY)
+            .size(lensWidth, lensHeight)
+            .clip(CircleShape)
+            .drawBehind {
+                // The lens over the selected tab is scaled by the glass intensity as a whole,
+                // not resolved through a `ttGlass*` accessor, because it is a bare `drawBehind`
+                // rather than a `ttGlassSurface` — there is no fill under it to cross-fade from.
+                // What it shares is the reason the wash goes to nothing at `0f`: it is light
+                // catching a dome, and an opaque tab bar has no dome to catch it.
+                val lensAlpha = ttGlass.TAB_LENS_ALPHA * intensity.coerceIn(0f, 1f)
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = lensAlpha),
+                            Color.White.copy(
+                                alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE),
                             ),
+                        ),
+                    ),
                         )
                     }
                     .border(

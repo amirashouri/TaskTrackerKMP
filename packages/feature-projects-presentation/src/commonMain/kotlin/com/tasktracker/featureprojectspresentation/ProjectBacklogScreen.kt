@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,7 +19,8 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttGlassAddButton
+import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.BacklogProjection
 import com.tasktracker.resources.Res
@@ -71,17 +73,43 @@ fun ProjectBacklogScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge),
+                // Top only: bottom padding here would shrink the *list's viewport* and stop it short of the
+                // screen's bottom edge. The clearance that keeps the last row off the glass is the
+                // list's `contentPadding`.
+                .padding(horizontal = ttSpacing.xxl)
+                .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
             onOpenSwitcher?.let { openSwitcher ->
-                ProjectSwitcherButton(
-                    project = projection.project,
-                    onClick = openSwitcher,
+                // The add action rides the switcher's row rather than floating over the list.
+                // It used to float at the bottom trailing corner, over a list that reserved only
+                // the tab bar's inset, and it sat on the *rows* - which are clickable across their
+                // full width - so tapping the bottom right of a backlog did nothing. It did not
+                // cover "Put on board" or "File away" as one might assume: this row lays those out
+                // with no `Alignment.End`, so they sit at the leading edge, well clear of the
+                // corner. `weight(1f)` keeps the switcher at its own content width rather than
+                // stretching it under the action. See `ProjectsHeader` for the projects list.
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    projects = projects,
-                    onSelectProject = onSelectProject,
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                ) {
+                    ProjectSwitcherButton(
+                        project = projection.project,
+                        onClick = openSwitcher,
+                        modifier = Modifier.weight(1f),
+                        projects = projects,
+                        onSelectProject = onSelectProject,
+                    )
+                    onAddTask?.let { addTask ->
+                        ttGlassIconButton(
+                            image = ttActionIcons.add,
+                            contentDescription = stringResource(Res.string.board_add_task),
+                            onClick = addTask,
+                            modifier = Modifier.testTag(BacklogAddTaskTag),
+                        )
+                    }
+                }
             }
             errorMessage?.let { message ->
                 ProjectsErrorBanner(message = message, onDismiss = onDismissError)
@@ -94,7 +122,7 @@ fun ProjectBacklogScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize().testTag(ProjectBacklogListTag),
-                    contentPadding = PaddingValues(bottom = tabBarInset),
+                    contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
                     items(projection.untriaged, key = { it.id.stringValue }) { item ->
@@ -107,19 +135,6 @@ fun ProjectBacklogScreen(
                     }
                 }
             }
-        }
-        onAddTask?.let { addTask ->
-            ttGlassAddButton(
-                contentDescription = stringResource(Res.string.board_add_task),
-                onClick = addTask,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(
-                        end = ttSpacing.xxl,
-                        bottom = ttSpacing.boardBottomInset + tabBarInset,
-                    )
-                    .testTag(BacklogAddTaskTag),
-            )
         }
     }
 }

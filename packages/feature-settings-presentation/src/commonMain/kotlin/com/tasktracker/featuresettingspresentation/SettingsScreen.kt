@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.testTag
+import com.tasktracker.designsystem.ttSlider
+import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -81,6 +83,8 @@ import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_connectivity_unknown
 import com.tasktracker.resources.settings_connection_section
 import com.tasktracker.resources.settings_force_offline
+import com.tasktracker.resources.settings_glass_label
+import com.tasktracker.resources.settings_glass_reduced
 import com.tasktracker.resources.settings_appearance_section
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
@@ -139,16 +143,26 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     accentPalette: AccentPalette = AccentPalette.Classic,
     onAccentPaletteChange: (AccentPalette) -> Unit = {},
+    glassIntensity: Float = 1f,
+    onGlassIntensityPreview: (Float) -> Unit = {},
+    onGlassIntensityCommit: (Float) -> Unit = {},
 ) {
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xl)
+            // Top only: bottom padding here would shrink the *list's viewport*, and the sign-out row
+            // would then never reach the screen's bottom edge — which is the bound the scroll is
+            // supposed to have. Its clearance from the glass is `contentPadding`, below.
+            .padding(horizontal = ttSpacing.xxl)
+            .padding(top = ttSpacing.xl)
             .testTag(SettingsScreenTag),
         // Scroll range under the floating tab bar, not viewport inset — see
         // `LocalTabBarScrollUnderInset`. This is the list whose last row is the sign-out button,
-        // so an inset that is a few dp short is a sign-out button parked under the glass.
-        contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current),
+        // so an inset that is a few dp short is a sign-out button parked under the glass. The
+        // `ttSpacing.xl` is clearance rather than decoration: it is the same air the board gives
+        // its lanes, and without it the last row comes to rest flush against the capsule's top
+        // edge instead of above it.
+        contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
         item {
@@ -169,6 +183,12 @@ fun SettingsScreen(
                 AccentPalettePickerRow(
                     selected = accentPalette,
                     onSelect = onAccentPaletteChange,
+                )
+                SettingsDivider()
+                GlassIntensityRow(
+                    intensity = glassIntensity,
+                    onPreview = onGlassIntensityPreview,
+                    onCommit = onGlassIntensityCommit,
                 )
             }
         }
@@ -344,6 +364,61 @@ private fun AccentPalettePickerRow(
         }
     }
 }
+
+@Composable
+private fun GlassIntensityRow(
+    intensity: Float,
+    onPreview: (Float) -> Unit,
+    onCommit: (Float) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = ttSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ttText(
+                text = stringResource(Res.string.settings_glass_label),
+                style = ttTypography.subheadline,
+                color = ttLabel(),
+            )
+            ttText(
+                // Named at the low end rather than left as "0%": the bottom of this slider is
+                // Reduce Transparency, which is a state with a name in the OS, and showing the
+                // user a bare zero for it would describe the control rather than the result.
+                text = glassAmountLabel(intensity),
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+                modifier = Modifier.testTag(GlassAmountTag),
+            )
+        }
+        ttSlider(
+            value = intensity,
+            onValueChange = onPreview,
+            onValueChangeFinished = onCommit,
+            modifier = Modifier.testTag(GlassSliderTag),
+        )
+    }
+}
+
+/**
+ * The slider's readout.
+ *
+ * A percentage everywhere except the very bottom, which reads as the platform's Reduce
+ * Transparency. The threshold is one step of the slider's own quantisation rather than a
+ * round number, so there is no band of values near the bottom that are Reduce Transparency but
+ * do not say so.
+ */
+@Composable
+private fun glassAmountLabel(intensity: Float): String =
+    if (intensity <= 0.005f) {
+        stringResource(Res.string.settings_glass_reduced)
+    } else {
+        "${(intensity * 100f).roundToInt()}%"
+    }
 
 /** A titled, inset group in the shared Settings list. */
 @Composable
@@ -674,6 +749,8 @@ const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
 const val ThemeDropdownTag = "settings.themeDropdown"
+const val GlassSliderTag = "settings.glassSlider"
+const val GlassAmountTag = "settings.glassAmount"
 
 /** Per-scheme test tag, so a scenario can tap "Dark" without a positional matcher. */
 fun ThemeOptionTag(scheme: ThemeScheme): String = "settings.theme.${scheme.wireValue}"

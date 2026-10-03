@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,7 +21,9 @@ import com.tasktracker.resources.project_remove_body_outstanding
 import com.tasktracker.resources.project_remove_title
 import com.tasktracker.resources.projects_empty_body
 import com.tasktracker.resources.projects_empty_title
+import androidx.compose.ui.geometry.Rect
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -241,7 +244,92 @@ object ProjectsListScenarios {
 
         assertTrue(asked, "expected the new-project button to be reachable with rows present")
     }
+
+    /**
+     * The create action and the last row's delete action do not occupy the same pixels.
+     *
+     * ## The defect this exists to catch
+     *
+     * The action used to float in the bottom trailing corner, and the list's `contentPadding`
+     * reserved the tab bar and nothing else. So the last row was laid out underneath a 56dp
+     * circle that also won the touch. `ProjectRow` puts its own actions bottom trailing, which
+     * makes the collision exact rather than incidental: the floating circle sat on the delete
+     * button of the last row - on exactly the rows long enough to reach the bottom of a screen.
+     *
+     * `theNewProjectButtonWorksWithRowsPresent` did not catch it, and could not have. That test
+     * asks whether the button can be *pressed*; the defect was that pressing *it* pressed
+     * something else instead. Both nodes were present, displayed and hittable at the same time.
+     * Only comparing where the two land sees the bug.
+     *
+     * ## Why bounds and not a screenshot
+     *
+     * The claim is about rectangles occupying the same space, which survives being read off the
+     * tree, so it does not need pixels. What it does need is a *full* list: with three rows the
+     * last one sits in the middle of the viewport and no corner control could reach it, so the
+     * assertion would pass against the bug. These rows overflow the smallest of the three test
+     * viewports deliberately.
+     */
+    val theNewProjectActionDoesNotCoverTheLastRowsDelete: suspend ComposeUiTest.() -> Unit = {
+        // Nine rows, so the list overflows even the smallest of the three test viewports and the
+        // bottom of the list is genuinely reached.
+        val seed = ProjectSummary(ViewPreviewData.seededProject, itemCount = 7)
+        val rows = rowsWith(
+            *Array(9) { index ->
+                seed.copy(
+                    id = ProjectID("00000000-0000-4000-8000-" + index.toString().padStart(12, '0')),
+                    keyPrefix = "p$index",
+                )
+            },
+        )
+        listShowing(rows = rows, onNewProject = {})
+
+        val create = onNodeWithTag(ProjectsListNewTag).fetchSemanticsNode().boundsInRoot
+        val removes = rows.flatMap { composedRemove(it) }
+
+        assertTrue(
+            removes.isNotEmpty(),
+            "expected at least one row's delete action to be composed, or this asserts nothing",
+        )
+        for (remove in removes) {
+            assertFalse(
+                create.overlaps(remove),
+                "the create action sits on a row's delete action: create=$create remove=$remove",
+            )
+        }
+    }
 }
+
+/**
+ * [row]'s delete action, or nothing if the viewport never composed that row.
+ *
+ * ## Why this asks about every row rather than the last one
+ *
+ * Which rows a `LazyColumn` composes is the viewport's decision, and the three test hosts disagree
+ * about it: Robolectric's default window is far smaller than the JVM's and iOS's. A scenario that
+ * named the ninth row and demanded its bounds would fail to find it on the smallest host, and
+ * asking for the *last composed* row would make the strength of the claim depend on the host.
+ *
+ * Asking about all of them and ignoring the ones that were not composed makes the assertion hold
+ * identically on all three - and it is the stronger claim besides. A floating control that covers
+ * some row other than the final one is still covering it.
+ *
+ * `boundsInRoot` is the rectangle a touch actually lands in, and the tags are read from the
+ * unmerged tree because the delete action sits inside the row's own clickable.
+ */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.composedRemove(row: ProjectRow): List<Rect> =
+    onAllNodesWithTag(ProjectRemoveTag(row.summary), useUnmergedTree = true)
+        .fetchSemanticsNodes()
+        .map { it.boundsInRoot }
+
+/**
+ * Whether two rectangles share any area.
+ *
+ * Touching edges are not an overlap: a control whose right edge meets the row's left edge covers
+ * nothing, and counting that as a collision would fail a layout that is correct.
+ */
+private fun Rect.overlaps(other: Rect): Boolean =
+    left < other.right && other.left < right && top < other.bottom && other.top < bottom
 
 /**
  * A drag that starts but does not commit.

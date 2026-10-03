@@ -181,6 +181,17 @@
     <string name="board_add_task">Add Task</string>
     <string name="board_no_project_title">No project chosen</string>
     <string name="board_no_project_body">Choose a project to see the work on its board.</string>
+    <!--
+      The board header's stack of initials. Two arguments because the discs and the words
+      are different claims: the count is how many distinct assignee *strings* the board
+      holds, and the names are those strings. Reading the count alone would promise that
+      many people, which free-text assignees cannot support - two people called Amir are
+      one disc - so the names are spelled out next to it.
+    -->
+    <plurals name="board_assignees_description">
+        <item quantity="one">%1$d person on this board: %2$s</item>
+        <item quantity="other">%1$d people on this board: %2$s</item>
+    </plurals>
     <string name="backlog_empty_title">The backlog is empty</string>
     <string name="backlog_empty_body">Tasks that have not been put on a board yet collect here.</string>
     <string name="backlog_put_on_board">Put on board</string>
@@ -224,6 +235,14 @@
     <string name="settings_title">Settings</string>
     <string name="settings_appearance_section">Appearance</string>
     <string name="settings_theme_label">Theme</string>
+    <!--
+      The glass amount. The label is the noun on its own rather than "Glass effect", because
+      the row's readout already says how much; "Reduce Transparency" is the platform's own name
+      for the low end rather than one invented here, so a user who has already set that switch
+      in the OS finds the same words in both places.
+    -->
+    <string name="settings_glass_label">Glass</string>
+    <string name="settings_glass_reduced">Reduce Transparency</string>
     <string name="settings_connection_section">Connection</string>
     <string name="settings_status_label">Status</string>
     <string name="settings_force_offline">Force Offline</string>

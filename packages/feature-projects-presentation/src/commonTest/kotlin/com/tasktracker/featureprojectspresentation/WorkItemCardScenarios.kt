@@ -28,7 +28,9 @@ import kotlin.test.assertTrue
  * scannable down a column of cards, and a column of prose is not scannable.
  *
  * **The assignee only when there is one.** An empty assignee row is a blank line that pushes
- * the rest of the card down, and "nobody" is not a fact worth the space.
+ * the rest of the card down, and "nobody" is not a fact worth the space. When there is one it
+ * is the **first name** ([assigneeFirstName]) in a pill: a 300dp card has room for "Amir" beside
+ * a due date, and a surname is the half of the name nobody scans a board for.
  *
  * **The due date only when there is one**, for the same reason.
  *
@@ -62,14 +64,26 @@ object WorkItemCardScenarios {
         onNested(PriorityBadgeTag(item.priority)).assertIsDisplayed()
     }
 
-    /** The assignee appears when there is one. */
+    /**
+     * The assignee appears as a first name, when there is one.
+     *
+     * Drawn from a **two-part** name on purpose. The fixture's own assignee is a single word,
+     * so asserting the full name would pass whether or not the card shortens anything - a test
+     * that cannot fail. "Amir Reza" makes the omission observable: a card still printing the
+     * surname fails here, which is the defect the rule exists to prevent.
+     */
     val showsTheAssigneeWhenThereIsOne: suspend ComposeUiTest.() -> Unit = {
-        val item = ViewPreviewData.workItems.first { it.assignee != null }
+        val item = ViewPreviewData.workItems.first { it.assignee != null }.copy(assignee = TWO_PART_ASSIGNEE)
 
         cardShowing(item)
 
         onNested(WorkItemCardAssigneeTag).assertIsDisplayed()
-        onNodeWithText(item.assignee!!).assertIsDisplayed()
+        // The literal, not `assigneeFirstName(TWO_PART_ASSIGNEE)`: asking the function under
+        // test what it should have produced means a card that stopped shortening anything
+        // still passes, because both sides move together. Restated here, the shortening is
+        // something the card can fail.
+        onNodeWithText("Amir").assertIsDisplayed()
+        onNodeWithText(TWO_PART_ASSIGNEE).assertDoesNotExist()
     }
 
     /** An unassigned task gets no assignee row at all - not an empty one. */
@@ -189,4 +203,61 @@ class WorkItemCardRulesTest {
         val noDueDate = ViewPreviewData.workItems.first { it.dueDate == null }
         assertFalse(isOverdue(noDueDate, now))
     }
+
+    @Test
+    fun theBoardStackDeduplicatesSortsAndSkipsBlankAssignees() {
+        val items = listOf(
+            ViewPreviewData.workItems[0].copy(assignee = "  Priya  "),
+            ViewPreviewData.workItems[1].copy(assignee = "amir"),
+            ViewPreviewData.workItems[2].copy(assignee = "Priya"),
+            ViewPreviewData.workItems[3].copy(assignee = null),
+            ViewPreviewData.workItems[4].copy(assignee = "   "),
+            ViewPreviewData.workItems[5].copy(assignee = "Amir"),
+        )
+
+        assertEquals(
+            // 'amir' before 'Amir', not the other way round: the sort key is lowercased, so the
+            // two compare equal and the stable sort leaves them in board order. That is the
+            // intended reading - a name that differs only in case is not ordered by the case.
+            listOf("amir", "Amir", "Priya"),
+            boardAssigneeNames(items),
+            "sorted case-insensitively so 'Amir' and 'amir' are two, blank and null are none, " +
+                "and the untrimmed '  Priya  ' is the same Priya as the trimmed one",
+        )
+    }
+
+    @Test
+    fun theAssigneeIsShortenedToItsFirstName() {
+        assertEquals("Amir", assigneeFirstName("Amir Reza"), "the surname is the half nobody scans for")
+        assertEquals("Amir", assigneeFirstName("Amir"), "a single-word name is already a first name")
+        assertEquals(
+            "Amir",
+            assigneeFirstName("  Amir  Reza  "),
+            "trimmed first, or an untrimmed name yields an empty pill",
+        )
+    }
+
+    @Test
+    fun anAssigneeWithNoSpaceInItIsShownWhole() {
+        assertEquals("amir@example.com", assigneeFirstName("amir@example.com"), "an address has no first name to keep")
+        assertEquals("Platform", assigneeFirstName("Platform"), "a team is left as it was written")
+    }
+
+    @Test
+    fun theShorteningAlsoCutsASurnameThatIsMoreThanOneWord() {
+        // The cost of the rule, asserted rather than left to be discovered on a card. A card
+        // shows one word, so "Ana van der Berg" reads as "Ana" and a pair of people reads as
+        // the first of them. Both are wrong as people; both are the price of not printing a
+        // surname on a 300dp card, and the editor one tap away is where the full name is read.
+        assertEquals("Ana", assigneeFirstName("Ana van der Berg"))
+        assertEquals("Amir", assigneeFirstName("Amir + Priya"))
+    }
 }
+
+/**
+ * A two-part name, for the scenario that has to observe the shortening.
+ *
+ * Private rather than a fixture of its own because it is not data any other test wants: it
+ * exists to make "the card dropped the surname" a failure rather than an unfalsifiable pass.
+ */
+private const val TWO_PART_ASSIGNEE = "Amir Reza"

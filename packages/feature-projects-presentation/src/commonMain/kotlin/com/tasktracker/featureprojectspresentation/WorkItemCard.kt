@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -40,10 +41,24 @@ import kotlinx.datetime.toLocalDateTime
  *
  * ## What is on it, and why nothing else is
  *
- * Key, title, priority, assignee and a due date. Not the details - a card is a summary, and
+ * Key, priority, title, assignee and a due date. Not the details - a card is a summary, and
  * the details are one tap away. Not the status either, because the card is *in* a column
  * labelled with the status; printing it again is the kind of duplication that goes stale
  * the moment a drag fails halfway.
+ *
+ * ## The order, and why it is that order
+ *
+ * Top to bottom: the key with the priority badge beside it, the title, the assignee, then the
+ * due date and the card's own action.
+ *
+ * The badge shares the key's row because those two are what a lane is scanned for - "is this
+ * the one, and how urgent is it" - and a badge two rows down from the key it belongs to makes
+ * the user read the card twice. The key takes the row's remaining width rather than sitting
+ * beside the badge, so a long key ellipsises instead of pushing the badge off the card.
+ *
+ * The due date sits with the action rather than with the assignee because of what the two are:
+ * a date is a *fact about the task*, and so is an assignee, but the action is a *thing you can
+ * do*, and a card read top to bottom should end on the things you can do.
  *
  * ## Why the strike-through is on the title and not the whole card
  *
@@ -66,13 +81,23 @@ fun WorkItemCard(
             .ttGlassCard()
             .clickable(onClick = onClick)
             .padding(ttSpacing.xl),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
-        ttText(
-            text = item.key.toString(),
-            style = ttTypography.key,
-            color = ttLabelSecondary(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ttText(
+                text = item.key.toString(),
+                style = ttTypography.key,
+                color = ttLabelSecondary(),
+                // Takes what the badge leaves, which is what pins the badge to the trailing
+                // edge and ellipsises a long key instead of pushing the badge off the card.
+                modifier = Modifier.weight(1f),
+            )
+            PriorityBadge(priority = item.priority)
+        }
         ttText(
             text = item.title,
             style = if (isDelivered(item)) {
@@ -84,35 +109,102 @@ fun WorkItemCard(
             maxLines = CARD_TITLE_MAX_LINES,
             overflow = TextOverflow.Ellipsis,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            PriorityBadge(priority = item.priority)
-            item.dueDate?.let { due ->
-                DueDateChip(
-                    dueDate = due,
-                    isOverdue = isOverdue(item, due),
-                )
-            }
-            // The card's own action slot. A card knows how to be a card and nothing about
-            // what a board lets you do to it, so the file-away affordance lives with the
-            // board - which is the surface that has to agree with the backlog about what
-            // filing away means.
-            trailing?.invoke()
-        }
         item.assignee?.takeIf { it.isNotBlank() }?.let { assignee ->
-            ttText(
-                text = assignee,
-                style = ttTypography.footnote,
-                color = ttLabelSecondary(),
-                maxLines = 1,
-                modifier = Modifier.testTag(WorkItemCardAssigneeTag),
-            )
+            AssigneeLabel(firstName = assigneeFirstName(assignee))
+        }
+        // The due date and the card's own action, on one row: the date at the leading edge and
+        // whatever the surface put in the action slot at the trailing one, so the action stays
+        // in the bottom corner whether or not the task has a date.
+        //
+        // The action is a *task*, not a property of the task, which is why it lives with the
+        // board rather than in this file: a card knows how to be a card and nothing about what
+        // a board lets you do to it. The board is the surface that has to agree with the
+        // backlog about what filing away means.
+        //
+        // Composed only when it has something in it. An always-present row would leave an
+        // empty row behind on a card with neither a date nor an action, and the column's
+        // `spacedBy` would still charge it a gap - 8dp of nothing at the bottom of the card.
+        if (item.dueDate != null || trailing != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                item.dueDate?.let { due ->
+                    DueDateChip(
+                        dueDate = due,
+                        isOverdue = isOverdue(item, due),
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                trailing?.invoke()
+            }
         }
     }
 }
+
+/**
+ * Who the task is with, as a first name in a pill.
+ *
+ * ## Why a pill, and why not a filled one
+ *
+ * A pill because it is a *fact about the task*, and the badge next to it is a fact too - two
+ * facts of the same kind should look the same, or the card has three visual weights instead of
+ * two. It is **not** filled, which is the part doing the work: [PriorityBadge] tints the two
+ * levels that need acting on and leaves the other three as hairline outlines precisely so that
+ * colour on this card means urgency. A washed assignee pill would spend that channel on a name.
+ *
+ * So this is built exactly like [DueDateChip]'s resting state - transparent fill, hairline rim,
+ * [ttRadius.row], the chip's own padding - rather than with a second set of numbers. That is a
+ * duplication of *construction* across three call sites ([PriorityBadge], [DueDateChip], this),
+ * and the right fix is one pill primitive in `:packages:design-system`; until that exists, all
+ * three are deliberately the same object rather than three that drift.
+ */
+@Composable
+private fun AssigneeLabel(
+    firstName: String,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(ttRadius.row)
+
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(Color.Transparent)
+            .border(1.dp, ttSeparator(), shape)
+            .padding(horizontal = ttSpacing.sm, vertical = CHIP_PADDING_V)
+            .testTag(WorkItemCardAssigneeTag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ttText(
+            text = firstName,
+            style = ttTypography.captionSmall,
+            color = ttLabelSecondary(),
+        )
+    }
+}
+
+/**
+ * The name a card shows for its assignee: the first word.
+ *
+ * `substringBefore` rather than a `split`, because the answer is the first token and the whole
+ * string when there is no delimiter - the same rule the auth session applies to an email
+ * address. A handle, a team or an address has no space in it and so comes through whole.
+ * Trimmed first so an untrimmed `" Amir"` cannot produce an empty pill.
+ *
+ * ## What it costs
+ *
+ * Anything with a space in it loses everything after the first one, so "Ana van der Berg" is
+ * "Ana" and "Amir + Priya" is "Amir". Both are wrong as people. Both are the price of a card
+ * showing one word of a free-text field, and the editor - one tap away - is where the whole
+ * name is read. Recorded here rather than discovered later, because a rule with a cost that
+ * is only written down as a benefit is how the cost becomes a surprise.
+ *
+ * Extracted rather than inlined because it is a rule, and this file's convention is that a rule
+ * gets a name and a test: the semantics tree can see *that* a name is on the card, but not that
+ * it is the shortened one, so `WorkItemCardRulesTest` holds it to the shortening.
+ */
+internal fun assigneeFirstName(assignee: String): String = assignee.trim().substringBefore(' ')
 
 /**
  * Whether a task was *delivered*, which is what earns the strike-through.

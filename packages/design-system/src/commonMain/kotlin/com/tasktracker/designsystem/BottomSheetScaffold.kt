@@ -109,7 +109,7 @@ fun TTBottomSheetScaffold(
                     .verticalScroll(rememberScrollState())
                     .ttGlassSurface(
                         shape = RoundedCornerShape(ttRadius.surface),
-                        base = ttSurface().copy(alpha = 1f - ttGlass.LENS_ALPHA),
+                        base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
                     )
                     .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xxl),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),

@@ -809,6 +809,7 @@ private fun SettingsDestination(
     // only stops a rebuilt model from rendering the switch off while the app is offline.
     val forceOffline by preferences.forceOffline.collectAsState()
     val accentPalette by preferences.accentPalette.collectAsState()
+    val glassIntensity by preferences.glassIntensity.collectAsState()
     LaunchedEffect(model, forceOffline) { model.restoreForceOffline(forceOffline) }
 
     SettingsScreen(
@@ -822,6 +823,13 @@ private fun SettingsDestination(
         onThemeChange = { scheme -> scope.launch { preferences.setThemeScheme(scheme) } },
         onAccentPaletteChange = { palette ->
             scope.launch { preferences.setAccentPalette(palette) }
+        },
+        glassIntensity = glassIntensity,
+        // Preview is not a coroutine: it only touches composition state, and a drag fires it
+        // every frame. The commit is the one that writes, and it waits for the finger to lift.
+        onGlassIntensityPreview = { intensity -> preferences.previewGlassIntensity(intensity) },
+        onGlassIntensityCommit = { intensity ->
+            scope.launch { preferences.commitGlassIntensity(intensity) }
         },
         // Both halves, and neither alone: the model drives the switch, and the remembered
         // intent is what the next rebuilt model reads. Recording only one of them is how a
