@@ -43,6 +43,19 @@ import androidx.compose.ui.unit.IntOffset
  * The same surface, content inset, outside-tap handling and slide transition wrap project and
  * task forms. The form content stays responsible for its fields and actions; this component
  * owns only the sheet and its presentation.
+ *
+ * ## Why a modal sheet has to go through this and not draw its own background
+ *
+ * The surface here is a lens *over* a solid base — `ttSurface()` at `1f - LENS_ALPHA` — and
+ * that base is what stops the page showing through a modal form. A sheet that calls
+ * [ttGlassSurface] with no `base` instead gets the fill ramp: shipped alpha
+ * `FILL_ALPHA * FILL_ALPHA` = 0.3025, tinted toward the accent. That is a translucent,
+ * accent-coloured panel, which is the correct vocabulary for a chip sitting on a background
+ * and the wrong one for something the user has committed to reading and tapping.
+ *
+ * The two look close enough together to pass review, which is how the project picker ended up
+ * with one while the project and task editors had the other — same rounded rect, same hairline,
+ * same name, ~3x the transmission. Anything that wants a modal sheet's frame takes it from here.
  */
 @Composable
 fun TTBottomSheetScaffold(
@@ -51,11 +64,36 @@ fun TTBottomSheetScaffold(
     modifier: Modifier = Modifier,
     sheetModifier: Modifier = Modifier,
     onDismissed: () -> Unit = {},
+
+    /**
+     * Whether the sheet body scrolls as one surface, or the body scrolls itself.
+     *
+     * The scaffold scrolls its content so that a form taller than the viewport — a project
+     * editor with a long description, a task form on a small phone — stays reachable instead
+     * of running off the top of the screen. That is right for a `Column` body and fatal for a
+     * `LazyColumn` one: Compose refuses to measure a scrollable inside a scrollable of the
+     * same axis, and it refuses at measure time rather than at compile time, so the failure is
+     * a crash on the first frame that happens to overflow rather than an error from the build.
+     *
+     * So a body that brings its own scrolling passes `false` and keeps its `LazyColumn`. The
+     * scaffold still owns everything that makes the sheet a sheet — the frame, the padding,
+     * the insets, the scrim, the transition — so opting out of this one modifier is not
+     * opting out of the shared language.
+     *
+     * Defaults to `true` because a plain `Column` body is the common case, and a body that
+     * forgets to say so should land on the arrangement that scrolls rather than on one that
+     * can crash.
+     */
+    scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val transitionState = remember { MutableTransitionState(false) }
     var hasBeenVisible by remember { mutableStateOf(false) }
+    // Remembered unconditionally, and applied conditionally below. A `remember` inside the
+    // `if` would be a composable call in a branch, which is legal but throws the state away on
+    // the branch that skips it, so toggling [scrollable] would restart the scroll position.
+    val scrollState = rememberScrollState()
 
     SideEffect { transitionState.targetState = visible }
     LaunchedEffect(transitionState.currentState, transitionState.targetState) {
@@ -106,7 +144,7 @@ fun TTBottomSheetScaffold(
                         ),
                     )
                     .then(sheetModifier)
-                    .verticalScroll(rememberScrollState())
+                    .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
                     .ttGlassSurface(
                         shape = RoundedCornerShape(ttRadius.surface),
                         base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),

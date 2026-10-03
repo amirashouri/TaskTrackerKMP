@@ -1,8 +1,6 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -447,21 +445,23 @@ private fun ProjectScopedTabScreen(
         }
     }
 
-    if (isPickerOpen) {
-        ProjectPicker(
-            repository = repository,
-            selectedProjectID = activeProjectID,
-            // `openProject` rather than a direct assignment, because choosing a project is a
-            // navigation decision with per-tab rules - it pushes on Projects, switches on
-            // Board and Backlog, and is rejected on Settings - and a picker that wrote the
-            // active id itself would bypass every one of them.
-            onSelect = { projectID ->
-                if (projectID != null) router.openProject(projectID)
-                isPickerOpen = false
-            },
-            scope = scope,
-        )
-    }
+    // Composed unconditionally and hidden with `visible`, which is how the project and task
+    // editors are hosted. Gating on `if (isPickerOpen)` would unmount the sheet the instant
+    // the flag flipped and take its exit transition with it.
+    ProjectPicker(
+        repository = repository,
+        selectedProjectID = activeProjectID,
+        // `openProject` rather than a direct assignment, because choosing a project is a
+        // navigation decision with per-tab rules - it pushes on Projects, switches on
+        // Board and Backlog, and is rejected on Settings - and a picker that wrote the
+        // active id itself would bypass every one of them.
+        onSelect = { projectID ->
+            if (projectID != null) router.openProject(projectID)
+            isPickerOpen = false
+        },
+        scope = scope,
+        visible = isPickerOpen,
+    )
 }
 
 /**
@@ -514,9 +514,16 @@ private fun ProjectPicker(
     selectedProjectID: ProjectID?,
     onSelect: (ProjectID?) -> Unit,
     scope: CoroutineScope,
+    visible: Boolean,
 ) {
     val model = remember(repository) { ProjectPickerModel(repository) }
-    DisposableEffect(model) {
+    // Keyed on `visible` as well as the model. The sheet has to stay composed through its exit
+    // transition or the slide is cut off mid-flight, and this used to be handled by an
+    // `if (isPickerOpen)` gate that unmounted the whole subtree — which is why the picker had
+    // no transition at all while the two editors next to it did. Keeping it composed costs a
+    // live model, so observation is scoped to the window in which the sheet is on screen.
+    DisposableEffect(model, visible) {
+        if (!visible) return@DisposableEffect onDispose { }
         model.observe(scope)
         onDispose { model.stopObserving() }
     }
@@ -528,31 +535,20 @@ private fun ProjectPicker(
         onSelect(projectID)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                // No indication: this is a scrim, not a control, and a ripple that reads as a
-                // tap target under the sheet is a hint that something else is clickable there.
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = { onSelect(null) },
-            )
-            .testTag(ProjectPickerScrimTag),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
-        ProjectPickerSheet(
-            projects = model.projects,
-            selectedProjectID = model.selectedProjectID ?: selectedProjectID,
-            onSelect = onPick,
-            modifier = Modifier.padding(
-                top = ttSpacing.md,
-                start = ttSpacing.md,
-                end = ttSpacing.md,
-                bottom = ttSpacing.md + LocalTabBarScrollUnderInset.current,
-            ),
-        )
-    }
+    // No scrim and no padding here any more: the scaffold owns the frame, the outside-tap
+    // handling and the insets. The tab bar's scroll-under inset in particular was being
+    // applied by hand below, from a copy of the scaffold's own reasoning, which is exactly the
+    // kind of second spelling that goes stale.
+    ProjectPickerSheet(
+        projects = model.projects,
+        selectedProjectID = model.selectedProjectID ?: selectedProjectID,
+        onSelect = onPick,
+        visible = visible,
+        // A scrim tap means "no project selected" — the same thing the hand-rolled scrim did,
+        // and the reason this sheet needs no OK button to dismiss it.
+        onDismissRequest = { onSelect(null) },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 /** One project's board. */
@@ -964,9 +960,6 @@ const val TabBarTag = "shell.tabs"
 
 /** The "choose a project" button on a scoped tab with nothing active. */
 const val ScopedChooseProjectTag = "shell.scoped.chooseProject"
-
-/** The picker's scrim. Tapping it dismisses the sheet. */
-const val ProjectPickerScrimTag = "shell.picker.scrim"
 
 /** The editor's container, so a test can assert the route is being rendered. */
 const val WorkItemEditorDestinationTag = "shell.workItemEditor"

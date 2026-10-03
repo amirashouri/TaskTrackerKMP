@@ -7,20 +7,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.ProjectID
+import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -45,6 +43,15 @@ import org.jetbrains.compose.resources.stringResource
  * The exception is [onCreateProject], which is a *different* action and is drawn as a
  * separate row at the end rather than as an option among the projects. A "+" that is
  * visually a project invites a user to tap it, discover it is not one, and tap again.
+ *
+ * ## Why the frame comes from [TTBottomSheetScaffold]
+ *
+ * This used to draw its own surface — a `ttGlassSurface` with no `base`, inside a hand-rolled
+ * scrim — while the project and task editors took the shared scaffold. That put a translucent,
+ * accent-tinted panel at 0.3025 alpha behind a list of project names, which was reported as
+ * the sheet being too see-through. It was not a difference in the design system's intent; it
+ * was this file opting out of it. The scaffold owns the frame now, so there is no second
+ * spelling of "a modal sheet" left to drift.
  */
 @Composable
 fun ProjectPickerSheet(
@@ -53,14 +60,46 @@ fun ProjectPickerSheet(
     onSelect: (ProjectID?) -> Unit,
     modifier: Modifier = Modifier,
     onCreateProject: (() -> Unit)? = null,
+    visible: Boolean = true,
+    onDismissRequest: () -> Unit = {},
+    onDismissed: () -> Unit = {},
 ) {
-    val shape = RoundedCornerShape(ttRadius.surface)
+    TTBottomSheetScaffold(
+        visible = visible,
+        onDismissRequest = onDismissRequest,
+        modifier = modifier,
+        onDismissed = onDismissed,
+        // The list below is a `LazyColumn` and stays one. A project list is unbounded in
+        // principle and long in practice, so it should not hold every row's composition the
+        // way a `Column` in the scaffold's scroll would.
+        scrollable = false,
+    ) {
+        ProjectPickerContent(
+            projects = projects,
+            selectedProjectID = selectedProjectID,
+            onSelect = onSelect,
+            onCreateProject = onCreateProject,
+        )
+    }
+}
 
+/**
+ * The picker's body, and only its body.
+ *
+ * No surface and no padding here: the scaffold draws the frame and pads it at `xxl`, the same
+ * arrangement the project and task editors get. Padding this as well is what would have kept
+ * the sheets visually different after the surface was unified.
+ */
+@Composable
+private fun ProjectPickerContent(
+    projects: List<PickableProject>,
+    selectedProjectID: ProjectID?,
+    onSelect: (ProjectID?) -> Unit,
+    onCreateProject: (() -> Unit)?,
+) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .ttGlassSurface(shape = shape)
-            .padding(ttSpacing.formStack)
             .testTag(ProjectPickerSheetTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {

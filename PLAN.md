@@ -2596,3 +2596,111 @@ The three panels are the travel's ends and the reported 20%. The other 98 positi
 unmeasured blend of the two interpolations, which is the accepted cost of a continuous control
 and is unchanged by this fix — but it now interpolates *two* quantities rather than one, so the
 "unverified intermediate" caveat covers a surface with two moving parts instead of one.
+
+---
+
+## Phase 17 — the project picker was not using the scaffold
+
+### 17.1 The defect, and why it survived review
+
+The picker was reported as having a background that is "too translucent". It was, by about a
+factor of three, and the cause was that it drew its own surface:
+
+```kotlin
+.ttGlassSurface(shape = shape)   // no `base`
+```
+
+`ttGlassSurface` has two washes. With a `base` it is a lens *over* something solid — white fading
+to nothing, with the base showing through underneath — and the scaffold passes
+`ttSurface()` at `1f - LENS_ALPHA`. Without one the fill ramp runs instead: shipped alpha
+`FILL_ALPHA * FILL_ALPHA` = 0.3025, tinted toward the accent. So the sheet listing the projects
+the user is choosing between was 0.3025-alpha accent, while the sheet that *creates* a project
+was a 0.92 opaque neutral.
+
+What made it survive review is that the two are the same rounded rect, with the same hairline,
+from the same design system, at the same radius. They read as one vocabulary in a screenshot.
+Only compositing told them apart.
+
+The other half of the defect was structural: because the picker had its own frame, it also had a
+hand-rolled scrim and its own copy of the tab bar's scroll-under inset arithmetic in
+`NavigationHost`, which is a second spelling of reasoning the scaffold already owns and does not
+get updated when that reasoning changes.
+
+### 17.2 The one thing that made this unsafe to fix directly
+
+`TTBottomSheetScaffold` applies `.verticalScroll` unconditionally, and the picker's body is a
+`LazyColumn`. Compose refuses to measure a scrollable inside a scrollable of the same axis, and
+it refuses at *measure* time, not compile time — so wrapping the picker in the scaffold as it
+stood would have compiled, run in previews, and crashed on the first frame that overflowed.
+
+So the scaffold grew a `scrollable: Boolean = true`. It is defaulted rather than named because a
+`Column` body is the common case and a body that forgets should land on the arrangement that
+scrolls rather than on one that can crash. Defaulting it also means the two existing callers are
+untouched, and the design-system suite stayed at 83/80 with no new failures.
+
+### 17.3 Why this needed pixels, and what it measured
+
+"Is the background the scaffold's" is readable off the modifier chain. "The sheet is opaque enough
+to read a list through" is not — a surface can be handed the right base and still composite to
+something translucent, and computing `0.92 * neutral + 0.08 * backdrop` in the test would be
+asserting the arithmetic rather than the frame. That is the modelling trap, and this repo has
+already shipped two of them.
+
+The measurement is a **difference between two backdrops**. The same sheet is rendered over pure
+black and over pure white and the assertion is on how far apart the two frames are inside the
+sheet. That needs no token, no predicted alpha, and no knowledge of which pixel is background:
+an opaque sheet transmits the lens and little else, a translucent one lets most of the page
+through.
+
+| | over black | over white | apart |
+| --- | --- | --- | --- |
+| Dark, fixed | `#1b1b1d` | `#2f2f31` | **20** channels |
+| Light, fixed | `#dfdfe4` | `#f3f3f8` | **19** channels |
+| Light, defect | `#262c34` | `#d8dee6` | **178** channels |
+
+Light and Dark were measured separately and the iOS simulator returned **19 and 20 — identical to
+the JVM**. They agree because the probe point is a flat padding strip rather than a glyph, which
+is the whole reason it is a padding strip. The bar is 51 channels: 31 above the correct reading
+for compositing rounding, 127 below the defect's.
+
+### 17.4 Where it samples, and the mutation that cost a cycle
+
+The measurement is a horizontal strip just below the sheet's content, inside the scaffold's own
+`xxl` bottom padding. Sampling the content would have been wrong in a way worth recording: each
+row is a `ttGlassCard`, which is *itself* an untinted fill ramp, and those rows sit on the sheet
+and so do not move with the page however translucent the sheet is. A median over the content area
+would be dominated by rows and would report an opaque sheet while the sheet was the most
+translucent thing in the frame.
+
+The mutation that cost the cycle is the same trap from the other side. The natural first attempt —
+put the untinted `ttGlassSurface` back on the *content* — **left the reading at 19 channels**. It
+should: that surface stacks on the scaffold's frame, which is already opaque, so the page still
+cannot reach the list. It is not the defect. The mutation that reproduces the defect is removing
+the solid `base` from `TTBottomSheetScaffold`; bypassing the scaffold altogether reads 255.
+
+Both tests are mutation-proven:
+
+| mutation | caught by |
+| --- | --- |
+| scaffold's `base` removed | `the sheet does not transmit the page behind it` (178 > 51) |
+| scaffold bypassed entirely | `the sheet does not transmit the page behind it` (255) **and** `the sheet is framed by the shared scaffold` (`assertExists` on the scrim tag) |
+| untinted surface added to the content | **nothing — correctly**, see above |
+
+The third row is in the table because a mutation that *should* stay green is only worth recording
+once you have checked it does.
+
+### 17.5 Baseline
+
+`:shared-ui` 24 → **26** tests, still **2** failures on both hosts
+(`aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList` — pre-existing, untouched).
+`:packages:design-system` unchanged at 83 JVM / 80 iOS. The two new tests live in `:shared-ui`
+rather than beside the picker because `:packages:feature-projects-presentation`'s `commonTest`
+does not currently compile — the two `ttTheme(ThemeScheme.Dark, content)` call sites whose second
+positional argument is now `accentPalette`. That is pre-existing and deliberately not folded in.
+
+### 17.6 What is still unverified
+
+The exit transition's *timing* is not asserted anywhere, only that the sheet stays composed long
+enough for one to run. And nothing here proves the picker looks right — that is a person opening
+the app. The numbers above prove the sheet stopped transmitting the page; they cannot say whether
+the result is *pleasant*.
