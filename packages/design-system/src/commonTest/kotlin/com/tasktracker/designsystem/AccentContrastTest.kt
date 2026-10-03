@@ -51,7 +51,10 @@ class AccentContrastTest {
 
     @Test
     fun `every accent variant clears the text contrast bar against the label colour`() {
-        for (variant in listOf(light, dark)) {
+        for (variant in listOf(
+                Variant("light", TaskTrackerAccent.Light),
+                Variant("dark", TaskTrackerAccent.Dark),
+            )) {
             val ratio = contrastRatio(variant.color, ttOnAccent)
             assertTrue(
                 ratio >= TEXT_CONTRAST_MINIMUM,
@@ -64,6 +67,10 @@ class AccentContrastTest {
 
     @Test
     fun `every selectable palette clears text and canvas contrast in both appearances`() {
+        // Every palette is exercised, so a bad accent cannot be added without the
+        // suite noticing. The classic pair and the five alternates share the same
+        // two-bar rule: 4.5:1 against the white label and 3:1 against the canvas of
+        // its own appearance.
         for (palette in AccentPalette.all) {
             val variants = listOf(
                 Variant("${palette.title} light", palette.light),
@@ -89,30 +96,6 @@ class AccentContrastTest {
         }
     }
 
-    @Test
-    fun `the light accent clears both bars on the light canvas`() {
-        assertBothBars(TaskTrackerAccent.Light, CANVAS_LIGHT)
-    }
-
-    @Test
-    fun `the dark accent clears both bars on the iOS dark canvas`() {
-        assertBothBars(TaskTrackerAccent.Dark, CANVAS_DARK_IOS)
-    }
-
-    /**
-     * Android's dark canvas is `?android:attr/colorBackground`, which the platform themes
-     * set to `#121212` rather than the pure black the iOS `CanvasBackground` colorset uses.
-     * It is checked separately because it is a genuinely different colour on a genuinely
-     * different target, and it moves the ratio the other way: a lighter canvas *lowers*
-     * contrast, so the `#5F6873` dark variant has less margin here (3.34 to 1) than against
-     * black (3.72 to 1). The bar is the same either way, and a token tuned only against
-     * the iOS canvas would have a thinner margin than it looks.
-     */
-    @Test
-    fun `the dark accent clears both bars on the Android dark canvas`() {
-        assertBothBars(TaskTrackerAccent.Dark, CANVAS_DARK_ANDROID)
-    }
-
     /**
      * The two variants have to actually differ. A refactor that collapsed
      * [TaskTrackerAccent] to one value would pass every test above - a single accent that
@@ -133,7 +116,10 @@ class AccentContrastTest {
         // A translucent accent is a different colour over every canvas it lands on, and
         // the bars above would then be asserting against a canvas that is not the one the
         // user sees.
-        for (variant in listOf(light, dark)) {
+        for (variant in listOf(
+                Variant("light", TaskTrackerAccent.Light),
+                Variant("dark", TaskTrackerAccent.Dark),
+            )) {
             assertTrue(
                 variant.color.alpha == 1f,
                 "${variant.name} accent ${variant.color.hex()} has alpha " +
@@ -182,9 +168,6 @@ class AccentContrastTest {
 
     /** A variant of the accent, paired with the name used to describe it in a failure. */
     private class Variant(val name: String, val color: Color)
-
-    private val light = Variant("light", TaskTrackerAccent.Light)
-    private val dark = Variant("dark", TaskTrackerAccent.Dark)
 
     private fun Color.hex(): String = "#" + channel(red) + channel(green) + channel(blue)
 

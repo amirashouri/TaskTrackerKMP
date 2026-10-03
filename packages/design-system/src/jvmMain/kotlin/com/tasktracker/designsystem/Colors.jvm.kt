@@ -29,4 +29,7 @@ actual fun ttLabel(): Color = ttFixedColours.label(ttIsDarkTheme())
 actual fun ttLabelSecondary(): Color = ttFixedColours.labelSecondary(ttIsDarkTheme())
 
 @Composable
+actual fun ttBodyLabel(): Color = ttFixedColours.bodyLabel(ttIsDarkTheme())
+
+@Composable
 actual fun ttSeparator(): Color = ttFixedColours.separator(ttIsDarkTheme())

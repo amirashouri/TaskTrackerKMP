@@ -2,17 +2,9 @@ package com.tasktracker.compositionroot
 
 import com.tasktracker.core.TTLogger
 import com.tasktracker.database.CachedSession
-import com.tasktracker.database.DatabaseConfiguration
-import com.tasktracker.database.NewOutboxEntry
-import com.tasktracker.database.OutboxEntity
-import com.tasktracker.database.OutboxOperation
-import com.tasktracker.database.RoomOutboxQueue
 import com.tasktracker.di.Resolver
 import com.tasktracker.network.SessionInvalidationReason
 import kotlin.time.Clock
-import com.tasktracker.database.TaskTrackerDatabase
-import com.tasktracker.keychain.InMemoryKeychain
-import com.tasktracker.userdefaults.InMemoryPreferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -67,27 +59,13 @@ class SessionTeardownTest {
         assertNull(stores.session.held())
     }
 
-    @Test
-    fun `the outbox is left alone`() = runTest {
-        val resolver = testResolver()
-        val database = inMemoryDatabase()
-        val outbox = RoomOutboxQueue(database)
-        outbox.enqueue(sampleEntry())
-        val stores = InMemoryStores()
-
-        SessionTeardown(
-            resolver = resolver,
-            metadata = stores.metadata,
-            sessionCache = stores.session,
-            syncCoordinator = silentSyncCoordinator(scope = backgroundScope),
-        ).run(SessionInvalidationReason.UserLogout)
-
-        // The load-bearing decision. Every queued row carries the id of the account that queued
-        // it, and the engine claims only the signed-in account's rows — so a different user
-        // cannot push this account's work, and the same user signing back in finds their
-        // unsynced edits exactly where they left them. Clearing here would discard them.
-        assertEquals(1, outbox.count(status = null))
-    }
+    /*
+     * `the outbox is left alone` used to live here. It now lives in [HostedGraphScenarios],
+     * because it opens a real `RoomOutboxQueue` and Room's `inMemoryDatabaseBuilder` needs a
+     * `Context` on Android. A recording outbox double would have made the assertion true by
+     * construction, so the fix was to move the test rather than to weaken it — see the note in
+     * that file for the full reasoning.
+     */
 
     @Test
     fun `two teardowns in a row are safe`() = runTest {
@@ -204,19 +182,6 @@ class SessionTeardownTest {
         override val registeredNames: List<String> get() = delegate.registeredNames
     }
 
-    /**
-     * A throwaway store for the outbox test, over the host this target can provide.
-     *
-     * The host is the part that matters: Room's `inMemoryDatabaseBuilder` needs a `Context` on
-     * Android, so a bare `DatabaseConfiguration.inMemory` fails on the Android test host with a
-     * message about the database rather than about anything this test is about. [testPlatformHost]
-     * is `Unit` on JVM and iOS, where nothing is needed, and Robolectric's application where
-     * something is.
-     */
-    private fun inMemoryDatabase(): TaskTrackerDatabase = TaskTrackerDatabase.open(
-        DatabaseConfiguration(name = "", inMemory = true, host = testPlatformHost()),
-    )
-
     private fun cachedSession() = CachedSession(
         userID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
         email = "ada@example.com",
@@ -225,12 +190,4 @@ class SessionTeardownTest {
         serverVersion = 0,
     )
 
-    private fun sampleEntry() = NewOutboxEntry(
-        id = "change-1",
-        entity = OutboxEntity.Project,
-        entityID = "project-1",
-        operation = OutboxOperation.Upsert,
-        payload = "{}".encodeToByteArray(),
-        createdAt = Clock.System.now(),
-    )
 }

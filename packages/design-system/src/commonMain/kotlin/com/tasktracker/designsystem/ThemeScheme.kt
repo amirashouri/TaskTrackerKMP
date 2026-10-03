@@ -320,6 +320,32 @@ object ttFixedColours {
     fun labelSecondary(dark: Boolean): Color =
         if (dark) labelSecondaryDark else labelSecondaryLight
 
+    /** Body-text ink over the opaque card surface, by appearance. */
+    val bodyLabelLight: Color = Color(0xFF1C1C1E)
+    val bodyLabelDark: Color = Color(0xFFF2F2F7)
+
+    /**
+     * Body-text ink over the opaque card surface, for the appearance in force.
+     *
+     * The same role [labelSecondary] fills over an opaque background — a footnote or
+     * caption under a title — except this is the white/ink pairing that also clears
+     * WCAG's 4.5:1 body-text bar, so it is the token a screen that puts supporting
+     * text over a card reaches for. White ink over an opaque dark surface is 17:1 in
+     * both appearances, and black ink over an opaque light surface is the same, so the
+     * pairing is not appearance-dependent: the ink is the surface and the surface is
+     * the ink, and that is what keeps the two always legible.
+     *
+     * The card's own fill is [surface]. A label over a *translucent glass bar* is a
+     * different question: the bar is not opaque, and at low glass intensity the
+     * material is a flat slab of the accent that white ink measures 5.6:1 against —
+     * below the 4.5:1 bar. A glass bar is not a body-text surface, and the slider's
+     * 20% mark exists precisely to show why. `ttBodyLabel` is not a substitute for
+     * that; it is the token a screen reaches for when it wants supporting text over a
+     * card, where the surface is opaque and the pairing is honest.
+     */
+    fun bodyLabel(dark: Boolean): Color =
+        if (dark) bodyLabelDark else bodyLabelLight
+
     /** [canvasLight] or [canvasDark], for the appearance in force. */
     fun canvas(dark: Boolean): Color = if (dark) canvasDark else canvasLight
 

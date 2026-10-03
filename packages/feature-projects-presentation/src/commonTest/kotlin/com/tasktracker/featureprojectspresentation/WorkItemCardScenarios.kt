@@ -150,10 +150,17 @@ internal fun ComposeUiTest.cardShowing(item: WorkItem) {
     }
 }
 
-/** The theme every scenario in this module is drawn in, so previews and tests agree. */
+/**
+ * The theme every scenario in this module is drawn in, so previews and tests agree.
+ *
+ * `content =` is named rather than positional because `ttTheme` grew an `accentPalette`
+ * parameter between `scheme` and `content`, so a positional call now binds the palette to a
+ * composable. That is a compile error here, and a silent one only until the module is built:
+ * this file is `commonTest`, so the JVM host reports it and the iOS host reports it again.
+ */
 @Composable
 internal fun Themed(content: @Composable () -> Unit) {
-    ttTheme(ThemeScheme.Dark, content)
+    ttTheme(ThemeScheme.Dark, content = content)
 }
 
 /**

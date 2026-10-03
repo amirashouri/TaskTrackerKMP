@@ -64,6 +64,9 @@ actual fun ttLabel(): Color = dynamicOrPinned(
 )
 
 @Composable
+actual fun ttBodyLabel(): Color = ttFixedColours.bodyLabel(ttIsDarkTheme())
+
+@Composable
 actual fun ttLabelSecondary(): Color = dynamicOrPinned(
     pinned = { ttFixedColours.labelSecondary(it) },
     dynamic = { UIColor.secondaryLabelColor.toComposeColor() },

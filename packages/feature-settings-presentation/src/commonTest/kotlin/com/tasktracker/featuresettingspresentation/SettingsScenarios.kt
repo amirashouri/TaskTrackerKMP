@@ -228,8 +228,15 @@ private fun ComposeUiTest.screenShowing(
     }
 }
 
-/** The theme every scenario here is drawn in, so previews and tests agree. */
+/**
+ * The theme every scenario here is drawn in, so previews and tests agree.
+ *
+ * `content =` is named rather than positional because `ttTheme` grew an `accentPalette`
+ * parameter between `scheme` and `content`, so a positional call now binds the palette to a
+ * composable. Same one-argument fix as `WorkItemCardScenarios`; the two modules failed their
+ * test *compilation* together, so neither reported any executions at all.
+ */
 @Composable
 internal fun Themed(content: @Composable () -> Unit) {
-    ttTheme(ThemeScheme.Dark, content)
+    ttTheme(ThemeScheme.Dark, content = content)
 }

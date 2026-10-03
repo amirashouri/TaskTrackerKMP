@@ -62,10 +62,10 @@ actual fun ttLabel(): Color = dynamicOrPinned(
  * appearance identical on both platforms.
  */
 @Composable
-actual fun ttLabelSecondary(): Color = dynamicOrPinned(
-    pinned = { ttFixedColours.labelSecondary(it) },
-    dynamic = { themeColor(android.R.attr.textColorSecondary) },
-)
+actual fun ttLabelSecondary(): Color = ttFixedColours.labelSecondary(ttIsDarkTheme())
+
+@Composable
+actual fun ttBodyLabel(): Color = ttFixedColours.bodyLabel(ttIsDarkTheme())
 
 @Composable
 actual fun ttSeparator(): Color = dynamicOrPinned(

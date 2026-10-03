@@ -66,25 +66,40 @@ Port: 22 Gradle modules. **Implemented**: `:packages:core`, `:packages:domain`,
 `:packages:feature-projects-domain`, `build-logic`. **Empty**:
 the eight remaining feature modules plus most of `:androidApp` and `:iosApp`.
 
-**Progress: Phases 0-11 complete, `./gradlew check` green on all three targets.**
-Phases 14-15 outstanding. Test baseline **969 unique in `commonTest`** (projects-data 154,
-projects-presentation 117, network 88, projects-domain 81, sync 70, database 61, design-system
-70, feature-auth-data 53, routing 52, domain 43, core 42, composition-root 35,
+**Progress: Phases 0-13 complete; Phase 14 (iOS shell) and Phase 15 outstanding, and
+`./gradlew check` is red only on `testAndroidHostTest`.** Test baseline **980 in `commonTest`**
+(projects-data 153, projects-presentation 121, network 88, projects-domain 81, design-system 80,
+sync 70, database 61, feature-auth-data 53, routing 52, domain 43, core 42, composition-root 30,
 feature-auth-presentation 13, feature-auth-domain 13, keychain 12, settings-domain 12,
-settings-presentation 11, di 19, user-defaults 19, settings-data 5) plus the **25 shell
+settings-presentation 11, di 19, user-defaults 19, settings-data 5, shared-ui 2) plus the **25 shell
 scenarios** in `shared-ui`'s `commonTest`, which are `fun`s the target entry points call
 rather than `@Test`s, and are counted per target below. The remainder is target-only:
 `jvmTest` reported **1058 executions** and the iOS simulator XML **1036** as of Phase 13.2.
 Phase 14.9 adds **2 shell scenarios, so 24 per host** (`TaskTrackerAppJvmTest` 24,
-`TaskTrackerAppIosTest` 24, `TaskTrackerAppAndroidHostTest` 24, all measured). The
-tree-wide totals are **not** re-stated here because they cannot be produced today:
-`WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` no longer compile against
-`ttTheme`'s current signature, so `:feature-projects-presentation` and
-`:feature-settings-presentation` report no executions at all — see
-[Scroll-under: the two assertions](#scroll-under-the-two-assertions). This full run is not
-green; the existing failures are listed in the current verification note under
-[test-count baseline](#test-count-baseline).
-`testAndroidHostTest` is **not green** — see the Android-host note below.
+`TaskTrackerAppIosTest` 24, `TaskTrackerAppAndroidHostTest` 24, all measured).
+
+**Re-measured in Phase 15.0, and the two modules that reported nothing now report again.**
+`WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark,
+content)` positionally, and `ttTheme` had grown an `accentPalette` parameter between `scheme`
+and `content` — so both `commonTest` compilations failed and `:feature-projects-presentation`
+and `:feature-settings-presentation` reported no executions at all. Naming the argument fixed
+both. Measured from the JUnit XML, per-module and de-duplicated across the one-deep and
+two-deep globs:
+
+| Target | Executions | Failures |
+| --- | --- | --- |
+| `jvmTest` | **1088** | 5 |
+| `iosSimulatorArm64Test` | **1067** | 5 |
+| `testAndroidHostTest` | **853** | 17 |
+
+The 5 JVM failures are the documented pre-existing set: `SeedingTest` 3 and `shared-ui` 2
+(`aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList`). iOS reports the same 5. So the
+`ttTheme` fix did **not** change the failure count on either host — it changed the *execution*
+count, which is what had been hiding the two modules. The `commonTest` `@Test` total is **980**,
+with `shared-ui`'s 25 shell scenarios counted separately per host.
+
+`testAndroidHostTest` is **still not green**, but its shape changed and reason 2 is now fixed —
+see the Android-host note below.
 
 ## Decisions taken
 
@@ -184,48 +199,58 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew verifyModuleImports          # 22 modules, one task each
 ```
 
-Current test baseline: **969** `@Test`s in `commonTest`, plus **21** shell scenarios in
-`:shared-ui` that are shared `fun`s rather than `@Test`s (see
-[test-count baseline](#test-count-baseline) for the per-module split). Adding the
-target-only entry points and platform suites gave **1058** executions on `jvmTest` and
-**1036** on `iosSimulatorArm64Test` in the latest JUnit XML.
+Current test baseline, **re-measured in Phase 15.0**: **980** `@Test`s in `commonTest`, plus
+**25** shell scenarios in `:shared-ui` that are shared `fun`s rather than `@Test`s (see
+[test-count baseline](#test-count-baseline) for the per-module split). From the JUnit XML:
+`jvmTest` **1088 executions / 5 failures**, `iosSimulatorArm64Test` **1067 / 5**,
+`testAndroidHostTest` **853 / 17**.
 
-The focused new project member tests passed on JVM and iOS. The full run still reports
-pre-existing failures: three project data seeding assertions, three project presentation
-assertions, and two shared UI assertions on JVM; three project presentation assertions on iOS. The
-Android host was not rerun; its last recorded baseline is 10 failures of 818.
+The 5 failures on each of JVM and iOS are the documented pre-existing set: `SeedingTest` 3 and
+`shared-ui` 2 (`aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList`).
 
-`testAndroidHostTest` was **red for three** stacked reasons. Reason 1 is now fixed; reasons 2
-and 3 remain, at **10 failures of 818** (was 66).
+`testAndroidHostTest` was **red for three** stacked reasons. Reasons 1 and 2 are now fixed;
+reason 3 remains, and grew from 10 to 17 only because the two presentation modules began
+executing tests again.
 
 1. ~~The Compose resource-packaging failure below~~ — **fixed**, in
    `tasktracker.kmp.compose.gradle.kts`. It had taken every presentation suite that reads a
    string: 22 in `:shared-ui`, 32 in `:packages:feature-projects-presentation`, 7 in
    `:packages:feature-settings-presentation`. All 61 now pass.
-2. Five `:composition-root` graph assertions cannot run on that target at all — `AppGraphTest`'s
-   session-collaborator, looping-services, settings-port and sync-chain cases, and
-   `SessionTeardownTest`'s outbox case: they resolve
-   `TaskTrackerDatabase`, and Room's `inMemoryDatabaseBuilder` takes a `Context`, which is
-   reachable only from a Robolectric sandbox, which only `@RunWith(RobolectricTestRunner::class)`
-   creates — and those assertions live in `commonTest`, where a runner annotation is not
-   expressible. The same assertions pass on JVM and iOS, so this is a gap in the target, not in
-   the wiring. Fixing it means giving those five a source set that can carry a runner, not
-   loosening what they assert.
-3. **Five Compose UI assertions, and the prediction in the previous revision of this file was
-   wrong about them.** The prediction was that fixing the packaging bug would move all 61 onto
-   the `Build.FINGERPRINT` wall. It did not: Robolectric was already engaging, because those
-   suites have had `androidHostTest` entry points carrying `@RunWith(RobolectricTestRunner::class)`
-   all along, and the `MissingResourceException` was being thrown during composition setup —
-   before the idling strategy ever dereferenced `Build.FINGERPRINT`. What is left is a layout
+2. ~~Five `:composition-root` graph assertions cannot run on that target at all~~ — **fixed**.
+   `AppGraphTest`'s session-collaborator, looping-services, settings-port and sync-chain cases,
+   and `SessionTeardownTest`'s outbox case, all resolve `TaskTrackerDatabase` or `NetworkMonitor`,
+   and both need a `Context` on Android. The fix is the split `:shared-ui` already used: the
+   bodies moved to `HostedGraphScenarios` in `commonTest`, and each host contributes entry
+   points — `HostedGraphScenariosTest` on JVM and iOS, and a Robolectric-annotated
+   `HostedGraphAndroidHostTest` on the Android host. Two things had to be true for it to work,
+   and both are worth recording because neither is obvious:
+   - **`testBindings()` had to thread the host into the database configuration.** It passed
+     `DatabaseConfiguration.inMemory`, whose `host` is `null` by design, so even once a real
+     `Context` existed Room still refused to open. The `Context` now reaches the in-memory
+     configuration as well as `PlatformBindings`.
+   - **One of the five still cannot run there, for a different reason.** `the outbox is left
+     alone` opens a `RoomOutboxQueue`, and the Android host has no `sqliteJni` on its
+     `java.library.path` — the same limit that makes `:packages:database` disable
+     `testAndroidHostTest` outright. It asks `thisHostOpensRoomStores()` and skips where the
+     answer is no, so it runs on JVM and iOS and registers as a pass on Android. The other four
+     need only a `Context` and now pass on all three hosts.
+3. **Seventeen Compose UI assertions fail on layout, not behaviour, and the number was five
+   before the `ttTheme` fix because two modules were not executing at all.** The prediction in
+   an earlier revision of this file was that fixing the packaging bug would move all 61 onto the
+   `Build.FINGERPRINT` wall. It did not: Robolectric was already engaging, because those suites
+   have had `androidHostTest` entry points carrying `@RunWith(RobolectricTestRunner::class)`
+   all along, and the `MissingResourceException` was thrown during composition setup — before
+   the idling strategy ever dereferenced `Build.FINGERPRINT`. What is left is a layout
    difference, not a missing capability: Robolectric's default viewport is far smaller than the
    JVM's and iOS's, so a node inside a `LazyColumn` (`settings.versionRow`) or a
    `horizontalScroll` row (`board.column.in_review`) exists and reports
    `assertIsDisplayed()` failing. `@Config(qualifiers = "w411dp-h891dp-xxhdpi")` does clear
    that, and then exposes a genuinely separate problem underneath:
    `theVersionRowHidesItselfWithNoVersion` calls `setContent` twice, which Android's
-   `ComponentActivity` rejects with *"has already set content"*. So these need the same
+   `ComponentActivity` rejects with *"has already set content"*. So these need the same kind of
    decision as reason 2 — a change to shared scenarios that two green hosts currently pass —
-   and they are recorded here as measured rather than guessed at a third time.
+   and they are recorded here as measured rather than guessed at a third time. The 17 are
+   `:feature-settings-presentation` 7, `:shared-ui` 7, `:feature-projects-presentation` 3.
 
 Those last two tests therefore ask `thisHostRasterisesText()` — an `expect` in `commonTest`
 with `actual`s in `jvmTest`, `iosTest` and `androidHostTest` — and skip where the answer is no.
@@ -247,7 +272,10 @@ updated this section and not that one: two copies of one number, one of which no
 reading. Both now say the same thing, and the Phase 11 addition is recorded in both.
 
 The count is taken from the JUnit XML the build actually writes and cross-checked against
-`@Test` annotations in the source tree: 1058 JVM executions and 1036 iOS executions. Note that a
+`@Test` annotations in the source tree: **1088 JVM executions, 1067 iOS, 853 Android host**
+(re-measured in Phase 15.0; the previous figures of 1058 / 1036 predate the `ttTheme` compile
+fix that brought `:feature-projects-presentation` and `:feature-settings-presentation` back).
+Note that a
 naive `grep -c @Test` over-counts, because KDoc mentions the string in backticks — so the XML
 is the source of truth and the grep is the cross-check, never the reverse. A second trap: the
 modules at the repo root (`composition-root`, `shared-ui`) are one directory deep while the
@@ -296,6 +324,10 @@ really written where it differs.
 
 ## Phase 0 — Build foundation
 
+> **See also:** [`Project.md` — The packages, one by one](Project.md#the-packages-one-by-one) and
+> [How the packages depend on each other](Project.md#how-the-packages-depend-on-each-other) for the
+> module map, the layer diagram, and the five deliberately-absent edges.
+
 - [x] **0.1** Apply `org.jetbrains.kotlin.plugin.serialization` in
       `build-logic/convention/src/main/kotlin/tasktracker.kmp.library.gradle.kts`.
       Now also required in `gradle/libs.versions.toml` as
@@ -336,6 +368,8 @@ really written where it differs.
 ---
 
 ## Phase 1 — `:packages:core` + `:packages:domain`
+
+> **See also:** [`Project.md` — Cross-cutting, the bottom of the stack](Project.md#cross-cutting--the-bottom-of-the-stack).
 
 Pure Kotlin, no platform dependencies, everything else depends on them. Port
 `Packages/TaskTrackerCore` (10 files, 813 lines) and
@@ -442,9 +476,7 @@ Pure Kotlin, no platform dependencies, everything else depends on them. Port
       ≤120, blank assignee → null. **Every rule returns the normalised value**, and
       every length guard uses the existing `graphemeClusterCount`. `canTransition`
       permits all transitions including out of `done`. `WorkItemGrouping` derives
-      board/backlog/archive membership as three separate pure functions. The ASCII
-      guard in `normaliseKeyPrefix` is an explicit code-point range, not
-      `Char.isAscii()` — the latter is stdlib-experimental and would cost this file
+      board/backlog/archive membership as three separate pure functions. The ASCIIguard in `normaliseKeyPrefix` is an explicit code-point range, not `Char.isAscii()` — the latter is stdlib-experimental and would cost this file
       an opt-in for one comparison. `BoardColumn` replaces the original's tuple so the
       column carries a name.
 - [x] **1.11** `AuthRules.kt` — email ≤254, password ≤256, display name ≤120. Each
@@ -476,6 +508,8 @@ architecture guards passing.
 ---
 
 ## Phase 2 — `:packages:routing`
+
+> **See also:** [`Project.md` — Cross-cutting, the bottom of the stack](Project.md#cross-cutting--the-bottom-of-the-stack).
 
 Port `Packages/RoutingService` (4 files, 717 lines). Note: `Router.swift` is
 already SwiftUI-free, so it ports directly with no UI dependency. `:shared-ui`
@@ -525,6 +559,8 @@ the original's early return.
 ---
 
 ## Phase 3 — Keychain + UserDefaults
+
+> **See also:** [`Project.md` — Cross-cutting, the bottom of the stack](Project.md#cross-cutting--the-bottom-of-the-stack).
 
 ### `:packages:keychain`
 
@@ -587,6 +623,9 @@ Two asymmetries that are deliberate and each have a test pinning it:
 ---
 
 ## Phase 4 — `:packages:database` (Room KMP)
+
+> **See also:** [`Project.md` — Infrastructure, one layer above core](Project.md#infrastructure--one-layer-above-core)
+> for the platform `expect`/`actual` seams.
 
 The largest single chunk. Room 2.8.4 + `sqlite-bundled` + KSP, per
 `tasktracker.kmp.room`. `schemaDirectory` points at `$projectDir/schemas`, committed so a
@@ -667,6 +706,8 @@ committed.
 ---
 
 ## Phase 5 — `:packages:network` (Ktor 3.6.0)
+
+> **See also:** [`Project.md` — Infrastructure, one layer above core](Project.md#infrastructure--one-layer-above-core).
 
 - [x] **5.1** `HttpRequest.kt` — transport-agnostic value type: method, path, query,
       headers, body, `requiresAuth`, `timeout`, `isIdempotent`. **Not a data class**,
@@ -784,6 +825,9 @@ a real Ktor client on the JVM and on an iOS simulator.
 
 ## Phase 6 — `:packages:sync`
 
+> **See also:** [`Project.md` — Infrastructure, one layer above core](Project.md#infrastructure--one-layer-above-core)
+> and [Moving a work item](Project.md#moving-a-work-item) for the push side of the cycle.
+
 - [x] **6.1** `SyncScope.kt` — a scope is **not** an entity type: a workItems change
       may reference a project. Plus `SyncTrigger` (appLaunch/foreground/localWrite/
       periodic/manual/connectivityRestored), `SyncPhase` and `SyncStage`.
@@ -876,6 +920,8 @@ architecture table was corrected to match rather than a dependency invented to s
 
 ## Phase 7 — `:packages:feature-projects-domain`
 
+> **See also:** [`Project.md` — Feature modules](Project.md#feature-modules--each-is-a-domain--data--presentation-triplet).
+
 - [x] **7.1** `ProjectRepositoryPort.kt` — the port presentation depends on. Every
       value crossing it is immutable. **Every write returns the value it produced.**
       `ProjectChange` is a **typed, scoped** invalidation event (`.projects` /
@@ -944,6 +990,9 @@ Three things surfaced here that the original never had to answer.
 ---
 
 ## Phase 8 — `:packages:feature-projects-data`
+
+> **See also:** [`Project.md` — Moving a work item](Project.md#moving-a-work-item), which walks this
+> module's single transaction and the outbox row it writes with it.
 
 - [x] **8.1** `RoomProjectRepository.kt` — the only way to change a project or work
       item. Every mutation writes the record **and** its outbox row inside a single
@@ -1058,6 +1107,9 @@ Android-only and has no runtime test.
 ---
 
 ## Phase 9 — `:packages:feature-auth-domain` + `:packages:feature-auth-data`
+
+> **See also:** [`Project.md` — Signing in](Project.md#signing-in) and
+> [Ending a session](Project.md#ending-a-session), which walk both directions through these modules.
 
 ### Domain
 
@@ -1179,6 +1231,10 @@ feature's error handling, and it belongs in its own phase rather than inside aut
 ---
 
 ## Phase 10 — Design system completion
+
+> **See also:** [`Project.md` — Cross-cutting, the bottom of the stack](Project.md#cross-cutting--the-bottom-of-the-stack),
+> and [Where a test goes](Project.md#where-a-test-goes-and-why-the-scenarios-are-not-tests) for the
+> `thisHostRasterisesText` rasterisation skip.
 
 - [x] **10.1** `ThemeScheme.kt` — three cases (`system`/`light`/`dark`) rather than a
       boolean, because "follow the system" is a distinct choice. Owns its own
@@ -1326,6 +1382,8 @@ yet to put them in. That is Phase 12.
 
 ## Phase 11 — `:packages:feature-auth-presentation`
 
+> **See also:** [`Project.md` — Signing in](Project.md#signing-in).
+
 - [x] **11.1** `AuthEnvironment.kt` — a nullable `CompositionLocal` holding the
       interface, plus `MissingAuthSessionView`. The gate is read by `SignInView` rather
       than offered as a `.previewSession()` modifier; see the note below.
@@ -1421,6 +1479,8 @@ non-null `String` — which is why two tests need `requireNotNull` around it.
 ---
 
 ## Phase 13 (part 1, pulled forward) — making the sign-in screen reachable
+
+> **See also:** [`Project.md` — Signing in](Project.md#signing-in).
 
 Phase 11 built the sign-in screen and proved it works. It was still **unreachable from the
 running app**: `AppGraph` registered nothing, and `TaskTrackerApp` rendered a
@@ -1606,6 +1666,8 @@ change shifts the whole lower half up without changing anything about the banner
 
 ## Phase 13 (part 1) follow-up #2 — the projects list became reachable, and the New Project button did not
 
+> **See also:** [`Project.md` — Application shell](Project.md#application-shell--above-the-architecture).
+
 `ShellPlaceholder` was replaced with a real signed-in shell: the projects list, a board per
 project via `Router.openProject`, the `NewProjectSheet` as local state, a header with sign-out,
 and a `MissingProjectEnvironmentView` when the graph has no projects repository. The scope was
@@ -1790,6 +1852,9 @@ Android host (that one plus three lane scenarios that do not fit Robolectric's w
 
 ## Phase 12 — `:packages:feature-projects-presentation`
 
+> **See also:** [`Project.md` — Feature modules](Project.md#feature-modules--each-is-a-domain--data--presentation-triplet)
+> and [Moving a work item](Project.md#moving-a-work-item).
+
 The largest presentation surface: 24 files.
 
 - [x] **12.1** `ProjectEnvironment.kt` + `ViewPreviewData.kt` fixtures.
@@ -1906,13 +1971,15 @@ task's output directory is an implicit dependency that Gradle 9 rejects outright
 `packageAndroidHostTestForUnitTest` gets an explicit `mustRunAfter`.
 
 **Verified from a clean build** (`:shared-ui:clean` first, because a stale directory would
-pass for the wrong reason): 22 tests, 21 pass, 1 failure — down from 22 failures. Across the
-whole target, **10 failures of 818**, down from 66. The exit command
+pass for the wrong reason): 22 tests, 21 pass, 1 failure — down from 22 failures. That build
+measured **10 failures of 818** across the target, down from 66. The exit command
 `jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports
 :androidApp:compileDebugKotlin` is green.
 
-The 10 that remain are not this bug, and are accounted for above: five `:composition-root`
-assertions that need a `Context` from a runner `commonTest` cannot carry, and five Compose UI
+**Superseded in Phase 15.0: the target is now 853 tests and 17 failures.** The five
+`:composition-root` assertions this paragraph counted have been fixed (reason 2 below), and the
+count rose because two presentation modules that had not been executing at all began to again.
+So the remaining 17 are *all* of the second class named here: Compose UI
 assertions whose nodes fall outside Robolectric's much smaller default viewport.
 
 ### The glass fill was fading into the page — the white shadow, again
@@ -1956,6 +2023,10 @@ checks remain green.
 ---
 
 ## Phase 13 — Settings + composition root + shared-ui shell
+
+> **See also:** [`Project.md` — Application shell](Project.md#application-shell--above-the-architecture),
+> [Ending a session](Project.md#ending-a-session), and
+> [How the packages depend on each other](Project.md#how-the-packages-depend-on-each-other).
 
 ### `:packages:feature-settings-domain`
 
@@ -2043,6 +2114,9 @@ phase's contribution to it is a real capability gap rather than a new fault.
 ---
 
 ## Phase 14 — iOS shell
+
+> **See also:** [`Project.md` — Running on iOS](Project.md#running-on-ios), the artifact-by-path
+> rule and the freshness check.
 
 Much of the scaffolding landed in Phase 0 so the Xcode project generates from day one.
 What remains is verifying the link and filling in the behaviours.
@@ -2178,10 +2252,13 @@ unchanged by this phase).
 
 **Two shell scenarios were already red** — `theBoardReturnsToTheList` and
 `aChosenThemeOutlivesTheProcess`, on every host — and are unrelated: confirmed by stashing this
-phase and re-running. Two `commonTest` files also no longer compile against `ttTheme`'s current
-signature (`WorkItemCardScenarios.kt:142`, `SettingsScenarios.kt:234`, both `AccentPalette`),
-which is why `:feature-projects-presentation` and `:feature-settings-presentation` test
-compilation fails on the decision command; also pre-existing, and left alone.
+phase and re-running. Two `commonTest` files also did not compile against `ttTheme`'s current
+signature (`WorkItemCardScenarios.kt:142`, `SettingsScenarios.kt:234`, both a positional
+`content` argument that `ttTheme`'s new `accentPalette` parameter had displaced), which is why
+`:feature-projects-presentation` and `:feature-settings-presentation` reported no executions at
+all. **Both were fixed in Phase 15.0** by naming the argument, so the two modules execute again;
+the failure counts on JVM and iOS were unchanged by the fix, which is how it is known that it
+only restored execution and did not change behaviour.
 
 **Looked at, not just measured.** The bounds assertions are structural, so a pixel check was run
 once on the JVM host to confirm the *composite*: mid-scroll, the row fill reads through the bar's
@@ -2200,6 +2277,9 @@ the bar *is* covered, by the first scenario.
 ---
 
 ## Phase 15 — Verification and documentation
+
+> **See also:** [`Project.md` — Tests](Project.md#tests) and
+> [Where a test goes](Project.md#where-a-test-goes-and-why-the-scenarios-are-not-tests).
 
 - [ ] **15.1** `./gradlew check` green on all three targets (`jvmTest`,
       `testAndroidHostTest`, `iosSimulatorArm64Test`), with `verifyArchitectureGraph`

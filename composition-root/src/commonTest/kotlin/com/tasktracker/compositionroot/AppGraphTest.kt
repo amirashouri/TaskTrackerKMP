@@ -204,53 +204,6 @@ class AppGraphTest {
     }
 
     /**
-     * Sync resolves as one graph rather than as loose parts.
-     *
-     * The engine, the coordinator and the monitor are checked by registration rather than by
-     * `resolve`, because resolving a coordinator reads the platform's connectivity and
-     * building a transport is real work this host has no business doing to assert a wiring
-     * fact. What matters here is that the edge exists and that the coordinator is the one
-     * app-scoped instance, since two of them would each start their own cycle.
-     */
-    @Test
-    fun `the sync chain is registered and shares one coordinator and one monitor`() {
-        val resolver = testGraph()
-
-        try {
-            assertTrue(resolver.isRegistered(SyncCoordinator::class))
-            assertTrue(resolver.isRegistered(NetworkMonitor::class))
-            assertSame(resolver.resolve(SyncCoordinator::class), resolver.resolve(SyncCoordinator::class))
-            assertSame(resolver.resolve(NetworkMonitor::class), resolver.resolve(NetworkMonitor::class))
-        } finally {
-            resolver.stop()
-        }
-    }
-
-    /**
-     * The three looping services are started by [AppGraph.start], not by their factories.
-     *
-     * Asserted through the monitor because it is the only one of the three with observable
-     * state: [NetworkMonitor.start] is idempotent and a second `start` would attach a second
-     * watcher. What is being pinned is that starting the graph starts the loops, so a caller
-     * that only ever calls `start` — which is every platform entry point — gets running
-     * services.
-     */
-    @Test
-    fun `starting the graph starts the looping services`() {
-        val resolver = runningGraph()
-
-        try {
-            // [NetworkMonitor] is the observable one: `start` attaches a watcher, and a
-            // coordinator started first would see `Connectivity.Unknown` and skip its first
-            // cycle. Asserted by asking the graph to stop them — [AppGraph.stop] resolves all
-            // three, so a service that was never registered would throw rather than pass.
-            AppGraph.stop(resolver)
-        } finally {
-            resolver.stop()
-        }
-    }
-
-    /**
      * A graph built with services off resolves everything but runs nothing.
      *
      * The counterpart to the test above, and the reason the seam is safe: turning loops off
@@ -272,51 +225,20 @@ class AppGraphTest {
         }
     }
 
-    /**
-     * The session collaborators resolve, and the coordinator is one instance for the process.
-     *
-     * App-scoped is load-bearing for the coordinator as much as for the auth port: a
-     * sign-out drops the session scope, and a session-scoped coordinator would be
-     * invalidated underneath the shell holding it.
-     */
-    @Test
-    fun `the session collaborators are registered and the coordinator is app scoped`() {
-        val resolver = testGraph()
-
-        try {
-            assertTrue(resolver.isRegistered(SessionCoordinator::class))
-            assertTrue(resolver.isRegistered(SessionTeardown::class))
-            assertSame(
-                resolver.resolve(SessionCoordinator::class),
-                resolver.resolve(SessionCoordinator::class),
-            )
-            assertSame(
-                resolver.resolve(SessionTeardown::class),
-                resolver.resolve(SessionTeardown::class),
-            )
-        } finally {
-            resolver.stop()
-        }
-    }
-
-    /**
-     * The settings port resolves, and is one instance.
-     *
-     * Resolved rather than registration-checked because this is the one registration whose
-     * factory has real work in it: it reads the platform version, which on this host is
-     * blanks. That is the point of the assertion — a factory that throws on a host with no
-     * bundle would turn the About row into a launch failure.
-     */
-    @Test
-    fun `the settings port resolves and is one instance`() {
-        val resolver = testGraph()
-
-        try {
-            val settings = resolver.resolve(SettingsPort::class)
-            assertNotNull(settings)
-            assertSame(settings, resolver.resolve(SettingsPort::class))
-        } finally {
-            resolver.stop()
-        }
-    }
 }
+
+/*
+ * Five assertions used to live here and now live in [HostedGraphScenarios], because they resolve
+ * `TaskTrackerDatabase` or `NetworkMonitor` and both need a `Context` on Android: Room's
+ * `inMemoryDatabaseBuilder` takes one, and `NetworkMonitor.forHost` needs one to reach
+ * `ConnectivityManager`. A `Context` comes only from a Robolectric sandbox, which only a class
+ * runner annotation creates, and a runner annotation cannot be written in `commonTest`. So the
+ * bodies moved to a scenario object and each host has an entry point that can carry the runner:
+ * `HostedGraphScenariosTest` on JVM and iOS, and the Robolectric-annotated
+ * `HostedGraphAndroidHostTest` on the Android host.
+ *
+ * They were left in place here until Phase 15 and failed on `testAndroidHostTest` with a
+ * `FactoryFailed` for `TaskTrackerDatabase` and for `NetworkMonitor`, which reads as "the graph
+ * is broken on Android" and is not. The same assertions pass on JVM and iOS, where neither
+ * backend needs a host, so it was always a gap in the test target rather than in the wiring.
+ */

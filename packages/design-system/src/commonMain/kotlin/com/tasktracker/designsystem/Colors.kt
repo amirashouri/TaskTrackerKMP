@@ -96,6 +96,10 @@ expect fun ttLabel(): Color
 @Composable
 expect fun ttLabelSecondary(): Color
 
+/** Body-text ink over the opaque card surface, by appearance. */
+@Composable
+expect fun ttBodyLabel(): Color
+
 /**
  * Marks and labels drawn *on top of* the accent fill.
  *

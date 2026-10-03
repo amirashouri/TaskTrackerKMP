@@ -38,15 +38,29 @@ internal expect fun testPlatformHost(): Any
  * `keychain` and `preferences` are parameters for the opposite reason. A relaunch test needs
  * *the same* in-memory stores in two graphs — fresh ones would assert that a session survives
  * nothing at all, and would pass, which is why those tests pass them explicitly.
+ *
+ * ## The host is threaded into the database configuration, not just handed to the bindings
+ *
+ * `DatabaseConfiguration.inMemory` carries a `null` host by design — it is the configuration
+ * for a store that has no location, and it is a `val` shared by every caller. On Android,
+ * though, Room's `inMemoryDatabaseBuilder` takes a `Context` whether the store is in memory or
+ * not, so a graph built from that `val` fails there even when [testPlatformHost] has a real
+ * `Context` to offer. Passing the host here as well as to [PlatformBindings] is what makes
+ * `inMemory` usable on that target, and it is why this is a named configuration rather than the
+ * shared `val`: a store that is in memory *and* hosted is a different thing from one that is
+ * merely in memory.
  */
 internal fun testBindings(
     startServices: Boolean = false,
     keychain: KeychainAccess = InMemoryKeychain(),
     preferences: PreferencesBackend = InMemoryPreferences(),
-): PlatformBindings = PlatformBindings(
-    host = testPlatformHost(),
-    keychain = keychain,
-    preferences = preferences,
-    database = DatabaseConfiguration.inMemory,
-    startServices = startServices,
-)
+): PlatformBindings {
+    val host = testPlatformHost()
+    return PlatformBindings(
+        host = host,
+        keychain = keychain,
+        preferences = preferences,
+        database = DatabaseConfiguration(name = "", inMemory = true, host = host),
+        startServices = startServices,
+    )
+}

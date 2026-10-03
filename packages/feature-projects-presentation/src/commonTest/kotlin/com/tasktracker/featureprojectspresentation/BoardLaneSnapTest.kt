@@ -108,7 +108,12 @@ class BoardLaneSnapTest {
         )
         assertEquals(
             STRIDE * 2,
-            restingAt(scrollValue = STRIDE + 450f, velocity = 0f),
+            restingAt(scrollValue = STRIDE + 500f, velocity = 0f),
+            // 500 is past half a stride (462), so the lane ahead is the nearer one. The value
+            // here was 450, which is 12px short of the halfway mark and so asserts the
+            // *opposite* of what this line says — and it never ran, because the module's
+            // `commonTest` did not compile until the `ttTheme` call in `WorkItemCardScenarios`
+            // was fixed. A green-looking suite is not evidence that a red test is absent.
             "past the halfway mark the next lane wins instead",
         )
     }
