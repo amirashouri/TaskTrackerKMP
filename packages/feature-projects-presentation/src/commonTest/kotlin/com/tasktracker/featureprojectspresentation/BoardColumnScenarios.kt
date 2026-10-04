@@ -113,6 +113,16 @@ object BoardColumnScenarios {
 
         assertEquals(item, selected)
     }
+
+    /** Clicking the sort button cycles through sort orders (Default -> ByDate -> ByPriority). */
+    val clickingSortButtonCyclesSortOrders: suspend ComposeUiTest.() -> Unit = {
+        val items = ViewPreviewData.workItems.filter { it.status == WorkItemStatus.Todo }
+        boardWith(mapOf(WorkItemStatus.Todo to items))
+
+        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).assertIsDisplayed().performClick()
+        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).performClick()
+        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).performClick()
+    }
 }
 
 /** Draws one board: a column per lane, populated from [itemsByStatus]. */

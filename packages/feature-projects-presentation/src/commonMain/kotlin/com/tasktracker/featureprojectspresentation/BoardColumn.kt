@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -43,6 +44,8 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_empty_column
 import com.tasktracker.resources.board_add_task
+import com.tasktracker.resources.board_sort_by_date
+import com.tasktracker.resources.board_sort_by_priority
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -114,8 +117,18 @@ fun BoardColumnView(
         // Zero on the first frame - nothing has been measured yet - which is the same trade
         // the tab-bar inset makes: one recomposition later the content starts below the slab.
         var headerHeightPx by remember { mutableStateOf(0) }
+        var sortOrder by remember(column.status) { mutableStateOf(ColumnSortOrder.ByDate) }
         val tabBarInset = LocalTabBarScrollUnderInset.current
         val headerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
+
+        val sortedItems = remember(column.items, sortOrder) {
+            when (sortOrder) {
+                ColumnSortOrder.ByDate -> column.items.sortedWith(
+                    compareBy<WorkItem> { it.dueDate == null }.thenBy { it.dueDate }
+                )
+                ColumnSortOrder.ByPriority -> column.items.sortedByDescending { it.priority.ordinal }
+            }
+        }
 
         // Underneath, and first in the box so it draws below the slab. Full height, so the
         // cards reach the bottom of the screen and can be scrolled up out from under both the
@@ -138,7 +151,7 @@ fun BoardColumnView(
                     modifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),
                 )
             } else {
-                column.items.forEach { item ->
+                sortedItems.forEach { item ->
                     WorkItemCard(
                         item = item,
                         onClick = { onSelect(item) },
@@ -185,6 +198,23 @@ fun BoardColumnView(
                 color = ttLabelSecondary(),
                 modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
             )
+            ttGlassIconButton(
+                image = ttActionIcons.sort,
+                contentDescription = stringResource(
+                    when (sortOrder) {
+                        ColumnSortOrder.ByDate -> Res.string.board_sort_by_date
+                        ColumnSortOrder.ByPriority -> Res.string.board_sort_by_priority
+                    }
+                ),
+                onClick = {
+                    sortOrder = when (sortOrder) {
+                        ColumnSortOrder.ByDate -> ColumnSortOrder.ByPriority
+                        ColumnSortOrder.ByPriority -> ColumnSortOrder.ByDate
+                    }
+                },
+                tint = ttAccent(),
+                modifier = Modifier.testTag(BoardColumnSortTag(column.status)),
+            )
             onAddTask?.let { addTask ->
                 ttGlassIconButton(
                     image = ttActionIcons.add,
@@ -195,6 +225,11 @@ fun BoardColumnView(
             }
         }
     }
+}
+
+enum class ColumnSortOrder {
+    ByDate,
+    ByPriority,
 }
 
 @Preview
@@ -234,6 +269,8 @@ fun BoardColumnCountTag(status: WorkItemStatus): String = "${BoardColumnTag(stat
 fun BoardColumnEmptyTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.empty"
 
 fun BoardColumnAddTaskTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.add"
+
+fun BoardColumnSortTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.sort"
 
 /**
  * The lane's width.

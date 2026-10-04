@@ -203,4 +203,7 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun collapseButtonTogglesExpandedState() = runComposeUiTest(block = WorkItemEditorScenarios.collapseButtonTogglesExpandedState)
+
+    @Test
+    fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 }

@@ -329,8 +329,15 @@ object ttActionIcons {
         close()
     }
 
+    /** Three horizontal descending bars representing sorting. */
+    val sort: ImageVector = icon("Sort") {
+        solidRoundRect(3.0f, 5.0f, 21.0f, 7.5f, radius = 1.0f)
+        solidRoundRect(6.0f, 10.5f, 18.0f, 13.0f, radius = 1.0f)
+        solidRoundRect(9.0f, 16.0f, 15.0f, 18.5f, radius = 1.0f)
+    }
+
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse)
+    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse, sort)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */

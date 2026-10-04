@@ -181,6 +181,10 @@
     <!-- The board, the backlog, and the archive. -->
     <string name="board_empty_column">Nothing here yet</string>
     <string name="board_add_task">Add Task</string>
+    <string name="board_sort">Sort tasks</string>
+    <string name="board_sort_default">Default order</string>
+    <string name="board_sort_by_date">Sort by date</string>
+    <string name="board_sort_by_priority">Sort by priority</string>
     <string name="board_no_project_title">No project chosen</string>
     <string name="board_no_project_body">Choose a project to see the work on its board.</string>
     <!--
