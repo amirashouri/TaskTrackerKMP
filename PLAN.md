@@ -38,6 +38,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:2795](#phase-18--the-app-had-no-icon) | done |
 | [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:2935](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
+| [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3263,3 +3264,73 @@ Whole JVM host: **1097 tests, 6 failures**; whole iOS simulator host: **1072 tes
 Identical set on both: 3 `SeedingTest`, 2 `:shared-ui`, 1 deliberate error-token bar.
 `verifyArchitectureGraph` and `verifyModuleImports` pass. All figures from the JUnit XML the
 build writes, cross-checked against `@Test` declarations.
+
+## Phase 21 — `ttBodyLabel` adopted, and `:shared-ui` back
+
+### 21.1 `:shared-ui` needed nothing from this phase
+
+Phase 20 recorded it uncompilable (`ShellPreferences.kt:138-139`). By the time this phase
+started it had been fixed by the same `currentUserName` workstream that broke it — the file's
+mtime moved at **18:16:10**, and the fix was the author's, not this phase's. Nothing was
+re-done.
+
+What this phase did do is **verify** it, because "no longer compiling" and "working" are
+different claims. `:shared-ui:jvmTest` now runs: **28 tests, 2 failures** — `aChosenThemeOutlivesTheProcess`
+and `theBoardReturnsToTheList`, which are the two `AGENTS.md` records for this module and were
+failing before any of this work began. Back to its documented baseline.
+
+`ProjectBoardModelTest.toggling showOnlyMyTasks filters items by assignee presence` also went
+green in the meantime, so the stale test Phase 20 left red on purpose has been resolved by the
+workstream that caused it.
+
+### 21.2 `ttBodyLabel`: adopted at two sites, and proven first
+
+The token existed with an `expect`, three `actual`s, a long argument for why the design system
+needed a fourth semantic role — and **no call sites and no assertions anywhere**. Its KDoc
+claimed "17:1 in both appearances", which was a number nobody was checking, and
+`AccentContrastTest` does not reach it because that suite is about the accent.
+
+`BodyLabelContrastTest` (4 tests, `commonTest`) now holds that claim, and it was written before
+the adoption so the token could be adopted against a measurement rather than a comment. Unlike
+`BannerContrastTest` — which could not fail for its own defect — this one goes red: mutating
+`bodyLabelLight` to a mid grey fails two of its four.
+
+**Adopted**, both where the text is load-bearing rather than decorative:
+
+| site | was | now | was measured |
+| --- | --- | --- | --- |
+| `LabelledField` field title, on the field's opaque `ttSurface()` | `ttLabelSecondary()` | `ttBodyLabel()` | **3.30:1** on that surface in light |
+| `ProjectsEmptyState` body — the only copy on an empty screen | `ttLabelSecondary()` | `ttBodyLabel()` | **3.44:1** on the light canvas |
+
+Both were below the 4.5:1 body-text bar. A word naming an input, and the single message an
+empty screen exists to deliver, were each the hardest text on their screen to read.
+
+### 21.3 What was deliberately *not* adopted, and why that is the discipline
+
+`ttBodyLabel` appears at **two** call sites out of 55 `ttLabelSecondary` uses. A blanket
+replacement would have been easy, wrong, and would have looked like thoroughness:
+
+- **The field's placeholder** stays on `ttLabelSecondary()`. A placeholder is a hint about what
+  could be typed; at full ink an empty field reads as a filled one. The *title* and the
+  *placeholder* are different roles and Phase 21 is the reason the design system has two tokens.
+- **The ~50 `ttLabelSecondary` calls on glass** are untouched. Over a glass card that token
+  measures **2.81:1** in light — a real defect — but the fix needs rendered pixels on both
+  rasterisers (19.9), and swapping full ink into every caption would flatten a deliberate
+  hierarchy rather than fix a number.
+
+Adoption was per-site and reasoned, not a find-and-replace. Two sites is the honest answer to
+"where is this token actually correct", and it is much smaller than the 55 that were available.
+
+### 21.4 Baseline
+
+Whole JVM host: **1064 tests, 6 failures**, all six accounted for:
+
+| count | what |
+| --- | --- |
+| 3 | `SeedingTest` in `:packages:feature-projects-data` — documented pre-existing |
+| 2 | `:shared-ui` `aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList` — documented pre-existing |
+| 1 | `AccentContrastTest` error-token bar — **red by design** since Phase 19 |
+
+`:packages:design-system` **90** (85 `commonTest` + 5 `jvmTest`), cross-checked against `@Test`
+declarations exactly. `:packages:feature-auth-presentation` and
+`:packages:feature-projects-presentation` both fully green.

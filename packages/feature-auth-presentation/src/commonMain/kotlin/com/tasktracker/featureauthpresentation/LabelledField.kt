@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -78,11 +79,20 @@ fun LabelledField(
             .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
     ) {
-        ttText(
-            text = title,
-            style = ttTypography.captionEmphasised,
-            color = ttLabelSecondary(),
-        )
+      ttText(
+          text = title,
+          // `ttBodyLabel`, not `ttLabelSecondary()`. This title is drawn on the field's own
+          // opaque `ttSurface()` above, which is the exact surface `ttBodyLabel` is documented
+          // for, and it is what the input is *called* — not a hint and not decoration. At 60%
+          // alpha the secondary label measures 3.30:1 on that surface in light appearance,
+          // which is below the 4.5:1 a label needs, and the word "Email" above a text field is
+          // the last thing that should be the hardest thing on screen to read.
+          //
+          // The *placeholder* further down stays on `ttLabelSecondary()`, and the difference is
+          // deliberate: a placeholder is a hint about what could go here, and drawing it at full
+          // ink makes an empty field look like a filled one.
+          color = ttBodyLabel(),
+      )
         content()
     }
 }

@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttErrorFill
@@ -198,7 +199,16 @@ internal fun ProjectsEmptyState(
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
     ) {
         ttText(text = title, style = ttTypography.titleSmall, color = ttLabel())
-        ttText(text = body, style = ttTypography.subheadline, color = ttLabelSecondary())
+        ttText(
+              // `ttBodyLabel`, not `ttLabelSecondary()`. This is instructional copy — "no
+              // projects yet, create one" — and it is the only thing on an empty screen, so it
+              // carries the screen's whole meaning. At 60% alpha the secondary label measures
+              // 3.44:1 on the light canvas, below the 4.5:1 bar, and the one message an empty
+              // state exists to deliver would be the hardest to read on the screen.
+              text = body,
+              style = ttTypography.subheadline,
+              color = ttBodyLabel(),
+          )
     }
 }
 
