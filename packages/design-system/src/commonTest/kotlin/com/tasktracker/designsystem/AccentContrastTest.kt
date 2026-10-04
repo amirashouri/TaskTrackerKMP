@@ -134,22 +134,30 @@ class AccentContrastTest {
      * `GlassFillContrastTest` holds the resulting numbers. The error red never had that
      * treatment.
      *
-     * ## This test is expected to be red
+     * ## This test used to be red
      *
-     * It is here to make the decision unavoidable rather than to describe a passing state.
-     * Fixing it means either darkening the red until white clears 4.5:1 on it in both
-     * appearances, or moving the destructive label off `ttOnAccent`. Both are design calls,
-     * and neither is one to make silently while tidying a different file.
+     * It landed **red by design** in Phase 19, at 3.55:1 light and 3.41:1 dark, so the
+     * decision about the red could not be deferred indefinitely by tidying a different file.
+     * It went green in Phase 22 when `ttFixedColours.errorLight` / `errorDark` were darkened
+     * to `#D3291F` / `#DC2B21` — same hue as UIKit's `systemRed`, saturation 0.74, and inside
+     * the luminance window where white-on-red and red-on-black both clear their bars at once.
+     * See `ttFixedColours.errorLight` for the arithmetic.
+     *
+     * It is kept as its own test rather than folded into the loop above because the red is
+     * held to the *same two bars* as the accent for a reason worth stating: it is the only
+     * other fill in the app that carries a label, and it was the only one exempt from this
+     * suite for as long as it existed.
      *
      * ## Why the pinned pair and not `ttError()`
      *
-     * `ttError()` is `@Composable` and resolves through the theme, so calling it here
-     * would mean composing — and this suite is deliberately a plain unit test with no
-     * composition. `ttFixedColours.errorLight` / `errorDark` are what a pinned appearance
-     * resolves to, which is the pairing a user on a pinned appearance actually gets. The
-     * dynamic path on Android resolves `android.R.attr.colorError` instead and is not
-     * covered here; that is the same trade `PinnedAppearanceTest` makes and for the same
-     * reason.
+     * `ttError()` is `@Composable` and resolves through the theme, so calling it here would
+     * mean composing — and this suite is deliberately a plain unit test with no composition.
+     * `ttFixedColours.errorLight` / `errorDark` are what it resolves to on **every** target
+     * and in **every** scheme now, because Phase 22 made the token authoritative rather than
+     * consulting `UIColor.systemRed` or `android.R.attr.colorError`. That is the one thing
+     * this assertion could not have covered before: a pinned appearance resolved the token
+     * while a following-system appearance got the platform's red, and the failing pairing
+     * would have survived on every device whose theme was *not* pinned.
      */
     @Test
     fun `the error token carries a white label as legibly as the accent does`() {

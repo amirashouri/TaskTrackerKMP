@@ -46,16 +46,19 @@ actual fun ttSurface(): Color = dynamicOrPinned(
 )
 
 /**
- * The original writes `Color.red` for its error banner, which is a fixed colour and not a
- * semantic one. UIKit has an adaptive answer — `systemRed` is `#FF3B30` on light and
- * `#FF453A` on dark — and it is the one used, so the banner follows the appearance the same
- * way every other token in this file does.
+ * The error red, from the token rather than from `UIColor.systemRed`.
+ *
+ * This used to resolve UIKit's `systemRed` — `#FF3B30` light, `#FF453A` dark — which is the
+ * right answer for a platform component and the wrong one for this app: a white label on it
+ * measures 3.55:1 and 3.41:1, and three destructive buttons here carry exactly that pairing.
+ *
+ * The distinction is the same one [ttLabelSecondary] draws. A platform colour is a *role* —
+ * "the system red", whatever it is on this OS version — and the platform has no filled
+ * destructive button to label, so it never had to satisfy the pairing this app does. The
+ * token's two values are that pairing. See `ttFixedColours.errorLight`.
  */
 @Composable
-actual fun ttError(): Color = dynamicOrPinned(
-    pinned = { ttFixedColours.error(it) },
-    dynamic = { UIColor.systemRedColor.toComposeColor() },
-)
+actual fun ttError(): Color = ttFixedColours.error(ttIsDarkTheme())
 
 @Composable
 actual fun ttLabel(): Color = dynamicOrPinned(

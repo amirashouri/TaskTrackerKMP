@@ -39,6 +39,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:2935](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 | [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
+| [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3334,3 +3335,175 @@ Whole JVM host: **1064 tests, 6 failures**, all six accounted for:
 `:packages:design-system` **90** (85 `commonTest` + 5 `jvmTest`), cross-checked against `@Test`
 declarations exactly. `:packages:feature-auth-presentation` and
 `:packages:feature-projects-presentation` both fully green.
+
+---
+
+## Phase 22 — the error red meets its bar, and the glass hairline is measured
+
+Two suggestions from the Phase 20 review, taken together: one is a fix and the other is a
+measurement. They are in one phase because they are the same kind of claim — *"this token
+passes the bar its KDoc claims"* — and one of them was false in a way arithmetic could not
+see.
+
+### 22.1 The error red: `dynamicOrPinned` deleted, and why that is the fix
+
+Phase 19 left `AccentContrastTest`'s error-token bar red by design, because `ttError()` was
+`UIColor.systemRed` on iOS and `android.R.attr.colorError` on Android, and a white label on
+either of those does not clear 4.5:1. Phase 22 pins the colour instead:
+
+| | before | after |
+| --- | --- | --- |
+| `errorLight` | `UIColor.systemRed` / `colorError` | **`#D3291F`** |
+| `errorDark` | `UIColor.systemRed` / `colorError` | **`#DC2B21`** |
+
+Measured on the tokens actually in the file, everything against the pairing it is drawn in:
+
+| pairing | before (`#FF3B30`) | after | bar |
+| --- | --- | --- | --- |
+| a white label on the error fill, light | 3.55:1 | **5.11:1** | 4.5:1 |
+| a white label on the error fill, dark | 3.55:1 | **4.76:1** | 4.5:1 |
+| an error glyph on the canvas, light | 3.55:1 | **5.11:1** | 3:1 non-text |
+| an error glyph on the canvas, dark | 5.92:1 | **4.41:1** | 3:1 non-text |
+| `ttLabel` on a 10%-alpha error fill, light | 18.37:1 | **17.98:1** | 4.5:1 |
+| `ttLabel` on a 10%-alpha error fill, dark | 19.62:1 | **19.92:1** | 4.5:1 |
+
+**One figure went the wrong way and is left that way rather than hidden.** The dark error
+glyph on the dark canvas drops from 5.92:1 to 4.41:1, because the red got *darker* and a
+dark red has less luminance to stand out from a black page with. It clears the 3:1 non-text
+bar by a wide margin and the light glyph — the one on a white page, which is where a warning
+icon is actually read — improves from 3.55:1 to 5.11:1. A single red cannot be right for both
+pages, and the pairing that had to hold was the label on the fill.
+
+(The Phase 19 dark glyph figure was 6.16:1; the 5.92:1 above is `#FF3B30` against
+`ttCanvas()`, which is what this table states. The label-on-fill figures are the ones Phase
+19 left red, and they are the ones this phase closes.)
+
+**How the two reds were chosen.** Both keep the systemRed hue (3.2°) and a saturation of
+0.74, and both sit inside the window that keeps a white label above 4.5:1 — which for a hue
+at 3.2° and that saturation means L* ≤ 0.18333. They are not the same colour, because a
+single red cannot serve two appearances: dark needs more luminance than light to hold the
+same ratio against a different surface pairing, and holding one value for both would mean
+either a dark red that reads as muddy on white or a bright red that glows on black. The hue
+being held is the deliberate part. A system red that is redder than `#D3291F` is redder than
+the thing being replaced.
+
+**The platform path is gone, not just bypassed.** `Colors.ios.kt` and `Colors.android.kt`
+both now read `ttFixedColours.error(ttIsDarkTheme())`. Keeping `dynamicOrPinned` and only
+changing `pinned` would have looked identical in every test on this host and would have left
+a following-system appearance picking up `#FF3B30` — a red measured at 3.55:1 under a white
+label, which is the
+defect this phase exists to close. `dynamicOrPinned` is for colours the *system* owns
+(backgrounds, separators, label tiers); a brand red that has to clear a contrast bar is not
+one of them, and leaving the branch in place would be a comment promising something the code
+does not do.
+
+### 22.2 The glass hairline and the caption over it, rendered
+
+`GlassSurfacePixelTest` reads the pixels a Compose frame actually produced. Both rasterising
+hosts report the same figures **to the digit**:
+
+| | modelled | rendered, JVM | rendered, iOS |
+| --- | --- | --- | --- |
+| `ttLabelSecondary` on the glass fill, light | 2.81:1 | **2.88:1** | **2.88:1** |
+| the same caption, dark | 5.85:1 | **6.01:1** | **6.01:1** |
+| the hairline against its own fill, light | 1.08:1 | **1.07:1** | **1.07:1** |
+| the hairline against its own fill, dark | 1.55:1 | **1.54:1** | **1.54:1** |
+
+The rendered light fill is **#c8d0db**, the caption composites to **#747780**, and the same
+token on the bare canvas measures **3.44:1**. So the finding from Phase 19 is real, and it
+is worse than "a low number": **glass is costing this caption contrast rather than adding
+any.** The accent-tinted fill darkens toward the token's own grey, so putting a surface
+behind a secondary label makes it *less* legible. A secondary caption placed on glass today
+is a regression against the same caption placed on the page.
+
+Both of these are now **red by design** and are meant to stay red until someone changes the
+tokens they name. They are detectors, not gates.
+
+### 22.3 How the rim was measured, and the three things that had to be fixed first
+
+The hairline is 0.5dp. Three separate measurements had to be got right before it produced a
+number at all, and each of them had failed silently rather than loudly:
+
+1. **A `?: return` on a host that rasterises.** A null reading on the JVM or iOS means the
+   measurement broke; returning made that a green test that measured nothing — the exact
+   shape of the `BannerContrastTest` failure in Phase 20. Each test now checks
+   `thisHostRasterisesText()` itself and *then* insists on a reading.
+2. **The dp→px scale was taken from the card instead of the root**, giving ≈3.66 on a 1×
+   host, sampling the canvas and reporting the fill as `#ffffff`. A *wrong* reading, which
+   passes every assertion written against it.
+3. **`getBoundsInRoot()` ignores `Modifier.offset`.** The card was offset 40dp and reported
+   bounds of `(0, 0)` anyway, because bounds come from layout and `offset` is a placement
+   offset. The card is no longer offset; the first version's fill sample happened to land
+   inside the card regardless, which is the kind of luck that hides a bug rather than
+   preventing one.
+
+**The rim is found by differencing two frames, not two cards.** One frame renders the card
+with the hairline, the second the identical card with `borderWidth = 0.dp`. The fill's wash
+is a function of `y` alone, so the two frames must agree everywhere except where the rim
+painted; the strongest disagreement along the top edge is the rim as the compositor mixed
+it, and the control frame's colour at that coordinate is the fill it sits on. Two cards side
+by side cannot work: the rim's colour depends on where the edge falls inside a device pixel,
+so a card at `x = 0` and one at `x = 120` sample the same 0.5dp band at different subpixel
+phases and blend it differently. That version returned no reading at all.
+
+**And it has to be rendered at 3×.** `runComposeUiTest` renders at density 1, and at density
+1 the hairline is **not drawn at all**: the two frames were compared across every pixel of a
+1024×768 frame and the maximum channel difference was **0.0**, while the same comparison
+against an 8dp border showed 0.13. A 0.5dp stroke is half a pixel and Skia drops it rather
+than splitting it. `LocalDensity` is overridden to 3 for the rim measurement — an iPhone and
+an Android phone are both at least 2×, so this is the case that ships rather than a
+contrivance. **The finding is therefore specific to devices at 2× and above, which is every
+device this app targets.**
+
+The strongest row is used, not the first: the rim spans 1.5 device rows at this density and
+one of them is a partial blend, so the first differing row is a *third* of the rim.
+
+### 22.4 Mutation evidence
+
+`HAIRLINE_ALPHA` was raised and the rim readings moved with it, which is what makes them
+measurements rather than two constants that happen to be near each other:
+
+| `HAIRLINE_ALPHA` | light rim as rendered | the fill under it | against that fill |
+| --- | --- | --- | --- |
+| **0.14** (shipped) | `#cad2dc` | `#c2cbd7` | **1.07:1** |
+| 0.5 | `#e1e5eb` | `#c2cbd7` | **1.30:1** |
+| 1.0 (an opaque white line, no longer a hairline) | `#ffffff` | `#c2cbd7` | **1.64:1** |
+
+### 22.5 What 22.3 and 22.4 mean: the light rim cannot be tuned into existence
+
+The dark rim reaches **1.54:1** against its own fill with the token exactly as it ships,
+because dark fill is dark enough for white to be lighter than it. The light rim reaches
+**1.07:1**, and the table above is the finding: even an **opaque white line** — no longer a
+hairline in any sense — manages only 1.64:1 against the light fill.
+
+So the light rim is **not** a tuning problem, and no value of `HAIRLINE_ALPHA` fixes it. The
+light fill is already at `#c2cbd7` and there is no white above it worth having. A rim that
+reads as a lit edge in light has to be *darker* than its fill — a shadow rather than a
+highlight — which is a different design grammar from the one `ttGlassSurface` claims to port,
+and a decision rather than a number. That is why the test is red by design and left red:
+it is waiting on a decision, not on a constant.
+
+The caption has no such excuse. Light glass captions sit at 2.88:1 against a 3:1 large-text
+bar and 4.5:1 body-text bar, and the same token reaches 3.44:1 on the bare canvas, so the
+fix is either a caption token chosen against glass, or a fill light enough that the existing
+one works — and the first is the cheaper of the two.
+
+### 22.6 Baseline
+
+Whole JVM host: **1105 tests, 7 failures**, all seven accounted for:
+
+| count | what |
+| --- | --- |
+| 3 | `SeedingTest` in `:packages:feature-projects-data` — documented pre-existing |
+| 2 | `:shared-ui` `aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList` — documented pre-existing |
+| 2 | `GlassSurfacePixelTest` light caption (2.88:1) and light rim (1.07:1) — **red by design** |
+
+`:packages:design-system` **94** (89 `commonTest` + 5 `jvmTest`), cross-checked against
+`@Test` declarations exactly. `AccentContrastTest`'s error bar, red by design since Phase 19,
+is **green** as of 22.1. `verifyArchitectureGraph`, `verifyModuleImports` and
+`:androidApp:compileDebugKotlin` all pass.
+
+`BodyLabelContrastTest`'s "body ink also clears the text bar on the canvas, which is where
+empty states sit" lost its comma: a backtick test name may not contain one, and
+`compileTestKotlinIosSimulatorArm64` rejected it. Caught by compiling the iOS host, which is
+the reason the deciding command includes it.

@@ -62,7 +62,7 @@ class BodyLabelContrastTest {
     }
 
     @Test
-    fun `body ink also clears the text bar on the canvas, which is where empty states sit`() {
+    fun `body ink also clears the text bar on the canvas where empty states sit`() {
         for (dark in listOf(false, true)) {
             val canvas = ttFixedColours.canvas(dark)
             val ink = ttFixedColours.bodyLabel(dark)

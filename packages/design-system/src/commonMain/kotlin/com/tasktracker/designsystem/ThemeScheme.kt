@@ -319,20 +319,59 @@ object ttFixedColours {
     val labelSecondaryDark: Color = Color(0x99EBEBF5)
 
     /**
-     * `ttError`, pinned: UIKit's `systemRed` in each appearance.
+     * `ttError`, pinned: a deep red that carries a white label.
      *
-     * The original writes `Color.red`, which is a *fixed* colour on every platform rather
-     * than a semantic one — so unlike every other token here it does not change with the
-     * appearance. UIKit still has an adaptive answer, and it is the better one: `systemRed`
-     * is `#FF3B30` on light and `#FF453A` on dark, so the two are not the same red. Pinning
-     * therefore resolves the platform's pair rather than one value used twice, which is what
-     * keeps a pinned dark appearance from painting a light-appearance red on a black canvas.
+     * ## Why this is not UIKit's `systemRed`
      *
-     * The values are the documented iOS ones and are among the few numbers in this file not
-     * traceable to the original, which delegated to `Color.red`; see `PinnedAppearanceTest`.
+     * It was: `#FF3B30` on light and `#FF453A` on dark, the documented `systemRed` pair. Those
+     * are the platform's own values and they are correct for the platform's own components —
+     * but a platform does not choose a red *for a white label on it*, because it has no
+     * filled destructive button to label. Measured, a white `ttOnAccent` label on them:
+     *
+     * | | was | now |
+     * | --- | --- | --- |
+     * | light | **3.55:1** | **5.11:1** |
+     * | dark | **3.41:1** | **4.76:1** |
+     *
+     * Three call sites paint that pairing — `ProjectsListScreen.kt:340`,
+     * `WorkItemEditor.kt:453` and `:625`, all `TTGlassButtonStyle(tint = ttError(), prominent =
+     * true)` — so a destructive action's label was below the 4.5:1 body-text bar in *both*
+     * appearances. Dark was the worse of the two, which is the opposite of every other pairing
+     * in this package and is what made it look like rounding rather than a gap.
+     *
+     * ## Why darkening was safe, which was not obvious
+     *
+     * Darkening the red helps white-on-red and *hurts* red-on-black, so the fix could have
+     * traded one failure for another. It does not, because both bars are satisfiable at once:
+     * white-on-red ≥ 4.5:1 needs relative luminance ≤ 0.18333, and red-on-black ≥ 3:1 needs
+     * ≥ 0.10. The window between them is where both of these sit.
+     *
+     * | pairing | light | dark | bar |
+     * | --- | --- | --- | --- |
+     * | white label on the fill | 5.11:1 | 4.76:1 | 4.5 |
+     * | the glyph against the canvas | 5.11:1 | 4.41:1 | 3.0 |
+     * | `ttLabel` ink on the 10% fill | 17.98:1 | 19.92:1 | 4.5 |
+     *
+     * Hue is UIKit's `systemRed` hue, held at **3.2°**, and saturation is **0.74** rather than
+     * 1.0. The desaturation is deliberate: clamping lightness alone lands on `#ED0D00`, a
+     * fully-saturated primary that satisfies the number and looks like an alarm. These are a
+     * shade deeper and noticeably calmer.
+     *
+     * The two differ (`#D3291F` / `#DC2B21`), which is what `PinnedAppearanceTest` requires of
+     * every token here and what the platform pair did.
+     *
+     * ## Why the platform no longer supplies this
+     *
+     * `ttError` used to resolve `UIColor.systemRed` on iOS and `android.R.attr.colorError` on
+     * Android, so **a pinned appearance and a following appearance got different reds** — and
+     * following-the-system would have kept handing back the failing `#FF3B30` regardless of
+     * anything written here. That is the same situation as [labelSecondary], which already
+     * ignores the dynamic path because a platform's answer is a role and this is a decision.
+     * `ttError` is a pairing constraint, exactly as [ttOnAccent] is, so it is now a token in
+     * both directions. See `Accent.kt` for the same argument about the accent.
      */
-    val errorLight: Color = Color(0xFFFF3B30)
-    val errorDark: Color = Color(0xFFFF453A)
+    val errorLight: Color = Color(0xFFD3291F)
+    val errorDark: Color = Color(0xFFDC2B21)
 
     /** [errorLight] or [errorDark], for the appearance in force. */
     fun error(dark: Boolean): Color = if (dark) errorDark else errorLight

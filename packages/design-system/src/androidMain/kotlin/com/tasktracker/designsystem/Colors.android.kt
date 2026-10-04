@@ -37,21 +37,19 @@ actual fun ttSurface(): Color = dynamicOrPinned(
 )
 
 /**
- * Android has no `separator` resource, so the hairline is derived from the theme's
- * secondary text colour at low alpha. That keeps it adapting with the theme, which a
- * fixed grey would not: on a dark canvas a hardcoded divider is a visible white line.
- */
-/**
- * Android's own error colour, so a failure banner follows the platform theme the way every
- * other token here does. Material's `colorError` is the attribute Android has always had
- * for this role, and reading it costs nothing — no Material *dependency*, only the theme
- * attribute.
+ * The error red, from the token rather than from `android.R.attr.colorError`.
+ *
+ * Material's `colorError` is a perfectly good platform role and the wrong value for this
+ * app: a white `ttOnAccent` label on it measures **3.55:1** in light and **3.41:1** in dark,
+ * and three destructive buttons here carry exactly that pairing. Android's own filled
+ * buttons use a darker red than its `colorError` for the same reason.
+ *
+ * Same distinction as [ttLabelSecondary]: a theme attribute is a *role*, and Android has no
+ * destructive button to label either. The pairing this app needs is a token. See
+ * `ttFixedColours.errorLight`.
  */
 @Composable
-actual fun ttError(): Color = dynamicOrPinned(
-    pinned = { ttFixedColours.error(it) },
-    dynamic = { themeColor(android.R.attr.colorError) },
-)
+actual fun ttError(): Color = ttFixedColours.error(ttIsDarkTheme())
 
 @Composable
 actual fun ttLabel(): Color = dynamicOrPinned(
