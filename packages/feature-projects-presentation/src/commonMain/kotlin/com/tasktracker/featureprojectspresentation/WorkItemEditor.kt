@@ -1,12 +1,18 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -16,7 +22,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTBottomSheetScaffold
@@ -24,8 +29,11 @@ import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
@@ -38,12 +46,14 @@ import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.work_item_archive
 import com.tasktracker.resources.work_item_assignee_label
+import com.tasktracker.resources.work_item_collapse
 import com.tasktracker.resources.work_item_details_label
 import com.tasktracker.resources.work_item_due_clear
 import com.tasktracker.resources.work_item_due_label
 import com.tasktracker.resources.work_item_due_set
 import com.tasktracker.resources.work_item_editor_edit_title
 import com.tasktracker.resources.work_item_editor_new_title
+import com.tasktracker.resources.work_item_expand
 import com.tasktracker.resources.work_item_key_read_only
 import com.tasktracker.resources.work_item_priority_label
 import com.tasktracker.resources.work_item_status_label
@@ -177,41 +187,292 @@ fun WorkItemEditorSheet(
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
+    /** Whether the user has asked for a full page. */
+    expanded: Boolean = false,
+    /** Called when the user asks to expand or collapse. */
+    onToggleExpanded: (Boolean) -> Unit = {},
 ) {
-    TTBottomSheetScaffold(
-        visible = visible,
-        onDismissRequest = onDismissRequest,
+    val sheetVisible = visible && !expanded
+
+    val editTitle = if (isCreating) {
+        stringResource(Res.string.work_item_editor_new_title)
+    } else {
+        val keyString = if (isCreating) "" else issuedKey?.toString().orEmpty()
+        stringResource(Res.string.work_item_editor_edit_title, keyString)
+    }
+
+    AnimatedContent(
+        targetState = expanded,
+        transitionSpec = {
+            if (targetState) {
+                (slideInVertically { height -> height } + fadeIn()) togetherWith
+                    (slideOutVertically { height -> -height / 3 } + fadeOut())
+            } else {
+                (slideInVertically { height -> -height / 3 } + fadeIn()) togetherWith
+                    (slideOutVertically { height -> height } + fadeOut())
+            }
+        },
+        label = "WorkItemEditorExpansion",
         modifier = modifier,
-        onDismissed = onDismissed,
-    ) {
-        WorkItemEditorForm(
-            title = title,
-            details = details,
-            status = status,
-            priority = priority,
-            assignee = assignee,
-            hasDueDate = hasDueDate,
-            isCreating = isCreating,
-            issuedKey = issuedKey,
-            selectableStatuses = selectableStatuses,
-            isFiledAway = isFiledAway,
-            canSave = canSave,
-            isBusy = isBusy,
-            errorMessage = errorMessage,
-            onTitleChanged = onTitleChanged,
-            onDetailsChanged = onDetailsChanged,
-            onStatusChanged = onStatusChanged,
-            onPriorityChanged = onPriorityChanged,
-            onAssigneeChanged = onAssigneeChanged,
-            onToggleDueDate = onToggleDueDate,
-            onFileAway = onFileAway,
-            onSave = onSave,
-            onCancel = onCancel,
-            onDismissError = onDismissError,
-            modifier = Modifier.testTag(WorkItemEditorSheetTag),
-        )
+    ) { isExpanded ->
+        if (isExpanded) {
+            ProjectsEditorFullScreen(
+                title = editTitle,
+                details = details,
+                status = status,
+                priority = priority,
+                assignee = assignee,
+                hasDueDate = hasDueDate,
+                isCreating = isCreating,
+                issuedKey = issuedKey,
+                selectableStatuses = selectableStatuses,
+                isFiledAway = isFiledAway,
+                canSave = canSave,
+                isBusy = isBusy,
+                errorMessage = errorMessage,
+                onTitleChanged = onTitleChanged,
+                onDetailsChanged = onDetailsChanged,
+                onStatusChanged = onStatusChanged,
+                onPriorityChanged = onPriorityChanged,
+                onAssigneeChanged = onAssigneeChanged,
+                onToggleDueDate = onToggleDueDate,
+                onFileAway = onFileAway,
+                onSave = onSave,
+                onCancel = onCancel,
+                onDismissError = onDismissError,
+                onToggleExpanded = onToggleExpanded,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(WorkItemEditorFullScreenTag),
+            )
+        } else {
+            TTBottomSheetScaffold(
+                visible = sheetVisible,
+                onDismissRequest = onDismissRequest,
+                onDismissed = onDismissed,
+            ) {
+                WorkItemEditorForm(
+                    title = title,
+                    details = details,
+                    status = status,
+                    priority = priority,
+                    assignee = assignee,
+                    hasDueDate = hasDueDate,
+                    isCreating = isCreating,
+                    issuedKey = issuedKey,
+                    selectableStatuses = selectableStatuses,
+                    isFiledAway = isFiledAway,
+                    canSave = canSave,
+                    isBusy = isBusy,
+                    errorMessage = errorMessage,
+                    onTitleChanged = onTitleChanged,
+                    onDetailsChanged = onDetailsChanged,
+                    onStatusChanged = onStatusChanged,
+                    onPriorityChanged = onPriorityChanged,
+                    onAssigneeChanged = onAssigneeChanged,
+                    onToggleDueDate = onToggleDueDate,
+                    onFileAway = onFileAway,
+                    onSave = onSave,
+                    onCancel = onCancel,
+                    onDismissError = onDismissError,
+                    onToggleExpanded = { onToggleExpanded(true) },
+                    modifier = Modifier.testTag(WorkItemEditorSheetTag),
+                )
+            }
+        }
     }
 }
+
+@Composable
+/**
+ * The same form, stretched to a full page.
+ *
+ * Shares the form's fields, the error banner, the key footnote and every button — the only
+ * thing that changes is the frame. In the sheet the bottom row is the tab bar, so the form
+ * scrolls with the tab-bar inset applied at its bottom; full-screen drops that inset and lets
+ * the scroll run to the very bottom, and pairs the row of actions with a back affordance so
+ * an over-content edit can't get lost.
+ */
+private fun ProjectsEditorFullScreen(
+    title: String,
+    details: String,
+    status: WorkItemStatus,
+    priority: Priority,
+    assignee: String,
+    hasDueDate: Boolean,
+    isCreating: Boolean,
+    issuedKey: WorkItemKey?,
+    selectableStatuses: List<WorkItemStatus>,
+    isFiledAway: Boolean,
+    canSave: Boolean,
+    isBusy: Boolean,
+    errorMessage: String?,
+    onTitleChanged: (String) -> Unit,
+    onDetailsChanged: (String) -> Unit,
+    onStatusChanged: (WorkItemStatus) -> Unit,
+    onPriorityChanged: (Priority) -> Unit,
+    onAssigneeChanged: (String) -> Unit,
+    onToggleDueDate: (Boolean) -> Unit,
+    onFileAway: () -> Unit,
+    onSave: () -> Unit,
+    onCancel: () -> Unit,
+    onDismissError: () -> Unit,
+    onToggleExpanded: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(ttCanvas())
+            .padding(ttSpacing.screenGutterLarge)
+            .verticalScroll(rememberScrollState())
+            .padding(bottom = LocalTabBarScrollUnderInset.current),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            ) {
+                ttText(
+                    text = title,
+                    style = ttTypography.title,
+                    color = ttLabel(),
+                )
+                errorMessage?.let { message ->
+                    ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+                }
+                issuedKey?.let { key ->
+                    ttText(
+                        text = stringResource(Res.string.work_item_key_read_only, key.toString()),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                }
+            }
+            ttGlassIconButton(
+                image = ttActionIcons.collapse,
+                contentDescription = stringResource(Res.string.work_item_collapse),
+                onClick = { onToggleExpanded(false) },
+                modifier = Modifier.testTag(WorkItemCollapseTag),
+            )
+            ttGlassButton(
+                label = stringResource(Res.string.common_cancel),
+                onClick = onCancel,
+                modifier = Modifier.testTag(WorkItemCancelTag),
+            )
+        }
+        ProjectsTextField(
+            title = stringResource(Res.string.work_item_title_label),
+            value = title,
+            onValueChange = onTitleChanged,
+            imeAction = ImeAction.Next,
+        )
+        ProjectsTextField(
+            title = stringResource(Res.string.work_item_details_label),
+            value = details,
+            onValueChange = onDetailsChanged,
+            singleLine = false,
+            minLines = DETAILS_MIN_LINES,
+            imeAction = ImeAction.Next,
+        )
+        if (selectableStatuses.size > 1) {
+            Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
+                ttText(
+                    text = stringResource(Res.string.work_item_status_label),
+                    style = ttTypography.captionEmphasised,
+                    color = ttLabelSecondary(),
+                )
+                TTGlassFlowPicker(
+                    options = selectableStatuses,
+                    selection = status,
+                    onSelect = onStatusChanged,
+                    title = { statusLabel(it) },
+                    modifier = Modifier.testTag(WorkItemStatusPickerTag),
+                )
+            }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
+            ttText(
+                text = stringResource(Res.string.work_item_priority_label),
+                style = ttTypography.captionEmphasised,
+                color = ttLabelSecondary(),
+            )
+            TTGlassFlowPicker(
+                options = Priority.entries,
+                selection = priority,
+                onSelect = onPriorityChanged,
+                title = { priorityLabel(it) },
+                modifier = Modifier.testTag(WorkItemPriorityPickerTag),
+            )
+        }
+        ProjectsTextField(
+            title = stringResource(Res.string.work_item_assignee_label),
+            value = assignee,
+            onValueChange = onAssigneeChanged,
+            capitalization = KeyboardCapitalization.Words,
+            imeAction = ImeAction.Done,
+            onImeAction = { if (canSave) onSave() },
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+        ) {
+            ttText(
+                text = stringResource(Res.string.work_item_due_label),
+                style = ttTypography.captionEmphasised,
+                color = ttLabelSecondary(),
+                modifier = Modifier.weight(1f),
+            )
+            ttGlassButton(
+                label = if (hasDueDate) {
+                    stringResource(Res.string.work_item_due_clear)
+                } else {
+                    stringResource(Res.string.work_item_due_set)
+                },
+                onClick = { onToggleDueDate(!hasDueDate) },
+                modifier = Modifier.testTag(WorkItemDueToggleTag),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = ttSpacing.sm)
+                .padding(bottom = LocalTabBarScrollUnderInset.current),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+        ) {
+            if (!isFiledAway) {
+                ttGlassButton(
+                    label = stringResource(Res.string.work_item_archive),
+                    onClick = { if (!isBusy) onFileAway() },
+                    modifier = Modifier.testTag(WorkItemFileAwayTag),
+                    style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+                )
+            }
+            ttGlassButton(
+                label = stringResource(Res.string.common_cancel),
+                onClick = onCancel,
+                modifier = Modifier.testTag(WorkItemCancelTag),
+            )
+            ttGlassButton(
+                label = stringResource(Res.string.common_save),
+                onClick = { if (canSave && !isBusy) onSave() },
+                modifier = Modifier.testTag(WorkItemSaveTag),
+                style = if (canSave && !isBusy) {
+                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                } else {
+                    TTGlassButtonStyle()
+                },
+            )
+        }
+    }
+}
+
+const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
 
 @Suppress("LongParameterList")
 @Composable
@@ -240,20 +501,36 @@ private fun WorkItemEditorForm(
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    onToggleExpanded: ((Boolean) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
     ) {
-        ttText(
-            text = if (isCreating) {
-                stringResource(Res.string.work_item_editor_new_title)
-            } else {
-                stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
-            },
-            style = ttTypography.title,
-            color = ttLabel(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ttText(
+                text = if (isCreating) {
+                    stringResource(Res.string.work_item_editor_new_title)
+                } else {
+                    stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
+                },
+                style = ttTypography.title,
+                color = ttLabel(),
+                modifier = Modifier.weight(1f),
+            )
+            if (onToggleExpanded != null) {
+                ttGlassIconButton(
+                    image = ttActionIcons.expand,
+                    contentDescription = stringResource(Res.string.work_item_expand),
+                    onClick = { onToggleExpanded(true) },
+                    modifier = Modifier.testTag(WorkItemExpandTag),
+                )
+            }
+        }
         errorMessage?.let { message ->
             ProjectsErrorBanner(message = message, onDismiss = onDismissError)
         }
@@ -429,6 +706,8 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
 
 const val WorkItemEditorScreenTag = "workItem.editor.screen"
 const val WorkItemEditorSheetTag = "workItem.editor.sheet"
+const val WorkItemExpandTag = "workItem.editor.expand"
+const val WorkItemCollapseTag = "workItem.editor.collapse"
 const val WorkItemStatusPickerTag = "workItem.editor.status"
 const val WorkItemPriorityPickerTag = "workItem.editor.priority"
 const val WorkItemDueToggleTag = "workItem.editor.dueToggle"

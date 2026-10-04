@@ -1,6 +1,5 @@
 package com.tasktracker.sharedui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -724,53 +723,85 @@ private fun WorkItemEditorDestination(
     // the call site so the omission is visible: adding a flag is a model change.
     var isBusy by remember(model) { mutableStateOf(false) }
     var isSheetVisible by remember(projectID, workItemID, initialStatus) { mutableStateOf(true) }
+    var isSheetExpanded by remember(projectID, workItemID, initialStatus) { mutableStateOf(false) }
+
+    val toggleExpanded = { expanded: Boolean ->
+        kotlin.run {
+            scope.launch {
+                isSheetExpanded = expanded
+            }
+            Unit
+        }
+    }
 
     WorkItemEditorSheet(
         title = model.title,
-            details = model.details,
-            status = model.status,
-            priority = model.priority,
-            assignee = model.assignee,
-            hasDueDate = model.dueDate != null,
-            isCreating = model.isCreating,
-            issuedKey = model.issuedKey,
-            selectableStatuses = if (workItemID == null && initialStatus == WorkItemStatus.Backlog) {
-                emptyList()
+        details = model.details,
+        status = model.status,
+        priority = model.priority,
+        assignee = model.assignee,
+        hasDueDate = model.dueDate != null,
+        isCreating = model.isCreating,
+        issuedKey = model.issuedKey,
+        selectableStatuses = if (workItemID == null && initialStatus == WorkItemStatus.Backlog) {
+            emptyList()
+        } else {
+            model.selectableStatuses
+        },
+        isFiledAway = model.isFiledAway,
+        canSave = model.canSave,
+        isBusy = isBusy,
+        errorMessage = model.errorMessage,
+        onTitleChanged = model::onTitleChanged,
+        onDetailsChanged = model::onDetailsChanged,
+        onStatusChanged = model::onStatusChanged,
+        onPriorityChanged = model::onPriorityChanged,
+        onAssigneeChanged = model::onAssigneeChanged,
+        // The toggle only has an on/off shape, so the model needs an instant and the clock
+        // is the only honest source for one. `now()` is suspend, hence the launch.
+        onToggleDueDate = { on ->
+            scope.launch {
+                model.onDueDateChanged(if (on) dateProvider.now() else null)
+            }
+        },
+        onFileAway = { scope.launch { model.fileAway() } },
+        // The route stays mounted through the sheet's exit transition, and a failed save
+        // leaves the draft visible with its error banner.
+        onSave = {
+            scope.launch {
+                isBusy = true
+                val outcome = model.save()
+                isBusy = false
+                if (outcome != null) {
+                    if (isSheetExpanded) {
+                        onDismiss()
+                    } else {
+                        isSheetVisible = false
+                    }
+                }
+            }
+        },
+        onCancel = {
+            if (isSheetExpanded) {
+                onDismiss()
             } else {
-                model.selectableStatuses
-            },
-            isFiledAway = model.isFiledAway,
-            canSave = model.canSave,
-            isBusy = isBusy,
-            errorMessage = model.errorMessage,
-            onTitleChanged = model::onTitleChanged,
-            onDetailsChanged = model::onDetailsChanged,
-            onStatusChanged = model::onStatusChanged,
-            onPriorityChanged = model::onPriorityChanged,
-            onAssigneeChanged = model::onAssigneeChanged,
-            // The toggle only has an on/off shape, so the model needs an instant and the clock
-            // is the only honest source for one. `now()` is suspend, hence the launch.
-            onToggleDueDate = { on ->
-                scope.launch {
-                    model.onDueDateChanged(if (on) dateProvider.now() else null)
+                isSheetVisible = false
+            }
+        },
+        onDismissError = model::dismissError,
+        visible = isSheetVisible,
+        onDismissRequest = {
+            if (!isBusy) {
+                if (isSheetExpanded) {
+                    onDismiss()
+                } else {
+                    isSheetVisible = false
                 }
-            },
-            onFileAway = { scope.launch { model.fileAway() } },
-            // The route stays mounted through the sheet's exit transition, and a failed save
-            // leaves the draft visible with its error banner.
-            onSave = {
-                scope.launch {
-                    isBusy = true
-                    val outcome = model.save()
-                    isBusy = false
-                    if (outcome != null) isSheetVisible = false
-                }
-            },
-            onCancel = { isSheetVisible = false },
-            onDismissError = model::dismissError,
-            visible = isSheetVisible,
-            onDismissRequest = { if (!isBusy) isSheetVisible = false },
-            onDismissed = onDismiss,
+            }
+        },
+        onDismissed = onDismiss,
+        expanded = isSheetExpanded,
+        onToggleExpanded = toggleExpanded,
         modifier = Modifier.fillMaxSize().testTag(WorkItemEditorDestinationTag),
     )
 }

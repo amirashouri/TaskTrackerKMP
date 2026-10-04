@@ -281,8 +281,56 @@ object ttActionIcons {
         close()
     }
 
+    /** Opposing outward arrows representing expanding a sheet to full screen. */
+    val expand: ImageVector = icon("Expand") {
+        moveTo(14.0f, 4.0f)
+        lineTo(20.0f, 4.0f)
+        lineTo(20.0f, 10.0f)
+        lineTo(17.5f, 10.0f)
+        lineTo(17.5f, 6.5f)
+        lineTo(12.0f, 12.0f)
+        lineTo(10.5f, 10.5f)
+        lineTo(16.0f, 5.0f)
+        lineTo(14.0f, 5.0f)
+        close()
+        moveTo(10.0f, 20.0f)
+        lineTo(4.0f, 20.0f)
+        lineTo(4.0f, 14.0f)
+        lineTo(6.5f, 14.0f)
+        lineTo(6.5f, 17.5f)
+        lineTo(12.0f, 12.0f)
+        lineTo(13.5f, 13.5f)
+        lineTo(8.0f, 19.0f)
+        lineTo(10.0f, 19.0f)
+        close()
+    }
+
+    /** Opposing inward arrows representing collapsing full screen to a sheet. */
+    val collapse: ImageVector = icon("Collapse") {
+        moveTo(14.0f, 4.0f)
+        lineTo(14.0f, 10.0f)
+        lineTo(20.0f, 10.0f)
+        lineTo(20.0f, 7.5f)
+        lineTo(16.5f, 7.5f)
+        lineTo(21.0f, 3.0f)
+        lineTo(19.5f, 1.5f)
+        lineTo(15.0f, 6.0f)
+        lineTo(15.0f, 4.0f)
+        close()
+        moveTo(10.0f, 20.0f)
+        lineTo(10.0f, 14.0f)
+        lineTo(4.0f, 14.0f)
+        lineTo(4.0f, 16.5f)
+        lineTo(7.5f, 16.5f)
+        lineTo(3.0f, 21.0f)
+        lineTo(4.5f, 22.5f)
+        lineTo(9.0f, 18.0f)
+        lineTo(9.0f, 20.0f)
+        close()
+    }
+
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown)
+    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */

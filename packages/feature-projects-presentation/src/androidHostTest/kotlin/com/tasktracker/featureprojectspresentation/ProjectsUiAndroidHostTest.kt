@@ -197,4 +197,10 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun tappingACardSelectsItsTask() = runComposeUiTest(block = WorkItemCardScenarios.tappingACardSelectsItsTask)
+
+    @Test
+    fun expandButtonTogglesExpandedState() = runComposeUiTest(block = WorkItemEditorScenarios.expandButtonTogglesExpandedState)
+
+    @Test
+    fun collapseButtonTogglesExpandedState() = runComposeUiTest(block = WorkItemEditorScenarios.collapseButtonTogglesExpandedState)
 }

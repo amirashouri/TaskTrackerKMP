@@ -173,6 +173,8 @@
     <string name="work_item_due_clear">Clear the due date</string>
     <string name="work_item_delete">Delete Task</string>
     <string name="work_item_archive">File Away</string>
+    <string name="work_item_expand">Expand</string>
+    <string name="work_item_collapse">Collapse</string>
     <string name="work_item_key_read_only">%1$s is issued by the project and cannot be changed.</string>
     <string name="work_item_overdue">Overdue</string>
 
