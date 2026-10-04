@@ -40,6 +40,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 | [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
 | [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain done, rest planned |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3507,3 +3508,283 @@ is **green** as of 22.1. `verifyArchitectureGraph`, `verifyModuleImports` and
 empty states sit" lost its comma: a backtick test name may not contain one, and
 `compileTestKotlinIosSimulatorArm64` rejected it. Caught by compiling the iOS host, which is
 the reason the deciding command includes it.
+
+---
+
+## Phase 23 — Sprints: a time-boxed goal, a set of tasks, and a verdict
+
+**Nothing in this phase is built yet.** This is the breakdown, written down before any of it
+so that the order is a decision rather than a sequence discovered halfway through.
+
+### 23.0 What was asked, and the four decisions it turns on
+
+A user can create a sprint board and add tasks to it. Every sprint has a goal, a start and
+end date, and an owner; the owner can finish it; finishing it produces a summary of what was
+done, what was not, how many story points were achieved, and whether the goal was hit. Work
+items gain a story-points attribute.
+
+Four things had to be decided before the work could be broken down, because each of them
+changes what the tasks *are*:
+
+| decision | choice | why this and not the other |
+| --- | --- | --- |
+| entry point | **a 5th tab, `Sprints`** | Adding a tab forces `tabTitle`, `tabIcon` and `isProjectScoped` to be updated, and those are exhaustive `when`s — so the tab bar cannot gain an unlabelled hole by accident. A push off the board would have been less code and a second-class destination. |
+| where it lives | **the existing `feature-projects-*` triple** | A sprint is the same aggregate as the work items it holds. A new `feature-sprints-*` triple would duplicate the port, the Room wiring and the Compose screen tree for one more project-scoped concept. |
+| story points | **`Int?`, `null` = unestimated** | Keeps "not estimated" distinct from "estimated as zero". A non-null `0` makes the summary silently wrong, and a summary that lies is worse than a summary that shows a blank. |
+| the goal | **`goalStoryPoints: Int`**, a number | This is the one place the brief is ambiguous. A free-text goal statement reads well in a header but cannot answer "did it hit the goal", which is half of what the summary has to say. So the goal is a **target in story points**, and "hit" is `achieved >= target`. A sentence is welcome as `name`; it is not the goal. |
+
+Two consequences worth stating before the list, because they are the parts most likely to be
+discovered late:
+
+- **A sprint cannot be closed until it has items, and the summary is computed from the items'
+  final state — not from a snapshot taken when Finish was pressed.** A snapshot goes stale the
+  moment a task is edited afterwards, and "the summary said we were done and then we edited
+  a task" is a bug nobody notices until a stakeholder asks.
+- **The app has no date-entry UI at all.** `WorkItem.dueDate` is a toggle, not a picker
+  (`WorkItemCard.kt` formats the instant it is given; nothing ever chooses one). Sprint start
+  and end dates are the first real date inputs in this codebase, so there is nothing to reuse
+  and 23.4.1 is new work rather than a wiring exercise.
+
+### 23.1 Domain — the entity and the two work-item attributes
+
+**All six done.** `:packages:domain` **66** tests (cross-checked against `@Test`), `:packages:core`
+**43**. Every assertion below is mutation-proven; the table is in 23.1.7.
+
+- [x] **23.1.1 `SprintID`.** A `value class` over `String` plus a `randomSprintID()` factory in
+  `:packages:core`, beside `ProjectID` and `WorkItemID`. Test alongside the existing id tests
+  — a distinct id per call is the whole contract.
+- [x] **23.1.2 `Sprint`.** In `Entities.kt` beside `Project`: `id`, `projectID`, `name`,
+  `goalStoryPoints`, `startDate`, `endDate`, `owner`, `isFinished`, `finishedAt`, `createdAt`,
+  `updatedAt`. `id`/`createdAt` are `val`, as on `Project`, because an entity that can change
+  its own identity is a row the sync layer cannot match. `init` enforces `endDate >= startDate`,
+  floors `goalStoryPoints` at 0, and keeps `finishedAt` consistent with `isFinished` in **both**
+  directions — the same invariant shape as `WorkItem.reconcileResolutionAt`, which is where the
+  two-directions rule is already written down. Test: an end before a start is refused; a
+  finished sprint is dated; **reopening clears the date**, which is the case that gets
+  forgotten.
+- [x] **23.1.3 `WorkItem.storyPoints: Int?`.** `null` is unestimated and must survive a round
+  trip unchanged. A negative arriving from a server is floored at 0 in `init`. Test: `null`
+  survives; `0` is not `null`; negative is floored.
+- [x] **23.1.4 `WorkItem.sprintID: SprintID?`.** `null` is "in the backlog", which is the state
+  almost every item starts in. Test: an item with no sprint is still fully usable.
+- [x] **23.1.5 The hit/miss predicate, as a pure function.** `achieved >= goal`, taking
+  `achieved` rather than reading items itself, so it is callable from a test without a store.
+  Test: under the goal misses, **exactly at the goal hits**, over hits. "Exactly at" is the
+  case a `>` gets wrong.
+- [x] **23.1.6 `SprintSummary`.** The value the end-of-sprint screen renders, built by a pure
+  function from a `Sprint` and a `List<WorkItem>`: committed points, achieved points, done
+  items, incomplete items, `didHitGoal`. The done/incomplete split **uses `status.isTerminal`**,
+  the same predicate the archive uses, so the summary and the archive cannot disagree about
+  which tasks shipped. Unestimated items count as tasks and as zero points — and that is stated
+  in the KDoc, because "does an unestimated task count" is the question a reader will have.
+  Test: the split agrees with `WorkItemGrouping`; a task with no estimate lands in the right
+  list and adds no points.
+
+#### 23.1.7 Four decisions that changed while building it
+
+None of these were in 23.0 and all four were forced by a question the brief does not answer.
+
+**A window that ends before it starts is constructible, not refused.** 23.1.2 said `init`
+enforces `endDate >= startDate`. It does not, and the plan was wrong to say so. A sprint
+pulled back in time arrives that way from a server, and a throwing constructor in a `data
+class` would take down the read of the *whole* list rather than quarantining the one bad row.
+`init` only **floors** the goal; the window is a question, and [Sprint.isActiveOn] is what
+answers it.
+
+**A sprint with no goal has no verdict, so the answer is `Boolean?`.** `didHitGoal` returns
+`null` for a goal of zero rather than `false`. A `false` would read as *we missed* — as much
+an invention as a `true`, which is the same over-crediting defect Phase 22 found in the light
+glass rim. Forcing the answer into a `Boolean` is what produces a sprint that always reports
+success. The third state is the honest one, and `SprintSummary.didHitGoal` carries it so every
+renderer has to handle it.
+
+**Achieved points counts only *delivered* items, while the done/incomplete split counts
+everything that left the flow.** `WorkItemStatus` has two different predicates and they are
+not the same question: `isComplete` is `Done` alone, `isTerminal` is `Done` or `Closed`. A
+closed item is reported under done — it is no longer outstanding work — but contributes
+**nothing** to `achievedStoryPoints`, because nothing was delivered. Counting it would let a
+sprint claim points for work that was decided against. Both choices are asserted separately
+(M8 below caught the merge of them).
+
+**The builder filters to the sprint's own items rather than trusting its caller.** Every
+caller here holds a project's whole work list, because that is what the board and the backlog
+have, so `sprintSummary` takes the list it is given and filters on `sprintID`. There is no
+way to produce a summary that counted another sprint's work.
+
+#### 23.1.8 Mutation evidence — 13 run, 13 caught
+
+Driven by `tools/mutate_23_1.py`, which applies one defect, runs the host, records what went
+red, and restores the file.
+
+| # | the deliberate defect | caught by |
+| --- | --- | --- |
+| M1 | `Sprint`'s goal floor removed | `aNegativeGoalIsFlooredRatherThanStored` |
+| M2 | the floor applied to `null` instead of to negatives | `aNegativeEstimateArrivingFromAServerIsFlooredAtZero`, `anUnestimatedItemKeepsItsNull` |
+| M3 | `reconcileFinishedAt` no longer clears on reopen | `reopeningClearsTheDate` |
+| M4 | `reconcileFinishedAt` restamps with the local clock | `anExistingFinishDateIsNotRestampedWithTheLocalClock` |
+| M5 | `isActiveOn`'s end made exclusive | `theWindowIncludesBothEnds` |
+| M6 | `sprintID`'s **default** changed to a random sprint | `aNewItemLandsInTheBacklogWithoutBeingToldTo` |
+| M7 | the sprint filter removed from `sprintSummary` | `anItemInAnotherSprintIsNotCounted` |
+| M8 | `isComplete` merged into `isTerminal` | `onlyDeliveredItemsCountTowardsTheAchievedPoints` |
+| M9 | `>=` written as `>` | `landingExactlyOnTheGoalIsAHit`, `theSummaryCarriesTheVerdictRatherThanLeavingItToTheView` |
+| M10 | no-goal answered `false` instead of `null` | `aSprintWithNoGoalHasNoVerdictRatherThanAVictory` |
+| M11 | the incomplete list left in input order | `bothListsComeBackInBoardOrderRatherThanTheOrderTheyWereHandedOver` |
+| M12 | `randomSprintID` made deterministic | `generatedIdentifiersAreDistinct` |
+| M13 | `parseSprintID` always returning `null` | `aSprintIdParsesAndRejectsLikeEveryOtherOne` |
+
+**M6 is the one that found a hole in a test, and it is why this table exists.** The first
+`WorkItemEstimationTest` passed `sprintID = null` *explicitly*, so it never exercised the
+default at all — and a default handing every new work item a random sprint passed the whole
+suite. That defect scatters new work into sprints nobody created, and nothing else in 23.1
+would have noticed. The fix is `aNewItemLandsInTheBacklogWithoutBeingToldTo`, which
+constructs a `WorkItem` and asserts on the default rather than on a value it supplied.
+
+One assertion was written and then **deleted** as non-load-bearing:
+`theOwnerIsFreeTextLikeAnAssigneeRatherThanAUserId` asserted that a string is stored
+unchanged, which no implementation could plausibly get wrong. The `String?` choice for
+`owner` is stated in the property's KDoc, which is where a reader looking for the reasoning
+will find it.
+
+#### 23.1.9 Baseline after 23.1
+
+Whole JVM host: **1129 tests, 7 failures** — the same seven Phase 22 recorded (3 `SeedingTest`,
+2 `:shared-ui`, 2 `GlassSurfacePixelTest` red by design). **24 new tests, no new failures.**
+iOS simulator: **1104 tests, same 7 failures**. `verifyArchitectureGraph`, `verifyModuleImports`
+and `:androidApp:compileDebugKotlin` all pass, which is the check that the new entity stayed in
+`:packages:domain` and the new identifier in `:packages:core`.
+
+### 23.2 Persistence
+
+- [ ] **23.2.1 `SprintRecord` + DAO + `version = 4`.** `TaskTrackerDatabase.kt` is at `version = 3`
+  with `AutoMigration(1 → 2)` and `(2 → 3)` only, so the new table arrives as
+  `AutoMigration(3 → 4)`. Two columns on `work_items`: `story_points` (nullable integer) and
+  `sprint_id` (nullable, no foreign key — see 23.3.5).
+- [ ] **23.2.2 Record ↔ entity mapping.** Both nullable pairs in both directions. Test: a
+  stored `null` comes back `null` rather than as 0 or an empty string, for both columns.
+- [ ] **23.2.3 The migration test.** Open a v3 database that holds real rows at v4 and assert
+  the rows survived and the two new columns are `NULL`. **This is the task that catches a
+  destructive migration**, and it is the one that must be written before the migration is
+  trusted, not after — the failure it prevents is silent and only appears on a device that
+  already has the user's data.
+
+### 23.3 Port and data
+
+- [ ] **23.3.1 Port reads.** `sprints(projectID)`, `sprint(id)`, `sprintWorkItems(id)`, on
+  `ProjectRepositoryPort`. Reads return domain values, never records, as the interface's own
+  KDoc already insists.
+- [ ] **23.3.2 Port writes.** `createSprint`, `updateSprint`, `finishSprint`, `reopenSprint`,
+  `setWorkItemSprint`. `now` is a parameter on every one of them, per the interface's stated
+  rule — a port method that reads the clock is a method whose tests can only run on a
+  particular day.
+- [ ] **23.3.3 The implementations**, writing through the same outbox path as every other write
+  so sprint changes are queued for sync rather than becoming a side door. While here, confirm
+  the outbox payload carries the two new work-item columns: a record that serialises without
+  them would silently drop a user's estimate on the next push.
+- [ ] **23.3.4 `setWorkItemSprint`.** One item, one sprint, one write. Moving an item between
+  sprints must **not** touch `rank` — the rank is the item's position in its *status column*
+  on the board, and a sprint is not a column, so letting the two interact is how a board ends
+  up reordering itself. Test: assigning, reassigning and clearing all leave `rank` alone.
+- [ ] **23.3.5 At most one **open** sprint per project.** Two concurrent open sprints make
+  "the sprint's items" ambiguous for the board and double the "what is in progress" question.
+  Enforced in the domain, so the data layer cannot create the state by accident. Test: a second
+  `createSprint` on a project with an open one is rejected; it is allowed once the first is
+  finished. *(Decide here whether a project may have several **future** sprints — the reading
+  is yes, and only the *open* one is exclusive.)*
+
+### 23.4 Design system
+
+- [ ] **23.4.1 `TTDateField`.** The first date input in the app. A field that opens a day grid,
+  built from `ttGlassSurface` and existing spacing/radius/typography tokens — **no new styling
+  primitives**, and if the grid needs a colour that does not exist, it is added as a token with
+  its measurement rather than inlined at the call site. Ships with the light/dark contrast
+  test the other new surfaces get.
+- [ ] **23.4.2 A story-points presentation.** A numeral in `ttTypography.caption`, deliberately
+  not a pill: fifty pills on a board is a wall of badges, and the number is a quantity rather
+  than a status. Test: it renders at the caption style and does not take the card's tint.
+
+### 23.5 Presentation
+
+- [ ] **23.5.1 `SprintListModel` + `SprintListScreen`.** Each row: name, date range, progress
+  as `achieved / goal`, and an open/finished badge. Model is `remember`-keyed and observed with
+  `DisposableEffect` like every other model in `NavigationHost` — that pair is what stops a
+  second live observer being left watching the store.
+- [ ] **23.5.2 `SprintEditorSheet`.** Create and edit in one sheet, mirroring
+  `WorkItemEditorSheet`'s nullable-id shape: name, goal points, start and end through
+  `TTDateField`, owner. Validates end ≥ start before it will save.
+- [ ] **23.5.3 `SprintDetailModel` + `SprintDetailScreen`.** Goal, dates, owner, the committed
+  and achieved totals, the sprint's items with their points, and a **Finish** button enabled
+  only for the owner.
+- [ ] **23.5.4 `SprintSummaryScreen`.** Rendered from `SprintSummary`, so there is no arithmetic
+  in the view: done items, incomplete items, achieved points, and whether the goal was hit. The
+  hit/miss is **read from the value**, never recomputed here.
+- [ ] **23.5.5 Story points in the work item editor**, plus `WorkItemEditorModel` carrying the
+  field through to `SaveWorkItem`. That use case takes every field **explicitly and by name**
+  (`title`, `details`, `status`, `priority`, `assignee`, `dueDate`, `now`) and forwards them to
+  `repository.createWorkItem` / `updateWorkItem`, so a new field that is not added to its
+  signature and to both call sites is a field that is silently dropped on save — and the editor
+  will look like it worked. Test: a value entered in the editor comes back out of the store.
+- [ ] **23.5.6 Assigning an item to a sprint**, from the editor and from the sprint screen. One
+  place, two callers.
+- [ ] **23.5.7 Story points on the board card and the backlog row**, through 23.4.2.
+
+### 23.6 The entry point
+
+This is the part that makes any of it reachable, and it is listed on its own because a feature
+with no entry point is a feature nobody can find.
+
+- [ ] **23.6.1 `AppTab.Sprints`.** The enum entry, `wireValue = "sprints"`, and
+  **`isProjectScoped = true`** — the switch over `AppTab` in `Routes.kt` is exhaustive, so
+  leaving it out is a compile error rather than a silently unscoped tab.
+- [ ] **23.6.2 `tabTitle` and `tabIcon`.** Both are exhaustive `when`s in `NavigationHost.kt`;
+  add `Res.string.tab_sprints` and `ttTabIcons.sprints`. The mapping back to the native app's
+  SF Symbols is recorded in `ttTabIcons.mapping`, and this one has no counterpart there — say so
+  in that table rather than leaving a blank.
+- [ ] **23.6.3 `AppRoute.SprintList` / `AppRoute.SprintDetail`**, and both route accessors:
+  `projectIDOrNull` returns the project, and `selectsActiveProject` returns it too, because a
+  sprint tab that did not become the active project would show nothing.
+- [ ] **23.6.4 `SprintsDestination` in `NavigationHost`**, plus the `TabRoot` branch, the
+  project picker and the empty state — mirroring `ProjectScopedTabScreen`, including
+  `seedSampleDataIfNeeded`, so landing on the tab first does not show an empty store.
+- [ ] **23.6.5 Deep links.** `tasktracker://sprints/<pid>` and `tasktracker://sprint/<pid>/<sid>`
+  in the link grammar, so the new tab does not become the one destination a shared link cannot
+  reach.
+- [ ] **23.6.6 Check five tabs at phone width.** `TTGlassTabBar` has laid out four. A fifth
+  segment is the first thing in this app to have been looked at at exactly one size, and the
+  Android host's viewport is already known to be smaller than the other two — so the bar is
+  checked in a preview and the tab-width assertion is written against a **fixed** expectation
+  rather than whatever the host happens to produce.
+
+### 23.7 Verification
+
+- [ ] **23.7.1 Mutation-check every new test** before it is believed, per `AGENTS.md` rule 1 —
+  including the pure ones, which are the ones most likely to pass for the wrong reason.
+- [ ] **23.7.2 The deciding command**, unchanged:
+
+  ```bash
+  ./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+  ```
+
+  `verifyArchitectureGraph` and `verifyModuleImports` are the check that the new entity stayed
+  in `:domain`, the new port stayed in `feature-projects-domain`, and no record leaked into
+  presentation. If a sprint needs a new dependency edge, `allowedLibraryTable` and
+  `packageOwnersTable` are updated **deliberately**, in the same change, with the reason.
+- [ ] **23.7.3 Baseline from the JUnit XML**, cross-checked against `@Test`, in the same change
+  as each test — never from `grep -c`.
+
+### 23.8 Two things not to do while this is in flight
+
+- **Do not extend the sample-data fixture with sprints.** `SeedingTest` has three documented
+  pre-existing failures on both hosts; adding rows to the fixture they assert against makes the
+  baseline worse and the existing failures harder to read. Sprints ship with no sample data
+  until those are resolved.
+- **Do not touch the tab bar's geometry.** Five tabs is a layout fact, not an invitation to
+  redesign the capsule. If it does not fit at phone width, 23.6.6 is where that is discovered
+  and answered, on its own.
+
+### 23.9 Build order
+
+`23.1 → 23.2 → 23.3` is a strictly layered chain: no presentation compiles without the port,
+and no port without the entity. `23.4.1` is independent and can be built in parallel, because
+nothing else blocks on it and it is the one piece with no precedent in this codebase.
+`23.5` follows `23.3`. `23.6.6` is last because five tabs cannot be measured until there are
+five.

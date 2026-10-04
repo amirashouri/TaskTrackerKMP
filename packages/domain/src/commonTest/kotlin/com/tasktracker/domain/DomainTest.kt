@@ -3,12 +3,14 @@ package com.tasktracker.domain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.graphemeClusterCount
 import com.tasktracker.core.parseStatusChangeID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.core.randomWorkItemID
@@ -16,9 +18,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -523,5 +527,369 @@ class WorkItemResolvedAtTest {
         val subject = item(WorkItemStatus.Done, pulled)
         subject.reconcileResolutionAt(now)
         assertEquals(pulled, subject.resolvedAt)
+    }
+}
+
+class SprintTest {
+
+    private val projectID = randomProjectID()
+    private val now = Instant.fromEpochSeconds(1_700_000_000)
+    private val start = now
+    private val end = now + 14.days
+
+    private fun sprint(
+        name: String = "Sprint 1",
+        goalStoryPoints: Int = 21,
+        startDate: Instant = start,
+        endDate: Instant = end,
+        owner: String? = "amir",
+        isFinished: Boolean = false,
+        finishedAt: Instant? = null,
+    ) = Sprint(
+        projectID = projectID,
+        name = name,
+        goalStoryPoints = goalStoryPoints,
+        startDate = startDate,
+        endDate = endDate,
+        owner = owner,
+        isFinished = isFinished,
+        finishedAt = finishedAt,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    @Test
+    fun aNegativeGoalIsFlooredRatherThanStored() {
+        // Rejecting instead would leave a sprint the UI cannot render a goal for. This
+        // mirrors Project's treatment of nextItemNumber: normalise on the way in.
+        assertEquals(0, sprint(goalStoryPoints = -5).goalStoryPoints)
+    }
+
+    @Test
+    fun aWindowThatEndsBeforeItStartsIsConstructibleButNotActive() {
+        // Not refused. A sprint pulled back in time arrives that way from a server, and a
+        // thrown constructor in a data class would take down the read of the whole list
+        // rather than the one bad row. isActiveOn is what answers the question.
+        val backwards = sprint(startDate = end, endDate = start)
+        assertFalse(backwards.isActiveOn(now))
+    }
+
+    @Test
+    fun theWindowIncludesBothEnds() {
+        assertTrue(sprint().isActiveOn(start))
+        assertTrue(sprint().isActiveOn(end))
+        assertFalse(sprint().isActiveOn(start - 1.seconds))
+        assertFalse(sprint().isActiveOn(end + 1.seconds))
+    }
+
+    @Test
+    fun finishingDatesTheSprint() {
+        val subject = sprint()
+        subject.isFinished = true
+        subject.reconcileFinishedAt(now + 3.days)
+        assertEquals(now + 3.days, subject.finishedAt)
+    }
+
+    @Test
+    fun reopeningClearsTheDate() {
+        // The half of the invariant that gets forgotten, exactly as WorkItem's
+        // resolvedAt does. A stale finishedAt would report a sprint as closed on the list
+        // while the board still let tasks be added to it.
+        val subject = sprint(isFinished = true, finishedAt = now + 3.days)
+        subject.isFinished = false
+        subject.reconcileFinishedAt(now + 4.days)
+        assertNull(subject.finishedAt)
+    }
+
+    @Test
+    fun anExistingFinishDateIsNotRestampedWithTheLocalClock() {
+        val pulled = now + 2.days
+        val subject = sprint(isFinished = true, finishedAt = pulled)
+        subject.reconcileFinishedAt(now + 9.days)
+        assertEquals(pulled, subject.finishedAt)
+    }
+
+    @Test
+    fun anUnownedSprintIsNullRatherThanAnEmptyString() {
+        // Not "". A blank owner would need a blank check at every place one is read, and
+        // "nobody owns this sprint" is a state both the summary and the Finish button
+        // have to handle — so it gets exactly one representation.
+        assertNull(sprint(owner = null).owner)
+    }
+}
+
+class WorkItemEstimationTest {
+
+    private val projectID = randomProjectID()
+    private val now = Instant.fromEpochSeconds(1_700_000_000)
+
+    private fun item(storyPoints: Int? = null, sprintID: SprintID? = null) = WorkItem(
+        projectID = projectID,
+        key = WorkItemKey("TT-1"),
+        title = "TT-1",
+        storyPoints = storyPoints,
+        sprintID = sprintID,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    @Test
+    fun anUnestimatedItemKeepsItsNull() {
+        // The whole reason the field is nullable. Flooring this to 0 would make "nobody
+        // estimated this" and "this is worth nothing" the same value, and a sprint would
+        // then be able to claim it had measured its whole scope.
+        assertNull(item(storyPoints = null).storyPoints)
+    }
+
+    @Test
+    fun zeroIsAnEstimateAndIsNotTheSameAsUnestimated() {
+        val subject = item(storyPoints = 0)
+        assertEquals(0, subject.storyPoints)
+        assertNotEquals(null, subject.storyPoints)
+    }
+
+    @Test
+    fun aNegativeEstimateArrivingFromAServerIsFlooredAtZero() {
+        assertEquals(0, item(storyPoints = -3).storyPoints)
+    }
+
+    @Test
+    fun anItemWithNoSprintIsInTheBacklogRatherThanBroken() {
+        // The state almost every item starts in, and a permanent one: the backlog is a
+        // real place, not an absence.
+        assertNull(item(sprintID = null).sprintID)
+        assertNotNull(item(sprintID = randomSprintID()).sprintID)
+    }
+
+    @Test
+    fun aNewItemLandsInTheBacklogWithoutBeingToldTo() {
+        // The *default*, not the passed value. An earlier version of this class passed
+        // `sprintID = null` explicitly and so never exercised the default at all, which
+        // meant a default that handed every new item a random sprint passed the suite -
+        // and would have silently scattered new work into sprints nobody created. The
+        // mutation that caught this changed the default and left everything green.
+        val fresh = WorkItem(
+            projectID = projectID,
+            key = WorkItemKey("TT-1"),
+            title = "TT-1",
+            createdAt = now,
+            updatedAt = now,
+        )
+        assertNull(fresh.sprintID)
+    }
+
+    @Test
+    fun puttingAnItemInASprintDoesNotMoveItOnTheBoard() {
+        // Rank is the item's position in its status column. A sprint is not a column, so
+        // letting the two interact is how a board starts reordering itself.
+        val subject = WorkItem(
+            projectID = projectID,
+            key = WorkItemKey("TT-9"),
+            title = "TT-9",
+            status = WorkItemStatus.InProgress,
+            rank = 7,
+            createdAt = now,
+            updatedAt = now,
+        )
+        subject.sprintID = randomSprintID()
+        assertEquals(7, subject.rank)
+        assertEquals(WorkItemStatus.InProgress, subject.status)
+    }
+}
+
+class SprintSummaryTest {
+
+    private val projectID = randomProjectID()
+    private val now = Instant.fromEpochSeconds(1_700_000_000)
+    private val sprint = Sprint(
+        projectID = projectID,
+        name = "Sprint 1",
+        goalStoryPoints = 8,
+        startDate = now,
+        endDate = now + 14.days,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    private fun item(
+        key: String,
+        status: WorkItemStatus,
+        storyPoints: Int?,
+        sprintID: SprintID? = sprint.id,
+        rank: Int = 0,
+        priority: Priority = Priority.Medium,
+    ) = WorkItem(
+        projectID = projectID,
+        key = WorkItemKey(key),
+        title = key,
+        status = status,
+        storyPoints = storyPoints,
+        sprintID = sprintID,
+        priority = priority,
+        rank = rank,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    @Test
+    fun theDoneAndIncompleteSplitAgreesWithTheArchivePredicate() {
+        // Both use status.isTerminal, so a task cannot be filed under one and not the
+        // other. An archive that disagrees with a sprint summary is two screens answering
+        // "did this ship?" differently.
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Done, 3),
+            item("TT-2", WorkItemStatus.InProgress, 5),
+            item("TT-3", WorkItemStatus.Closed, 0),
+        )
+        val summary = sprintSummary(sprint, items)
+
+        assertEquals(
+            WorkItemGrouping.resolved(items).map { it.key.rawValue }.sorted(),
+            summary.done.map { it.key.rawValue }.sorted(),
+        )
+        assertEquals(listOf("TT-2"), summary.incomplete.map { it.key.rawValue })
+    }
+
+    @Test
+    fun onlyDeliveredItemsCountTowardsTheAchievedPoints() {
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Done, 3),
+            item("TT-2", WorkItemStatus.Closed, 5),
+            item("TT-3", WorkItemStatus.InProgress, 2),
+        )
+        val summary = sprintSummary(sprint, items)
+
+        assertEquals(10, summary.committedStoryPoints)
+        // The closed item is reported as done — it is no longer outstanding — but it
+        // contributes nothing, because nothing was delivered. Counting it would let a
+        // sprint claim points for work that was decided against.
+        assertEquals(3, summary.achievedStoryPoints)
+    }
+
+    @Test
+    fun anUnestimatedTaskIsReportedAndContributesNoPoints() {
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Done, null),
+            item("TT-2", WorkItemStatus.Todo, 4),
+        )
+        val summary = sprintSummary(sprint, items)
+
+        assertEquals(listOf("TT-1"), summary.done.map { it.key.rawValue })
+        assertEquals(4, summary.committedStoryPoints)
+        assertEquals(0, summary.achievedStoryPoints)
+    }
+
+    @Test
+    fun anItemInAnotherSprintIsNotCounted() {
+        // The builder filters on the sprint id, so a caller holding the whole project's
+        // work list cannot produce a summary that counted something else.
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Done, 3),
+            item("TT-2", WorkItemStatus.Done, 99, sprintID = randomSprintID()),
+            item("TT-3", WorkItemStatus.Done, 99, sprintID = null),
+        )
+        val summary = sprintSummary(sprint, items)
+
+        assertEquals(listOf("TT-1"), summary.done.map { it.key.rawValue })
+        assertEquals(3, summary.achievedStoryPoints)
+    }
+
+    @Test
+    fun anEmptySprintIsEmptyAndStillReportsTheGoalItMissed() {
+        // Not "no verdict": this sprint *has* a goal of 8, so achieving none of it is a
+        // genuine miss and the summary has to say so. The three-way answer is for a
+        // sprint nobody set a target for, which is a different thing.
+        val summary = sprintSummary(sprint, emptyList())
+        assertTrue(summary.isEmpty)
+        assertEquals(0, summary.committedStoryPoints)
+        assertEquals(0, summary.achievedStoryPoints)
+        assertEquals(false, summary.didHitGoal)
+    }
+
+    @Test
+    fun bothListsComeBackInBoardOrderRatherThanTheOrderTheyWereHandedOver() {
+        val first = item("TT-1", WorkItemStatus.Todo, 1, rank = 0, priority = Priority.Lowest)
+        val second = item("TT-2", WorkItemStatus.Todo, 1, rank = 1, priority = Priority.Critical)
+
+        // Handed over backwards on purpose. A builder that kept the input order answers
+        // TT-2, TT-1 here, which is the defect: the same two tasks in two stores would
+        // then be listed in two different orders.
+        assertEquals(
+            listOf("TT-1", "TT-2"),
+            sprintSummary(sprint, listOf(second, first)).incomplete.map { it.key.rawValue },
+        )
+        assertEquals(
+            listOf("TT-1", "TT-2"),
+            sprintSummary(sprint, listOf(first, second)).incomplete.map { it.key.rawValue },
+        )
+    }
+}
+
+class SprintGoalTest {
+
+    private val now = Instant.fromEpochSeconds(1_700_000_000)
+
+    /**
+     * One sprint, held as a property rather than built per call, because
+     * [sprintSummary] filters on the id: an item built against a *different* sprint is
+     * correctly excluded, which is the behaviour [SprintSummaryTest] asserts and which
+     * would otherwise make this class assert nothing.
+     */
+    private fun sprint(goalStoryPoints: Int) = Sprint(
+        projectID = randomProjectID(),
+        name = "Sprint 1",
+        goalStoryPoints = goalStoryPoints,
+        startDate = now,
+        endDate = now + 14.days,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    private fun item(
+        status: WorkItemStatus,
+        storyPoints: Int?,
+        sprintID: SprintID,
+    ) = WorkItem(
+        projectID = randomProjectID(),
+        key = WorkItemKey("TT-1"),
+        title = "TT-1",
+        status = status,
+        storyPoints = storyPoints,
+        sprintID = sprintID,
+        createdAt = now,
+        updatedAt = now,
+    )
+
+    @Test
+    fun landingExactlyOnTheGoalIsAHit() {
+        // The case a `>` gets wrong, and the most likely thing to be re-derived by hand
+        // somewhere else in the app.
+        assertEquals(true, SprintGoal.didHitGoal(achieved = 8, goal = 8))
+    }
+
+    @Test
+    fun underTheGoalMissesAndOverItHits() {
+        assertEquals(false, SprintGoal.didHitGoal(achieved = 7, goal = 8))
+        assertEquals(true, SprintGoal.didHitGoal(achieved = 9, goal = 8))
+    }
+
+    @Test
+    fun aSprintWithNoGoalHasNoVerdictRatherThanAVictory() {
+        // `false` here would read as "we missed", which is as much an invention as
+        // `true`. The third state is the honest one and it is why the answer is nullable.
+        assertNull(SprintGoal.didHitGoal(achieved = 0, goal = 0))
+        assertNull(SprintGoal.didHitGoal(achieved = 12, goal = 0))
+    }
+
+    @Test
+    fun theSummaryCarriesTheVerdictRatherThanLeavingItToTheView() {
+        val subject = sprint(goalStoryPoints = 8)
+        val items = listOf(item(WorkItemStatus.Done, 8, subject.id))
+
+        assertEquals(true, sprintSummary(subject, items).didHitGoal)
+        assertEquals(
+            false,
+            sprintSummary(subject, items.map { it.copy(status = WorkItemStatus.Todo) }).didHitGoal,
+        )
     }
 }

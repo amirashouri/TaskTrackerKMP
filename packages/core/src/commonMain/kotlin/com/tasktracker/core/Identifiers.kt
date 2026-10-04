@@ -45,6 +45,19 @@ value class UserID(val rawValue: Uuid) {
     override fun toString(): String = stringValue
 }
 
+/**
+ * A time-boxed iteration of work. Distinct from [ProjectID] and [WorkItemID] on the
+ * same grounds: a sprint id passed where a project id is expected is a mistake the
+ * compiler should catch, and "it is just a UUID" is not a reason to make it one type.
+ */
+@Serializable
+@JvmInline
+value class SprintID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
 /** One row in a work item's status history. */
 @Serializable
 @JvmInline
@@ -78,6 +91,9 @@ fun randomWorkItemID(): WorkItemID = WorkItemID(Uuid.random())
 fun randomUserID(): UserID = UserID(Uuid.random())
 
 /** Generates a fresh identifier. */
+fun randomSprintID(): SprintID = SprintID(Uuid.random())
+
+/** Generates a fresh identifier. */
 fun randomStatusChangeID(): StatusChangeID = StatusChangeID(Uuid.random())
 
 /**
@@ -96,6 +112,9 @@ fun parseWorkItemID(raw: String): WorkItemID? = runCatching { WorkItemID(Uuid.pa
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseUserID(raw: String): UserID? = runCatching { UserID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseSprintID(raw: String): SprintID? = runCatching { SprintID(Uuid.parse(raw)) }.getOrNull()
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseStatusChangeID(raw: String): StatusChangeID? =

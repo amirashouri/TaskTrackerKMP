@@ -138,7 +138,7 @@ class IdentifiersTest {
     fun identifierTypesShareARepresentationButStayDistinct() {
         val uuid = Uuid.random()
 
-        // Same UUID, four types, identical text. What makes them distinct is that
+        // Same UUID, five types, identical text. What makes them distinct is that
         // they do not unify in code — `fun f(p: ProjectID)` cannot be called with a
         // `WorkItemID`, and that is the guarantee the compiler is giving us. Asserting
         // it at runtime is impossible by construction; what is asserted here is the
@@ -146,6 +146,7 @@ class IdentifiersTest {
         assertEquals(uuid.toString(), ProjectID(uuid).stringValue)
         assertEquals(uuid.toString(), WorkItemID(uuid).stringValue)
         assertEquals(uuid.toString(), UserID(uuid).stringValue)
+        assertEquals(uuid.toString(), SprintID(uuid).stringValue)
         assertEquals(uuid.toString(), StatusChangeID(uuid).stringValue)
         assertNotNull(parseUserID(uuid.toString()))
     }
@@ -166,6 +167,18 @@ class IdentifiersTest {
     }
 
     @Test
+    fun aSprintIdParsesAndRejectsLikeEveryOtherOne() {
+        // Same contract as [parseProjectID], and asserted separately because a sprint id
+        // reaches the parser from a deep link (`tasktracker://sprint/<pid>/<sid>`) rather
+        // than from a server payload, which makes "silently null" the failure rather than
+        // a rejected request.
+        val uuid = Uuid.random()
+        assertEquals(SprintID(uuid), assertNotNull(parseSprintID(uuid.toString())))
+        assertNull(parseSprintID("nope"))
+        assertNull(parseSprintID(""))
+    }
+
+    @Test
     fun generatedIdentifiersAreDistinct() {
         // Not a collision test — a UUID test. It exists so that accidentally making
         // the generator deterministic would fail here rather than produce two boards
@@ -173,6 +186,7 @@ class IdentifiersTest {
         assertFalse(randomProjectID() == randomProjectID())
         assertFalse(randomWorkItemID() == randomWorkItemID())
         assertFalse(randomUserID() == randomUserID())
+        assertFalse(randomSprintID() == randomSprintID())
         assertFalse(randomStatusChangeID() == randomStatusChangeID())
     }
 

@@ -1,11 +1,13 @@
 package com.tasktracker.domain
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.StatusChangeID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
 import kotlinx.serialization.SerialName
@@ -188,6 +190,91 @@ data class Project(
     }
 }
 
+/**
+ * A time-boxed iteration of work: a goal, a window, an owner, and the tasks pulled into it.
+ *
+ * ## The goal is a number, not a sentence
+ *
+ * `goalStoryPoints` is the target the sprint is measured against, and "did it hit the goal"
+ * is [SprintGoal.didHitGoal] on the number achieved. A free-text goal would read better in
+ * a header and would answer none of the questions the summary exists to answer, which is
+ * the trade this field is making deliberately. The sprint's *name* is where a sentence
+ * belongs.
+ *
+ * ## At most one sprint is open at a time
+ *
+ * Enforced in the domain rather than here, because a second open sprint is a business-rule
+ * violation and not a malformed value — the sprint itself is perfectly well-formed. Two
+ * concurrent open sprints make "what is in progress in this project" ambiguous on the board
+ * and double the question at the end of each one.
+ *
+ * Mutable for the fields the editor writes, with [id] and [createdAt] `val` for the same
+ * reason [Project]'s are: an entity that can change its own identity is a row the sync
+ * layer can no longer match up.
+ */
+@Serializable
+data class Sprint(
+    val id: SprintID = randomSprintID(),
+    val projectID: ProjectID,
+    /** The sprint's name. [ProjectRules.normaliseName] applies the same rules as a project. */
+    var name: String,
+    /** The target, in story points. Never negative; see [SprintGoal]. */
+    var goalStoryPoints: Int = 0,
+    /** The first day of the sprint. */
+    var startDate: Instant,
+    /** The last day, inclusive. Never before [startDate]. */
+    var endDate: Instant,
+    /**
+     * Who owns the sprint, and who may finish it.
+     *
+     * A `String?` and not a [UserID] for the reason [WorkItem.assignee] is one: an owner
+     * that filtered and displayed differently from an assignee would be two concepts
+     * wearing the same word, and "am I the owner" is then answered inconsistently in two
+     * places. `null` is an unowned sprint, which anyone may finish.
+     */
+    var owner: String? = null,
+    /** Whether the sprint has been closed and summarised. */
+    var isFinished: Boolean = false,
+    /**
+     * When it was closed, or `null` while it is open.
+     *
+     * The invariant `finishedAt != null` exactly when [isFinished] is enforced in both
+     * directions by [reconcileFinishedAt], for the same reason and with the same shape as
+     * [WorkItem.reconcileResolutionAt] — including the half that gets forgotten, which is
+     * that reopening has to *clear* the date.
+     */
+    var finishedAt: Instant? = null,
+    val createdAt: Instant,
+    var updatedAt: Instant,
+) {
+    init {
+        // Floors rather than rejects, matching [Project]'s treatment of `nextItemNumber`:
+        // a value that arrived from a server is normalised in place so every later reader
+        // sees the same number, rather than the sprint holding a goal no screen can render.
+        if (goalStoryPoints < 0) goalStoryPoints = 0
+    }
+
+    /**
+     * Puts [finishedAt] back in step with [isFinished].
+     *
+     * A date already present is kept rather than overwritten, so a value that arrived from
+     * a server is not restamped with the local clock — the same rule as
+     * [WorkItem.reconcileResolutionAt], and for the same reason.
+     */
+    fun reconcileFinishedAt(now: Instant) {
+        finishedAt = if (isFinished) (finishedAt ?: now) else null
+    }
+
+    /**
+     * Whether [now] falls inside the sprint's window, inclusive of both ends.
+     *
+     * A parameter rather than a clock read, for the reason every write in this project
+     * takes its instant from its caller: a rule that reads the wall clock is a rule whose
+     * tests can only be run on a particular day.
+     */
+    fun isActiveOn(now: Instant): Boolean = now >= startDate && now <= endDate
+}
+
 /** One unit of work. */
 @Serializable
 data class WorkItem(
@@ -204,6 +291,28 @@ data class WorkItem(
     var priority: Priority = Priority.Medium,
     var assignee: String? = null,
     var dueDate: Instant? = null,
+    /**
+     * The item's estimate, in points. `null` means **unestimated**.
+     *
+     * Nullable rather than `0` on purpose. A non-null zero makes "nobody estimated this"
+     * and "this is worth nothing" the same value, and the difference is precisely what a
+     * sprint's summary is for: an unestimated task still has to appear in the done or
+     * incomplete list, it just contributes no points. Rendering it as `0` would let a
+     * sprint claim it had measured its whole scope.
+     *
+     * A negative arriving from a server is floored at 0 in `init` rather than rejected,
+     * for the reason [Sprint]'s goal is.
+     */
+    var storyPoints: Int? = null,
+    /**
+     * The sprint this item has been pulled into, or `null` for "in the backlog".
+     *
+     * `null` is the state almost every item starts in and is not a temporary one — the
+     * backlog is a real place, not an absence of a sprint. An item's [rank] is deliberately
+     * untouched by a change here: rank is the item's position in its *status column* on
+     * the board, and a sprint is not a column.
+     */
+    var sprintID: SprintID? = null,
     /**
      * Manual position within its status column. Lower sorts first.
      *
@@ -229,6 +338,16 @@ data class WorkItem(
      */
     var resolvedAt: Instant? = null,
 ) {
+
+    init {
+        // `null` is left exactly as it is. The floor applies only to a number that
+        // arrived, and the pair of them is the point of the field: a floored `null` would
+        // be an unestimated task claiming to be worth nothing. The local, rather than a
+        // `storyPoints != null && storyPoints < 0`, because a `var` cannot be smart-cast
+        // across the two reads.
+        val points = storyPoints
+        if (points != null && points < 0) storyPoints = 0
+    }
 
     /**
      * The date the archive should file this item under.
