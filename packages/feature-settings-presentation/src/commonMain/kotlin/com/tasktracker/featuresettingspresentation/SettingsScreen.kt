@@ -55,6 +55,7 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSettingsIconSize
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
@@ -505,7 +506,7 @@ private fun SettingsDivider() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = ttSettingsIconSize.tile + ttSpacing.md)
-            .height(1.dp)
+            .height(ttSeparatorWidth)
             .background(ttSeparator()),
     )
 }

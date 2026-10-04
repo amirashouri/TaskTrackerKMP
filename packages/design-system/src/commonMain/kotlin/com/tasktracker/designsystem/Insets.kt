@@ -1,5 +1,6 @@
 package com.tasktracker.designsystem
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.unit.Dp
@@ -35,3 +36,7 @@ import androidx.compose.ui.unit.dp
  * before the shell existed.
  */
 val LocalTabBarScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
+
+/** Sets the system status bar icon appearance (light vs dark) based on the active theme. */
+@Composable
+expect fun SystemBarAppearance(isDark: Boolean)

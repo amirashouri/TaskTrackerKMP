@@ -28,6 +28,8 @@ import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.ttBannerTone
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttCanvas
@@ -344,7 +346,7 @@ private fun ProjectsEditorFullScreen(
                     color = ttLabel(),
                 )
                 errorMessage?.let { message ->
-                    ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+                    ttBanner(message = message, onDismiss = onDismissError)
                 }
                 issuedKey?.let { key ->
                     ttText(
@@ -532,7 +534,7 @@ private fun WorkItemEditorForm(
             }
         }
         errorMessage?.let { message ->
-            ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+            ttBanner(message = message, onDismiss = onDismissError)
         }
         issuedKey?.let { key ->
             ttText(

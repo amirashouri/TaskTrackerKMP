@@ -3,7 +3,9 @@ package com.tasktracker.sharedui
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.routing.Router
+import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -89,6 +91,30 @@ class ShellPreferences(
     private val _forceOffline = MutableStateFlow(false)
     val forceOffline: StateFlow<Boolean> = _forceOffline.asStateFlow()
 
+    private val _currentUserName = MutableStateFlow<String?>(null)
+
+    /**
+     * Who to call the signed-in person, or `null` before [refreshCurrentUser] has run.
+     *
+     * A [StateFlow] and not a `val` for two reasons, and the first is mechanical: the read is
+     * `UserDefaultsStore.value`, which is `suspend` because it may cross a platform boundary,
+     * and the reader is a `remember` block in a composition — not a coroutine. A property
+     * cannot be the shape the call needs.
+     *
+     * The second is that the value has to be *re-read*, not captured once. The cached profile
+     * is written by sign-in (`AuthRepository.signIn` -> `DefaultsKey.CachedProfile`) and cleared
+     * by sign-out, so anything read during [restore] is stale by the time it matters: on a cold
+     * launch `restore` runs before anybody has signed in, and the board's "show only my tasks"
+     * filter would be handed `null` and match nothing. [refreshCurrentUser] is therefore called
+     * when the root moves to the main tree, not from [restore], and the flow is what lets a
+     * later board pick up a name that arrived after this screen was composed.
+     *
+     * `preferredGreeting` rather than a local display-name-else-email expression: it is the one
+     * definition of what to call this person, it is on the type that owns it, and re-spelling it
+     * here is how the shell's greeting and the sign-in screen's greeting drift apart.
+     */
+    val currentUserName: StateFlow<String?> = _currentUserName.asStateFlow()
+
     /**
      * Loads the stored shell preferences once at launch.
      *
@@ -130,6 +156,28 @@ class ShellPreferences(
      */
     var lastVisitedProjectID: String? = null
         private set
+
+    /**
+     * Re-reads the signed-in person's name from the cached profile.
+     *
+     * Called when the router's root becomes `Main`, which is the first moment a cached profile
+     * *can* be the current session's — a sign-in writes it before it moves the root, so this
+     * cannot miss a fresh session, and it overwrites rather than accumulating, so a stale name
+     * cannot survive a new sign-in as a different account's.
+     *
+     * No `runCatching`, unlike the raw-key reads in [restore], and that is a considered
+     * difference rather than an oversight: those reads have a documented fallback this one
+     * cannot invent. `UserDefaultsStore.value` already answers `null` for both "absent" and
+     * "undecodable", and `null` is the *correct* answer to each — nobody is signed in, or a
+     * profile written by an older build is not readable — whereas the fallback [restore] wants
+     * is a default appearance. Swallowing a throw here would have to either keep the previous
+     * name, which leaves one account's name on the board after another account signs in, or
+     * invent a name, which filters a real person's own work out of their own board.
+     */
+    suspend fun refreshCurrentUser() {
+        _currentUserName.value =
+            store.value<UserIdentity>(DefaultsKey.CachedProfile)?.preferredGreeting
+    }
 
     /**
      * Writes a new appearance.

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.BoardProjection
@@ -36,6 +37,7 @@ class ProjectBoardModel(
     val projectID: ProjectID,
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
+    private val currentUserName: String? = null,
 ) : ObservingProjectModel(repository) {
 
     private val moveWorkItem = MoveWorkItem(repository, dateProvider)
@@ -55,13 +57,52 @@ class ProjectBoardModel(
     var movingItemID: WorkItemID? by mutableStateOf(null)
         private set
 
+    private var rawItems: List<WorkItem> = emptyList()
+
+    /** Whether to show only tasks assigned to the current user. */
+    var showOnlyMyTasks: Boolean by mutableStateOf(false)
+        private set
+
+    fun toggleShowOnlyMyTasks() {
+        showOnlyMyTasks = !showOnlyMyTasks
+        updateProjection()
+    }
+
+    private fun assigneeMatchesCurrentUser(assignee: String?): Boolean {
+        val current = currentUserName?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val target = assignee?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val currentFirst = assigneeFirstName(current)
+        val targetFirst = assigneeFirstName(target)
+        return currentFirst.isNotEmpty() && targetFirst.isNotEmpty() &&
+            currentFirst.equals(targetFirst, ignoreCase = true)
+    }
+
+    private fun updateProjection() {
+        val filtered = if (showOnlyMyTasks) {
+            rawItems.filter { assigneeMatchesCurrentUser(it.assignee) }
+        } else {
+            rawItems
+        }
+        projection = BoardProjection(
+            project = projection.project,
+            items = filtered,
+        )
+    }
+
     override fun isRelevant(change: ProjectChange): Boolean =
         change.projectID == null || change.projectID == projectID
 
     override suspend fun reload() {
+        val project = repository.project(projectID)
+        rawItems = repository.workItems(projectID)
+        val filtered = if (showOnlyMyTasks) {
+            rawItems.filter { assigneeMatchesCurrentUser(it.assignee) }
+        } else {
+            rawItems
+        }
         projection = BoardProjection(
-            project = repository.project(projectID),
-            items = repository.workItems(projectID),
+            project = project,
+            items = filtered,
         )
     }
 

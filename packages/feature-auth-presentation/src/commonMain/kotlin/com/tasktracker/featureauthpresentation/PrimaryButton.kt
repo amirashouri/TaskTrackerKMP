@@ -1,12 +1,8 @@
 package com.tasktracker.featureauthpresentation
 
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,10 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.AmbientBackdrop
@@ -43,6 +35,7 @@ import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSpinner
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
@@ -134,7 +127,7 @@ fun PrimaryButton(
             text = label,
             visible = !isLoading,
         )
-        Spinner(visible = isLoading)
+        ttSpinner(color = ttOnAccent)
     }
 }
 
@@ -185,48 +178,6 @@ private fun LabelContent(text: String, visible: Boolean) {
  * ships no icon set. An indeterminate arc rather than a full circle, because a static ring
  * reads as a broken image next to a label that has just vanished.
  */
-@Composable
-private fun Spinner(visible: Boolean) {
-    if (!visible) return
-    // `rememberInfiniteTransition` rather than `animateFloatAsState`: the latter runs its
-    // animation once on the way to `targetValue` and then stops, so a spinner built on it
-    // would rotate exactly once and sit still — which is the one thing a loading indicator
-    // must never do.
-    val rotation by rememberInfiniteTransition(label = "PrimaryButton spinner").animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = SPINNER_PERIOD_MILLIS, easing = LinearEasing),
-        ),
-        label = "rotation",
-    )
-    androidx.compose.foundation.Canvas(
-        modifier = Modifier.size(ttSpacing.xxl),
-    ) {
-        val stroke = SPINNER_STROKE.toPx()
-        val diameter = size.minDimension - stroke
-        val topLeft = Offset(
-            x = (size.width - diameter) / 2f,
-            y = (size.height - diameter) / 2f,
-        )
-        drawArc(
-            color = Color.White,
-            startAngle = rotation,
-            sweepAngle = SPINNER_SWEEP_DEGREES,
-            useCenter = false,
-            topLeft = topLeft,
-            size = Size(diameter, diameter),
-            style = Stroke(width = stroke, cap = androidx.compose.ui.graphics.StrokeCap.Round),
-        )
-    }
-}
-
-private const val SPINNER_PERIOD_MILLIS = 900
-
-private val SPINNER_STROKE = 2.dp
-
-/** A partial arc, not a full ring: a complete circle reads as static. */
-private const val SPINNER_SWEEP_DEGREES = 280f
 
 @Preview(name = "Primary button", showBackground = true, widthDp = 360)
 @Composable

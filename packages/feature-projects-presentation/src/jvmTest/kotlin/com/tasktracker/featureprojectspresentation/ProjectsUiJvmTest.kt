@@ -158,4 +158,7 @@ class ProjectsUiJvmTest {
 
     @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
+
+    @Test
+    fun theMyTasksFilterButtonIsDisplayed() = runComposeUiTest(block = BoardLaneScenarios.theMyTasksFilterButtonIsDisplayed)
 }

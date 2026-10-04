@@ -253,6 +253,7 @@ private fun TabRoot(
                 router = router,
                 environment = environment,
                 scope = scope,
+                preferences = preferences,
             )
         }
 
@@ -312,6 +313,7 @@ private fun PushedRoute(
             router = router,
             environment = environment,
             scope = scope,
+            preferences = preferences,
         )
 
         is AppRoute.Backlog -> BacklogDestination(
@@ -341,6 +343,7 @@ private fun PushedRoute(
                     router = router,
                     environment = environment,
                     scope = scope,
+                    preferences = preferences,
                 )
 
                 is AppRoute.Backlog -> BacklogDestination(
@@ -365,6 +368,7 @@ private fun PushedRoute(
                     router = router,
                     environment = environment,
                     scope = scope,
+                    preferences = preferences,
                 )
             }
             WorkItemEditorDestination(
@@ -557,9 +561,23 @@ private fun BoardDestination(
     router: Router,
     environment: ProjectEnvironment,
     scope: CoroutineScope,
+    preferences: ShellPreferences,
 ) {
-    val model = remember(projectID, environment) {
-        ProjectBoardModel(projectID, environment.repository, environment.dateProvider)
+    val currentUserName by preferences.currentUserName.collectAsState()
+    // `currentUserName` is a `remember` key on purpose. The board's filter freezes the name into
+    // the model, so a name that arrived after this screen was composed has to build a new model
+    // rather than leave the first one filtering on a stale or absent name — the same
+    // rebuild-and-cancel-the-previous-observation `ProjectBoardDestination` documents, and the
+    // `DisposableEffect` below cancels the old observation, so this cannot leave two boards
+    // watching the store. On a cold launch this does build the model twice: once with `null`,
+    // then again once the session is known.
+    val model = remember(projectID, environment, preferences, currentUserName) {
+        ProjectBoardModel(
+            projectID = projectID,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+            currentUserName = currentUserName,
+        )
     }
     DisposableEffect(model) {
         model.observe(scope)
@@ -597,6 +615,8 @@ private fun BoardDestination(
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Board) },
+        showOnlyMyTasks = model.showOnlyMyTasks,
+        onToggleMyTasks = model::toggleShowOnlyMyTasks,
     )
 }
 

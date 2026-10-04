@@ -251,6 +251,26 @@ class ProjectBoardModelTest {
         model.dismissError()
         assertNull(model.errorMessage)
     }
+
+    @Test
+    fun `toggling showOnlyMyTasks filters items by assignee presence`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        repository.seed(testWorkItem(project.id, key = "AP-1", assignee = "Amir"))
+        repository.seed(testWorkItem(project.id, key = "AP-2", assignee = null))
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(), currentUserName = "Amir")
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertEquals(2, model.projection.itemCount)
+
+        model.toggleShowOnlyMyTasks()
+        assertTrue(model.showOnlyMyTasks)
+        assertEquals(1, model.projection.itemCount)
+        assertEquals("Amir", model.projection.items.single().assignee)
+    }
 }
 
 private fun repositoryClock(): kotlin.time.Instant = kotlin.time.Instant.fromEpochSeconds(1_760_000_000)

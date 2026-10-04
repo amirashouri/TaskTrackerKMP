@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -171,6 +173,11 @@ object ttGlass {
      * `PLAN.md`'s measurement table is 2.08–2.15:1, and it is left there because a control
      * the user cannot press *should* read as less available. Buying back its contrast would be
      * buying back the state the dim is communicating.
+     *
+     * That first sentence cited a *feature's* component for a design-system constant.
+     * `PrimaryButton` still carries a private copy at the same number, so the claim described
+     * a coincidence between two constants that have nothing to do with each other — which is
+     * exactly the kind of note that makes a reader believe a coupling that does not exist.
      */
     const val DISABLED_ALPHA: Float = 0.4f
 
@@ -799,13 +806,34 @@ fun ttGlassButton(
     modifier: Modifier = Modifier,
     style: TTGlassButtonStyle = TTGlassButtonStyle.resting,
     enabled: Boolean = true,
+    loading: Boolean = false,
 ) {
     val accent = ttAccent()
     val resolvedTint = if (style.prominent) (style.tint ?: accent) else style.tint
+    val content = if (style.prominent) ttOnAccent else ttLabel()
+
+    // A loading button does not answer a tap. Not `enabled = false`: that carries
+    // [ttGlass.DISABLED_ALPHA] with it, and a busy control is not a dimmed control — dimming
+    // it says "you cannot use this", when what it means is "this is working, do not press it
+    // again". A second tap on a sign-in button is the failure this exists to prevent.
+    val interactive = enabled && !loading
+
+    // The press scale [ttGlass.PRESSED_SCALE] exists for, and which no component applied
+    // until now. It was a constant with a KDoc explaining it and zero call sites, while
+    // `PrimaryButton` carried a private `0.97f` of its own — the same drift this file's
+    // other constants were written to prevent.
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed && interactive) ttGlass.PRESSED_SCALE else 1f,
+        animationSpec = ttGlass.pressSpring,
+        label = "ttGlassButton press",
+    )
 
     Box(
         modifier = modifier
             .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
+            .scale(scale)
             .ttGlassSurface(
                 shape = CircleShape,
                 tint = resolvedTint,
@@ -817,11 +845,25 @@ fun ttGlassButton(
                 vertical = ttSpacing.buttonPaddingV,
                 horizontal = ttSpacing.buttonPaddingH,
             )
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+            .clickable(
+                interactionSource = interactionSource,
+                // The press response *is* the scale, so the default ripple would stack a
+                // second reaction under a control that already shrinks.
+                indication = null,
+                enabled = interactive,
+                role = Role.Button,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        val content = if (style.prominent) ttOnAccent else ttLabel()
-        Box(modifier = Modifier.semantics { contentDescription = label }) {
+        // Both children stay composed and cross-fade, so the button does not change width as
+        // the label becomes a spinner. Removing the label from the tree instead would make the
+        // button collapse to the spinner and then spring back — a layout jump on every press.
+        Box(
+            modifier = Modifier
+                .alpha(if (loading) 0f else 1f)
+                .semantics { contentDescription = label },
+        ) {
             ttText(
                 text = label,
                 style = ttTypography.button,
@@ -829,10 +871,22 @@ fun ttGlassButton(
                 textAlign = TextAlign.Center,
             )
         }
+        if (loading) {
+            Box(modifier = Modifier.alpha(1f - if (loading) 0f else 1f)) {
+                ttSpinner(color = content)
+            }
+        }
     }
 }
 
-/** A circular glass add action for a screen-level create affordance. */
+/**
+ * A circular glass add action for a screen-level create affordance.
+ *
+ * **Unused.** It was written for a floating create action no screen ended up needing, and it is
+ * the one component in this package with zero call sites and zero tests. Kept for now because the
+ * affordance is plausible; see `PLAN.md` Phase 19. If the next screen that wants a floating
+ * create does not reach for it, it should go rather than sit here reading as available.
+ */
 @Composable
 fun ttGlassAddButton(
     contentDescription: String,

@@ -112,3 +112,6 @@ private fun UIColor.toComposeColor(): Color {
         )
     }
 }
+
+@Composable
+actual fun SystemBarAppearance(isDark: Boolean) {}

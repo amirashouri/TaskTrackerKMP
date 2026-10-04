@@ -279,17 +279,41 @@ object ttFixedColours {
      *
      * The 60% is what makes this token *secondary* — and it is also this token's one
      * accessibility cost, which a caller needs before using it. Composited over its canvas
-     * it measures **3.44:1** on light and **3.64:1** on dark, which clears WCAG's 3:1
-     * large-text bar and does *not* clear the 4.5:1 body-text bar. That is not a rounding
-     * error in the port; it is what UIKit's own `secondaryLabel` measures, and the original
-     * used it on footnotes and captions only. Those are 11-13sp, below the size WCAG calls
-     * "large", so the honest statement is:
+     * it measures **3.44:1** on light and **6.36:1** on dark.
      *
-     *  - correct for footnotes, captions, and other de-emphasised supporting text;
-     *  - not correct for body copy, which is what [labelLight] / [labelDark] are for.
+     * The two are not the same measurement, and the difference is worth stating rather
+     * than averaging away. On light the token fails WCAG's 4.5:1 body-text bar and clears
+     * only the 3:1 large-text bar; on dark it clears the body-text bar comfortably. That
+     * asymmetry is inherent to the colour pair, not a defect in the port: UIKit's
+     * `secondaryLabel` is a *dark* grey at 60% on light and a *pale* grey at 60% on dark,
+     * and 60% of white text on black is a much lighter result than 60% of black text on
+     * white. Any statement about this token has to be per-appearance, and an averaged
+     * number would be a number for a pairing that never occurs.
      *
-     * `PinnedAppearanceTest` pins the ratio so a change to either the alpha or the canvas
-     * is a deliberate one.
+     * So, per appearance:
+     *
+     *  - **light**: correct for footnotes, captions and other de-emphasised supporting
+     *    text at large sizes. Not correct for body copy — use [labelLight].
+     *  - **dark**: clears 4.5:1 against the canvas. Still not *preferred* for body copy,
+     *    because a caller that reads this token is reaching for de-emphasis; the fact that
+     *    dark happens to afford it is not a reason to use it as the default ink.
+     *
+     * One more surface, and it is the one that bites: this token is **worse over glass than
+     * over the canvas**. An untinted glass surface composites to `#C2CBD7` in light, which
+     * is *darker* than a white canvas and therefore closer to this token's own dark grey —
+     * so the same 60% alpha measures **2.81:1** there, below even the 3:1 large-text bar.
+     * Eleven files in `:packages:feature-projects-presentation` use this token and all
+     * eleven also build glass surfaces, so this is not hypothetical. A caption on a glass
+     * card in light appearance is the worst case in the app, and it is not reachable by
+     * reading either number above.
+     *
+     * `PinnedAppearanceTest` asserts this token stays at or above 3:1 against the canvas in
+     * both appearances. It deliberately does **not** assert the exact ratio: it is the one
+     * place in this file where the guidance is per-appearance, so a single threshold is
+     * what the invariant actually is. The two figures above were measured rather than
+     * quoted; the earlier revision of this comment claimed 3.64:1 on dark, which was
+     * wrong by a factor of 1.75, and nothing caught it because the test only ever checked
+     * `>= 3f`.
      */
     val labelSecondaryLight: Color = Color(0x993C3C43)
     val labelSecondaryDark: Color = Color(0x99EBEBF5)

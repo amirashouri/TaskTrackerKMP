@@ -31,6 +31,7 @@ import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttCanvas
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttErrorFill
 import com.tasktracker.designsystem.ttErrorRim
 import com.tasktracker.designsystem.ttLabel
@@ -174,43 +175,6 @@ internal fun ProjectsTextField(
                     }
                 },
             )
-        }
-    }
-}
-
-/**
- * A failure, in a banner the user can dismiss.
- *
- * The message arrives as a [String] rather than an `AppError` because that is the whole
- * contract: `ProjectsListModel.errorMessage` and its siblings are the one place the module
- * turns a domain failure into text, and a view that re-worded one would be a view that
- * disagrees with the data layer.
- */
-@Composable
-internal fun ProjectsErrorBanner(
-    message: String,
-    modifier: Modifier = Modifier,
-    onDismiss: (() -> Unit)? = null,
-) {
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(ttRadius.control))
-            .background(ttErrorFill())
-            .border(1.dp, ttErrorRim(), RoundedCornerShape(ttRadius.control))
-            .padding(ttSpacing.xl)
-            .then(
-                if (onDismiss == null) {
-                    Modifier
-                } else {
-                    Modifier.clickable(onClick = onDismiss)
-                },
-            ),
-        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        verticalAlignment = Alignment.Top,
-    ) {
-        ttText(text = message, style = ttTypography.callout, color = ttErrorRim(), modifier = Modifier.weight(1f))
-        if (onDismiss != null) {
-            ttText(text = "×", style = ttTypography.callout, color = ttErrorRim())
         }
     }
 }

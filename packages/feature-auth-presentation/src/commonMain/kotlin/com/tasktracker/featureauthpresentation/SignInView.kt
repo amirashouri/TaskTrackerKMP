@@ -38,7 +38,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.AppMark
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -149,7 +151,7 @@ fun SignInView(
             // not shove the button down the screen. The original's `.if let` around the
             // spacer does the same thing, for the same reason.
             Spacer(Modifier.height(ttSpacing.formStack))
-            model.errorMessage?.let { ErrorBanner(message = it) }
+            model.errorMessage?.let { ttBanner(message = it) }
 
             Spacer(Modifier.height(ttSpacing.formStack))
             PrimaryButton(

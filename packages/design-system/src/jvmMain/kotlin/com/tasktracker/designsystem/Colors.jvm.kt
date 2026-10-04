@@ -33,3 +33,6 @@ actual fun ttBodyLabel(): Color = ttFixedColours.bodyLabel(ttIsDarkTheme())
 
 @Composable
 actual fun ttSeparator(): Color = ttFixedColours.separator(ttIsDarkTheme())
+
+@Composable
+actual fun SystemBarAppearance(isDark: Boolean) {}

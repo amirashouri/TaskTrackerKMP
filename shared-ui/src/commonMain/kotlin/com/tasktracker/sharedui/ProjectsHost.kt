@@ -231,7 +231,12 @@ private fun ProjectBoardDestination(
     onAddTask: (WorkItemStatus) -> Unit,
 ) {
     val model = remember(projectID, environment) {
-        ProjectBoardModel(projectID, environment.repository, environment.dateProvider)
+        ProjectBoardModel(
+            projectID = projectID,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+            currentUserName = null,
+        )
     }
     DisposableEffect(model) {
         model.observe(scope)
@@ -260,6 +265,8 @@ private fun ProjectBoardDestination(
             projects = picker.projects,
             onSelectProject = onSelectProject,
             onAddTask = onAddTask,
+            showOnlyMyTasks = model.showOnlyMyTasks,
+            onToggleMyTasks = model::toggleShowOnlyMyTasks,
         )
     }
 }

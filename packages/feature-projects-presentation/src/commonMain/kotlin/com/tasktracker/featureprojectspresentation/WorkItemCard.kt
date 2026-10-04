@@ -27,6 +27,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -171,7 +172,7 @@ private fun AssigneeLabel(
         modifier = modifier
             .clip(shape)
             .background(Color.Transparent)
-            .border(1.dp, ttSeparator(), shape)
+            .border(ttSeparatorWidth, ttSeparator(), shape)
             .padding(horizontal = ttSpacing.sm, vertical = CHIP_PADDING_V)
             .testTag(WorkItemCardAssigneeTag),
         verticalAlignment = Alignment.CenterVertically,
@@ -239,7 +240,7 @@ private fun DueDateChip(
         modifier = modifier
             .clip(shape)
             .background(if (isOverdue) ttLabelSecondary().copy(alpha = OVERDUE_FILL_ALPHA) else Color.Transparent)
-            .border(1.dp, if (isOverdue) ttLabelSecondary() else ttSeparator(), shape)
+            .border(ttSeparatorWidth, if (isOverdue) ttLabelSecondary() else ttSeparator(), shape)
             .padding(horizontal = ttSpacing.sm, vertical = CHIP_PADDING_V)
             .testTag(WorkItemCardDueTag),
         verticalAlignment = Alignment.CenterVertically,

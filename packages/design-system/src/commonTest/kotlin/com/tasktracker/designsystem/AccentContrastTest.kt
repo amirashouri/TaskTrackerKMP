@@ -111,6 +111,62 @@ class AccentContrastTest {
         )
     }
 
+    /**
+     * The error red has to clear the same bar the accent does, and it does not.
+     *
+     * ## Why the red was exempt and should not be
+     *
+     * This suite iterates [TaskTrackerAccent] and holds every one of its six palettes to
+     * two bars. The error token was never in that list, which is how a destructive button
+     * came to sit at **3.55:1** in light appearance and **3.41:1** in dark — white label on
+     * opaque `#FF3B30` / `#FF453A`, from
+     * `TTGlassButtonStyle(tint = ttError(), prominent = true)` at
+     * `ProjectsListScreen.kt:340`, `WorkItemEditor.kt:453` and `WorkItemEditor.kt:625`.
+     *
+     * Dark is the *worse* of the two, which is the opposite of every other pairing in this
+     * package and is what makes this look like a rounding error rather than a gap. It is
+     * not: 3.41:1 is a white label on a red button, and the fix is a design decision
+     * about the red or about where the label sits.
+     *
+     * The repository already knows this bug class. `LENS_ALPHA` was cut from 0.16 to 0.08
+     * for the stated reason that "this wash lands on the *only* fill in the app that
+     * carries a label, so it spends the accent's contrast margin", and
+     * `GlassFillContrastTest` holds the resulting numbers. The error red never had that
+     * treatment.
+     *
+     * ## This test is expected to be red
+     *
+     * It is here to make the decision unavoidable rather than to describe a passing state.
+     * Fixing it means either darkening the red until white clears 4.5:1 on it in both
+     * appearances, or moving the destructive label off `ttOnAccent`. Both are design calls,
+     * and neither is one to make silently while tidying a different file.
+     *
+     * ## Why the pinned pair and not `ttError()`
+     *
+     * `ttError()` is `@Composable` and resolves through the theme, so calling it here
+     * would mean composing — and this suite is deliberately a plain unit test with no
+     * composition. `ttFixedColours.errorLight` / `errorDark` are what a pinned appearance
+     * resolves to, which is the pairing a user on a pinned appearance actually gets. The
+     * dynamic path on Android resolves `android.R.attr.colorError` instead and is not
+     * covered here; that is the same trade `PinnedAppearanceTest` makes and for the same
+     * reason.
+     */
+    @Test
+    fun `the error token carries a white label as legibly as the accent does`() {
+        for (dark in listOf(false, true)) {
+            val error = ttFixedColours.error(dark)
+            val ratio = contrastRatio(error, ttOnAccent)
+            assertTrue(
+                ratio >= TEXT_CONTRAST_MINIMUM,
+                "${if (dark) "dark" else "light"} appearance: a white label on a prominent " +
+                    "destructive button (TTGlassButtonStyle(tint = ttError(), prominent = true)) " +
+                    "sits on ${error.hex()} at ${ratio.ratioText()} to 1, below the " +
+                    "${TEXT_CONTRAST_MINIMUM} to 1 a text label needs. Three call sites paint " +
+                    "this: ProjectsListScreen.kt:340 and WorkItemEditor.kt:453 and 625.",
+            )
+        }
+    }
+
     @Test
     fun `every accent variant is fully opaque`() {
         // A translucent accent is a different colour over every canvas it lands on, and

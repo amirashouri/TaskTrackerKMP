@@ -19,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -90,7 +91,7 @@ fun ProjectArchiveScreen(
             )
         }
         errorMessage?.let { message ->
-            ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+            ttBanner(message = message, onDismiss = onDismissError)
         }
         if (projection.isEmpty && !isLoading) {
             ProjectsEmptyState(

@@ -46,6 +46,12 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 object BoardLaneScenarios {
 
+    /** The My Tasks person filter icon button is displayed in the board header. */
+    val theMyTasksFilterButtonIsDisplayed: suspend ComposeUiTest.() -> Unit = {
+        boardShowing()
+        onNodeWithTag(ProjectBoardMyTasksTag).assertIsDisplayed()
+    }
+
     /** The lane row's own container runs the whole width of the screen. */
     val theLaneRowReachesBothEdgesOfTheScreen: suspend ComposeUiTest.() -> Unit = {
         boardShowing()

@@ -26,6 +26,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -63,7 +64,7 @@ fun PriorityBadge(
         modifier = modifier
             .clip(shape)
             .background(priorityFill(priority))
-            .border(1.dp, priorityRim(priority), shape)
+            .border(ttSeparatorWidth, priorityRim(priority), shape)
             .padding(horizontal = ttSpacing.sm, vertical = BADGE_PADDING_V)
             .testTag(PriorityBadgeTag(priority)),
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
@@ -112,7 +113,7 @@ private fun PriorityDot(
             .size(BADGE_DOT)
             .clip(shape)
             .background(if (filled) ttLabel() else Color.Transparent)
-            .border(1.dp, ttLabelSecondary(), shape),
+            .border(ttSeparatorWidth, ttLabelSecondary(), shape),
     )
 }
 

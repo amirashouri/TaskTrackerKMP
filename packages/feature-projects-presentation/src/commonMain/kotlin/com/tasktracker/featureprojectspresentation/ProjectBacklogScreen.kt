@@ -19,6 +19,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttSpacing
@@ -112,7 +113,7 @@ fun ProjectBacklogScreen(
                 }
             }
             errorMessage?.let { message ->
-                ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+                ttBanner(message = message, onDismiss = onDismissError)
             }
             if (projection.isEmpty && !isLoading) {
                 ProjectsEmptyState(

@@ -27,6 +27,8 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
+import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.ttBannerTone
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
@@ -123,10 +125,11 @@ fun ProjectsListScreen(
         ) {
             ProjectsHeader(onNewProject = onNewProject)
             errorMessage?.let { message ->
-                ProjectsErrorBanner(message = message, onDismiss = onDismissError)
+                ttBanner(message = message, onDismiss = onDismissError)
             }
             notice?.let { outcome ->
-                ProjectsErrorBanner(
+                ttBanner(
+                    tone = ttBannerTone.Accent,
                     message = when (outcome) {
                         is RemovalNotice.ArchivedInstead -> stringResource(
                             Res.string.project_archived_notice_counted,

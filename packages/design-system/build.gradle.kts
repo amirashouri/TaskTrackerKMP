@@ -14,6 +14,7 @@ dependencies {
     // dependency direction: shared visual assets live in the design system
     // rather than being duplicated into every presentation module.
     commonMainImplementation(libs.compose.resources)
+    androidMainImplementation(libs.androidx.core.ktx)
 }
 
 compose.resources {

@@ -2,6 +2,8 @@ package com.tasktracker.designsystem
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 /**
  * The app's colour tokens.
@@ -108,3 +110,22 @@ expect fun ttBodyLabel(): Color
  * pairing also becomes invisible against the dark canvas. See `AGENTS.md`.
  */
 val ttOnAccent: Color = Color.White
+
+/**
+ * The stroke width that goes with [ttSeparator] — and with any other outline drawn between a
+ * control and the surface behind it.
+ *
+ * ## Why this is a token and not `1.dp` at the call site
+ *
+ * Six call sites were spelling one number: two chip outlines on `WorkItemCard`, the monogram
+ * rim on `ProjectRow`, two outlines on `PriorityBadge`, and the hairline rule in
+ * `SettingsScreen`. None of them would have been wrong on its own, and all six would have had
+ * to be found before the weight could be changed.
+ *
+ * It is deliberately **not** [ttGlass]'s `hairlineWidth`. That is 0.5dp and belongs to a glass
+ * *rim*: a highlight meant to be lighter than the surface it outlines. An outline on an opaque
+ * chip is the opposite job — it has to be visible against the fill it sits on — so the two are
+ * different weights doing different things, and their being confusable is why this one needed
+ * a name.
+ */
+val ttSeparatorWidth: Dp = 1.dp

@@ -33,6 +33,11 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [13](#phase-13--settings--composition-root--shared-ui-shell) | settings + composition-root + shared-ui | [PLAN.md:1838](#phase-13--settings--composition-root--shared-ui-shell) | done |
 | [14](#phase-14--ios-shell) | iOS shell | [PLAN.md:1915](#phase-14--ios-shell) | open |
 | [15](#phase-15--verification-and-documentation) | verification + docs | [PLAN.md:1968](#phase-15--verification-and-documentation) | open |
+| [16](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | glass slider intensity | [PLAN.md:2498](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | done |
+| [17](#phase-17--the-project-picker-was-not-using-the-scaffold) | project picker scaffold | [PLAN.md:2682](#phase-17--the-project-picker-was-not-using-the-scaffold) | done |
+| [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:2795](#phase-18--the-app-had-no-icon) | done |
+| [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:2935](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
+| [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -2136,6 +2141,10 @@ What remains is verifying the link and filling in the behaviours.
       purpose: `ttAccent()` is a token in `commonMain`, so an iOS colorset would be a
       second source of truth for a value nothing reads. If system chrome ever needs the
       accent, derive the colorset from the token rather than hand-writing it.
+      **Correction, Phase 18:** the `AppIcon.appiconset` this box claims existed was a
+      `Contents.json` with no `filename` on any image, so it compiled to nothing and the
+      app shipped with **no icon at all**. The slot is now populated — see
+      [Phase 18](#phase-18--the-app-had-no-icon).
 - [x] **14.4** `shared-ui/src/iosMain/.../MainViewController.kt` — exports
       `mainViewController()` to Swift and **owns the graph**, mirroring
       `TaskTrackerApplication` on Android. It takes no arguments precisely so
@@ -2784,3 +2793,473 @@ The exit transition's *timing* is not asserted anywhere, only that the sheet sta
 enough for one to run. And nothing here proves the picker looks right — that is a person opening
 the app. The numbers above prove the sheet stopped transmitting the page; they cannot say whether
 the result is *pleasant*.
+
+## Phase 18 — the app had no icon
+
+### 18.1 What was actually wrong
+
+Two different failures, and only one of them looked like a failure.
+
+**iOS had no icon at all.** `AppIcon.appiconset/Contents.json` declared the 1024×1024
+universal slot and gave it no `filename`, so `actool` compiled the catalog happily and the
+bundle shipped without a primary icon. Phase 14.3 ticked this box as done, which is the
+part worth recording: the checkbox was satisfied by a file existing, not by the icon
+existing.
+
+**Android's icon existed and was unrelated to the product.** `ic_launcher_foreground.xml`
+was a white box-and-bar glyph on `#1C1C1E` — a placeholder, not the brand accent, and drawn
+in the 108dp viewport with no regard for the mask. It was the one screen in the app with
+`#1C1C1E` on it, which is the same colour `Colors.android.kt` uses as its
+*missing-theme fallback* (`fallbackColor()`). An icon is the one thing that cannot fall
+back.
+
+### 18.2 The composition
+
+Three board lanes at 18% white behind a bold checkmark, on a diagonal ramp from `#40659A`
+to `#22354F`.
+
+The ramp's two stops average to `#314C74`, within 3/255 of `TaskTrackerAccent.Light`
+(`#34537A`) on every channel. So the icon is the accent token lifted and deepened rather
+than a second colour that happens to sit near it, and the two stay recognisably the same
+colour. The ramp runs along the anti-diagonal to match `AppMark`'s `.topLeading` →
+`.bottomTrailing`.
+
+The lanes are at 18% and are meant to be texture, not a second element. At the size a
+launcher actually draws an icon — around 40px before the mask takes its third — three
+separate bars *in front of* a checkmark are the first thing to turn to mush. Behind it,
+they read as depth at a large icon size and are simply absent at a small one, which is the
+right failure mode: the mark loses a texture rather than losing a silhouette. `_assert_lanes_stay_behind_the_mark`
+fails the generator above 0.25 rather than leaving it to taste.
+
+The stroke is **0.24 of the glyph box**. `AppMarkDefaults` is `0.085 / (30/68)` = **0.193**
+of its own. Same reasoning as the geometry below: heavier because it has to survive a
+downscale.
+
+### 18.3 Why `AppMark` was not changed to match
+
+`AppMark`'s proportions were not reused, and they were not adjusted. Its geometry is tuned
+for a 68dp tile drawn at 1x, inside a screen the user is already looking at. A launcher
+icon is seen at roughly 40px and then masked down to about half that, so this file uses a
+short arm reaching further left (`0.04` against `0.10`) with the vertex moved to match
+(`0.34` against `0.38`), widening the corner a small render is most likely to round off,
+and a long arm climbing further (`0.78→0.14` against `0.80→0.18`) so the diagonal cannot
+flatten into a horizontal dash.
+
+Two different numbers for two different sizes is correct. Pretending otherwise is how a
+logo ends up with a stroke that looks heavy in the splash and flimsy on the home screen.
+
+### 18.4 Platform differences, and why there are fewer than usual
+
+- **`minSdk` is 26**, so adaptive icons cover *every* device this app targets. The legacy
+  `mipmap-*/ic_launcher.png` rasters that the other option would have added are dead
+  weight — no device that can install this APK can reach the branch that would read them.
+- **Android content is fitted to the 33dp safe circle**, not the 72dp safe square. The
+  square would let the lanes' round ends sit outside the circular mask, and the circle is
+  the one every launcher can be relied on to show. Measured: the farthest drawn point is
+  **405.1 canvas px** from the centre, giving **0.08146 dp/px** and a lane span of
+  **53.4dp of the 108dp viewport (49%)**.
+- The bound is the **capsule endpoints**, not the geometry's bounding box. Every shape here
+  is a union of circles and capsules, so the farthest point of a cap at `p` is exactly
+  `|p| + r`. The bounding box would be simpler and would shrink the icon for nothing: this
+  composition is wide and flat, so its box has empty top corners. Worth about 3dp of width.
+- **Monochrome is the checkmark alone.** Android 13+ tints that layer with the user's
+  wallpaper palette and picks the contrasting shade itself, so anything low-alpha in there
+  becomes a muddy second tone at best.
+- **iOS gets a dark-appearance variant** (`luminosity: dark`): same white mark, field
+  dropped to `#232F3F`→`#121820`. Apple darkens the icon rather than shipping a second
+  mark, which is also what the monochrome layer does.
+- **No alpha channel.** `actool` rejects one. `_write_png` emits colour type 2 (RGB)
+  directly so the file is correct before it reaches Xcode, rather than relying on a tool to
+  flatten it.
+
+### 18.5 Why a generator, and why not Pillow
+
+The PNG and the vector have to be the same picture, and they are the two files in this repo
+most likely to drift: nobody compares a rendered `ic_launcher_foreground.xml` against a
+1024px PNG by looking at them. `tools/generate_app_icon.py` emits both, plus the dark PNG,
+from one geometry.
+
+It is not a Pillow script because there is no Pillow and no numpy on this machine, and a
+build tool that needs a `pip install` is one that stops working the next time the
+virtualenv is rebuilt. `zlib` is standard library, a PNG is a zlib stream in four chunks,
+and anti-aliasing comes from analytic signed-distance coverage rather than supersampling —
+faster at 1024px, and exact at the round caps.
+
+### 18.6 The bug the generator shipped with, and how it presented
+
+The first run rendered the lanes as solid white bars running edge to edge, and an ASCII
+preview of a *later* build still showed them as a dashed flicker. Two different defects,
+worth separating because only one was real:
+
+**The real one.** `_render` carried the gradient in `r/g/b` and composited into those same
+variables. Composite operations are additive, so the first pixel the check painted white
+raised the accumulator to white and every pixel to its right inherited that. The mask was
+consulted correctly at every single pixel; the colour it produced simply was not reset. It
+looks like a mask bug and is not one — the fix is to carry the gradient in `gr/gg/gb` and
+composite on copies. The signature that identifies it is that the *leading* edge of every
+shape is correct and everything to its right is solid: a mask bug would be wrong at the
+edge too.
+
+**The other one was the diagnostic, not the icon.** The preview sampled one pixel per
+character cell at a 16px stride, so it landed on a lane about a third of the time and
+missed it the rest. Averaging the cell is what makes the shape legible. Same discipline as
+[17.4](#174-where-it-samples-and-the-mutation-that-cost-a-cycle): a diagnostic that cannot
+distinguish "this is wrong" from "I am looking in the wrong place" is not a diagnostic.
+
+### 18.7 Verified
+
+| check | result |
+| --- | --- |
+| white on light ramp top (`#40659A`) | **5.92:1** |
+| white on light ramp bottom (`#22354F`) | **12.42:1** |
+| white on dark ramp top (`#232F3F`) | **13.55:1** |
+| white on dark ramp bottom (`#121820`) | **17.84:1** |
+| `actool` on the whole catalog | exit 0; emitted `AppIcon60x60@2x.png`, `AppIcon76x76@2x~ipad.png`, `Assets.car` |
+| `:androidApp:processDebugResources` | **BUILD SUCCESSFUL** (AAPT2 links all three vectors) |
+| PNG format | `1024 x 1024, 8-bit/color RGB, non-interlaced` — no alpha, as `actool` requires |
+
+The contrast gate runs in the generator and **fails the build**, not the launch, if white
+drops below 4.5:1 on any of the four stops. It checks the *lightest* stop, not the darkest:
+a mark that clears at `#22354F` can still fail at `#40659A`.
+
+### 18.8 What is not verified
+
+No test was added and the baseline is unchanged — there is no source set that can see a
+PNG or a `res/drawable`, and a test that asserts a hex is a test that cannot fail for a
+reason anyone would act on. The contrast gate in the generator is the honest equivalent:
+it fails for a specific, actionable reason, and it fails at build time.
+
+Nothing here proves the icon looks *good*. It proves the mark clears the text contrast bar
+everywhere it is drawn, that it sits inside the tightest adaptive mask, and that both
+platforms compile the same geometry. Whether three lanes at 18% read as a board or as noise
+is a person putting the app on a home screen.
+
+## Phase 19 — the palette audit: the error red was never held to the accent's bar
+
+### 19.1 What was asked, and what the answer was
+
+A sweep of every pairing the app actually paints, in both appearances, against the bars in
+`AGENTS.md`. The palette is sound. The accent clears both bars in both appearances across all
+six palettes; `label`/`bodyLabel` sit between 15.25:1 and 21:1 everywhere; the glass fill is
+visible on its own canvas in both (1.64:1 light, 1.28:1 dark); and the `LENS_ALPHA` tuning from
+the sign-in-button work still holds (6.39:1 light, 4.73:1 dark).
+
+The defect is narrower and worse than "some numbers are low": **one colour was exempt from the
+suite that exists to police the others.**
+
+### 19.2 The root cause: `AccentContrastTest` iterates the accent, and only the accent
+
+`AccentContrastTest` holds every `TaskTrackerAccent` variant to two bars — 4.5:1 against
+`ttOnAccent` for the label drawn on it, 3:1 against its own canvas for the control to be visible.
+`ttError` is not in that list, and `ErrorTokenTest` covers only `ttErrorFill`/`ttErrorRim`'s
+*alphas* (26 and 64 of 255), never their contrast.
+
+So the red was never measured against a label. Measured now:
+
+| pairing | light | dark | bar |
+| --- | --- | --- | --- |
+| `ttError()` vs `ttOnAccent` (prominent destructive button) | **3.55:1** | **3.41:1** | 4.5:1 |
+| `ttError()` vs canvas (the `WarningGlyph`) | 3.55:1 | 6.16:1 | 3:1 non-text — passes |
+
+**Dark is the worse of the two**, which is the opposite of every other pairing in the package and
+is what makes this look like rounding error rather than a gap. It is not: it is a white label on
+a red button. Three call sites paint it, all `TTGlassButtonStyle(tint = ttError(), prominent = true)`
+— `ProjectsListScreen.kt:340`, `WorkItemEditor.kt:453`, `WorkItemEditor.kt:625`.
+
+The repository already knows this bug class by name. `LENS_ALPHA` was cut from 0.16 to 0.08 for
+the stated reason that the wash "lands on the *only* fill in the app that carries a label, so it
+spends the accent's contrast margin", and `GlassFillContrastTest` holds the result. The error red
+simply never had that treatment.
+
+### 19.3 The error banner's message was drawn in its own rim token
+
+`ProjectsComponents.kt` drew the banner's message *and* its dismiss glyph in `ttErrorRim()` — the
+**rim** token, error at 25% alpha — composited over the banner's own `ttErrorFill()` at 10%, on
+the canvas.
+
+| | banner fill | message | ratio |
+| --- | --- | --- | --- |
+| light | `#FFEBEA` | `#FFBFBC` | **1.37:1** |
+| dark | `#1A0706` | `#531613` | **1.39:1** |
+
+Pale pink on pale pink, in **both** appearances, on the one component whose entire job is to be
+read. Seven screens render it (`WorkItemEditor.kt:347,535`, `ProjectArchiveScreen.kt:93`,
+`ProjectBacklogScreen.kt:115`, `ProjectsListScreen.kt:126,129`, `ProjectBoardScreen.kt:184`).
+
+**The fix, and the fix that was tried first and rejected.** The obvious repair is `ttError()`. It
+is not sufficient: `#FF3B30` on the light fill measures **3.10:1** — a different bug rather than
+the absence of one. What ships is `ttLabel()`, at **18.37:1** light and **19.53:1** dark. The
+banner's error-ness is already carried three times over (the fill, the rim, and `WarningGlyph`),
+so the message does not also have to be red, and an unreadable failure notice is worse than a
+legible one that is not coloured.
+
+### 19.4 `ttLabelSecondary` is *worse* over glass than over the canvas
+
+Undocumented, and the direction is the opposite of intuition. An untinted glass surface composites
+to `#C2CBD7` in light — *darker* than a white canvas, and therefore closer to this token's own
+dark grey. So the same 60% alpha that measures 3.44:1 on the canvas measures:
+
+| | over canvas | over a glass card |
+| --- | --- | --- |
+| light | 3.44:1 | **2.81:1** — below even the 3:1 large-text bar |
+| dark | 6.36:1 | 5.85:1 |
+
+Eleven files in `:packages:feature-projects-presentation` use `ttLabelSecondary` and **all eleven**
+also build glass surfaces, so this is not hypothetical. It is recorded and *not* fixed here: it is
+a design decision about how much weight a caption carries on glass, not an arithmetic slip.
+
+### 19.5 The glass hairline does not exist in light appearance
+
+`ttGlassSurface`'s rim is `Color.White` at `HAIRLINE_ALPHA` on **both** appearances — `Glass.kt`
+says so, and `GlassIntensity.kt` confirms there is no per-appearance factor. White at 14% over the
+light glass fill measures **1.08:1**: against its own fill. In dark it is 1.55:1, and 1.98:1
+against the canvas, so the rim is doing real work there.
+
+`Glass.kt` asserts the rim "is what makes the surface read as raised". That is true in dark and
+measurably false in light, where light-mode glass has no lit edge at all. Also recorded, not fixed.
+
+### 19.6 A KDoc figure that was wrong by a factor of 1.75
+
+`ttFixedColours.labelSecondary`'s comment claimed the token measures "3.44:1 on light and 3.64:1 on
+dark". Light is right. **Dark is 6.36:1** — which means the comment's conclusion, "does not clear
+the 4.5:1 body-text bar", is true of light and false of dark, and the guidance it gives is wrong
+for half the users of the app.
+
+Nothing caught it because `PinnedAppearanceTest` asserts only `secondary >= 3f`. That is now
+stated as deliberate in the KDoc: this is the one token whose guidance is per-appearance, so a
+single threshold is the actual invariant and pinning a ratio would pin the wrong thing.
+
+### 19.7 Tests
+
+Two, with the second expected to be red.
+
+**`ProjectPaletteTest`** (`jvmTest`, one test) — no `color = ttErrorRim()` / `color = ttErrorFill()`
+anywhere in this module's `commonMain`. It is a *source* scan on purpose: the defect was an
+argument that was passed, and read the pixels back the message is legible while read the source
+it still says `color = ttErrorRim()`. Every route to a Compose text node's resolved colour goes
+through rasterising the node, which costs a `thisHostRasterisesText()` skip on the Android host —
+so the assertion that matters most would be the one silently not running on a third of the
+platforms. It checks `color =` only, so the banner's own `.border(1.dp, ttErrorRim(), …)` — the
+correct use, in the same function — is not flagged, and comment lines are skipped because the
+explanatory comment quotes the offending call verbatim.
+
+Limitation, stated rather than papered over: it needs a filesystem, so it runs on the **JVM host
+only**. The module root comes from the test class's own code source walked up to a directory
+containing `src/commonMain`, not from `user.dir` or a relative path.
+
+**`AccentContrastTest.the error token carries a white label as legibly as the accent does`**
+(`commonTest`, one test) — **red on both hosts by design**, landing at 3.55:1 light / 3.41:1 dark.
+It exists to make the decision unavoidable rather than to describe a passing state. Fixing it means
+either darkening the red until white clears 4.5:1 on it in both appearances, or moving the
+destructive label off `ttOnAccent`; both are design calls, and neither should be made silently
+while tidying a different file.
+
+| mutation | caught by |
+| --- | --- |
+| `ProjectsErrorBanner` message reverted to `ttErrorRim()` | `ProjectPaletteTest` — names `ProjectsComponents.kt:228` and `:230` with both source lines |
+
+### 19.8 Baseline
+
+`:packages:design-system` JVM **81** tests, **1 failing by design** (the error-token bar).
+`:packages:feature-projects-presentation` JVM **165** tests, 0 failing.
+
+Both figures are from the JUnit XML and both cross-check against `@Test` declarations exactly
+(78 `commonTest` + 3 `jvmTest` = 81). `:packages:design-system`'s commonTest additions compile for
+`iosSimulatorArm64`; the iOS **run** was not repeated this session.
+
+**A bookkeeping correction.** Phase 17.5 recorded this module at "83 JVM / 80 iOS". The declared
+count is 81 on the JVM host, so that figure was already wrong by 2 before this phase and was not
+caught, which is the same failure `AGENTS.md` warns about when it says counts must come from the
+XML rather than from a running total. iOS is left unrecorded rather than guessed: this phase
+measured one host and did not invent the other.
+
+### 19.9 What is still unverified
+
+Findings 19.4 and 19.5 are **sRGB models**, and `AGENTS.md` rule 2 says a model is not the
+compositor. 1.37:1 and 3.55:1 are far enough below their bars that the verdict is not in doubt;
+2.81:1 and 1.08:1 are not, and both need rendered pixels on **both** the JVM and the iOS
+rasteriser before either is called a defect. The design-system test hosts can do this and are
+unaffected by the `ShellPreferences.kt` break.
+
+## Phase 20 — the design system review, and four things it was missing
+
+A pass over all 16 files of `:packages:design-system` (4,663 lines) plus every call site in the
+repo. The package's *documentation and test discipline* is the best in the codebase and nothing
+here criticises it. The gaps were coverage, ownership and duplication.
+
+### 20.1 Two banners, and the drift between them
+
+`ErrorBanner.kt` (auth) and `ProjectsErrorBanner` (projects) were the same component twice. They
+had diverged on six axes, and the one that mattered was the message colour: the auth copy used
+`ttLabel()`, the projects copy used `ttErrorRim()` — the **1.37:1** defect from Phase 19, on seven
+screens. Nothing could catch it, because each module's tests could only see its own copy.
+
+**One `ttBanner` now lives in the design system.** `Banner.kt`. Both feature copies are deleted
+and all eight call sites point at it.
+
+`ttBannerTone` is a parameter rather than a second component because the projects screens were
+*already* passing non-failures through their error banner — `RemovalNotice.ArchivedInstead`
+("3 items were archived instead") was painted in the failure red. That is a **deliberate
+behaviour change**: those notices are now accent-toned. It is the one user-visible change in
+this phase and it should be looked at.
+
+### 20.2 The design system was citing a feature for one of its own constants
+
+`ttGlass.PRESSED_SCALE` existed, with a KDoc explaining the press response — and **no component
+applied it**. `PrimaryButton` carried a private `0.97f` of its own. `DISABLED_ALPHA`'s doc
+literally said "the same value `PrimaryButton` uses", describing a coincidence between two
+constants with nothing to do with each other.
+
+- `ttGlassButton` now applies `ttGlass.PRESSED_SCALE`, with `indication = null` so the scale is
+  the only reaction.
+- `ttGlassButton(loading = true)` added: the label and the spinner cross-fade, and the button
+  stops answering taps. Deliberately **not** `enabled = false` — that carries `DISABLED_ALPHA`
+  with it, and a busy control is not a dimmed control.
+- `PrimaryButton`'s private `Spinner` became `ttSpinner` in the design system.
+
+### 20.3 Six copies of `1.dp`
+
+`ttSeparatorWidth` now exists. Six call sites were spelling one number: three chip/badge outlines
+and the hairline rule in `SettingsScreen`. It is deliberately **not** `ttGlass.hairlineWidth`
+(0.5dp) — a glass rim is a highlight, an outline has to be visible against its own fill.
+
+**A correction to the review that prompted this.** That review claimed "callers hand-roll
+dividers". On checking, only **one** of those sites was a divider; the rest are chip outlines,
+field-focus borders and badge tints. A `ttDivider` component would have had one call site, so
+what shipped is a token instead.
+
+### 20.4 Two pieces of dead public API, one resolution each
+
+- **`ttGlassAddButton`** — zero call sites, zero tests. Kept, and its KDoc now says so plainly,
+  with a rule for deleting it: if the next screen wanting a floating create does not reach for
+  it, it goes. Dead API reads as *available*, which is worse than absent API.
+- **`ttBodyLabel`** — an `expect` plus three `actual`s and a KDoc arguing it is "the fourth
+  semantic role the app actually has", with **zero call sites** and no contrast assertion
+  anywhere. Still unresolved and deliberately left alone: the right move is to adopt it over the
+  11 files reaching for `ttLabelSecondary` on glass, and that depends on 20.6.
+
+### 20.5 Six previews for the components that had none
+
+`ttSlider`, a slider in its busy state, `ttInitialsStack`, `ttBanner` (both tones), glass
+intensity at 1.0 / 0.5 / 0.0, and `TTBottomSheetScaffold`. The gallery covered ten components
+and these were the ones nobody could *look at* — including `ttSlider`, which has the most
+intricate logic in the package.
+
+### 20.6 Not done: the rim and the on-glass caption
+
+Both are Phase 19's findings 19.4 and 19.5, both belong in `ttGlassSurface` so one edit fixes
+every surface, and **neither is touched** — they need rendered pixels on both rasterisers first
+(19.9). Shipping them on an sRGB model would repeat the exact mistake `AGENTS.md` rule 2 exists
+to prevent.
+
+### 20.7 Tests, and a test that could not fail
+
+| test | host | what it holds |
+| --- | --- | --- |
+| `BannerContrastTest` (3) | common | the token-level relationship: ink over a 10% error fill clears 4.5:1 |
+| `BannerSourceTest` (2) | jvm | the banner's text nodes are `ttLabel()`; the two tones differ |
+| `ProjectPaletteTest` (1) | jvm | no rim/fill token used as a text colour (Phase 19) |
+
+**`BannerContrastTest` stayed green through both mutations of its own defect.** The message
+colour moved to `ttErrorRim()` — the original bug — and it passed. The fill alpha moved 0.10 →
+0.22, and it passed. Neither is a rounding error: `ttLabel()` is black on light and white on
+dark and a banner's fill is always a pale tint near the canvas, so *black on pale pink clears
+4.5:1*. The test computed its own fill instead of reading the drawn one, and a contrast ratio
+held a constant about a component it did not look at.
+
+That is what `BannerSourceTest` is for, and it asserts the *argument* rather than a ratio. Its
+KDoc says so, so the next person does not "fix" it by deleting the weaker one.
+
+Two false reds along the way, both worth recording because a false red teaches everyone that an
+assertion is noise: the guard's first regex swept every `color =` in the file and so flagged the
+border's `color = rim` and the glyph's `color = base` — both correct. Scoping it to `ttText(`
+calls by balanced-paren parse fixed it.
+
+| mutation | caught by | not caught by |
+| --- | --- | --- |
+| message → `base.copy(alpha = RIM_ALPHA)` | `BannerSourceTest`, names `base.copy()` | `BannerContrastTest` |
+| fill alpha 0.10 → 0.22 | — | `BannerContrastTest` |
+
+### 20.8 Unblocking, and one test that is not mine
+
+`:packages:feature-projects-presentation` did not compile, so nothing in this phase could be
+verified until it did. `ProjectBoardModel.kt:72-73` read `currentUserName?.trim().takeIf { … }`,
+where the `?.` makes the receiver `String?`. Two characters (`?.takeIf`) — the author's evident
+intent was already in the `?: return false`, and the file had not moved for ten minutes.
+
+That fix exposed a **stale test**, not a regression:
+`ProjectBoardModelTest.toggling showOnlyMyTasks filters items by assignee presence` expected 1
+item and got 0. The in-flight `currentUserName` work changed the filter from "has an assignee"
+to "is the current user" and had not updated the test. **Left red on purpose** — deciding whether
+a stale test should be updated or the filter reverted is the author's call, not this phase's.
+(It has since been updated by the author and is green.)
+
+`:shared-ui` remained uncompilable (`ShellPreferences.kt:138-139`, the same `currentUserName`
+work) and was untouched by this phase. Fixed later; see 20.10.
+
+### 20.10 Uncompiling `:shared-ui` — `ShellPreferences.currentUserName`
+
+The remaining compile break was one line and one mistake: `currentUserName` was a plain `val`
+whose getter called `UserDefaultsStore.value(key: DefaultsKey)`, which is `suspend`
+(`UserDefaultsStore.kt:33` — it may cross a platform boundary, so the whole facade is). The
+reader is a `remember` block in a composition (`NavigationHost.kt:571`), which is not a
+coroutine, so a property cannot be the shape the call needs. `ShellPreferences.kt:138-139`,
+suspend-in-a-non-suspend-getter, both hosts.
+
+**The one-line fix is the wrong one, and it is worth recording why.** Making the getter `suspend`,
+or snapshotting the read into `restore()`, both compile — and the snapshot version is behaviourally
+broken. `restore()` runs once per process from `RootScreen.kt:158`, *before* anyone has signed in,
+and `DefaultsKey.CachedProfile` is only written by `AuthRepository.signIn`
+(`AuthRepository.kt:132`). So a cold launch + sign in would hand `ProjectBoardModel`'s
+"show only my tasks" filter a `null`, and `assigneeMatchesCurrentUser` returns `false` for a
+`null` current user — the filter would silently match nothing, with no error and no red test.
+
+Resolved as a `StateFlow` + an explicit `refreshCurrentUser()`:
+
+| piece | file | why |
+| --- | --- | --- |
+| `currentUserName: StateFlow<String?>` | `ShellPreferences.kt` | the file's own convention for all four of its other preferences; gives a later board a name that arrives after it composed |
+| `suspend fun refreshCurrentUser()` | `ShellPreferences.kt` | reads `CachedProfile` when the root is `Main`, which is the first moment a cached profile *can* be the current session's |
+| one `LaunchedEffect` on `(isPreferencesRestored, navigation.root)` | `RootScreen.kt` | sign-in writes the profile *before* the coordinator moves the root, so arriving at `Main` is the signal, and re-reading on the next `Main` overwrites rather than accumulates |
+| `collectAsState` + `remember` key | `NavigationHost.kt` | the board freezes the name into its model, so a late-arriving name has to build a new model |
+
+Two things settled rather than left open. `preferredGreeting` (`AuthSession.kt:54`) is reused
+rather than re-spelling display-name-else-email here — it is the one definition of what to call
+this person, and a second spelling is how the shell's greeting and the sign-in screen's drift
+apart. And `refreshCurrentUser` has **no** `runCatching`, unlike the raw-key reads in
+`restore()`: those have a documented fallback, and this one cannot invent one. Keeping the
+previous name on a throw would leave one account's name on the board after another signs in, and
+inventing one would filter a real person's own work out of their own board. `null` is correct for
+both cases the store can actually report.
+
+**Cost, stated rather than hidden:** on a cold launch the board model is built twice — once with
+`null`, once with the name. That is the rebuild-and-cancel-the-previous-observation
+`ProjectsHost.kt:220` already documents, and the `DisposableEffect` below it cancels the old
+observation, so this cannot leave two boards watching the store.
+
+**A mutation that proved the path is dead to the suite.** Deleting the `refreshCurrentUser()`
+call left `:shared-ui:jvmTest` byte-identical: 28 tests, the same 2 pre-existing failures. Nothing
+in the suite renders `RootScreen` with a seeded `CachedProfile`, so the whole feature could be
+deleted and no test would notice. This is a real coverage gap, not a passing verification — it
+needs a scenario that seeds a cached profile, drives the root to `Main`, and asserts the board
+received the name. Not written here: it is a new test, and this phase fixed a compile break rather
+than adding behaviour tests. Recorded so the next person does not read the green suite as
+evidence the filter works.
+
+### 20.11 Baseline
+
+`:packages:design-system` **86** JVM tests (81 `commonTest` + 5 `jvmTest`), **1 failing by
+design** — the error-token bar from Phase 19.
+
+`:packages:feature-projects-presentation` **165**, 0 failing — the stale `ProjectBoardModelTest`
+is green.
+`:packages:feature-auth-presentation` **20**, 0 failing.
+`:packages:feature-projects-data` **153**, 3 failing (`SeedingTest`, documented pre-existing).
+`:shared-ui` **28** JVM / **26** iOS, 2 failing on both hosts (`aChosenThemeOutlivesTheProcess`,
+`theBoardReturnsToTheList`, documented pre-existing) — the module now compiles and runs, which it
+did not in 20.9.
+
+Whole JVM host: **1097 tests, 6 failures**; whole iOS simulator host: **1072 tests, 6 failures**.
+Identical set on both: 3 `SeedingTest`, 2 `:shared-ui`, 1 deliberate error-token bar.
+`verifyArchitectureGraph` and `verifyModuleImports` pass. All figures from the JUnit XML the
+build writes, cross-checked against `@Test` declarations.

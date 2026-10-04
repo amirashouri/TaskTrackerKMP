@@ -10,6 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Modifier
@@ -256,6 +261,139 @@ private fun GlassOverBackdropPreview() {
  * scheme *somewhere* rather than leaving it to the developer's machine, which is the point
  * noted at the top of the file.
  */
+// ---------------------------------------------------------------------------------------------
+// The components that had no preview at all
+// ---------------------------------------------------------------------------------------------
+//
+// These five were the gaps in a gallery that covered ten components. They are grouped here
+// rather than scattered, because they share a reason for having been missed: each one is
+// easy to get wrong in a way a test cannot see, and each one is hard to get right without
+// looking at it.
+//
+//  - [ttSlider] has the most intricate logic in the package (a tap sets the value, the commit
+//    happens once in a `finally`) and no way to *see* it.
+//  - [ttInitialsStack]'s overlap is negative `Arrangement` spacing with a per-disc inset. Both
+//    numbers are wrong-capable and neither is legible from the source.
+//  - The glass intensity slider changes every surface in the app at once, and there was no
+//    preview that showed what "less glass" actually looks like.
+//  - [ttBanner] replaced two divergent implementations in Phase 20 and is the component most
+//    likely to regress silently, since both its tones still render *something*.
+
+@Preview(name = "Slider", showBackground = true, widthDp = 320)
+@Composable
+private fun SliderPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        Box(modifier = Modifier.padding(ttSpacing.screenGutterLarge)) {
+            var value by remember { mutableFloatStateOf(0.62f) }
+            ttSlider(
+                value = value,
+                onValueChange = { value = it },
+                onValueChangeFinished = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Slider in flight", showBackground = true, widthDp = 320)
+@Composable
+private fun SliderWhileBusyPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        Column(
+            modifier = Modifier.padding(ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        ) {
+            ttSlider(value = 0.4f, onValueChange = {}, onValueChangeFinished = {})
+            ttGlassButton(label = "Archive project", onClick = {}, loading = true)
+            ttGlassButton(label = "Archive project", onClick = {})
+        }
+    }
+}
+
+@Preview(name = "Initials", showBackground = true, widthDp = 320)
+@Composable
+private fun InitialsStackPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        Column(
+            modifier = Modifier.padding(ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        ) {
+            ttInitialsStack(initials = listOf("AR", "MJ", "KW", "TS", "PL"))
+            ttInitialsStack(initials = listOf("AR"))
+            ttInitialsStack(initials = listOf("AR", "MJ"), size = 40.dp)
+        }
+    }
+}
+
+@Preview(name = "Banner", showBackground = true, widthDp = 360)
+@Composable
+private fun BannerPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        Column(
+            modifier = Modifier.padding(ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttBanner(message = "That email or password is not right.", onDismiss = {})
+            ttBanner(
+                message = "3 items were archived instead, because they still had open subtasks.",
+                tone = ttBannerTone.Accent,
+                onDismiss = {},
+            )
+            ttSpinner()
+        }
+    }
+}
+
+@Preview(name = "Glass intensity", showBackground = true, widthDp = 320)
+@Composable
+private fun GlassIntensityPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        Column(
+            modifier = Modifier.padding(ttSpacing.screenGutterLarge),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            for (intensity in listOf(1f, 0.5f, 0f)) {
+                ttTheme(ThemeScheme.Light, glassIntensity = intensity) {
+                    ttText(
+                        text = "intensity ${intensity}",
+                        style = ttTypography.captionSmall,
+                        color = ttLabelSecondary(),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .ttGlassCard()
+                            .padding(ttSpacing.xxl),
+                    ) {
+                        ttText(
+                            text = "The fill's alpha and its ramp both move with this.",
+                            style = ttTypography.body,
+                            color = ttLabel(),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Preview(name = "Bottom sheet", showBackground = true, widthDp = 390, heightDp = 600)
+@Composable
+private fun BottomSheetPreview() {
+    ttPreviewSurface(ThemeScheme.Light) {
+        TTBottomSheetScaffold(
+            visible = true,
+            onDismissRequest = {},
+        ) {
+            ttText(text = "New project", style = ttTypography.titleSmall, color = ttLabel())
+            ttText(
+                text = "A sheet is a lens over a solid base, not a translucent fill.",
+                style = ttTypography.body,
+                color = ttLabel(),
+            )
+        }
+    }
+}
+
 @Composable
 private fun ttPreviewSurface(
     scheme: ThemeScheme = ThemeScheme.System,

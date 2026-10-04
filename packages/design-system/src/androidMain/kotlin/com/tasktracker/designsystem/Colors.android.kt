@@ -1,10 +1,15 @@
 package com.tasktracker.designsystem
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.util.TypedValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowInsetsControllerCompat
 
 /**
  * Android's counterpart to the original's `UIColor` semantic colours.
@@ -112,3 +117,18 @@ private fun applyAlpha(color: Int, alpha: Float): Int {
 
 /** Near-black rather than transparent, so a missing theme cannot blank the app. */
 private fun fallbackColor(): Int = 0xFF1C1C1E.toInt()
+
+@Composable
+actual fun SystemBarAppearance(isDark: Boolean) {
+    val view = LocalView.current
+    DisposableEffect(isDark) {
+        val window = generateSequence(view.context) { (it as? ContextWrapper)?.baseContext }
+            .filterIsInstance<Activity>()
+            .firstOrNull()
+            ?.window
+        window?.let {
+            WindowInsetsControllerCompat(it, it.decorView).isAppearanceLightStatusBars = !isDark
+        }
+        onDispose {}
+    }
+}

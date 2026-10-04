@@ -27,16 +27,20 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.ttBannerTone
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.board_my_tasks
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
@@ -115,6 +119,8 @@ fun ProjectBoardScreen(
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
     onAddTask: ((WorkItemStatus) -> Unit)? = null,
+    showOnlyMyTasks: Boolean = false,
+    onToggleMyTasks: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -140,12 +146,16 @@ fun ProjectBoardScreen(
         // preview, a screenshot, a keyboard-only surface - would otherwise lose the one part of
         // the header it had anything to say with.
         val assignees = boardAssigneeNames(projection.items)
-        if (onOpenSwitcher != null || assignees.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalGutter()
+                .testTag(ProjectBoardHeaderTag),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalGutter()
-                    .testTag(ProjectBoardHeaderTag),
+                modifier = Modifier.weight(1f, fill = false),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -153,21 +163,27 @@ fun ProjectBoardScreen(
                     ProjectSwitcherButton(
                         project = projection.project,
                         onClick = openSwitcher,
-                        // Takes what is left, capped inside itself, so a long project name
-                        // ellipsises in the pill instead of pushing the stack off the header.
-                        modifier = Modifier.weight(1f, fill = false),
                         projects = projects,
                         onSelectProject = onSelectProject,
                     )
                 }
-                AssigneeStack(
-                    names = assignees,
-                    modifier = Modifier.testTag(ProjectBoardAssigneesTag),
-                )
+                if (assignees.isNotEmpty()) {
+                    AssigneeStack(
+                        names = assignees,
+                        modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                    )
+                }
             }
+            ttGlassIconButton(
+                image = ttActionIcons.person,
+                contentDescription = stringResource(Res.string.board_my_tasks),
+                onClick = onToggleMyTasks,
+                tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                modifier = Modifier.testTag(ProjectBoardMyTasksTag),
+            )
         }
         errorMessage?.let { message ->
-            ProjectsErrorBanner(
+            ttBanner(
                 message = message,
                 onDismiss = onDismissError,
                 modifier = Modifier.fillMaxWidth().horizontalGutter(),
@@ -430,6 +446,7 @@ private fun ProjectBoardScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light
 const val ProjectBoardScreenTag = "board.screen"
 const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
+const val ProjectBoardMyTasksTag = "board.myTasks"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 

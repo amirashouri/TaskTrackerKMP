@@ -30,6 +30,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -175,7 +176,7 @@ private fun ProjectKeyMonogram(
             .size(monogramSize)
             .clip(shape)
             .background(tint.copy(alpha = MONOGRAM_FILL_ALPHA))
-            .border(1.dp, tint.copy(alpha = MONOGRAM_RIM_ALPHA), shape),
+            .border(ttSeparatorWidth, tint.copy(alpha = MONOGRAM_RIM_ALPHA), shape),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {

@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import com.tasktracker.core.AppError
 import com.tasktracker.featureauthdomain.AuthSessionPort
+import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import kotlin.test.assertTrue
@@ -106,7 +107,7 @@ object SignInScenarios {
 
         signInWith("amir@example.com", "wrong")
 
-        onNodeWithTag(ErrorBannerTag).assertIsDisplayed()
+        onNodeWithTag(TTBannerTag).assertIsDisplayed()
         onNode(hasText(requireNotNull(AppError.Unauthorized.message) {
             "AppError always carries text; the nullability is inherited from Exception"
         })).assertIsDisplayed()

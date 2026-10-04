@@ -336,8 +336,19 @@ object ttActionIcons {
         solidRoundRect(9.0f, 16.0f, 15.0f, 18.5f, radius = 1.0f)
     }
 
+    /** A compact person silhouette for filtering by assignee. */
+    val person: ImageVector = icon("Person") {
+        solidRoundRect(7.5f, 3.5f, 16.5f, 10.5f, radius = 3.5f)
+        moveTo(3.0f, 21.0f)
+        lineTo(3.0f, 18.0f)
+        quadTo(3.0f, 13.5f, 12.0f, 13.5f)
+        quadTo(21.0f, 13.5f, 21.0f, 18.0f)
+        lineTo(21.0f, 21.0f)
+        close()
+    }
+
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse, sort)
+    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */

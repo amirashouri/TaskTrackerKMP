@@ -23,6 +23,8 @@ import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.AmbientBackdrop
+import com.tasktracker.designsystem.SystemBarAppearance
+import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdomain.AuthSessionPort
@@ -179,9 +181,26 @@ fun RootScreen(
         }
     }
 
+    // The signed-in person's name, read once the main tree is actually up — not in
+    // `preferences.restore()`, which runs before anybody has signed in and so would hand the
+    // board's "show only my tasks" filter a null on every cold launch. A sign-in writes the
+    // cached profile before the session coordinator moves the root, so arriving here *is* the
+    // signal that the profile on disk belongs to the session now in front of us.
+    //
+    // Keyed on the root rather than run once for the same reason as the two effects above: the
+    // first `Main` after an auth-gate launch is the first moment the answer can differ from
+    // `null`, and a sign-out back to `Auth` followed by another sign-in has to re-read it.
+    LaunchedEffect(isPreferencesRestored, navigation.root) {
+        if (isPreferencesRestored && navigation.root == RootDestination.Main) {
+            preferences.refreshCurrentUser()
+        }
+    }
+
     val themeScheme by preferences.themeScheme.collectAsState()
     val accentPalette by preferences.accentPalette.collectAsState()
     val glassIntensity by preferences.glassIntensity.collectAsState()
+    val isDark = ttIsDarkTheme(themeScheme)
+    SystemBarAppearance(isDark)
 
     // The two alphas are deliberately not each other's inverse. The splash fades out on a
     // timer and takes itself out of the composition when it reaches zero; the content is
