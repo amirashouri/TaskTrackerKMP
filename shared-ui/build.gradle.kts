@@ -32,6 +32,19 @@ dependencies {
     // which is what keeps the screen unable to reach the live service.
     commonMainImplementation(project(":packages:feature-settings-domain"))
     commonMainImplementation(project(":packages:feature-settings-presentation"))
+
+    // For `LocalDate`, and only for that: the sprint editor sheet is typed on the calendar
+    // type `:packages:design-system` chose in 23.4, and `SprintEditorModel` holds its draft
+    // in that type, so *resolving the call* needs the class here even though no import
+    // names it. Kotlin resolves a signature before it type-checks an argument, so an
+    // `implementation` dependency one module down is not enough — and the alternative,
+    // having the shell re-declare its own date type, would put two notions of "a day" in
+    // the app.
+    //
+    // A **library** edge, so `allowedLibraryTable` and `packageOwnersTable` are untouched:
+    // `verifyArchitectureGraph` filters `ProjectDependency`, and neither it nor
+    // `verifyModuleImports` reads a `libs.` coordinate.
+    commonMainImplementation(libs.kotlinx.datetime)
 }
 
 // The single framework the SwiftUI Liquid Glass shell links against. iOS entry

@@ -1,6 +1,7 @@
 package com.tasktracker.routing
 
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseWorkItemID
 
 /**
@@ -19,6 +20,8 @@ object DeepLinkParser {
      * tasktracker://board/<projectID>             -> a project's board, as the Board tab's root
      * tasktracker://backlog/<projectID>           -> a project's backlog, as the Backlog tab's root
      * tasktracker://archive/<projectID>           -> a project's archive
+     * tasktracker://sprints/<projectID>           -> a project's sprints, as the tab's root
+     * tasktracker://sprint/<projectID>/<sprintID> -> one sprint's own screen
      * tasktracker://workitem/<projectID>/<itemID> -> edit a specific work item
      * tasktracker://workitem/<projectID>/new      -> create a work item
      * ```
@@ -49,6 +52,29 @@ object DeepLinkParser {
             // pushed on top of its root.
             "archive" -> components.projectIDAt(1)?.let {
                 ParsedLink(AppTab.Board, route = null, path = listOf(AppRoute.Archive(it)))
+            }
+
+            // The sprints tab *is* a tab, so this is its root: the same shape as `board` and
+            // `backlog`, both of which also name their root as a route rather than leaving
+            // the stack empty. `sprintListStack` is `Router.openProject`'s definition too, so
+            // arriving by link and choosing a project describe the same state.
+            "sprints" -> components.projectIDAt(1)?.let {
+                ParsedLink(AppTab.Sprints, route = null, path = sprintListStack(it))
+            }
+
+            // One sprint, with the list underneath it. The detail is presented as the
+            // `route` so the shell can decide whether to animate it over the list, and the
+            // stack comes from `sprintStack` — the same function `Router.openSprint` uses for
+            // a tapped row, which is what stops a link and a tap describing different
+            // histories for the same screen.
+            "sprint" -> {
+                val projectID = components.projectIDAt(1) ?: return null
+                val sprintID = components.getOrNull(2)?.let { parseSprintID(it) } ?: return null
+                ParsedLink(
+                    tab = AppTab.Sprints,
+                    route = AppRoute.SprintDetail(projectID, sprintID),
+                    path = sprintStack(projectID, sprintID),
+                )
             }
 
             "workitem" -> {

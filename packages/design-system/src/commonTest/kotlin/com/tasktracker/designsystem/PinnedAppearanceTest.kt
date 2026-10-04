@@ -1,9 +1,6 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.ui.graphics.Color
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -176,7 +173,7 @@ class PinnedAppearanceTest {
             val canvas = ttFixedColours.canvas(dark)
             val ratio = contrastRatio(label, canvas)
             assertTrue(
-                ratio >= 4.5f,
+                ratio >= 4.5,
                 "the label has $ratio:1 against its own canvas, below the 4.5:1 body-text bar",
             )
         }
@@ -242,7 +239,7 @@ class PinnedAppearanceTest {
                 "the secondary label ($secondary:1) is not dimmer than the label ($primary:1)",
             )
             assertTrue(
-                secondary >= 3f,
+                secondary >= 3.0,
                 "the secondary label has $secondary:1 against the canvas, below even the " +
                     "3:1 large-text bar it was chosen for",
             )
@@ -264,40 +261,18 @@ class PinnedAppearanceTest {
         }
     }
 
-    /** WCAG relative luminance, as the ratio definition uses it. */
-    private fun contrastRatio(foreground: Color, background: Color): Float {
-        val lighter = max(luminance(foreground), luminance(background))
-        val darker = min(luminance(foreground), luminance(background))
-        return (lighter + 0.05f) / (darker + 0.05f)
-    }
-
-    private fun luminance(colour: Color): Float {
-        fun channel(value: Float): Float =
-            if (value <= 0.03928f) value / 12.92f else ((value + 0.055f) / 1.055f).pow(2.4f)
-
-        val red = channel(colour.red)
-        val green = channel(colour.green)
-        val blue = channel(colour.blue)
-        return 0.2126f * red + 0.7152f * green + 0.0722f * blue
-    }
-
     /**
      * [top] composited over [bottom], by source-over alpha.
      *
      * The one the secondary-label test needs: an RGBA token is not a colour on its own, and
      * the whole reason it is stored pre-composited rather than as an opaque grey is that
      * which colour shows through depends on what is behind it.
+     *
+     * Now [over] in `PixelContrast.kt`, which arrived as a `Double` implementation rather
+     * than this file's `Float` one. The four call sites below moved from `4.5f` to `4.5`
+     * with them; nothing else about the measurement changed, and the thresholds are far
+     * enough from the measured values that `Float` precision was never load-bearing.
      */
-    private fun over(top: Color, bottom: Color): Color {
-        val alpha = top.alpha
-        fun blend(over_: Float, under: Float): Float = over_ * alpha + under * (1f - alpha)
-        return Color(
-            red = blend(top.red, bottom.red),
-            green = blend(top.green, bottom.green),
-            blue = blend(top.blue, bottom.blue),
-            alpha = 1f,
-        )
-    }
 
     private fun alphaOf(colour: Color): Float = (colour.alpha * 255f).roundToInt() / 255f
 }

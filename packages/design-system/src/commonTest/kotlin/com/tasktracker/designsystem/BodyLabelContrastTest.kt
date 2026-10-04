@@ -1,10 +1,6 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.ui.graphics.Color
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -110,41 +106,7 @@ class BodyLabelContrastTest {
         )
     }
 
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val lighter = max(relativeLuminance(first), relativeLuminance(second))
-        val darker = min(relativeLuminance(first), relativeLuminance(second))
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    private fun relativeLuminance(color: Color): Double =
-        0.2126 * linearise(color.red) +
-            0.7152 * linearise(color.green) +
-            0.0722 * linearise(color.blue)
-
-    private fun linearise(channel: Float): Double {
-        val value = channel.toDouble()
-        return if (value <= SRGB_LINEAR_THRESHOLD) value / SRGB_DIVISOR
-        else ((value + SRGB_OFFSET) / SRGB_SCALE).pow(SRGB_EXPONENT)
-    }
-
-    /** `String.format` is JVM-only, so the ratio is written out in integer hundredths. */
-    private fun Double.ratioText(): String {
-        val hundredths = round(this * 100).toInt()
-        return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
-    }
-
-    private fun Color.hex(): String =
-        "#" + listOf(red, green, blue).joinToString("") {
-            round(it * 255f).toInt().toString(16).padStart(2, '0')
-        }
-
     private companion object {
         const val TEXT_CONTRAST_MINIMUM = 4.5
-
-        const val SRGB_LINEAR_THRESHOLD = 0.03928
-        const val SRGB_DIVISOR = 12.92
-        const val SRGB_OFFSET = 0.055
-        const val SRGB_SCALE = 1.055
-        const val SRGB_EXPONENT = 2.4
     }
 }

@@ -1,10 +1,6 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.ui.graphics.Color
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -44,7 +40,7 @@ class GlassFillContrastTest {
     @Test
     fun `the lens at full strength still carries the label on every accent variant`() {
         for (variant in listOf(light, dark)) {
-            val composited = over(variant.color, Color.White, ttGlass.LENS_ALPHA)
+            val composited = over(Color.White, ttGlass.LENS_ALPHA, variant.color)
             val ratio = contrastRatio(composited, ttOnAccent)
             assertTrue(
                 ratio >= TEXT_CONTRAST_MINIMUM,
@@ -63,7 +59,7 @@ class GlassFillContrastTest {
      */
     @Test
     fun `the lens stays well short of the label colour`() {
-        val composited = over(TaskTrackerAccent.Light, Color.White, ttGlass.LENS_ALPHA)
+        val composited = over(Color.White, ttGlass.LENS_ALPHA, TaskTrackerAccent.Light)
         val ratio = contrastRatio(composited, ttOnAccent)
         assertTrue(
             ratio <= LENS_MAX_CONTRAST,
@@ -89,58 +85,10 @@ class GlassFillContrastTest {
         )
     }
 
-    /** [top] at [alpha] over [bottom], which is what the lens does to the base. */
-    private fun over(bottom: Color, top: Color, alpha: Float): Color = Color(
-        red = top.red * alpha + bottom.red * (1f - alpha),
-        green = top.green * alpha + bottom.green * (1f - alpha),
-        blue = top.blue * alpha + bottom.blue * (1f - alpha),
-        alpha = 1f,
-    )
-
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val lighter = max(relativeLuminance(first), relativeLuminance(second))
-        val darker = min(relativeLuminance(first), relativeLuminance(second))
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    /**
-     * WCAG 2.x relative luminance. The linearisation is not optional — contrast is defined
-     * in linear light, and summing the raw 0-1 channels instead reports a light grey on
-     * white as roughly 1.05 to 1, which is how the original measurement came to believe a
-     * `#F6F7F8` fill and a white label were the same colour.
-     */
-    private fun relativeLuminance(color: Color): Double =
-        RED_COEFFICIENT * linearise(color.red) +
-            GREEN_COEFFICIENT * linearise(color.green) +
-            BLUE_COEFFICIENT * linearise(color.blue)
-
-    private fun linearise(channel: Float): Double {
-        val value = channel.toDouble()
-        return if (value <= SRGB_LINEAR_THRESHOLD) {
-            value / SRGB_DIVISOR
-        } else {
-            ((value + SRGB_OFFSET) / SRGB_SCALE).pow(SRGB_EXPONENT)
-        }
-    }
-
     private class Variant(val name: String, val color: Color)
 
     private val light = Variant("light", TaskTrackerAccent.Light)
     private val dark = Variant("dark", TaskTrackerAccent.Dark)
-
-    private fun Color.hex(): String = "#" + channel(red) + channel(green) + channel(blue)
-
-    private fun channel(value: Float): String =
-        round(value * 255f).toInt().toString(16).padStart(2, '0')
-
-    /**
-     * Two decimal places, written out: `String.format` is JVM-only and does not compile for
-     * Kotlin/Native, so the rounding is done in integer hundredths.
-     */
-    private fun Double.ratioText(): String {
-        val hundredths = round(this * HUNDREDTHS).toInt()
-        return "${hundredths / HUNDREDTHS}.${(hundredths % HUNDREDTHS).toString().padStart(2, '0')}"
-    }
 
     private companion object {
         const val TEXT_CONTRAST_MINIMUM = 4.5
@@ -151,17 +99,5 @@ class GlassFillContrastTest {
          * of the legibility rule.
          */
         const val LENS_MAX_CONTRAST = 7.0
-
-        const val HUNDREDTHS = 100
-
-        const val RED_COEFFICIENT = 0.2126
-        const val GREEN_COEFFICIENT = 0.7152
-        const val BLUE_COEFFICIENT = 0.0722
-
-        const val SRGB_LINEAR_THRESHOLD = 0.04045
-        const val SRGB_DIVISOR = 12.92
-        const val SRGB_OFFSET = 0.055
-        const val SRGB_SCALE = 1.055
-        const val SRGB_EXPONENT = 2.4
     }
 }

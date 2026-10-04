@@ -68,6 +68,16 @@ object ViewPreviewData {
 
     private val zone: TimeZone = TimeZone.UTC
 
+    /**
+     * The zone a preview's sprint dates are read in.
+     *
+     * Public because a preview that builds a [SprintListRow] or a [SprintDetail] by hand has
+     * to convert the same instants the models convert, and reading them in a different zone
+     * would make a preview disagree with the screen it is previewing. `sprintLocalDate`
+     * takes the zone as a parameter for exactly this reason.
+     */
+    val previewZone: TimeZone = zone
+
     /** The board a first launch starts with, matching the store's own seed. */
     val seededProject: Project = Project(
         id = projectID(1),
@@ -187,11 +197,90 @@ object ViewPreviewData {
         add(item("GE-1", secondProject.id, "Rename the colour tokens", status = WorkItemStatus.Todo))
     }
 
+    // MARK: Sprints
+
+    /**
+     * Two sprints: one open and mid-flight, one finished and over its goal.
+     *
+     * Preview fixtures only — **not** the store's first-launch sample data, which 23.8
+     * forbids extending while `SeedingTest` has three documented failures: adding rows to
+     * the fixture those tests assert against makes the baseline worse and their failures
+     * harder to read.
+     *
+     * Both readings are here on purpose. The open sprint is short of its goal and holds an
+     * unestimated task, so a preview shows a bar below the end *and* `TTStoryPoints`'
+     * absent reading. The finished one is over its goal, so a preview shows the overshoot
+     * that [SprintListRow.progressFraction] deliberately does not clamp away, and a
+     * summary reporting a hit.
+     */
+    val openSprint: Sprint = Sprint(
+        id = sprintID(1),
+        projectID = seededProject.id,
+        name = "Sprint 7",
+        goalStoryPoints = 12,
+        startDate = Instant.parse("2026-03-02T00:00:00Z"),
+        endDate = Instant.parse("2026-03-16T00:00:00Z"),
+        owner = "Amir",
+        isFinished = false,
+        finishedAt = null,
+        createdAt = instant,
+        updatedAt = instant,
+    )
+
+    val finishedSprint: Sprint = Sprint(
+        id = sprintID(2),
+        projectID = seededProject.id,
+        name = "Sprint 6",
+        goalStoryPoints = 8,
+        startDate = Instant.parse("2026-02-09T00:00:00Z"),
+        endDate = Instant.parse("2026-02-20T00:00:00Z"),
+        owner = "Amir",
+        isFinished = true,
+        // A date, because `finishedAt != null` exactly when `isFinished` is what
+        // `Sprint.reconcileFinishedAt` exists to hold and a preview that broke it would be
+        // showing a state the store cannot hold.
+        finishedAt = Instant.parse("2026-02-20T16:30:00Z"),
+        createdAt = instant,
+        updatedAt = instant,
+    )
+
+    val sprints: List<Sprint> = listOf(openSprint, finishedSprint)
+
+    /**
+     * The task list, with sprint membership and estimates on it.
+     *
+     * Built by copying [workItems] rather than by changing it: the board previews assert on
+     * [workItems] having items in every column and nothing in a sprint, and a fixture that
+     * moved a card into a sprint would take the board's empty-column with it. Every item
+     * below the seeded project that is not already terminal is pulled into [openSprint],
+     * which is what makes the open sprint's bar read as partly filled.
+     */
+    fun sprintWorkItems(
+        sprint: Sprint = openSprint,
+        points: Map<String, Int?> = mapOf(
+            "TT-2" to 5,
+            "TT-3" to 3,
+            "TT-4" to 8,
+            // Unestimated on purpose: the reading `TTStoryPoints` exists to distinguish
+            // from a real zero, and a preview that never shows it cannot show that.
+            "TT-8" to null,
+            "TT-9" to 2,
+        ),
+    ): List<WorkItem> = workItems
+        .filter { it.projectID == sprint.projectID && !it.status.isTerminal }
+        .map { item ->
+            item.copy(
+                sprintID = sprint.id,
+                storyPoints = points[item.key.toString()],
+            )
+        }
+
     /** A store holding the fixtures, for a preview that needs a real model behind it. */
     fun repository(
         projects: List<Project> = listOf(seededProject, secondProject),
         items: List<WorkItem> = workItems,
-    ): ProjectRepositoryPort = PreviewRepository(projects, items)
+        sprints: List<Sprint> = emptyList(),
+    ): ProjectRepositoryPort = PreviewRepository(projects, items, sprints)
 
     // MARK: Projections
 
@@ -260,15 +349,17 @@ object ViewPreviewData {
 private class PreviewRepository(
     projects: List<Project>,
     items: List<WorkItem>,
+    sprints: List<Sprint> = emptyList(),
 ) : ProjectRepositoryPort {
 
     private val storedProjects = projects.map { it.copy() }.toMutableList()
     private val storedItems = items.map { it.copy() }.toMutableList()
-    // Sprints are not part of the preview fixtures yet, so this starts empty. It exists as
-    // real storage rather than as `emptyList()` returns because a preview that is handed a
-    // sprint — or that creates one — should behave, and `setWorkItemSprint` has to be able
-    // to write here for the same reason.
-    private val storedSprints = mutableListOf<Sprint>()
+    // Seeded only when a preview asks for sprints; the default stays empty so the previews
+    // that predate this feature are unaffected. It is real storage rather than an
+    // `emptyList()` return because a preview that is handed a sprint — or that creates
+    // one — should behave, and `setWorkItemSprint` has to be able to write here for the
+    // same reason.
+    private val storedSprints = sprints.map { it.copy() }.toMutableList()
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val broadcaster = Broadcaster<ProjectChange>()
 
@@ -564,3 +655,6 @@ private fun projectID(n: Int): ProjectID = ProjectID(deterministicID(n))
 
 private fun workItemID(key: String): WorkItemID =
     WorkItemID("00000000-0000-4000-8001-" + key.substringAfter('-').padStart(12, '0'))
+
+/** Distinct from every other id above it, so a sprint can never collide with a task. */
+private fun sprintID(n: Int): SprintID = SprintID("00000000-0000-4000-8002-" + n.toString().padStart(12, '0'))

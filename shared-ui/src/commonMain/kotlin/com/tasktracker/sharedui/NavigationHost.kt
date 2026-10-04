@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -62,12 +63,20 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
+import com.tasktracker.featureprojectspresentation.SprintDetailModel
+import com.tasktracker.featureprojectspresentation.SprintDetailScreen
+import com.tasktracker.featureprojectspresentation.SprintEditorModel
+import com.tasktracker.featureprojectspresentation.SprintEditorSheet
+import com.tasktracker.featureprojectspresentation.SprintListModel
+import com.tasktracker.featureprojectspresentation.SprintListScreen
+import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreen
 import com.tasktracker.featureprojectspresentation.ProjectBoardModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
@@ -88,6 +97,7 @@ import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.resources.tab_sprints
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
@@ -273,6 +283,24 @@ private fun TabRoot(
         // The gate replaces *this tab* and not the signed-in area. Projects, Board and Backlog
         // all work without a settings port, so breaking three screens to explain a fourth
         // would be a worse answer than one sentence on one tab.
+        // Sprints is project-scoped like Board and Backlog, and for the same reason: it shows one
+        // project's work, so a project switcher here is navigation rather than an extra
+        // affordance. `seedSampleDataIfNeeded` comes from `ProjectScopedTabScreen`, so
+        // landing on this tab first does not show an empty store.
+        AppTab.Sprints -> ProjectScopedTabScreen(
+            router = router,
+            repository = environment.repository,
+            scope = scope,
+        ) { projectID ->
+            SprintsDestination(
+                projectID = projectID,
+                router = router,
+                environment = environment,
+                scope = scope,
+                preferences = preferences,
+            )
+        }
+
         AppTab.Settings -> if (settings == null) {
             MissingSettingsServiceView()
         } else {
@@ -331,6 +359,23 @@ private fun PushedRoute(
             scope = scope,
         )
 
+        is AppRoute.SprintList -> SprintsDestination(
+            projectID = route.projectID,
+            router = router,
+            environment = environment,
+            scope = scope,
+            preferences = preferences,
+        )
+
+        is AppRoute.SprintDetail -> SprintDetailDestination(
+            projectID = route.projectID,
+            sprintID = route.sprintID,
+            router = router,
+            environment = environment,
+            scope = scope,
+            preferences = preferences,
+        )
+
         is AppRoute.WorkItemEditor -> Box(modifier = Modifier.fillMaxSize()) {
             val backgroundRoute = previousRoute ?: when (tab) {
                 AppTab.Board -> AppRoute.Board(route.projectID)
@@ -362,6 +407,8 @@ private fun PushedRoute(
                 )
 
                 is AppRoute.WorkItemEditor,
+                is AppRoute.SprintList,
+                is AppRoute.SprintDetail,
                 AppRoute.Settings,
                 -> BoardDestination(
                     projectID = route.projectID,
@@ -698,6 +745,205 @@ private fun ArchiveDestination(
 }
 
 /**
+ * One project's sprints, and the sheet that creates or edits one.
+ *
+ * ## The editor is a sheet over the list, not a route
+ *
+ * Creating a sprint takes five fields and leaves the user looking at the list afterwards —
+ * the same shape as [NewProjectSheet] over the board, and the same reason. Pushing a route
+ * would mean a navigation round trip for something that does not need one, and — worse — a
+ * *cancel* would have to pop a stack, which is a second thing to get wrong.
+ *
+ * So the sheet's visibility is local state here, exactly as [WorkItemEditorDestination]'s is
+ * for the task form.
+ *
+ * ## The editor's existing sprint is read before the model is built
+ *
+ * `SprintEditorModel` reads its `existing` sprint exactly once, in its constructor, and uses
+ * the result as the change snapshot. Building the model before the read answers would hand it
+ * a `null` and turn every edit into a create — the same trap
+ * [WorkItemEditorDestination] documents for the task form, and the same `produceState` shape
+ * that avoids it.
+ *
+ * ## The list's own "can I create one" answer gates the button, not the store
+ *
+ * `hasOpenSprint` comes from the same read the rows came from, so the create affordance is
+ * absent exactly when the store would refuse. The store's refusal is still there for the
+ * race, and it arrives as the usual banner.
+ */
+@Composable
+private fun SprintsDestination(
+    projectID: ProjectID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+    preferences: ShellPreferences,
+) {
+    val model = remember(projectID, environment) {
+        SprintListModel(projectID, environment.repository)
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    // `null` for creating, a `SprintID` for editing. Named rather than a separate boolean
+    // because "creating" and "editing sprint X" are one state with two shapes, and two
+    // booleans would allow the impossible third.
+    var editorSprintID by remember(projectID) { mutableStateOf<SprintID?>(null) }
+    var isEditorVisible by remember(projectID) { mutableStateOf(false) }
+    var isEditorBusy by remember(projectID) { mutableStateOf(false) }
+
+    SprintListScreen(
+        rows = model.rows,
+        isLoading = model.isLoading,
+        isEmpty = model.isEmpty,
+        canCreate = !model.hasOpenSprint,
+        errorMessage = model.errorMessage,
+        onOpen = { sprintID ->
+            // `openSprint` rather than `push`, because the list belongs *underneath* the detail and a
+            // `push` onto an empty stack — which is what a plain tab switch leaves — would
+            // describe a sprint with nothing beneath it. One transition, so the stack is
+            // never published with the list missing.
+            router.openSprint(projectID = projectID, sprintID = sprintID)
+        },
+        onNewSprint = {
+            editorSprintID = null
+            isEditorVisible = true
+        },
+        onDismissError = model::dismissError,
+    )
+
+    // Open the editor for a sprint by id, reading it first. `null` when it has gone — the
+    // store deletes a sprint independently — and a create rather than an edit is the honest
+    // answer for a form whose subject no longer exists, because it is not silently editing
+    // a blank.
+    val existingSprint by produceState<Sprint?>(initialValue = null, editorSprintID, environment) {
+        value = if (isEditorVisible && editorSprintID != null) {
+            runCatching { environment.repository.sprint(editorSprintID!!) }.getOrNull()
+        } else {
+            null
+        }
+    }
+    val editor = remember(projectID, editorSprintID, environment, existingSprint) {
+        SprintEditorModel(
+            projectID = projectID,
+            existing = existingSprint,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+        )
+    }
+    // Same reason the task form has one: the model has no in-flight flag, and a save button
+    // that can be pressed twice answers a double tap with two writes.
+    if (isEditorVisible) {
+        SprintEditorSheet(
+            name = editor.name,
+            goalStoryPoints = editor.goalStoryPoints,
+            startDate = editor.startDate,
+            endDate = editor.endDate,
+            owner = editor.owner,
+            isCreating = editor.isCreating,
+            canSave = editor.canSave,
+            endIsBeforeStart = editor.endIsBeforeStart,
+            onNameChanged = editor::onNameChanged,
+            onGoalChanged = editor::onGoalChanged,
+            onStartDateChanged = editor::onStartDateChanged,
+            onEndDateChanged = editor::onEndDateChanged,
+            onOwnerChanged = editor::onOwnerChanged,
+            onSave = {
+                scope.launch {
+                    isEditorBusy = true
+                    val saved = editor.save()
+                    isEditorBusy = false
+                    if (saved) isEditorVisible = false
+                }
+            },
+            onCancel = { isEditorVisible = false },
+            isBusy = isEditorBusy,
+            visible = true,
+            onDismissRequest = { isEditorVisible = false },
+            onDismissed = {},
+        )
+    }
+}
+
+/**
+ * One sprint's own screen.
+ *
+ * ## The viewer's name is a `remember` key, for the same reason the board's is
+ *
+ * `SprintDetail.canFinish` depends on who is looking, and the board's filter has already
+ * established the pattern: a name that arrives after this screen was composed has to build
+ * a new model rather than leave the first one answering "is this mine" from a stale `null`.
+ * On a cold launch that builds the model twice, which is the cost of the alternative being
+ * a Finish button that appears a moment late.
+ *
+ * ## A deleted sprint reads as "nothing", not as a blank screen
+ *
+ * The store deletes a sprint on its own — [com.tasktracker.featureprojectsdomain.
+ * DeleteSprint] returns its tasks to the backlog — so a sprint on screen can vanish between
+ * the read and the render. `SprintDetailModel` answers that with `null`, and this returns
+ * rather than rendering a detail made of empty fields, which would be a screen the user
+ * could dismiss but not interpret.
+ */
+@Composable
+private fun SprintDetailDestination(
+    projectID: ProjectID,
+    sprintID: SprintID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+    preferences: ShellPreferences,
+) {
+    val currentUserName by preferences.currentUserName.collectAsState()
+    val model = remember(sprintID, environment, preferences, currentUserName) {
+        SprintDetailModel(
+            sprintID = sprintID,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+            currentUserName = currentUserName,
+        )
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    // The summary is the model's own value rather than a second read: the detail screen has
+    // already loaded the items, and re-reading them at the moment the summary is opened is
+    // how the two screens end up reporting different totals for the same sprint.
+    var isSummaryOpen by remember(sprintID) { mutableStateOf(false) }
+
+    val detail = model.detail
+    if (detail == null) {
+        // Deliberately empty rather than an error banner: this is a sprint that is gone, not
+        // a failure, and a banner saying "could not load" would be inventing a cause.
+        return
+    }
+
+    if (isSummaryOpen) {
+        SprintSummaryScreen(
+            summary = detail.summary,
+            modifier = Modifier.testTag(SprintSummaryDestinationTag),
+        )
+        return
+    }
+
+    SprintDetailScreen(
+        detail = detail,
+        isBusy = model.isFinishing,
+        errorMessage = model.errorMessage,
+        onFinish = { scope.launch { model.finish() } },
+        onReopen = { scope.launch { model.reopen() } },
+        onViewSummary = { isSummaryOpen = true },
+        onDismissError = model::dismissError,
+    )
+}
+
+/** The summary, rendered in place of the detail screen. See [SprintDetailDestination]. */
+const val SprintSummaryDestinationTag = "shell.sprintSummary"
+
+/**
  * The work item editor, over whatever opened it.
  *
  * One route covers create and edit, because `AppRoute.WorkItemEditor.workItemID` is nullable
@@ -978,12 +1224,13 @@ private fun TabBar(
  */
 private class LoadedWorkItem(val item: WorkItem?)
 
-/** One tab's label. Exhaustive over [AppTab], so a fifth tab is a compile error here. */
+/** One tab's label. Exhaustive over [AppTab], so a sixth tab is a compile error here. */
 @Composable
 private fun tabTitle(tab: AppTab): String = when (tab) {
     AppTab.Projects -> stringResource(Res.string.tab_projects)
     AppTab.Board -> stringResource(Res.string.tab_board)
     AppTab.Backlog -> stringResource(Res.string.tab_backlog)
+    AppTab.Sprints -> stringResource(Res.string.tab_sprints)
     AppTab.Settings -> stringResource(Res.string.tab_settings)
 }
 
@@ -992,15 +1239,22 @@ private fun tabTitle(tab: AppTab): String = when (tab) {
  *
  * The drawings live in `ttTabIcons` because they are visual assets; *which* tab gets which one
  * is the shell's decision, and it is a `when` over [AppTab] for the same reason [tabTitle] is
- * one — a fifth tab becomes a compile error here rather than a blank square.
+ * one — a sixth tab becomes a compile error here rather than a blank square.
  *
  * The mapping matches the native app's SF Symbols one for one, and `ttTabIcons.mapping` records
  * that correspondence so the two cannot drift apart without a test noticing.
+ *
+ * `internal` rather than `private` because nothing else asserted *this* choice. The design
+ * system tests its own drawings and `everyTabIsNamedAndCarriesTheTabRole` asserts the labels,
+ * so a tab handed its neighbour's glyph passed everything - found by mutation U1, which went
+ * green. The function is pure and takes no composable scope, so a test can call it directly
+ * and assert the whole set rather than a restated copy of the mapping.
  */
-private fun tabIcon(tab: AppTab): ImageVector = when (tab) {
+internal fun tabIcon(tab: AppTab): ImageVector = when (tab) {
     AppTab.Projects -> ttTabIcons.projects
     AppTab.Board -> ttTabIcons.board
     AppTab.Backlog -> ttTabIcons.backlog
+    AppTab.Sprints -> ttTabIcons.sprints
     AppTab.Settings -> ttTabIcons.settings
 }
 

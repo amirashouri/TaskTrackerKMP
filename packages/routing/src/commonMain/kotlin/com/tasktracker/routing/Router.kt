@@ -2,6 +2,7 @@ package com.tasktracker.routing
 
 import com.tasktracker.core.LogPrivacy
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.TTLogger
 import com.tasktracker.core.logMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,14 +28,25 @@ data class RouterState(
     val projectsPath: List<AppRoute> = emptyList(),
     val boardPath: List<AppRoute> = emptyList(),
     val backlogPath: List<AppRoute> = emptyList(),
+    val sprintsPath: List<AppRoute> = emptyList(),
     val settingsPath: List<AppRoute> = emptyList(),
     val activeProjectID: ProjectID? = null,
 ) {
-    /** The navigation stack belonging to [onTab]. */
+    /**
+     * The navigation stack belonging to [onTab].
+     *
+     * One field per tab rather than a `Map<AppTab, List<AppRoute>>`, and the reason is that
+     * a map needs a key for every tab before any of them has been visited — so the state
+     * either grows a null per unused tab or a `getOrDefault(emptyList())` at every read,
+     * and both put "what is the stack for a tab nobody has opened" into the type instead of
+     * leaving it as the empty list it actually is. The cost is that a new tab is a compile
+     * error here, which is the price worth paying.
+     */
     fun pathFor(tab: AppTab): List<AppRoute> = when (tab) {
         AppTab.Projects -> projectsPath
         AppTab.Board -> boardPath
         AppTab.Backlog -> backlogPath
+        AppTab.Sprints -> sprintsPath
         AppTab.Settings -> settingsPath
     }
 }
@@ -155,6 +167,23 @@ class Router {
             AppTab.Backlog -> state.copy(activeProjectID = projectID, selectedTab = AppTab.Backlog)
                 .withPath(AppTab.Backlog, emptyList())
 
+            // Switches, like Board and Backlog, and lands on the list rather than on a
+            // particular sprint: choosing a project says *which* project, never *which*
+            // sprint inside it.
+            //
+            // The root is named as a **route** rather than left empty, which is what
+            // `tasktracker://sprints/<pid>` installs too. The reason is state, not pixels:
+            // nothing in this app has a back affordance — `NavigationHost` registers no
+            // `BackHandler` and `SprintDetailScreen` has no back button, so the tab bar is
+            // how every project-scoped screen is left — and the shell renders a tab root and
+            // a pushed root identically. So an empty stack here would render the same
+            // screen while describing a different history from the one a link describes, and
+            // [openSprint] and [DeepLinkParser] would then be free to drift apart. One
+            // definition ([sprintListStack]) for every way in is cheaper than reasoning about
+            // which paths happen to look alike.
+            AppTab.Sprints -> state.copy(activeProjectID = projectID, selectedTab = AppTab.Sprints)
+                .withPath(AppTab.Sprints, sprintListStack(projectID))
+
             AppTab.Settings -> state
         }
     }
@@ -190,6 +219,31 @@ class Router {
 
     /** Replaces [onTab]'s stack wholesale. Used by the shell to restore persisted state. */
     fun setPath(path: List<AppRoute>, onTab: AppTab) = update { it.withPath(onTab, path) }
+
+    /**
+     * Opens one sprint, and the list it sits on, in a single transition.
+     *
+     * Exists because the two ways into a sprint — tapping a row and following
+     * `tasktracker://sprint/<pid>/<sid>` — had each grown their own stack, and they
+     * disagreed: the link installed `[SprintList, SprintDetail]` while the tap pushed
+     * `SprintDetail` onto whatever was there, which after a tab switch is nothing. The
+     * rendering was identical either way, so the drift was invisible until a test asserted
+     * the stack. [DeepLinkParser] now builds its link from the same [sprintStack] function,
+     * so the two cannot drift again without both changing.
+     *
+     * One `update` rather than a `push` of the list followed by a `push` of the detail,
+     * because [RouterState] publishes through a single [StateFlow] precisely so that a
+     * transition moving several fields at once is never observable half-applied — and two
+     * pushes would publish a state in which the list is a *pushed* route for one frame.
+     */
+    fun openSprint(projectID: ProjectID, sprintID: SprintID) = update { state ->
+        state.copy(
+            selectedTab = AppTab.Sprints,
+            // `AppRoute.SprintDetail.selectsActiveProject` is `projectID`, and the tab is not
+            // Settings, so this is the same assignment `push` would have made.
+            activeProjectID = projectID,
+        ).withPath(AppTab.Sprints, sprintStack(projectID, sprintID))
+    }
 
     /** Pushes onto [onTab], defaulting to the selected tab; pops if already on top. */
     fun push(route: AppRoute, onTab: AppTab? = null) = update { state ->
@@ -300,6 +354,7 @@ class Router {
         projectsPath = emptyList(),
         boardPath = emptyList(),
         backlogPath = emptyList(),
+        sprintsPath = emptyList(),
         settingsPath = emptyList(),
     )
 
@@ -307,6 +362,7 @@ class Router {
         AppTab.Projects -> copy(projectsPath = path)
         AppTab.Board -> copy(boardPath = path)
         AppTab.Backlog -> copy(backlogPath = path)
+        AppTab.Sprints -> copy(sprintsPath = path)
         AppTab.Settings -> copy(settingsPath = path)
     }
 
@@ -319,3 +375,22 @@ class Router {
         TTLogger.routing.info { logMessage { append(text) } }
     }
 }
+
+/**
+ * The Sprints tab's root stack for [projectID]: the list, and nothing on top of it.
+ *
+ * Shared by [Router.openProject] and [DeepLinkParser] so that choosing a project and
+ * following `tasktracker://sprints/<pid>` produce the same state.
+ */
+fun sprintListStack(projectID: ProjectID): List<AppRoute> = listOf(AppRoute.SprintList(projectID))
+
+/**
+ * The Sprints tab's stack for one open sprint: [sprintListStack] with the detail on top.
+ *
+ * One definition for [Router.openSprint] and for the `sprint/<pid>/<sid>` link. The two
+ * disagreed until a shell test asserted the stack after a tap, which is the only reason
+ * to trust a single source here: the shell renders a tab root and a pushed root
+ * identically, so nothing about the pixels would ever have shown the drift.
+ */
+fun sprintStack(projectID: ProjectID, sprintID: SprintID): List<AppRoute> =
+    sprintListStack(projectID) + AppRoute.SprintDetail(projectID, sprintID)

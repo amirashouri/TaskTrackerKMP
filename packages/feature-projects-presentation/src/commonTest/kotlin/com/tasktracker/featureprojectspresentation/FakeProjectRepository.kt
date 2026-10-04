@@ -597,6 +597,8 @@ fun testWorkItem(
     rank: Int = 0,
     resolvedAt: Instant? = null,
     id: WorkItemID = randomWorkItemID(),
+    storyPoints: Int? = null,
+    sprintID: SprintID? = null,
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -607,10 +609,49 @@ fun testWorkItem(
     priority = priority,
     assignee = assignee,
     dueDate = dueDate,
+    storyPoints = storyPoints,
+    sprintID = sprintID,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,
     resolvedAt = resolvedAt,
+)
+
+/**
+ * A sprint fixture, on a fixed clock.
+ *
+ * The defaults are a **two-week window in March 2026**, chosen so that the window crosses
+ * no month boundary and `LocalDate(2026, MARCH, 2)` is what [sprintLocalDate] has to
+ * produce in UTC. A sprint whose end lands in a different month would make a date
+ * conversion test pass or fail on which month it happened to pick, which is not what any
+ * of these tests are about.
+ */
+@Suppress("LongParameterList")
+fun testSprint(
+    projectID: ProjectID,
+    name: String = "Sprint 1",
+    goalStoryPoints: Int = 10,
+    startDate: Instant = Instant.parse("2026-03-02T00:00:00Z"),
+    endDate: Instant = Instant.parse("2026-03-16T00:00:00Z"),
+    owner: String? = "Amir",
+    isFinished: Boolean = false,
+    finishedAt: Instant? = null,
+    id: SprintID = randomSprintID(),
+): Sprint = Sprint(
+    id = id,
+    projectID = projectID,
+    name = name,
+    goalStoryPoints = goalStoryPoints,
+    startDate = startDate,
+    endDate = endDate,
+    owner = owner,
+    isFinished = isFinished,
+    // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
+    // own invariant would make every test using it assert against a state the store cannot
+    // hold — which is a green test and a useless one.
+    finishedAt = finishedAt ?: if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
+    createdAt = FIXED,
+    updatedAt = FIXED,
 )
 
 private val FIXED: Instant = Instant.fromEpochSeconds(1_760_000_000)

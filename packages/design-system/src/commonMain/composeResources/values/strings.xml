@@ -69,6 +69,7 @@
     <string name="tab_projects">Projects</string>
     <string name="tab_board">Board</string>
     <string name="tab_backlog">Backlog</string>
+    <string name="tab_sprints">Sprints</string>
     <string name="tab_settings">Settings</string>
 
     <!-- Connectivity, as the Settings Connection section reports it. -->
@@ -102,6 +103,52 @@
     <string name="common_cancel">Cancel</string>
     <string name="common_delete">Delete</string>
     <string name="common_save">Save</string>
+
+    <!--
+      The date field. Three words of chrome and then the calendar's own vocabulary.
+
+      Month names and weekday abbreviations are here rather than formatted from a locale,
+      and the reason is that a design system has no locale: it draws tokens, and the only
+      string layer in the build is this file. A month name assembled by `DateTimeFormatter`
+      inside `commonMain` would be correct on one host and hardcoded English on the other
+      the moment a resource bundle disagreed with it. Twenty-one strings buy the whole
+      calendar a translator can reorder, which is the property that matters.
+
+      The weekday abbreviations are three letters rather than one, because a `TT_WEEKDAY_INITIALS`
+      truncation of "Wednesday" is "W" and so is "Thursday": a header where two columns are
+      indistinguishable is a header that cannot be read, and the cell widths are wide enough
+      for three letters at `captionSmall`.
+    -->
+    <string name="date_placeholder">No date</string>
+    <string name="date_next_month">Next month</string>
+    <string name="date_previous_month">Previous month</string>
+    <string name="month_january">January</string>
+    <string name="month_february">February</string>
+    <string name="month_march">March</string>
+    <string name="month_april">April</string>
+    <string name="month_may">May</string>
+    <string name="month_june">June</string>
+    <string name="month_july">July</string>
+    <string name="month_august">August</string>
+    <string name="month_september">September</string>
+    <string name="month_october">October</string>
+    <string name="month_november">November</string>
+    <string name="month_december">December</string>
+    <string name="weekday_monday">Mon</string>
+    <string name="weekday_tuesday">Tue</string>
+    <string name="weekday_wednesday">Wed</string>
+    <string name="weekday_thursday">Thu</string>
+    <string name="weekday_friday">Fri</string>
+    <string name="weekday_saturday">Sat</string>
+    <string name="weekday_sunday">Sun</string>
+
+    <!--
+      Story points on a card. Two readings, because the number and its absence are different
+      information: "5" is what somebody decided a thing was worth, and "—" is that nobody has
+      said. Rendering the absent case as "0" would be a lie that also sums wrong.
+    -->
+    <string name="story_points_format">%1$d pts</string>
+    <string name="story_points_unestimated">—</string>
 
     <!--
       The project list, and the row under it.
@@ -205,6 +252,64 @@
     <string name="archive_empty_title">Nothing filed away</string>
     <string name="archive_empty_body">Tasks you file away appear here, grouped by the month they left the flow.</string>
     <string name="archive_reopen">Reopen</string>
+
+    <!--
+      The sprint list, the sprint editor, the sprint's own screen, and its summary.
+
+      "Points" is the unit noun everywhere, not "story points" spelled out: it is the noun
+      `story_points_format` already uses for a single card's estimate, and a list row
+      saying "5 / 12 story points" beside a card saying "5 pts" reads as two different
+      units.
+
+      The progress reading is "%1$d of %2$d" rather than a percentage. A percentage claims
+      a precision the underlying number does not have - 5 of 12 is 42%, which is not a
+      measurement of anything, and a sprint at 42% invites a question the data cannot
+      answer. The two numbers are what was committed and what was delivered.
+
+      The hit/miss trio is three strings rather than one with a boolean, because the third
+      state is real: a sprint with no goal has not missed it, and a two-string summary
+      would have to claim one of the two.
+    -->
+    <string name="sprint_list_title">Sprints</string>
+    <string name="sprint_list_empty_title">No sprints yet</string>
+    <string name="sprint_list_empty_body">A sprint is a short window of work with a goal measured in story points.</string>
+    <string name="sprint_list_new">New Sprint</string>
+    <string name="sprint_open">Open</string>
+    <string name="sprint_finished">Finished</string>
+    <string name="sprint_progress">%1$d of %2$d pts</string>
+    <string name="sprint_editor_new_title">New Sprint</string>
+    <string name="sprint_editor_edit_title">Edit %1$s</string>
+    <string name="sprint_name_label">Name</string>
+    <string name="sprint_goal_label">Goal (pts)</string>
+    <string name="sprint_goal_placeholder">Points to aim for</string>
+    <string name="sprint_start_label">Start</string>
+    <string name="sprint_end_label">End</string>
+    <string name="sprint_owner_label">Owner</string>
+    <string name="sprint_owner_none">Anyone can finish this sprint</string>
+    <string name="sprint_owner_only">Only %1$s can finish this sprint</string>
+    <string name="sprint_end_before_start">A sprint cannot end before it starts.</string>
+    <string name="sprint_end_before_start_field">The end date is before the start date.</string>
+    <string name="sprint_finish">Finish Sprint</string>
+    <string name="sprint_reopen">Reopen Sprint</string>
+    <string name="sprint_items_title">In this sprint</string>
+    <string name="sprint_items_empty">No tasks have been put into this sprint yet.</string>
+    <string name="sprint_committed">Committed</string>
+    <string name="sprint_achieved">Achieved</string>
+    <string name="sprint_view_summary">View Summary</string>
+
+    <!--
+      The summary of a finished sprint. Two sections rather than one list with a badge,
+      because the split is the question the summary exists to answer: what was delivered
+      against what was promised.
+    -->
+    <string name="sprint_summary_title">%1$s Summary</string>
+    <string name="sprint_summary_done">Delivered</string>
+    <string name="sprint_summary_incomplete">Not delivered</string>
+    <string name="sprint_summary_empty">This sprint held no tasks, so there is nothing to report.</string>
+    <string name="sprint_summary_hit">Goal met</string>
+    <string name="sprint_summary_miss">Goal missed</string>
+    <string name="sprint_summary_no_goal">No goal was set for this sprint</string>
+    <string name="sprint_summary_none">None</string>
 
     <!-- The project picker and the new-project sheet. -->
     <string name="picker_title">Choose a Project</string>

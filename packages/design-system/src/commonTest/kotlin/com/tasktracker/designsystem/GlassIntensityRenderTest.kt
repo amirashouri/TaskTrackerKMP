@@ -281,12 +281,11 @@ class GlassIntensityRenderTest {
  * `format` is a JVM-flavoured convenience that does not resolve the same way on Kotlin/Native,
  * and a hex dump that only compiles on one of the three hosts is a hex dump two hosts cannot
  * print in a failure message — which is the only place it is used.
+ *
+ * Now [hex] in `PixelContrast.kt`, which this file's own copy shadowed. A file-private
+ * extension and an `internal` one with the same receiver and arguments are a *redeclaration
+ * conflict*, not a preference, so two files could not both keep it.
  */
-private fun Color.hex(): String {
-    fun channel(value: Float): String =
-        (value * 255f).toInt().coerceIn(0, 255).toString(16).padStart(2, '0')
-    return "#${channel(red)}${channel(green)}${channel(blue)}"
-}
 
 /** One channel of a [Color], hex, for a failure message that has to name the mix. */
 private fun hex(value: Float): String = (value * 255f).toInt().coerceIn(0, 255).toString(16)

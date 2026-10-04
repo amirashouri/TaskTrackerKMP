@@ -1,6 +1,7 @@
 package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.WorkItemStatus
 
@@ -31,6 +32,7 @@ enum class AppTab(val wireValue: String) {
     Projects("projects"),
     Board("board"),
     Backlog("backlog"),
+    Sprints("sprints"),
     Settings("settings"),
     ;
 
@@ -43,7 +45,7 @@ enum class AppTab(val wireValue: String) {
      */
     val isProjectScoped: Boolean
         get() = when (this) {
-            Board, Backlog -> true
+            Board, Backlog, Sprints -> true
             Projects, Settings -> false
         }
 
@@ -69,6 +71,18 @@ sealed interface AppRoute {
     /** The month-grouped history of a project's finished and closed work. */
     data class Archive(val projectID: ProjectID) : AppRoute
 
+    /**
+     * A project's sprints, as the Sprints tab's own root.
+     *
+     * A route rather than tab-only, for the same reason [Board] and [Backlog] are: the shell
+     * renders a tab root and a pushed root identically, so naming the root is what keeps the
+     * stack a tab switch, a link and a tapped row all produce the same one. See [sprintStack].
+     */
+    data class SprintList(val projectID: ProjectID) : AppRoute
+
+    /** One sprint: its window, its tasks, and the summary a finished one is read through. */
+    data class SprintDetail(val projectID: ProjectID, val sprintID: SprintID) : AppRoute
+
     data class WorkItemEditor(
         val projectID: ProjectID,
         val workItemID: WorkItemID?,
@@ -84,6 +98,8 @@ val AppRoute.projectIDOrNull: ProjectID?
         is AppRoute.Board -> projectID
         is AppRoute.Backlog -> projectID
         is AppRoute.Archive -> projectID
+        is AppRoute.SprintList -> projectID
+        is AppRoute.SprintDetail -> projectID
         is AppRoute.WorkItemEditor -> projectID
         AppRoute.Settings -> null
     }
@@ -98,12 +114,20 @@ val AppRoute.projectIDOrNull: ProjectID?
  * without switching which project's board the tabs show. Collapsing the two into one
  * accessor is the easy mistake, and it would silently move the Board and Backlog tabs
  * out from under the user.
+ *
+ * **[SprintList] and [SprintDetail] both select**, and not by accident. A sprints tab that
+ * did not become the active project would show nothing at all — the screen reads the
+ * router's active project, and a deep link that arrived before any project had been opened
+ * would leave it with `null` to render. So a link into a sprint is also a decision about
+ * which project the other project-scoped tabs are showing, exactly as [Archive] is.
  */
 val AppRoute.selectsActiveProject: ProjectID?
     get() = when (this) {
         is AppRoute.Board -> projectID
         is AppRoute.Backlog -> projectID
         is AppRoute.Archive -> projectID
+        is AppRoute.SprintList -> projectID
+        is AppRoute.SprintDetail -> projectID
         is AppRoute.WorkItemEditor, AppRoute.Settings -> null
     }
 

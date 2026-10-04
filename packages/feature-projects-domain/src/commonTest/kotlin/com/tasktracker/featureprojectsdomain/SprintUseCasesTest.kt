@@ -1,0 +1,331 @@
+package com.tasktracker.featureprojectsdomain
+
+import com.tasktracker.core.AppError
+import com.tasktracker.core.TestDateProvider
+import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
+import kotlinx.coroutines.test.runTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.time.Instant
+
+/**
+ * The sprint use cases' decisions, tested against the fake port.
+ *
+ * ## The window rule is the one worth testing twice over
+ *
+ * `UpdateSprint` reads the sprint before it patches, because `end < start` is a relation
+ * between two fields and a partial edit may name only one of them. That read is the whole
+ * reason this use case is more than a forward, so it gets the sharper of the two tests:
+ * moving the *start* past an untouched end must be refused, which a naive
+ * "refuse only when both arguments are present" check would let through.
+ *
+ * Note the fake's `updateSprint` deliberately does **not** make that check — `:packages:
+ * feature-projects-data` does, inside the transaction, and a fake that copied the check
+ * would mean this test could not tell which layer refused.
+ */
+class SprintUseCasesTest {
+
+    private val now: Instant = Instant.fromEpochSeconds(1_760_000_000)
+    private val march2: Instant = Instant.parse("2026-03-02T00:00:00Z")
+    private val march16: Instant = Instant.parse("2026-03-16T00:00:00Z")
+
+    private fun create(repository: FakeProjectRepository) = CreateSprint(repository, TestDateProvider(now))
+
+    private suspend fun sprintIn(
+        repository: FakeProjectRepository,
+        goalStoryPoints: Int = 10,
+        startDate: Instant = march2,
+        endDate: Instant = march16,
+        owner: String? = "Amir",
+    ): Pair<Project, Sprint> {
+        val project = repository.seedProject()
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = goalStoryPoints,
+            startDate = startDate,
+            endDate = endDate,
+            owner = owner,
+        )
+        return project to sprint
+    }
+
+    // MARK: CreateSprint
+
+    @Test
+    fun `a valid sprint is created with its name trimmed`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "  Sprint 7  ",
+            goalStoryPoints = 12,
+            startDate = march2,
+            endDate = march16,
+            owner = "Grace",
+        )
+
+        assertEquals("Sprint 7", sprint.name)
+        assertEquals(12, sprint.goalStoryPoints)
+        assertEquals("Grace", sprint.owner)
+        assertEquals(1, repository.sprints(project.id).size)
+    }
+
+    @Test
+    fun `a blank name is refused before anything is stored`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        assertFailsWith<AppError.Validation> {
+            create(repository)(
+                projectID = project.id,
+                name = "   ",
+                startDate = march2,
+                endDate = march16,
+            )
+        }
+        assertTrue(repository.sprints(project.id).isEmpty())
+    }
+
+    @Test
+    fun `a sprint ending before it starts is refused on creation`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        val failure = assertFailsWith<AppError.Validation> {
+            create(repository)(
+                projectID = project.id,
+                name = "Sprint 7",
+                startDate = march16,
+                endDate = march2,
+            )
+        }
+        // The message is the whole of what the model above shows a user, so it is asserted
+        // rather than left to be whatever the string happened to say.
+        assertEquals("A sprint cannot end before it starts.", failure.message)
+        assertTrue(repository.sprints(project.id).isEmpty())
+    }
+
+    @Test
+    fun `a one-day sprint is not backwards`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        // Inclusive on both ends, matching `Sprint.isActiveOn`. A strict comparison would
+        // make the shortest possible sprint unsaveable, which is the kind of rule that only
+        // shows up after somebody tries to book a one-day sprint.
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Bug bash",
+            startDate = march2,
+            endDate = march2,
+        )
+        assertEquals(march2, sprint.endDate)
+    }
+
+    @Test
+    fun `a negative goal is floored rather than refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Sprint 7",
+            goalStoryPoints = -5,
+            startDate = march2,
+            endDate = march16,
+        )
+
+        // Floored, matching `Sprint`'s own `init` and the store's `updateSprint`: a value
+        // that arrived from a server is normalised in place so every later reader sees one
+        // number rather than a sprint holding a goal no screen can render.
+        assertEquals(0, sprint.goalStoryPoints)
+    }
+
+    @Test
+    fun `a blank owner is nobody rather than whitespace`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Sprint 7",
+            startDate = march2,
+            endDate = march16,
+            owner = "   ",
+        )
+
+        // `null` is unowned, which anyone may finish — see `Sprint`'s KDoc. Storing the
+        // whitespace would make "am I the owner" answer false for a sprint showing a blank
+        // owner field.
+        assertNull(sprint.owner)
+    }
+
+    // MARK: UpdateSprint
+
+    @Test
+    fun `a rename leaves the rest of the sprint alone`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository)
+
+        val updated = UpdateSprint(repository, TestDateProvider(now))(id = sprint.id, name = "Sprint 8")
+
+        assertEquals("Sprint 8", updated.name)
+        assertEquals(10, updated.goalStoryPoints)
+        assertEquals("Amir", updated.owner)
+        assertEquals(march2, updated.startDate)
+        assertEquals(march16, updated.endDate)
+    }
+
+    @Test
+    fun `an untouched end is not dragged along by a moved start`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository, startDate = march2, endDate = march16)
+        val update = UpdateSprint(repository, TestDateProvider(now))
+
+        // Only the start is mentioned, and it lands after the end that was left alone. This
+        // is the edit that a check reading only its own arguments would accept, and it is
+        // the one that produces a sprint which is never active — which is why this use case
+        // reads before it patches.
+        val failure = assertFailsWith<AppError.Validation> {
+            update(id = sprint.id, startDate = Instant.parse("2026-03-20T00:00:00Z"))
+        }
+        assertEquals("A sprint cannot end before it starts.", failure.message)
+        // Refused, so the store still holds the original window.
+        assertEquals(march2, repository.sprint(sprint.id)!!.startDate)
+        assertEquals(march16, repository.sprint(sprint.id)!!.endDate)
+    }
+
+    @Test
+    fun `an untouched start is not dragged along by a moved end`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository, startDate = march2, endDate = march16)
+
+        assertFailsWith<AppError.Validation> {
+            UpdateSprint(repository, TestDateProvider(now))(
+                id = sprint.id,
+                endDate = Instant.parse("2026-03-01T00:00:00Z"),
+            )
+        }
+        assertEquals(march16, repository.sprint(sprint.id)!!.endDate)
+    }
+
+    @Test
+    fun `both ends moved together are accepted`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository)
+        val june = Instant.parse("2026-06-01T00:00:00Z")
+
+        val updated = UpdateSprint(repository, TestDateProvider(now))(
+            id = sprint.id,
+            startDate = june,
+            endDate = Instant.parse("2026-06-15T00:00:00Z"),
+        )
+
+        assertEquals(june, updated.startDate)
+    }
+
+    @Test
+    fun `editing a sprint that no longer exists is refused`() = runTest {
+        val repository = FakeProjectRepository()
+
+        // `Storage`, not a silent no-op: the caller asked to edit something, and reporting
+        // success for an edit that was never applied is the combination a user reports as a
+        // bug with no reproduction.
+        assertFailsWith<AppError.Storage> {
+            UpdateSprint(repository, TestDateProvider(now))(
+                id = com.tasktracker.core.randomSprintID(),
+                name = "Sprint 8",
+            )
+        }
+    }
+
+    @Test
+    fun `handing a sprint to nobody is an instruction rather than an absence`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository, owner = "Amir")
+
+        val updated = UpdateSprint(repository, TestDateProvider(now))(
+            id = sprint.id,
+            owner = Patch.Of("   "),
+        )
+
+        // Normalised to `null` on the way through, so the stored value is "unowned" and not
+        // a whitespace owner that would fail an equality check against every real name.
+        assertNull(updated.owner)
+    }
+
+    @Test
+    fun `an unmentioned owner is left alone`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository, owner = "Amir")
+
+        val updated = UpdateSprint(repository, TestDateProvider(now))(id = sprint.id, name = "Sprint 8")
+
+        assertEquals("Amir", updated.owner)
+    }
+
+    // MARK: Finish, reopen, delete
+
+    @Test
+    fun `finishing dates the sprint from the injected clock`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository)
+
+        val finished = FinishSprint(repository, TestDateProvider(now))(sprint.id)
+
+        assertTrue(finished.isFinished)
+        assertEquals(now, finished.finishedAt)
+    }
+
+    @Test
+    fun `reopening clears the finish date`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository)
+        FinishSprint(repository, TestDateProvider(now))(sprint.id)
+
+        // The half that gets forgotten: `reconcileFinishedAt` keeps a date on an open
+        // sprint otherwise, and the state it rules out is a finished date on a sprint that
+        // is not finished.
+        val reopened = ReopenSprint(repository, TestDateProvider(now))(sprint.id)
+
+        assertTrue(!reopened.isFinished)
+        assertNull(reopened.finishedAt)
+    }
+
+    @Test
+    fun `deleting a sprint stamps it from the injected clock`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Abandoned",
+            startDate = march2,
+            endDate = march16,
+        )
+
+        DeleteSprint(repository, TestDateProvider(now))(sprint.id)
+
+        assertTrue(repository.sprints(project.id).isEmpty())
+    }
+
+    @Test
+    fun `a store refusal reaches the caller as itself`() = runTest {
+        val repository = FakeProjectRepository()
+        repository.failure = AppError.Validation("'Sprint 3' is still open.")
+
+        // The use cases do not wrap the store's refusals, and the reason is the one
+        // `ProjectModel.onFailure` documents: `AppError.message` is already the user-facing
+        // sentence, and a use case that reworded it would create a second source of truth
+        // for text `:packages:core` owns.
+        val failure = assertFailsWith<AppError.Validation> {
+            FinishSprint(repository, TestDateProvider(now))(com.tasktracker.core.randomSprintID())
+        }
+        assertEquals("'Sprint 3' is still open.", failure.message)
+    }
+}

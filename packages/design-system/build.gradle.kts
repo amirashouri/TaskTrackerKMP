@@ -5,6 +5,19 @@ plugins {
 dependencies {
     commonMainImplementation(project(":packages:core"))
 
+    // For `TTDateField`, and specifically for `LocalDate` rather than for anything else in
+    // this file. A day grid is a calendar, and a calendar needs calendar arithmetic: which
+    // weekday a month starts on, how long the month is, what the previous month is. Written
+    // by hand over `kotlin.time.Instant` that means a UTC-midnight conversion, a leap-year
+    // rule and a month-length table — and an `Instant` that lands on the *previous* day in
+    // any negative-offset zone, which is how a date field ends up a day out.
+    //
+    // This is a library dependency rather than a module edge, so `allowedLibraryTable` and
+    // `packageOwnersTable` are unchanged and neither architecture check reads it. It is
+    // declared here rather than inherited for the same reason `:packages:domain` declares its
+    // own `kotlinx.serialization`: a KMP `implementation` dependency is not `api`.
+    commonMainImplementation(libs.kotlinx.datetime)
+
     // :packages:design-system is the single owner of Compose resources for the
     // whole build. The convention plugin deliberately does not add
     // compose.components.resources, because each module that configures

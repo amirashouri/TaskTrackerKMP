@@ -23,8 +23,6 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.pow
-import kotlin.math.round
 import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -144,7 +142,7 @@ class AvatarContrastTest {
             // differencing the two frames at the same offset rather than by looking for a colour
             // that contrasts with the fill. The colour reported is still the *inked* frame's, so
             // what is measured is what was rasterised and not a reconstruction of it.
-            val glyph = interior.maxBy { abs(luminance(inked[it]) - luminance(blank[it])) }
+            val glyph = interior.maxBy { abs(relativeLuminance(inked[it]) - relativeLuminance(blank[it])) }
             val ink = inked[glyph]
 
             initials to Reading(ink = ink, fill = fill, ratio = contrastRatio(ink, fill))
@@ -218,35 +216,6 @@ class AvatarContrastTest {
     )
 
     private data class Reading(val ink: Color, val fill: Color, val ratio: Double)
-
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val lighter = max(luminance(first), luminance(second))
-        val darker = minOf(luminance(first), luminance(second))
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    private fun luminance(color: Color): Double {
-        fun channel(value: Float): Double {
-            val c = value.toDouble()
-            return if (c <= 0.03928) c / 12.92 else ((c + 0.055) / 1.055).pow(2.4)
-        }
-        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) +
-            0.0722 * channel(color.blue)
-    }
-
-    private fun Color.hex(): String = "#" + channel(red) + channel(green) + channel(blue)
-
-    private fun channel(value: Float): String =
-        round(value * 255f).toInt().toString(16).padStart(2, '0')
-
-    /**
-     * Two decimal places, written out: `String.format` is JVM-only and does not compile for the
-     * iOS target, so the house spelling of this is arithmetic.
-     */
-    private fun Double.ratioText(): String {
-        val hundredths = round(this * HUNDREDTHS).toInt()
-        return "${hundredths / HUNDREDTHS}.${(hundredths % HUNDREDTHS).toString().padStart(2, '0')}"
-    }
 
     private companion object {
         val APPEARANCES = listOf(ThemeScheme.Light, ThemeScheme.Dark)

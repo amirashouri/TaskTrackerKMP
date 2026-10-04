@@ -1,6 +1,7 @@
 package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomWorkItemID
@@ -13,9 +14,11 @@ import kotlin.test.assertTrue
 
 private const val PROJECT_UUID = "11111111-1111-1111-1111-111111111111"
 private const val ITEM_UUID = "22222222-2222-2222-2222-222222222222"
+private const val SPRINT_UUID = "33333333-3333-3333-3333-333333333333"
 
 private val projectID = ProjectID(PROJECT_UUID)
 private val itemID = WorkItemID(ITEM_UUID)
+private val sprintID = SprintID(SPRINT_UUID)
 
 class DeepLinkParserTest {
 
@@ -63,6 +66,48 @@ class DeepLinkParserTest {
     @Test
     fun `rejects an archive link with a malformed project id`() {
         assertNull(DeepLinkParser.route("tasktracker://archive/not-a-uuid"))
+    }
+
+    @Test
+    fun `links to a project's sprints and installs the list`() {
+        val link = DeepLinkParser.route("tasktracker://sprints/$PROJECT_UUID")
+        assertEquals(AppTab.Sprints, link?.tab)
+        // The list is *pushed* rather than implied, even though it is the tab's root: a
+        // deep link that arrives with a sprint open has to have a back that returns here
+        // rather than to nothing, and a stack that cannot hold its own root cannot do that.
+        assertEquals(listOf(AppRoute.SprintList(projectID)), link?.path)
+        assertNull(link?.route)
+    }
+
+    @Test
+    fun `links to one sprint with the list underneath it`() {
+        val link = DeepLinkParser.route("tasktracker://sprint/$PROJECT_UUID/$SPRINT_UUID")
+        assertEquals(AppTab.Sprints, link?.tab)
+        assertEquals(
+            listOf(AppRoute.SprintList(projectID), AppRoute.SprintDetail(projectID, sprintID)),
+            link?.path,
+        )
+        // Presented, not pushed: the list has to be beneath it for there to be anything to
+        // go back to, and `route` is what the shell animates in over the top.
+        assertEquals(AppRoute.SprintDetail(projectID, sprintID), link?.route)
+    }
+
+    @Test
+    fun `rejects a sprint link with a malformed sprint id`() {
+        assertNull(DeepLinkParser.route("tasktracker://sprint/$PROJECT_UUID/not-a-uuid"))
+    }
+
+    @Test
+    fun `a sprint link with no sprint segment is refused rather than opening the list`() {
+        // Not degraded to the list. A shared link that quietly lands somewhere other than
+        // where it points is worse than one that does nothing, because the user cannot tell
+        // the difference between the two until the screen is already wrong.
+        assertNull(DeepLinkParser.route("tasktracker://sprint/$PROJECT_UUID"))
+    }
+
+    @Test
+    fun `rejects a sprints link with a malformed project id`() {
+        assertNull(DeepLinkParser.route("tasktracker://sprints/not-a-uuid"))
     }
 
     @Test
@@ -269,9 +314,53 @@ class RouterTest {
 
         router.push(AppRoute.Settings, onTab = AppTab.Settings)
         router.push(AppRoute.Board(projectID), onTab = AppTab.Projects)
+        // The fifth tab's own stack. Without this the new path would be a field nothing
+        // wrote to and nothing read, which is indistinguishable from a tab that cannot be
+        // navigated within — and both look exactly like "the tab works" in a smoke test.
+        router.push(AppRoute.SprintDetail(projectID, sprintID), onTab = AppTab.Sprints)
 
         assertEquals(listOf(AppRoute.Board(projectID)), router.path(AppTab.Projects))
         assertEquals(listOf(AppRoute.Settings), router.path(AppTab.Settings))
+        assertEquals(
+            listOf(AppRoute.SprintDetail(projectID, sprintID)),
+            router.path(AppTab.Sprints),
+        )
+    }
+
+    @Test
+    fun `a sprint route becomes the active project`() {
+        // `selectsActiveProject`, and the reason both sprint routes select: the tab reads
+        // the router's active project, so a deep link arriving before any project had been
+        // opened would otherwise leave it with nothing to render.
+        assertEquals(projectID, AppRoute.SprintList(projectID).selectsActiveProject)
+        assertEquals(
+            projectID,
+            AppRoute.SprintDetail(projectID, sprintID).selectsActiveProject,
+        )
+        assertNull(AppRoute.Settings.selectsActiveProject)
+    }
+
+    @Test
+    fun `sprints is project-scoped`() {
+        assertTrue(AppTab.Sprints.isProjectScoped)
+        // And the tab bar's order, which is the enum's declaration order. Sprints sits
+        // between Backlog and Settings because it is a project-scoped work surface and
+        // Settings keeps the last position it has always had.
+        assertEquals(
+            listOf(
+                AppTab.Projects,
+                AppTab.Board,
+                AppTab.Backlog,
+                AppTab.Sprints,
+                AppTab.Settings,
+            ),
+            AppTab.entries.toList(),
+        )
+    }
+
+    @Test
+    fun `the sprints tab is reachable from its wire value`() {
+        assertEquals(AppTab.Sprints, AppTab.fromWireValue("sprints"))
     }
 
     @Test
@@ -414,6 +503,62 @@ class RouterTest {
 
         assertTrue(router.path(AppTab.Backlog).isEmpty())
         assertEquals(otherProjectID, router.activeProjectID)
+    }
+
+    @Test
+    fun `openProject on the sprints tab switches to it and lands on the list root`() {
+        val router = Router()
+        router.enterMain()
+        router.openSprint(projectID, sprintID)
+
+        router.openProject(otherProjectID, inTab = AppTab.Sprints)
+
+        // Choosing a project says *which* project, never *which* sprint inside it — so the
+        // detail is discarded. The root is *named* rather than left empty, because that is
+        // what `openSprint` and the `sprints/<pid>` link both install; the shell renders a
+        // tab root and a pushed root identically, so only the stack distinguishes them.
+        assertEquals(sprintListStack(otherProjectID), router.path(AppTab.Sprints))
+        assertEquals(otherProjectID, router.activeProjectID)
+        assertEquals(AppTab.Sprints, router.selectedTab)
+    }
+
+    @Test
+    fun `openSprint installs the list beneath the detail`() {
+        val router = Router()
+        router.enterMain()
+
+        router.openSprint(projectID, sprintID)
+
+        assertEquals(
+            listOf(AppRoute.SprintList(projectID), AppRoute.SprintDetail(projectID, sprintID)),
+            router.path(AppTab.Sprints),
+        )
+        assertEquals(AppTab.Sprints, router.selectedTab)
+        assertEquals(projectID, router.activeProjectID)
+    }
+
+    @Test
+    fun `a tapped sprint and a deep-linked sprint leave the same stack`() {
+        // The invariant that was broken: the row tap pushed the detail onto whatever the tab
+        // had, while the link installed both routes, and the rendered screen was identical
+        // either way. Asserted here rather than only in a Compose test so the drift is
+        // caught in this module.
+        val tapped = Router().apply {
+            enterMain()
+            openSprint(projectID, sprintID)
+        }
+        val linked = Router().apply {
+            enterMain()
+            open("tasktracker://sprint/$PROJECT_UUID/$SPRINT_UUID")
+        }
+
+        assertEquals(
+            listOf(AppRoute.SprintList(projectID), AppRoute.SprintDetail(projectID, sprintID)),
+            linked.path(AppTab.Sprints),
+        )
+        assertEquals(tapped.path(AppTab.Sprints), linked.path(AppTab.Sprints))
+        assertEquals(tapped.selectedTab, linked.selectedTab)
+        assertEquals(tapped.activeProjectID, linked.activeProjectID)
     }
 
     @Test

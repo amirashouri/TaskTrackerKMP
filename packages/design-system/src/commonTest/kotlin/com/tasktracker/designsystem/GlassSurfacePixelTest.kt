@@ -24,10 +24,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -375,55 +373,6 @@ class GlassSurfacePixelTest {
                 ),
         )
     }
-
-    private fun pixelAt(
-        pixels: PixelMap,
-        x: Float,
-        y: Float,
-    ): Color = pixels[
-        x.toInt().coerceIn(0, pixels.width - 1),
-        y.toInt().coerceIn(0, pixels.height - 1),
-    ]
-
-    private fun channelDistance(a: Color, b: Color): Float = max(
-        max(abs(a.red - b.red), abs(a.green - b.green)),
-        abs(a.blue - b.blue),
-    )
-
-    // --- WCAG -------------------------------------------------------------------------------------
-
-    private fun over(foreground: Color, alpha: Float, background: Color): Color = Color(
-        red = foreground.red * alpha + background.red * (1f - alpha),
-        green = foreground.green * alpha + background.green * (1f - alpha),
-        blue = foreground.blue * alpha + background.blue * (1f - alpha),
-        alpha = 1f,
-    )
-
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val lighter = max(relativeLuminance(first), relativeLuminance(second))
-        val darker = min(relativeLuminance(first), relativeLuminance(second))
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    private fun relativeLuminance(color: Color): Double =
-        0.2126 * linearise(color.red) +
-            0.7152 * linearise(color.green) +
-            0.0722 * linearise(color.blue)
-
-    private fun linearise(channel: Float): Double {
-        val value = channel.toDouble()
-        return if (value <= 0.03928) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)
-    }
-
-    private fun Double.ratioText(): String {
-        val hundredths = kotlin.math.round(this * 100).toInt()
-        return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
-    }
-
-    private fun Color.hex(): String =
-        "#" + listOf(red, green, blue).joinToString("") {
-            kotlin.math.round(it * 255f).toInt().coerceIn(0, 255).toString(16).padStart(2, '0')
-        }
 
     private companion object {
         const val TEXT_MINIMUM = 4.5

@@ -93,8 +93,8 @@ fun ProjectsHost(
         // was built to give.
         //
         // Only `Board` is a destination of *this* tab: `openProject` pushes nothing else, and
-        // the routes that do belong to the Board, Backlog and Archive tabs are not pushed
-        // onto Projects by anything the shell does. The list is the tab's root, so an
+        // the routes that do belong to the Board, Backlog, Sprints and Archive tabs are not
+        // pushed onto Projects by anything the shell does. The list is the tab's root, so an
         // unrecognised or not-yet-implemented case falls back to the root rather than to a
         // blank frame — visible, and honest about not being that screen.
         when (val route = navigation.projectsPath.lastOrNull()) {
@@ -119,6 +119,8 @@ fun ProjectsHost(
             null,
             is AppRoute.Backlog,
             is AppRoute.Archive,
+            is AppRoute.SprintList,
+            is AppRoute.SprintDetail,
             is AppRoute.WorkItemEditor,
             AppRoute.Settings,
             -> ProjectsListDestination(

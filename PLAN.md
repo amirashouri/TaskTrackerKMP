@@ -40,7 +40,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 | [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
 | [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
-| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port done |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port + design system + models and screens + the Sprints tab (23.5.1–23.5.4, 23.6.1–23.6.6) done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3907,28 +3907,271 @@ one was a real trap:
 
 ### 23.4 Design system
 
-- [ ] **23.4.1 `TTDateField`.** The first date input in the app. A field that opens a day grid,
+**26 new tests, 14 mutations run and 14 caught.** `:packages:design-system` is 119 tests on
+the JVM with the same 2 red-by-design `GlassSurfacePixelTest` failures; the table is in 23.4.7
+and the measurements are in 23.4.6.
+
+- [x] **23.4.1 `TTDateField`.** The first date input in the app. A field that opens a day grid,
   built from `ttGlassSurface` and existing spacing/radius/typography tokens — **no new styling
   primitives**, and if the grid needs a colour that does not exist, it is added as a token with
   its measurement rather than inlined at the call site. Ships with the light/dark contrast
   test the other new surfaces get.
-- [ ] **23.4.2 A story-points presentation.** A numeral in `ttTypography.caption`, deliberately
+- [x] **23.4.2 A story-points presentation.** A numeral in `ttTypography.caption`, deliberately
   not a pill: fifty pills on a board is a wall of badges, and the number is a quantity rather
   than a status. Test: it renders at the caption style and does not take the card's tint.
 
+#### 23.4.3 Three decisions taken before writing, and one that was not free
+
+**`LocalDate`, and `kotlinx-datetime` enters `:design-system`.** A day grid is a calendar, and
+a calendar needs calendar arithmetic: which weekday a month starts on, how long the month is,
+what the previous month is. `Sprint.startDate` is an `Instant`, and an `Instant` cannot answer
+"the 4th" without a time zone to interpret it in — and the answer changes with the device, so a
+sprint stored as an instant begins on a different day for a user who flies. The conversion
+belongs at the edge in 23.5, where the zone is a decision somebody actually made.
+
+The dependency is a **library**, not a module edge: `verifyArchitectureGraph` filters
+`filterIsInstance<ProjectDependency>()`, so `allowedLibraryTable` and `packageOwnersTable` are
+unchanged and neither architecture check reads it. It is declared in the module's own build
+file for the reason `:packages:domain` declares its own `kotlinx.serialization` — a KMP
+`implementation` dependency is not `api`.
+
+**Field, popup and grid are one component.** 23.4.1 asks for "a field that opens a day grid",
+and splitting the grid out as the real component leaves the popup wiring bespoke and re-decided
+by every caller. 23.5 gets one call site per sprint date.
+
+**`TTStoryPoints(points: Int?)` owns the unestimated reading.** `null` means nobody has said;
+`0` means somebody said zero, which is a real answer — a one-line chore worth nothing is worth
+nothing. Rendering the absent case as "0" would throw that decision away *and* sum wrong. A card
+and a backlog row disagreeing about what a dash means is the failure the component prevents.
+
+**The one that cost something: the weekday header is `ttBodyLabel`, not `ttLabelSecondary`.**
+`ttLabelSecondary` measures **3.30:1** on this popup's base in light appearance, and the header
+is `captionSmall`, so it needs the 4.5:1 that text below 18sp gets. The obvious choice — the
+secondary token, because the header is a label rather than content — would have shipped a
+failing number on the one row that says what each column *is*. `ttBodyLabel` is documented for
+the opaque `ttSurface()` the popup's base is built from, so it is the token that matches the
+surface rather than the one that matches the role. Measured, both appearances, in 23.4.6.
+
+#### 23.4.4 The calendar arithmetic is pure, and that is what made it testable
+
+`ttMonthGrid`, `ttShiftMonth`, `ttWeekdayOrder` are functions over `LocalDate` with no frame in
+them. Every interesting thing about a date grid is a question about which day lands in which
+cell, and reading that off a rendered frame means comparing a screenshot to a picture of a
+calendar — which is how a grid that is off by one cell survives review, because "the 1st is
+under a T" is not a sentence anybody says out loud.
+
+Four things this bought, each of which is a test that could not otherwise exist:
+
+- **`ttMonthGrid` is always 6x7.** 42 cells, padded with `null`. A month that needs five rows
+  still gets six. The alternative makes the popup **change height** between months, so stepping
+  from a 28-day February to a 31-day March moves the control under the user's finger.
+- **`null` means "not this month", not "greyed out".** Those cells are exactly how a user picks
+  the 1st of March while looking at February, and grey reads as *disabled*, which is a different
+  promise from "belongs to another month".
+- **The grid is always Monday-first *relative to a parameter*.** Both `MONDAY` and `SUNDAY` are
+  exercised by every test, and the header row and the cells below it come from one
+  `firstDayOfWeek`, so they cannot disagree about which way round the week runs.
+- **Month length is asked of the calendar, never counted.** kotlinx-datetime 0.8.0 has no
+  `daysInMonth`, so it is "the day before the first of the next month". A hard-coded
+  `31, 28, 31, 30…` array is a leap-year bug waiting for February — the one month where the two
+  answers differ. The tests pin 2024 (29), 2026 (28), 2000 (29, the 400 rule) and **1900 (28,
+  the century rule a naive rule gets wrong)**.
+
+#### 23.4.5 The three measurement bugs this phase found, and what each one was
+
+All three produced a **green or plausible-looking number that was measuring the wrong thing**,
+which is the failure mode `AGENTS.md` rule 2 exists to prevent. They are recorded because the
+first two would have shipped had the assertions been looser.
+
+**A `LocalDensity` override silently halves every node's reported bounds.** `getBoundsInRoot()`
+reports each node in *that node's own* density. Overriding `LocalDensity` to 2 leaves the root
+reporting density-1 coordinates and the card and the text reporting half of theirs — and the
+scale derived from the root then maps every sample onto the wrong half of the frame. The scan
+came back reading the card's own fill gradient as if it were the numeral's ink, and reported
+**1.56:1** for black-on-white text. `GlassSurfacePixelTest` overrides density legitimately, to
+measure a 0.5dp rim that is genuinely not drawn at density 1; copying that idiom here was the
+error. A `caption` numeral at density 1 is 14 device pixels tall and does have fully-covered
+interior pixels, so the override bought nothing.
+
+**Modifier order decided what "the card" was.** `padding` *before* `ttGlassCard` puts the
+padding outside the glass, so the card shrink-wraps to the numeral, and a background sample
+taken 4dp from the card's top-left lands in the padding rather than on the fill. The card then
+measured the canvas and the ink measured the canvas. Glass first, padding inside.
+
+**Ink on a filled cell needs the *cell* as its background.** With the popup's fill as the
+reference, the strongest pixel in a selected day's bounds is the **accent disc**, not the white
+numeral — white `#ffffff` is nearly this popup's `#f4f4f9` while the disc is not. So the
+selected-day assertion measured accent-against-popup and reported 7.19:1, which is about the
+right number for entirely the wrong pair.
+
+Two further measurement notes, both now in the code: the fill is sampled from the surface's
+**horizontal centre**, because a sample 4dp in from a corner lands outside a 16dp rounded rect
+and reads the page behind it — invisible in light, where the glass composites to the same white,
+and a 0% ink coverage in dark. And the pill test measures **ink coverage of the component's own
+box**: a numeral covers 26% and a capsule covers very nearly 100%, so the threshold sits between
+them by a wide margin and depends on neither the font, the density nor the rasteriser. There is
+no `Background` semantics property in Compose Multiplatform 1.12.1 to assert against, so this
+had to come out of the frame.
+
+#### 23.4.6 What the components measure, on both rasterisers
+
+`DateFieldContrastTest` and `StoryPointsTest` print every figure. Measured on the JVM, on the
+popup's own lens-over-`ttSurface()` frame (`#f4f4f9` light, `#2c2c2e` dark) and on a real glass
+card:
+
+| | light | dark |
+| --- | --- | --- |
+| an unselected day (`ttLabel`) on the popup | `#000000` on `#f4f4f9` — **19.15:1** | `#ffffff` on `#2c2c2e` — **13.94:1** |
+| the weekday header (`ttBodyLabel`) on the popup | `#1c1c1e` on `#f4f4f9` — **15.52:1** | `#f2f2f7` on `#2c2c2e` — **12.49:1** |
+| the selected day (`ttOnAccent`) on the accent disc | `#ffffff` on `#39577d` — **7.41:1** | `#ffffff` on `#636c76` — **5.33:1** |
+| an estimate (`ttLabel`) on a glass card | `#000000` on `#c2ccd7` — **12.91:1** | `#ffffff` on `#1c1f22` — **16.56:1** |
+| the accent disc against its surround | **0.73** apart | **0.33** apart |
+| the estimate's glyphs' share of its own box | **26%** | **31%** |
+
+Every one of these is the **composite the app ships**, not a token on a token: a day numeral on
+a translucent lens over an opaque surface is a value composited under another translucent layer,
+which `AGENTS.md`'s scope table sends to pixels unconditionally. The last two rows are not
+contrast at all and are the ones a ratio cannot produce: a disc painted the same colour as its
+surround satisfies every ratio above and is still a calendar with no visible selection, and a
+pill is still a pill at 21:1.
+
+**Two of the four contrast figures are also what makes 23.4.2's "no tint" claim structural.**
+`TTStoryPoints` has no `tint` parameter, so no call site *can* pass one — but a parameter can
+be added, and a component can pick up a tint without one being passed. So the estimate is
+rendered twice over the *same* card, once plain and once tinted hard with the accent, and the
+assertion is that **the ink does not move**: `#000000` both times in light, `#ffffff` both times
+in dark, and 0.48 and 0.63 away from the accent itself.
+
+#### 23.4.7 Mutation evidence — 14 run, 14 caught
+
+Driven by `tools/mutate_23_4.py`, which excludes the two red-by-design `GlassSurfacePixelTest`
+tests **by name** — they are red on every run, so counting them would make every mutation look
+caught and the table meaningless. That is the same trap 23.1 M6 and 23.3 M12 fell into.
+
+| # | the deliberate defect | outcome |
+| --- | --- | --- |
+| D1 | the grid drops its last week | caught by `a month grid is six rows of seven and never anything else` |
+| D2 | the leading-blank count off by one | caught by `the leading blanks are exactly the days before the first of the month` |
+| D3 | February a day short, so a leap 29th falls off the grid | caught by `February is 29 days in a leap year and 28 in a common one` |
+| D4 | stepping a month steps 30 *days* | caught by `stepping a month lands on the first and crosses a year boundary` |
+| D5 | the weekday header ignoring the grid's week start | caught by `every day sits in the column whose header names its own weekday` |
+| D6 | the header truncated to one character — two `W`s | caught by `no two weekday columns read the same` |
+| D7 | a day cell sized to its numeral, ~20dp | caught by `a day cell is at least the platform minimum tap target` |
+| D8 | an unselected day on the secondary ink | caught by `an unselected day clears the text bar on the popup's own fill` |
+| D9 | a selected day in `ttLabel` rather than `ttOnAccent` | caught by `the selected day's ink is the same in both appearances` — **see below** |
+| D10 | the weekday header back on `ttLabelSecondary` | caught by `the weekday header clears the text bar on the popup's own fill` |
+| D11 | an unestimated card drawn at the estimate's size | caught by `an unestimated card reads a step below an estimated one` |
+| D12 | proportional digits, so 9 → 10 reflows the row | caught by `an estimate uses monospaced digits` |
+| D13 | an estimate painted in the card's accent | caught by `an estimate is never painted in the accent over a tinted card` |
+| D14 | the pill 23.4.2 rejected | caught by `the estimate is text over nothing rather than text inside a pill` |
+
+**D9 is the one worth reading.** It was **not caught** on the first run, and the reason is the
+most interesting result in this phase. Replacing `ttOnAccent` with `ttLabel` on the selected day
+left *every* contrast assertion green: black on the light accent is **7.5:1** and white on the
+dark accent **5.33:1**, both clear of 4.5:1. The defect was real — the token whose entire job
+is to name the one fill in this app that carries text had been dropped — and **no ratio could see
+it**. What it actually breaks is that `ttLabel` *follows the appearance* (black in light, white
+in dark) while `ttOnAccent` does not, so the pairing is right by luck rather than by
+construction, and it stops being legible the moment the dark accent is lightened. So
+`the selected day's ink is the same in both appearances` was added, and it is that assertion —
+not any contrast figure — which now holds the token in place. **A measurement passing and the
+pixels still being wrong is a real state, and it is invisible unless somebody looks for it.**
+
+D14 also took three attempts, and the first two **did not compile**: one wrapped the numeral in
+a `Box` without closing the brace, the next passed a second `modifier =` to a function that
+already takes one. Neither is evidence about anything — 23.2's N3 and 23.3's M4 are the same
+lesson, and it is now four phases running. The third edits the modifier chain that is already
+there, which is also how the pill would actually be added.
+
+#### 23.4.8 A build constraint that only the iOS host found
+
+Three test names carried a comma, and the JVM compiled them without complaint:
+
+```
+e: Name contains illegal characters: ",".
+> Task :packages:design-system:compileTestKotlinIosSimulatorArm64 FAILED
+```
+
+Kotlin/Native mangles test function names into exported symbols, and a backticked name may not
+carry a comma there. The JVM is permissive, so `jvmTest` alone would have been green and the
+iOS build broken. This is the counterpart to the rule already in this file about iOS test entry
+points, and it is now recorded here because it is the same species of problem: **a test name is
+source, and the Native target's rules for it are stricter than the JVM's.**
+
+#### 23.4.9 The contrast maths, folded in — and what 23.4.9 got wrong when it said "follow up"
+
+The note originally written here said the WCAG relative-luminance formula existed **four** times,
+and left the folding in as a follow-up. Both halves were wrong. Counting it properly found
+**nine** files carrying it, and the suite was not one implementation copied nine times — it was
+**two implementations disagreeing**:
+
+| file | sRGB breakpoint |
+| --- | --- |
+| `AccentContrastTest`, `AvatarContrastTest`, `BannerContrastTest`, `BodyLabelContrastTest`, `GlassSurfacePixelTest`, `PinnedAppearanceTest` | **`0.03928`** |
+| `GlassFillContrastTest`, `TabLensContrastTest` | **`0.04045`** |
+
+So a token sitting in the narrow band between the two breakpoints would have measured
+differently depending on which suite asked. Both values are in circulation in accessibility
+references, which is exactly how that happens. `0.03928` is kept, on the majority's side, and
+changing it moved **no** test — which is recorded as the reason the choice is not load-bearing
+today, not as a reason it does not matter.
+
+They also disagreed on `over`'s **parameter order**, in three shapes:
+`over(foreground, alpha, background)` in three files, `over(bottom, top, alpha)` in
+`GlassFillContrastTest`, and a two-argument `over(top, bottom)` that read the alpha off `top` in
+`PinnedAppearanceTest`. One signature now: `over(top, alpha, bottom)`, plus a two-argument
+overload for the "the top carries its own alpha" case, which is a genuinely different operation
+rather than a different spelling.
+
+**And there was a ninth `Color.hex()`** — a *file-private top-level* extension in
+`GlassIntensityRenderTest`, which the survey missed because it carries no `relativeLuminance`.
+A file-private extension and an `internal` one with the same receiver and arguments are a
+redeclaration conflict, not a preference, so the compiler found it.
+
+The refactor is a **pure deletion**: the shared helpers are top-level internal functions with the
+names the call sites already used, so no call site moved. The diff is nine deleted helper blocks
+and one rewritten file, and there is no opportunity to change an argument at the same time as
+the implementation underneath it.
+
+**The conversion went wrong exactly where the old signatures were ambiguous, and the test that
+already existed caught it.** `GlassFillContrastTest`'s two call sites were rewritten as
+`over(variant.color, LENS_ALPHA, Color.White)` — which reads correctly against the *old*
+spelling and puts the lens where the base belongs, so the composite came out `#eff1f4` and the
+lens measured **1.13:1**. That is the argument-order hazard made real rather than theoretical,
+and it is the strongest argument for unifying the signature instead of overloading it.
+
+Two process notes, because both cost time and both are the same lesson as the 23.2 N3 and 23.3
+M4 ones:
+
+- **The first attempt at this was a scripted brace-matching deletion, and it ate declarations.**
+  `AccentContrastTest` declares a `data class Variant` *between* two of its helper functions, so
+  removing `linearise` also removed the class and four `CANVAS_*` constants. The build caught it
+  immediately and `git checkout` restored all eight files, which were clean and tracked —
+  but `AGENTS.md` warns about exactly this ("do not use broad scripted search-and-replace in
+  this tree") for a reason that is now measured rather than assumed. The rest was done by hand.
+- **`PinnedAppearanceTest`'s pair was `Float`, not `Double`,** and became `Double` with it. Four
+  call sites moved from `4.5f` to `4.5`. Nothing else changed, and the thresholds sit far enough
+  from the measured values that `Float` precision was never load-bearing.
+
+Baseline is unchanged: **1186 JVM / 1158 iOS, the same 7 failures**, and `:packages:design-system`
+is **120 tests with the same 2 red-by-design `GlassSurfacePixelTest` failures**.
+
 ### 23.5 Presentation
 
-- [ ] **23.5.1 `SprintListModel` + `SprintListScreen`.** Each row: name, date range, progress
+The first half of 23.5: the sprint list, the editor, the sprint's own screen, and its summary.
+**23.5.1–23.5.4 landed; 23.5.5–23.5.7 are still open** and are listed as such below.
+
+- [x] **23.5.1 `SprintListModel` + `SprintListScreen`.** Each row: name, date range, progress
   as `achieved / goal`, and an open/finished badge. Model is `remember`-keyed and observed with
   `DisposableEffect` like every other model in `NavigationHost` — that pair is what stops a
   second live observer being left watching the store.
-- [ ] **23.5.2 `SprintEditorSheet`.** Create and edit in one sheet, mirroring
+- [x] **23.5.2 `SprintEditorSheet`.** Create and edit in one sheet, mirroring
   `WorkItemEditorSheet`'s nullable-id shape: name, goal points, start and end through
   `TTDateField`, owner. Validates end ≥ start before it will save.
-- [ ] **23.5.3 `SprintDetailModel` + `SprintDetailScreen`.** Goal, dates, owner, the committed
+- [x] **23.5.3 `SprintDetailModel` + `SprintDetailScreen`.** Goal, dates, owner, the committed
   and achieved totals, the sprint's items with their points, and a **Finish** button enabled
   only for the owner.
-- [ ] **23.5.4 `SprintSummaryScreen`.** Rendered from `SprintSummary`, so there is no arithmetic
+- [x] **23.5.4 `SprintSummaryScreen`.** Rendered from `SprintSummary`, so there is no arithmetic
   in the view: done items, incomplete items, achieved points, and whether the goal was hit. The
   hit/miss is **read from the value**, never recomputed here.
 - [ ] **23.5.5 Story points in the work item editor**, plus `WorkItemEditorModel` carrying the
@@ -3941,38 +4184,314 @@ one was a real trap:
   place, two callers.
 - [ ] **23.5.7 Story points on the board card and the backlog row**, through 23.4.2.
 
+#### 23.5.1–23.5.4 What landed, and the four decisions that were not free
+
+**Sprint use cases went into the domain, not into the models.** 23.3 gave the port nine sprint
+writes and nothing above it had a caller, so the presentation models were the only thing that
+could reach them. That is the shape every other write in this feature was moved *away* from, and
+the deciding question was where a decision a view makes belongs: `SprintUseCases.kt` holds
+`CreateSprint`, `UpdateSprint`, `FinishSprint`, `ReopenSprint`, `DeleteSprint`, following
+`ProjectUseCases`. The validation split is deliberate and is **not** "the same checks twice" —
+the use case answers "is this edit well-formed" and the store answers "may this project hold it",
+which only the transaction can know. The one-open rule stays in `RoomProjectRepository` where 23.3
+put it.
+
+**`UpdateSprint` reads the sprint before it patches it, and that is the whole reason it is more
+than a forward.** `end < start` is a relation between *two* fields, and a partial edit may name
+only one of them. Refusing only when both arguments are present accepts exactly the edit easiest to
+make by accident — moving the start past an end the caller never mentioned. The first version of
+this was the argument-only check and mutation **N2** killed it; the test that does it is
+`an untouched start is not dragged along by a moved end`. The read costs one call and is still
+cheaper than a write that fails inside a transaction after the outbox has been touched.
+
+**The `Instant ↔ LocalDate` conversion is one pair of functions at the model edge, and the
+rounding direction is a decision that was argued rather than defaulted.** 23.4 deferred the
+conversion here precisely because "which day is this instant" is a real answer that depends on
+the zone. Both directions round **toward the start of the day**, so a sprint stored at 09:00 on
+the 4th reads back as the 4th, and a user who picks 18 October is never shown the 19th. Rounding
+the end *up* to the end of its day is the other defensible choice and it is the wrong one for a
+form. The consequence is stated rather than hidden: `Sprint.isActiveOn` compares instants, so the
+final day belongs to the window for display and to the day-after for `isActiveOn`. That asymmetry
+is in the entity and is not this function's to fix.
+
+Every other date test in 23.5 uses UTC, so a suite of them would never notice a conversion that
+ignored the zone it was handed — which is why `a row's dates are read in the model's zone and not
+in UTC's` uses a fixed UTC+11 offset and the same instant that is the 16th in UTC. That test is
+what makes mutation **P6** (`TimeZone.UTC` hardcoded inside `sprintInstant`) caught rather than
+green.
+
+**`ttDateLabel` became public, and `ttDateRange` was added next to it.** A sprint's window is
+rendered *outside* the field that picked it, so a list row saying "4 Oct – 18 Oct 2026" has to
+format a `LocalDate` and there was no way to do it that reused this file's month-name lookup.
+Formatting it again at the call site is how a date grid and the row above it end up disagreeing
+about what a month is called. The range prints the year **once** when both ends share one:
+"4 Oct 2026 – 18 Oct 2026" is two facts where the reader wanted one, and the repetition makes a
+single-year sprint look as though it spans a year boundary — which is precisely what a reader of
+a sprint window is checking for. The rule is same-*year*, not same-*month*, because a window
+crossing months is common while one crossing years is not.
+
+#### 23.5.4 Why the verdict is a function and not a `when` inside the screen
+
+23.5.4's promise is that the hit/miss is **read from `SprintSummary.didHitGoal`** and never
+recomputed in the view. A `when` written inline in a composable states that only a rendered frame
+could check, and a rendered frame can check the *wording* but not the *source* of the verdict.
+`sprintVerdict(didHitGoal: Boolean?)` is therefore a pure function over the flag alone — no
+`achievedStoryPoints`, no `goalStoryPoints` — and `SprintVerdictTest` asserts that for all 169
+goal/achieved pairs the flag and the comparison a screen would have made **never disagree**. If a
+summary could carry numbers and a flag that disagree, there would be something to recompute, and a
+view recomputing from the numbers would be right some of the time and wrong the rest with no test
+noticing. Mutations **P15** (the `null` state collapsed into `Miss`) and **P16** (the `true` state
+collapsed into `Miss`, which is the `>` that gets "exactly at the goal" wrong) are both caught.
+
+#### 23.5.7 deferred, and `ProjectBoardScreen.kt` untouched
+
+`ProjectBoardScreen.kt` and `ProjectBoardModel.kt` belong to the concurrent workstream, so the
+board-card half of 23.5.7 is deferred rather than contended. Nothing in 23.5.1–23.5.4 needed
+either file: `SprintListModel` filters by the `sprintID` the store hands it rather than reaching
+into the board's own grouping, which is what made that possible.
+
+**Preview fixtures only.** 23.8 forbids extending the store's first-launch sample data while
+`SeedingTest` has three documented failures, so `ViewPreviewData.sprints` is preview-only and
+`PreviewRepository` still defaults to no sprints — the board previews assert on `workItems` having
+nothing in a sprint, and a fixture that moved a card into one would take the board's empty column
+with it.
+
+#### 23.5.5 Verification
+
+**24 mutations, 24 caught** (`tools/mutate_23_5.py`), and **three of the twenty-four were wrong
+mutations on the first pass** — which is the number worth recording, because each was a way of
+reporting a green that meant nothing:
+
+- **N4** was originally "drop the `normaliseName` call", and recorded NOT CAUGHT. The fake's
+  `createSprint` normalises the name too, exactly as `RoomProjectRepository` does — so deleting
+  the use case's copy of a check the layer below already performs is invisible through this port.
+  That is the fake doing its job, and it means "delete the redundant call" is not a mutation when
+  something below you already does the same thing. It was replaced with a name-shouting defect,
+  which is caught.
+- **P9** was originally `isCreating || false || (…)`, and `false || (x)` is `x`. A runner that
+  cannot tell an equivalent expression from a real defect will happily report its own arithmetic
+  mistake as a hole in the tests. The second attempt (`get() = isCreating`) was REJECTED AT COMPILE
+  TIME because it orphaned the four `original*` vals this build treats as errors. The third
+  short-circuits the condition, which compiles and is a real defect.
+- **P11** originally compared the draft's dates as **instants**, on the theory that the stored
+  instant might not be at midnight and the `LocalDate` comparison might be hiding something. It
+  recorded NOT CAUGHT because `sprintInstant` round-trips exactly, so the two comparisons agree
+  for every input: an equivalent mutation, not a defect. The `LocalDate` choice is still the right
+  one and is still asserted directly in `an unchanged edit is not a change` — but it cannot be
+  mutated into failing, because it makes no observable difference. That is now said in the runner
+  rather than left as a surprise.
+- **P6** was first written as `date.atTime(12, 0).toInstant(timeZone)` and was REJECTED AT COMPILE
+  TIME — those are `expect`-declared extensions, so the call needs imports the file does not have.
+  A mutation that does not compile proves nothing, which is now a third reported outcome rather
+  than a silent "nothing ran". This is the fifth such case across the project (23.2 N3, 23.3 M4,
+  23.4 D14 ×2, 23.5 P6/P9).
+
+**68 new tests**: `SprintUseCasesTest` 17, `SprintDetailModelTest` 15, `SprintListModelTest` 14,
+`SprintEditorModelTest` 13, `SprintVerdictTest` 5, plus 4 added to `DateFieldTest`. Measured from
+the JUnit XML and cross-checked against `@Test`, never from `grep -c`.
+
+Baseline: **1254 JVM / 1226 iOS, the same 7 failures** — the 3 `SeedingTest` in
+`:packages:feature-projects-data`, the 2 red-by-design `GlassSurfacePixelTest` in
+`:packages:design-system`, and the 2 `:shared-ui` ones. Up from 1186 / 1158, which is `+68` on each
+host and matches the new-test count exactly.
+
 ### 23.6 The entry point
 
 This is the part that makes any of it reachable, and it is listed on its own because a feature
 with no entry point is a feature nobody can find.
 
-- [ ] **23.6.1 `AppTab.Sprints`.** The enum entry, `wireValue = "sprints"`, and
+- [x] **23.6.1 `AppTab.Sprints`.** The enum entry, `wireValue = "sprints"`, and
   **`isProjectScoped = true`** — the switch over `AppTab` in `Routes.kt` is exhaustive, so
   leaving it out is a compile error rather than a silently unscoped tab.
-- [ ] **23.6.2 `tabTitle` and `tabIcon`.** Both are exhaustive `when`s in `NavigationHost.kt`;
+- [x] **23.6.2 `tabTitle` and `tabIcon`.** Both are exhaustive `when`s in `NavigationHost.kt`;
   add `Res.string.tab_sprints` and `ttTabIcons.sprints`. The mapping back to the native app's
   SF Symbols is recorded in `ttTabIcons.mapping`, and this one has no counterpart there — say so
   in that table rather than leaving a blank.
-- [ ] **23.6.3 `AppRoute.SprintList` / `AppRoute.SprintDetail`**, and both route accessors:
+- [x] **23.6.3 `AppRoute.SprintList` / `AppRoute.SprintDetail`**, and both route accessors:
   `projectIDOrNull` returns the project, and `selectsActiveProject` returns it too, because a
   sprint tab that did not become the active project would show nothing.
-- [ ] **23.6.4 `SprintsDestination` in `NavigationHost`**, plus the `TabRoot` branch, the
+- [x] **23.6.4 `SprintsDestination` in `NavigationHost`**, plus the `TabRoot` branch, the
   project picker and the empty state — mirroring `ProjectScopedTabScreen`, including
   `seedSampleDataIfNeeded`, so landing on the tab first does not show an empty store.
-- [ ] **23.6.5 Deep links.** `tasktracker://sprints/<pid>` and `tasktracker://sprint/<pid>/<sid>`
+- [x] **23.6.5 Deep links.** `tasktracker://sprints/<pid>` and `tasktracker://sprint/<pid>/<sid>`
   in the link grammar, so the new tab does not become the one destination a shared link cannot
   reach.
-- [ ] **23.6.6 Check five tabs at phone width.** `TTGlassTabBar` has laid out four. A fifth
+- [x] **23.6.6 Check five tabs at phone width.** `TTGlassTabBar` has laid out four. A fifth
   segment is the first thing in this app to have been looked at at exactly one size, and the
   Android host's viewport is already known to be smaller than the other two — so the bar is
   checked in a preview and the tab-width assertion is written against a **fixed** expectation
   rather than whatever the host happens to produce.
 
+#### 23.6.6 The measurement, and why the width is fixed
+
+`TTGlassTabBar` has never laid out a fifth segment, and 23.6.6 is the first look at one. The
+numbers below are **JVM, 390dp, density 1**, and they are frozen into the test's KDoc and its
+failure messages rather than recomputed per host:
+
+```
+bar            x 16.0..374.0 dp, 358px   (= 390 − 2 × ttSpacing.tabBarEdgeInset 16)
+segments       71, 71, 70, 70, 70 px     (= (358 − 2 × hairlineInset 3) / 5 = 70.4)
+captions       projects 47, board 34, backlog 46, sprints 41, settings 47 px
+caption boxes  71, 71, 70, 70, 70 px
+```
+
+**Five tabs fit, with headroom**: the narrowest segment is 70px against the 44px minimum hit
+target both platforms' accessibility guidance names, read from `ttSpacing.iconButtonSize` so
+the assertion tracks the token. The 71/71/70/70/70 spread is the integer division of 70.4
+across five segments, and the test allows a 1px spread rather than demanding five equal
+numbers the layout cannot produce.
+
+Three assertions, and each is **structural** — none of them reads a pixel, because nothing
+here survives being read off the modifier chain:
+
+- the tab count is the **literal 5**, not `AppTab.entries.size`, so a sixth tab is a design
+  decision that has to change the number on purpose;
+- the segment spread is at most 1px;
+- each caption's drawn width is at most its own box.
+
+The third is the one that carries the finding. The caption is `maxLines = 1` with **no**
+`overflow`, so a label too wide for its segment is **clipped, not ellipsised** — a defect that
+reads as a slightly wrong word rather than as an error, and which no assertion about
+`hasText` would ever catch, because the text is still in the semantics tree. `sprints` at 41px
+in a 70px box has 29px to spare, and the two labels that were already tightest (`board` 34px,
+`projects`/`settings` 47px) are unchanged by this phase.
+
+**The shell is constrained, not the window resized.** `setUpShell` takes a `width` and lays
+the app inside a `Box` of it. The alternative — a density override — was rejected on purpose:
+it leaves the root at the host's density and everything below it at the forced one, so
+`getBoundsInRoot()` reports **two coordinate systems on one frame**, and a test written
+against it measures nothing. Relatedly, `setContent` can only be called once per test, so a
+scenario needing two widths has to be two tests rather than one test with two layouts; the
+width became a parameter of the setup helper instead.
+
+#### 23.6.7 One definition for a sprint, because two of them disagreed
+
+The first run of `aSprintOpensAndALinkLandsOnIt` failed with
+
+```
+expected:<[SprintList(...), SprintDetail(...)]> but was:<[SprintDetail(...)]>
+```
+
+and the cause was not the test. **The deep link and the row tap each had their own idea of
+the stack a sprint is opened on.** The link installed `[SprintList, SprintDetail]`; the tap
+called `push(SprintDetail)` onto whatever the tab had, which after a plain tab switch is
+nothing, so it installed `[SprintDetail]`.
+
+What makes this worth writing down is that **the two render identically**. `NavigationHost`
+draws `TabRoot` only when the stack is empty (`if (pushed == null || editorOverProjectRoot)`),
+and `SprintDetailScreen` is opaque, so a stack with the list beneath it and a stack without
+produce the same pixels. A screenshot could never have found this, and neither could any
+assertion about what is on screen. It was found only because the test asserted the **router's
+state**.
+
+The fix is one definition used by both entry points — `sprintListStack` for the root and
+`sprintStack` for the open sprint, both in `Router.kt`, called by `Router.openProject`,
+`Router.openSprint` and `DeepLinkParser` — plus one atomic transition, `Router.openSprint`.
+Not two `push`es: `RouterState` publishes through a single `StateFlow` precisely so a
+transition moving several fields at once is never observable half-applied, and two pushes
+would publish a state in which the list is a *pushed* route for one frame.
+
+**The KDoc written for this was wrong and was corrected.** It claimed "a detail with no list
+beneath it is a screen with no back". There is no `BackHandler` anywhere in `NavigationHost`
+and `SprintDetailScreen` has no back button — the tab bar is how every project-scoped screen
+in this app is left, board and backlog included. The real reason is state consistency, and the
+comment now says that.
+
+The alternative shapes were weighed rather than skipped. Two `push`es at the call site is a
+smaller diff and leaves the link and the tap as two statements that can drift again. Mirroring
+the board's `editorOverProjectRoot` builds and discards a sprint-list model behind an opaque
+screen and adds a second tab-specific carve-out to the shell's render condition. Making the
+root *implied* — no `SprintList` in any stack, back via `popToRoot` — matches only the board
+tab's comment and contradicts what `board/<pid>` and `backlog/<pid>` both do, since each
+installs its root route.
+
+#### 23.6.8 18 tests, and the one that was not measuring anything
+
+**18 new tests**, all green on all three hosts:
+
+| Module | Count | What |
+| --- | --- | --- |
+| `:packages:routing` | 11 | the tab and its `wireValue`, `isProjectScoped`, both link forms, both refusal cases, `openProject`, `openSprint`, and the tap/link agreement |
+| `:shared-ui` | 5 | two sprint scenarios, five-tabs-at-390dp, plus 2 in `TabPresentationTest` |
+| `:packages:design-system` | 2 | the glyph's rising bars and its non-frame shape |
+
+**13 mutations, 13 caught** (`tools/mutate_23_6.py`, 0 compile-rejected). **Two were wrong on
+the first pass**, which is the number that matters:
+
+- **U1 went green.** Handing the Sprints tab the **Projects glyph** failed nothing: the design
+  system asserts its own drawings and never asks which tab a glyph belongs to, and the shell
+  scenarios assert labels and roles but not drawings. Two 22dp glyphs differing by one bar are
+  the same blob at review size, so no screenshot test would have caught it either. The fix was
+  a new test, not a new assertion: `tabIcon` is now `internal` rather than `private`, and
+  `TabPresentationTest` asserts the two properties that pin the mapping **without restating
+  it** — that no two tabs share a glyph, and that the set handed out is `ttTabIcons.all`. A
+  table of `AppTab.Sprints to ttTabIcons.sprints` in a test would be a second copy of the
+  thing being checked and would keep passing after the production mapping changed.
+- **S6 was rejected at compile time** on the first attempt: `parseSprintID` returns
+  `SprintID?`, so reading the project id out of the wrong slot produced a nullable where a
+  non-null was required. Rejecting the defect proves nothing, and the runner reports that
+  outcome separately for exactly this reason — the sixth such case in the project after 23.2
+  N3, 23.3 M4, 23.4 D14 ×2 and 23.5 P6/P9.
+
+S1–S3 are the three ways the sprint stack can be wrong, and they are the reason the runner
+leads with them. **Only S1 was caught before the runner existed, and it was caught by a Compose
+test rather than by the module that owns the stack.**
+
+One honest limit: **`openProject` on the Sprints tab is covered only by a routing test.** The
+Compose scenario reaches Sprints by tab tap, not by `openProject`, so mutation S3 is caught in
+`:packages:routing` and nowhere else. That is the right module for it — the shell has no way
+to reach that branch — but it means the assertion is a pure unit test with no rendered
+counterpart.
+
+#### 23.6.9 Baseline
+
+`./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin --continue`
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1254 | **1272** | 7, unchanged |
+| iOS simulator | 1226 | **1244** | 7, unchanged |
+
++18 on both hosts, from the JUnit XML the build writes, cross-checked against `@Test`:
+`RoutingTest.kt` 63 `@Test` / 63 results, `TabIconsGeometryTest.kt` 9 / 9, and shared-ui's 33
+as 27 (`TaskTrackerAppJvmTest`) + 2 (`ProjectPickerSheetRenderTest`) + 2 (`TabBarScreenshotTest`)
++ 2 (`TabPresentationTest`).
+
+The 7 failures are the documented ones, identical by name on both hosts: 3 × `SeedingTest`
+in `:packages:feature-projects-data`, 2 × `GlassSurfacePixelTest` in `:packages:design-system`
+(red by design, Phase 22), and 2 × `:shared-ui` (`aChosenThemeOutlivesTheProcess`,
+`theBoardReturnsToTheList`).
+
+**Android host** (`:shared-ui`, documented-red): 31 tests, the same 7 failures as before this
+phase — 2 × `ProjectPickerSheetRenderTest` (`Build.FINGERPRINT` is null under Robolectric) and
+5 × `TaskTrackerAppAndroidHostTest` in the viewport/layout class ("Failed to inject touch
+input… could not find node", "is not displayed"). **All five sprint and tab tests pass there**,
+including the three new scenarios; the sprint reads in `ProjectFakes.kt` were made real rather
+than left stubbed, which is what lets them.
+
+Two counts in the tree were stale after the fifth glyph and were corrected in this change: the
+`TabIcons` class docs ("four glyphs", "four names") and the test name
+`every glyph fills the grid so the four read as one set`. Two comments in `NavigationHost` said
+a **fifth** tab would be a compile error; with five tabs present they now say **sixth**.
+
+#### 23.6.10 What 23.6.6 did not change
+
+`TTGlassTabBar`'s geometry is **untouched** — no segment count, no inset, no hairline. 23.8
+said not to, and the measurement is the reason that was the right instruction: five segments
+fit at 390dp with 26px of headroom over the 44px minimum, so there was no pressure to change
+anything. `setUpShell`'s `width` parameter constrains the **test**, not the bar.
+
+`ProjectBoardScreen.kt` and `ProjectBoardModel.kt` belong to the concurrent workstream and were
+not touched. No sprint rows were added to the sample-data fixture (23.8), so `SeedingTest`'s
+three documented failures are exactly as readable as they were.
+
 ### 23.7 Verification
 
-- [ ] **23.7.1 Mutation-check every new test** before it is believed, per `AGENTS.md` rule 1 —
+- [x] **23.7.1 Mutation-check every new test** before it is believed, per `AGENTS.md` rule 1 —
   including the pure ones, which are the ones most likely to pass for the wrong reason.
-- [ ] **23.7.2 The deciding command**, unchanged:
+  23.6's run is `tools/mutate_23_6.py`: **13 mutations, 13 caught, 0 compile-rejected**, with
+  two wrong on the first pass (U1 green, S6 compile-rejected) — see §23.6.8.
+- [x] **23.7.2 The deciding command**, unchanged:
 
   ```bash
   ./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
@@ -3982,8 +4501,11 @@ with no entry point is a feature nobody can find.
   in `:domain`, the new port stayed in `feature-projects-domain`, and no record leaked into
   presentation. If a sprint needs a new dependency edge, `allowedLibraryTable` and
   `packageOwnersTable` are updated **deliberately**, in the same change, with the reason.
-- [ ] **23.7.3 Baseline from the JUnit XML**, cross-checked against `@Test`, in the same change
-  as each test — never from `grep -c`.
+  23.6 added one library edge — `shared-ui` → `kotlinx-datetime` — which is a library and so
+  leaves both tables untouched. All four tasks passed; see §23.6.9.
+- [x] **23.7.3 Baseline from the JUnit XML**, cross-checked against `@Test`, in the same change
+  as each test — never from `grep -c`. After 23.6: **JVM 1272 / iOS 1244, 7 failures each**,
+  up +18 from 1254 / 1226. See §23.6.9 for the per-module cross-check.
 
 ### 23.8 Two things not to do while this is in flight
 

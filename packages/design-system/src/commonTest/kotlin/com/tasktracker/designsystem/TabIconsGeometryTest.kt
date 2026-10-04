@@ -64,14 +64,14 @@ class TabIconsGeometryTest {
     }
 
     @Test
-    fun `every glyph fills the grid so the four read as one set`() {
+    fun `every glyph fills the grid so the five read as one set`() {
         // A glyph that covers a fraction of the others' area renders as a smaller one, which is
-        // the failure that survives review: nothing is wrong with any of the four drawings, they
+        // the failure that survives review: nothing is wrong with any of the drawings, they
         // are just not the same size.
         //
         // The bound is loose on purpose. The gear is *legitimately* the largest — a cog fills
         // the cap height, a tray is wide and squat — so the test asserts the spread is bounded
-        // rather than that the four are equal. Tightening it to equality would mean shrinking
+        // rather than that they are equal. Tightening it to equality would mean shrinking
         // the gear for no reason.
         val extents = ttTabIcons.all.map { icon ->
             val points = icon.points()
@@ -130,11 +130,21 @@ class TabIconsGeometryTest {
     @Test
     fun `every native symbol has a glyph standing in for it`() {
         // The table is the record that these are deliberate stand-ins for specific SF Symbols
-        // rather than four drawings somebody liked. A glyph added without a row here fails
-        // this; a row whose name is not a symbol the native app uses fails nothing, which is why
-        // the names are asserted as literals rather than merely as a count.
+        // rather than drawings somebody liked. A glyph added without a row here fails this; a
+        // row whose name is not a symbol the native app uses fails nothing, which is why the
+        // names are asserted as literals rather than merely as a count.
+        //
+        // [ttTabIcons.NO_COUNTERPART] is expected rather than tolerated: Sprints is new in
+        // this port, so it stands in for nothing, and the table saying so is the difference
+        // between "nothing was decided" and "somebody forgot".
         assertEquals(
-            listOf("square.grid.2x2", "rectangle.split.3x1", "tray", "gearshape"),
+            listOf(
+                "square.grid.2x2",
+                "rectangle.split.3x1",
+                "tray",
+                ttTabIcons.NO_COUNTERPART,
+                "gearshape",
+            ),
             ttTabIcons.mapping.keys.toList(),
         )
         assertEquals(
@@ -142,6 +152,58 @@ class TabIconsGeometryTest {
             ttTabIcons.mapping.values.toSet(),
             "every glyph should appear in the mapping exactly once",
         )
+    }
+
+    @Test
+    fun `the sprints bars rise and share a baseline`() {
+        // The glyph's whole reading. Three bars of equal height read as one measure sampled
+        // three times; a bar whose tops do not share a bottom reads as three unrelated marks.
+        // So the two properties that make it say "successive iterations" are asserted
+        // directly, from the geometry rather than from a screenshot.
+        val contours = ttTabIcons.sprints.contours()
+        assertEquals(3, contours.size, "three bars, and each is one closed contour")
+
+        val bounds = contours.map { it.bounds() }
+        val bottoms = bounds.map { it.bottom }.distinct()
+        assertEquals(
+            1,
+            bottoms.size,
+            "the bars must share a baseline to read as a chart, got bottoms $bottoms",
+        )
+        val heights = bounds.map { it.bottom - it.top }
+        assertEquals(
+            heights.sorted(),
+            heights,
+            "the bars must rise left to right, got heights $heights",
+        )
+        assertTrue(
+            heights.zipWithNext().all { (a, b) -> b > a },
+            "each bar must be strictly taller than the one before it, got $heights — evenly " +
+                "spaced steps read as one measure sampled three times rather than as three " +
+                "iterations",
+        )
+    }
+
+    @Test
+    fun `the sprints glyph is not a frame with contents in it`() {
+        // The first drawing was a rounded frame plus a progress band, on the theory that a
+        // sprint is a time box. It was rejected because [ttTabIcons.backlog] is *also* a
+        // frame with contents in it, and two such glyphs in the same bar are one family.
+        //
+        // This is the assertion that keeps the rejection: a solid disc or frame would have
+        // contours nested inside one another, and a bar chart has three that are not.
+        val bounds = ttTabIcons.sprints.contours().map { it.bounds() }
+        val pairs = bounds.indices.flatMap { i ->
+            (i + 1 until bounds.size).map { j -> bounds[i] to bounds[j] }
+        }
+        for ((a, b) in pairs) {
+            assertTrue(
+                !a.isInside(b) && !b.isInside(a),
+                "the sprints glyph has a contour ${a} nested inside ${b}, so it is a frame " +
+                    "with contents in it — which is the Backlog glyph's shape, and two of " +
+                    "those in one bar are one family",
+            )
+        }
     }
 
     @Test

@@ -2,6 +2,10 @@
 
 package com.tasktracker.sharedui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -19,6 +23,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.dp
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
@@ -45,6 +52,10 @@ import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
+import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
+import com.tasktracker.featureprojectspresentation.SprintListScreenTag
+import com.tasktracker.featureprojectspresentation.SprintRowTag
+import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.SettingsForceOfflineTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
@@ -55,6 +66,7 @@ import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.resources.tab_sprints
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.InMemoryPreferences
@@ -120,6 +132,7 @@ object ShellScenarios {
         settings: SettingsPort? = null,
         preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         splashHold: Long = 0L,
+        width: Dp? = null,
     ): FakeResolver {
         val resolver = if (omitProjects) {
             FakeResolver.withoutProjects(session = session, router = router, preferences = preferences)
@@ -138,7 +151,20 @@ object ShellScenarios {
         // too, but only because `waitForIdle` happens to drain it — and a test whose correctness
         // rests on that is a test that breaks when a frame is added.
         resolver.startSessionDriver()
-        setContent { TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold) }
+        // The width is a *constraint on the parent*, not a resize of the window and not a
+        // density override. The app fills whatever it is given, so a fixed-width Box lays the
+        // whole shell out at that width while leaving every node reporting in one coordinate
+        // system — which is the whole reason this is done this way. See
+        // [fiveTabsFitAtPhoneWidth].
+        setContent {
+            if (width == null) {
+                TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+            } else {
+                Box(modifier = Modifier.width(width)) {
+                    TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+                }
+            }
+        }
         return resolver
     }
 
@@ -585,6 +611,10 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectBacklogScreenTag).assertIsDisplayed()
 
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
         onNodeWithTag(SettingsScreenTag).assertIsDisplayed()
@@ -748,6 +778,260 @@ object ShellScenarios {
             "expected the last tab to end one hairline inset inside the bar's right edge",
         )
     }
+
+    /**
+     * A sprint's row opens its own screen, and a link to one lands there too.
+ *
+     * ## Both paths, because they are different paths
+     *
+     * Tapping a row goes through [Router.push] on the Sprints tab's own stack; a link goes
+     * through [Router.open], which installs a *path* and selects the tab. They share the
+     * `PushedRoute` branch but not the route to it, and a deep link that landed on the tab
+     * root instead of the sprint would look correct until someone actually followed one.
+     *
+     * The detail screen is also the first place [SprintDetail.canFinish] is exercised
+     * through the shell: it reads the signed-in user's name out of [ShellPreferences], and
+     * that name arriving late is what makes the model a `remember` key — so the Finish
+     * button appearing a frame after the screen is the behaviour, not a flake.
+     */
+    val aSprintOpensAndALinkLandsOnIt: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).assertIsDisplayed()
+
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+
+        // And the push is recorded, so the detail screen is a *navigation* rather than the
+        // list having quietly swapped its own content.
+        assertEquals(
+            listOf(AppRoute.SprintList(project.id), AppRoute.SprintDetail(project.id, sprint.id)),
+            router.path(AppTab.Sprints),
+        )
+    }
+
+        /**
+     * A link to one sprint selects the tab, installs the stack, and shows the detail screen.
+     *
+     * Distinct from [aSprintOpensAndALinkLandsOnIt] because it enters through
+     * [Router.open] rather than through a tap, and the two differ in the way that matters
+     * here: a link has to **select the active project**, or the tab has nothing to render.
+     * That is `AppRoute.SprintDetail.selectsActiveProject`, and a test that only tapped a row
+     * would never reach it.
+     */
+    val aDeepLinkToOneSprintLandsOnItsScreen: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        // The router is handed the link *before* the session resolves, which is the case
+        // that matters: a link arriving while signed out has to be remembered and applied on
+        // entry, and that path is `Router.open`'s rather than a tap's.
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+
+        assertTrue(
+            router.open("tasktracker://sprint/${project.id.stringValue}/${sprint.id.stringValue}"),
+            "the link should be accepted",
+        )
+        waitForIdle()
+
+        assertEquals(AppTab.Sprints, router.selectedTab)
+        assertEquals(
+            listOf(AppRoute.SprintList(project.id), AppRoute.SprintDetail(project.id, sprint.id)),
+            router.path(AppTab.Sprints),
+        )
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * Five tabs fit at phone width, and every one of them keeps its whole label.
+     *
+     * ## Why this is a *fixed* expectation and not whatever the host produced
+     *
+     * The Android host's viewport is documented as smaller than the JVM's and the iOS
+     * simulator's, so an assertion written against "the width the host happened to give" is
+     * an assertion about the host. 23.6.6 asks for a fixed expectation, and these are what
+     * it means:
+     *
+     * - **five** tabs, written as a literal rather than as [AppTab.entries].size — a sixth
+     *   tab is a design decision and has to change this number on purpose;
+     * - **390dp**, the narrowest phone this app ships to, pinned as a literal rather than
+     *   taken from whatever device the build is on;
+     * - **44dp**, the minimum hit target both platforms' accessibility guidance names,
+     *   read from [ttSpacing.iconButtonSize] so the assertion tracks the token rather than
+     *   a number that can drift away from it.
+     *
+     * ## The shell is constrained, not the window resized
+     *
+     * [setUpShell] takes a width and lays the app out inside a [Box] of it, because the app
+     * fills its parent. The alternatives were both rejected on purpose:
+     * `DensityForcedSize` is `internal` to Compose, and overriding
+     * [androidx.compose.ui.platform.LocalDensity] is the mistake `GlassSurfacePixelTest` is
+     * the only place in this repo that gets right — a density override leaves the root at
+     * the host's density and everything below it at the forced one, so `getBoundsInRoot`
+     * reports two coordinate systems on one frame and every comparison drawn from it is
+     * wrong.
+     *
+     * ## Why the labels are what is worth asserting
+     *
+     * The segments splitting evenly is already [theTabBarIsWiderThanItsTabs]. What is new
+     * with a fifth tab is that every segment is **narrower**, and the caption is the only
+     * thing in a segment with an intrinsic width. It is `maxLines = 1` with **no**
+     * `overflow`, so a caption that does not fit is *clipped* — not ellipsised — and a
+     * clipped caption still renders as text, still measures as non-empty, and is exactly
+     * the kind of fault that survives a screenshot review.
+     *
+     * So the check is each caption's laid-out width against the box it was given, with the
+     * numbers dumped when it fails. A caption *narrower* than its box is fitting; one
+     * exactly as wide has been cut.
+     */
+    val fiveTabsFitAtPhoneWidth: suspend ComposeUiTest.() -> Unit = {
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = PHONE_WIDTH)
+        waitForIdle()
+
+        assertEquals(
+            PHONE_TAB_COUNT,
+            AppTab.entries.size,
+            "the tab count is a fixed expectation rather than whatever the enum currently says — " +
+                "a sixth tab is a design decision and has to change this number on purpose",
+        )
+
+        val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
+        val barWidthPx = bar.widthPx()
+        val captions = AppTab.entries.associateWith { captionInside(it) }
+        val segments = AppTab.entries.associateWith {
+            onNodeWithTag(TabButtonTag(it)).getBoundsInRoot().widthPx()
+        }
+
+        // The numbers below, measured on the JVM host at 390dp and density 1, with the whole
+        // dump printed so a failure can be compared against them rather than guessed at:
+        //
+        //   bar            x 16.0..374.0 dp, 358px wide  (= 390 − 2 × tabBarEdgeInset 16)
+        //   segments       71, 71, 70, 70, 70 px       (= (358 − 2 × hairlineInset 3) / 5 = 70.4)
+        //   captions       projects 47, board 34, backlog 46, sprints 41, settings 47 px
+        //   caption boxes  71, 71, 70, 70, 70 px
+        //
+        // The segment widths are the point of 23.6.6: five tabs is the first count this bar
+        // has been laid out at, and 70.4px is comfortably above the 44px minimum — the
+        // finding is that it fits, not that it is tight.
+        val measured = buildString {
+            append("\n  bar            x ${bar.left.value}..${bar.right.value} dp, ${barWidthPx}px")
+            append("\n  segments       ${segments.values.joinToString(", ")} px")
+            append("\n  captions       ${captions.values.joinToString(", ") { "${it.drawnWidth}" }} px")
+            append("\n  caption boxes  ${captions.values.joinToString(", ") { "${it.boxWidth}" }} px")
+        }
+
+        // The even split, restated for five. The lens travels `selectedIndex * segmentWidth`,
+        // so an uneven split puts the highlight on the wrong tab — which is the failure this
+        // is looking for, and the reason the check is not merely "it fits".
+        val segmentWidths = segments.values.toList()
+        val spread = segmentWidths.max() - segmentWidths.min()
+        assertTrue(
+            spread <= 1.0,
+            "expected the five tabs to split a ${barWidthPx}px bar evenly to within a pixel, " +
+                "got $segmentWidths (spread ${spread}px)$measured. The lens's travel is " +
+                "`selectedIndex * segmentWidth`, so an uneven split puts the highlight on the " +
+                "wrong tab.",
+        )
+
+        // The fit itself, derived from tokens rather than read from this host. The bar insets
+        // itself by `tabBarEdgeInset` on each side and its row starts one `hairlineInset`
+        // inside the glass on each side, so this is the widest a segment could possibly be.
+        val insets = ttSpacing.tabBarEdgeInset * 2f + ttSpacing.hairlineInset * 2f
+        val widestPossibleSegment = (PHONE_WIDTH - insets) / PHONE_TAB_COUNT.toFloat()
+        assertTrue(
+            widestPossibleSegment >= ttSpacing.iconButtonSize,
+            "at ${PHONE_WIDTH.value}dp a $PHONE_TAB_COUNT-tab bar gives each tab at most " +
+                "${widestPossibleSegment.value}dp, below the ${ttSpacing.iconButtonSize.value}dp " +
+                "minimum hit target$measured",
+        )
+
+        // And the labels, which are what actually break first. The caption is `maxLines = 1`
+        // with **no** `overflow`, so a label that does not fit is *clipped* — cut mid-glyph,
+        // not ellipsised — and a clipped caption still renders as text and still measures as
+        // non-empty, so nothing else would catch it.
+        //
+        // The worst case measured is 47px of caption in a 70px box, so this clears by 23px on
+        // the JVM. That is not a wide margin for a word like "Backlog" in a larger language,
+        // which is why the failure message carries every caption rather than just the one that
+        // broke.
+        for ((tab, caption) in captions) {
+            assertTrue(
+                caption.drawnWidth <= caption.boxWidth,
+                "the ${tab.wireValue} caption laid out ${caption.drawnWidth}px wide inside a " +
+                    "${caption.boxWidth}px segment, which is what a clipped label looks like — " +
+                    "the tab bar's caption is `maxLines = 1` with no overflow, so a label that " +
+                    "does not fit is cut mid-glyph rather than ellipsised. Every caption: " +
+                    "${captions.entries.joinToString { "${it.key.wireValue}=${it.value}" }}$measured",
+            )
+        }
+    }
+
+    /** A tab's caption: how wide the text laid out, and how wide the box it was given. */
+    private data class Caption(val drawnWidth: Double, val boxWidth: Double) {
+        override fun toString(): String = "${drawnWidth}px in ${boxWidth}px"
+    }
+
+    /**
+     * The caption node inside a tab.
+     *
+     * A tab is a `clickable`, so its subtree is merged and this node exists **only in the
+     * unmerged tree** — the same trap `TestQueries.onNested` documents for the board's cards,
+     * and the reason this reaches for `useUnmergedTree` rather than for a tag.
+     */
+    private fun ComposeUiTest.captionInside(tab: AppTab): Caption {
+        val node = onNodeWithTag(TabButtonTag(tab), useUnmergedTree = true)
+            .fetchSemanticsNode()
+        val text = node.children
+            .first { it.config.getOrElseNullable(SemanticsProperties.Text) { null } != null }
+        return Caption(
+            drawnWidth = text.boundsInRoot.widthPx(),
+            boxWidth = node.boundsInRoot.widthPx(),
+        )
+    }
+
+    /**
+     * [androidx.compose.ui.test.getBoundsInRoot] answers in dp, so this file converts once
+     * rather than comparing a dp-derived width against a pixel-derived one.
+     */
+    private fun DpRect.widthPx(): Double = (right.value - left.value).toDouble()
+
+    /** [androidx.compose.ui.semantics.SemanticsNode.boundsInRoot] answers in pixels already. */
+    private fun Rect.widthPx(): Double = (right - left).toDouble()
+
+    /** The narrowest phone this app ships to, as a fixed number rather than a device's. */
+    private val PHONE_WIDTH = 390.dp
+
+    /** Five, written out so a sixth tab has to change this on purpose. */
+    private const val PHONE_TAB_COUNT = 5
 
     /**
      * Every destination is named in the bar, and exactly one of them says it is the current one.
@@ -1255,6 +1539,7 @@ object ShellScenarios {
         AppTab.Projects -> getString(Res.string.tab_projects)
         AppTab.Board -> getString(Res.string.tab_board)
         AppTab.Backlog -> getString(Res.string.tab_backlog)
+        AppTab.Sprints -> getString(Res.string.tab_sprints)
         AppTab.Settings -> getString(Res.string.tab_settings)
     }
 }

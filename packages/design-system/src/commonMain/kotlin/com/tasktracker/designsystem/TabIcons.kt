@@ -18,7 +18,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * The four tab glyphs, drawn here rather than imported.
+ * The five tab glyphs, drawn here rather than imported.
  *
  * ## Why these are hand-drawn instead of a dependency
  *
@@ -28,22 +28,22 @@ import kotlin.math.sin
  *  - `compose-material3` is excluded by the architecture, because its theming fights the
  *    design system rather than extending it.
  *  - `compose-materialIconsExtended` is on every target and is the obvious port, but it is
- *    several megabytes of vectors for **four** glyphs, it is a Material set rather than the
+ *    several megabytes of vectors for **five** glyphs, it is a Material set rather than the
  *    SF set the native app uses, and it would be the first runtime icon dependency in a build
  *    whose stated approach is to own its own visuals.
  *  - An icon font brings its own licensing question and its own baseline problems.
  *
- * So the four shapes are drawn as [ImageVector]s. They are **not** traced SF Symbols: those
+ * So the shapes are drawn as [ImageVector]s. They are **not** traced SF Symbols: those
  * are Apple's assets and copying their outlines would be a licensing problem dressed up as
  * diligence. Each is a plain geometric drawing chosen to read the way the SF Symbol the native
- * project names does. [mapping] is that table, and it is the reason these four exist in this
- * order.
+ * project names does — or, for [sprints], to read as a thing the native app never had. [mapping]
+ * is that table, and it is the reason these exist in this order.
  *
  * ## The 24-unit grid
  *
  * Every glyph is drawn on a 24x24 viewport with a 3-unit margin, which is the cap height the SF
- * Symbols these stand in for use. Icons are therefore interchangeable: a fifth tab drawn on
- * this grid lines up with these four without anybody measuring anything, and one drawn off it
+ * Symbols these stand in for use. Icons are therefore interchangeable: a tab drawn on
+ * this grid lines up with the others without anybody measuring anything, and one drawn off it
  * is visibly a size out rather than subtly a size out.
  *
  * ## One fill rule for the whole file
@@ -138,14 +138,65 @@ object ttTabIcons {
     val settings: ImageVector = icon("Settings") { gear() }
 
     /**
+     * Three bars rising left to right — a chart of successive iterations.
+     *
+     * ## There is no SF Symbol standing in for this one, and the mapping says so
+     *
+     * The other four are stand-ins for symbols the native app names (see [mapping]). Sprints
+     * is new in this port, so there is nothing to stand in for. Rather than leave a blank —
+     * which reads as "somebody forgot" — [mapping] carries an explicit
+     * `NO_COUNTERPART` key, so a reader of the table learns the fact instead of guessing it.
+     *
+     * ## Why bars, and not another frame
+     *
+     * The first drawing was a rounded frame with a filled band across it, on the theory that
+     * a sprint *is* a time box with progress in it. Two reasons that was the wrong answer,
+     * and both are about the bar rather than about the icon:
+     *
+     * - **It would have been the Backlog glyph with the bars in a different order.** That
+     *   glyph is a frame with two bars in it, and the two tabs sit close enough together in
+     *   the bar for two frame-and-contents glyphs to be read as one family. A glyph that
+     *   distinguishes a tab by its contents is a glyph that cannot be told from its
+     *   neighbour at 22dp.
+     * - **Rising bars read as *sequence*, which is what a sprint is.** Three of them say
+     *   "these are iterations" in a way a single progress band does not — and the goal of
+     *   this tab is comparing one iteration against another, which is the one thing a
+     *   progress bar cannot show.
+     *
+     * Heights are increasing and bottom-aligned, which is the whole reading: three equal
+     * bars would be a bar chart of one measure, and a descending pair would be a chart of
+     * decline rather than of iterations.
+     */
+    val sprints: ImageVector = icon("Sprints") {
+        val width = 4.0f
+        val radius = width / 2f
+        val baseline = 20.0f
+        // Left to right at `width + gap`, bottom-aligned, rising. Computed rather than
+        // listed for the reason `settings` is: three hand-typed bar coordinates are three
+        // chances to leave a gap that is one hair narrower than its neighbour, and at 22dp
+        // that is invisible in review and obvious on the device.
+        val gap = 2.5f
+        for (step in 0..2) {
+            val height = HEIGHTS[step]
+            solidRoundRect(
+                left = 3.5f + step * (width + gap),
+                top = baseline - height,
+                right = 3.5f + step * (width + gap) + width,
+                bottom = baseline,
+                radius = radius,
+            )
+        }
+    }
+
+    /**
      * Every glyph, for the test that walks them.
      *
      * Exposed rather than kept private so a test can assert over the whole set instead of
-     * restating four names, for the same reason [ttSpacing.ramp] and [ttRadius.all] are: a
+     * restating five names, for the same reason [ttSpacing.ramp] and [ttRadius.all] are: a
      * copy of a collection in a test is a second thing to update, and it would keep passing
      * after the collection stopped being what the test claims it is.
      */
-    val all: List<ImageVector> = listOf(projects, board, backlog, settings)
+    val all: List<ImageVector> = listOf(projects, board, backlog, sprints, settings)
 
     /**
      * Each glyph against the SF Symbol name the native project uses for that tab.
@@ -154,14 +205,34 @@ object ttTabIcons {
      * the claim being made is about *these drawings* being deliberate stand-ins. A list in
      * the shell would be a comment in code; this is a table a test can walk, and a fifth tab
      * added without a row here fails that test instead of arriving unremarked.
+     *
+     * [NO_COUNTERPART] is a key like any other, and that is the point. Sprints is new in this
+     * port, so there is no symbol it stands in for — and a table with a hole in it would leave
+     * a reader unable to tell "nothing was ever decided here" from "somebody forgot", which
+     * are opposite and only one of which is true.
      */
     val mapping: Map<String, ImageVector> = linkedMapOf(
         "square.grid.2x2" to projects,
         "rectangle.split.3x1" to board,
         "tray" to backlog,
+        NO_COUNTERPART to sprints,
         "gearshape" to settings,
     )
+
+    /** The [mapping] key for a glyph the native app has no symbol for. See [sprints]. */
+    const val NO_COUNTERPART: String = "<no SF Symbol counterpart>"
 }
+
+/**
+ * The three bar heights [ttTabIcons.sprints] is drawn from, shortest first.
+ *
+ * Top-level rather than a private constant *inside* the `icon` block so that it is named
+ * once in the file rather than recomputed per glyph, and so a reader can see the ratios
+ * without doing arithmetic: 5.5, 9.5 and 15 on a 15-unit column, which is roughly
+ * 1 : 1.7 : 2.7. Evenly spaced (5.5, 10.25, 15) was tried first and reads as a bar chart of
+ * one measure rather than as three iterations — the steps have to be visibly uneven.
+ */
+private val HEIGHTS = floatArrayOf(5.5f, 9.5f, 15.0f)
 
 /** Compact action glyphs, separate from the app's tab navigation symbols. */
 object ttActionIcons {
@@ -278,6 +349,38 @@ object ttActionIcons {
         lineTo(21.0f, 11.5f)
         lineTo(12.0f, 20.5f)
         lineTo(3.0f, 11.5f)
+        close()
+    }
+
+    /**
+     * [chevronDown] turned a quarter turn, for stepping backwards through a sequence.
+     *
+     * Drawn rather than rotated at the call site, and the reason is that the terminals: a
+     * rotated chevron carries its square cut around with it, which is right, but the
+     * `chevronDown` contour is only symmetric about its own diagonal, so rotating it 90
+     * degrees puts the *thick* edge on the wrong side of the stroke. These are the same
+     * contour walked from the other corner, so the 3.5-unit thickness sits across the
+     * diagonal exactly as it does in the original — which is what makes the three read as
+     * one family rather than as a down arrow and two approximations of it.
+     */
+    val chevronLeft: ImageVector = icon("ChevronLeft") {
+        moveTo(8.0f, 3.0f)
+        lineTo(17.0f, 12.0f)
+        lineTo(8.0f, 21.0f)
+        lineTo(11.5f, 21.0f)
+        lineTo(20.5f, 12.0f)
+        lineTo(11.5f, 3.0f)
+        close()
+    }
+
+    /** [chevronDown] turned the other way. See [chevronLeft] for why this is drawn. */
+    val chevronRight: ImageVector = icon("ChevronRight") {
+        moveTo(16.0f, 3.0f)
+        lineTo(7.0f, 12.0f)
+        lineTo(16.0f, 21.0f)
+        lineTo(12.5f, 21.0f)
+        lineTo(3.5f, 12.0f)
+        lineTo(12.5f, 3.0f)
         close()
     }
 

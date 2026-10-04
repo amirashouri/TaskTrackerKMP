@@ -62,6 +62,21 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedProjects = mutableListOf<Project>()
     private val storedItems = mutableListOf<WorkItem>()
 
+    // Sprints are *read* for real since 23.6, unlike every other unimplemented member in this
+    // file. The Sprints tab calls `sprints(projectID)` on every appearance, so leaving it as
+    // `unused(...)` would mean the tab cannot be rendered by any shell test at all — and a
+    // destination nothing can reach is a destination nothing checks.
+    //
+    // Only the three reads, and only because the shell's *editor* is the one place a write
+    // would be needed; `SprintsDestination` hosts `SprintEditorSheet` but nothing in this
+    // file drives a form, so the writes stay `unused` and still fail loudly.
+    private val storedSprints = mutableListOf<Sprint>()
+
+    /** Seeds a sprint directly, the way [seed] does for a project. */
+    fun seedSprint(sprint: Sprint) {
+        storedSprints += sprint.copy()
+    }
+
     /** Every write the shell's code path made, so a test can assert a verb reached the store. */
     val writes = mutableListOf<String>()
 
@@ -165,11 +180,21 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
         unused("statusChanges")
 
-    override suspend fun sprints(projectID: ProjectID): List<Sprint> = unused("sprints")
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> = locked {
+        // Open first, then by start date — the order the real port documents as part of its
+        // contract, so a shell test does not depend on insertion order by accident.
+        storedSprints.filter { it.projectID == projectID }
+            .sortedWith(compareBy({ it.isFinished }, { it.startDate }))
+            .map { it.copy() }
+    }
 
-    override suspend fun sprint(id: SprintID): Sprint? = unused("sprint")
+    override suspend fun sprint(id: SprintID): Sprint? = locked {
+        storedSprints.firstOrNull { it.id == id }?.copy()
+    }
 
-    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = unused("sprintWorkItems")
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = locked {
+        storedItems.filter { it.sprintID == id }.sortedBy { it.rank }.map { it.copy() }
+    }
 
     override suspend fun createSprint(
         projectID: ProjectID,
@@ -345,4 +370,36 @@ fun shellTestWorkItem(
     createdAt = Instant.fromEpochSeconds(1_760_000_000),
     updatedAt = Instant.fromEpochSeconds(1_760_000_000),
     resolvedAt = null,
+)
+
+/**
+ * A sprint fixture, on a fixed clock so nothing in a shell test depends on `now`.
+ *
+ * The window is a fortnight in March 2026 at UTC midnight, matching the presentation
+ * module's `testSprint`, so a date assertion written against one reads the same against the
+ * other. The goal is non-zero because the list row's progress is `null` without one, and a
+ * fixture that could only exercise the no-goal case would leave the common path untested.
+ */
+fun shellTestSprint(
+    projectID: ProjectID,
+    name: String = "Sprint 7",
+    goalStoryPoints: Int = 12,
+    owner: String? = "Amir",
+    isFinished: Boolean = false,
+    id: SprintID = SprintID("33333333-3333-3333-3333-333333333333"),
+): Sprint = Sprint(
+    id = id,
+    projectID = projectID,
+    name = name,
+    goalStoryPoints = goalStoryPoints,
+    startDate = Instant.parse("2026-03-02T00:00:00Z"),
+    endDate = Instant.parse("2026-03-16T00:00:00Z"),
+    owner = owner,
+    isFinished = isFinished,
+    // Kept in step with `isFinished`, because `Sprint.reconcileFinishedAt`'s invariant is
+    // that the two agree and a fixture that broke it would be asserting on a state the
+    // store cannot hold.
+    finishedAt = if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
+    createdAt = Instant.fromEpochSeconds(1_760_000_000),
+    updatedAt = Instant.fromEpochSeconds(1_760_000_000),
 )

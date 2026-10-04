@@ -22,9 +22,6 @@ import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -329,27 +326,6 @@ class TabLensContrastTest {
         }
     }
 
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val a = relativeLuminance(first)
-        val b = relativeLuminance(second)
-        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
-    }
-
-    /** WCAG 2.x relative luminance. Linearised, because contrast is defined in linear light. */
-    private fun relativeLuminance(color: Color): Double =
-        RED_COEFFICIENT * linearise(color.red) +
-            GREEN_COEFFICIENT * linearise(color.green) +
-            BLUE_COEFFICIENT * linearise(color.blue)
-
-    private fun linearise(channel: Float): Double {
-        val value = channel.toDouble()
-        return if (value <= SRGB_LINEAR_THRESHOLD) {
-            value / SRGB_DIVISOR
-        } else {
-            ((value + SRGB_OFFSET) / SRGB_SCALE).pow(SRGB_EXPONENT)
-        }
-    }
-
     private class Reading(val glyph: Color, val background: Color, val ratio: Double)
 
     private companion object {
@@ -422,30 +398,15 @@ class TabLensContrastTest {
          * sit on the real threshold.
          */
         const val UNSELECTED_FLOOR = TEXT_CONTRAST_MINIMUM
-
-        const val RED_COEFFICIENT = 0.2126
-        const val GREEN_COEFFICIENT = 0.7152
-        const val BLUE_COEFFICIENT = 0.0722
-        const val SRGB_LINEAR_THRESHOLD = 0.04045
-        const val SRGB_DIVISOR = 12.92
-        const val SRGB_OFFSET = 0.055
-        const val SRGB_SCALE = 1.055
-        const val SRGB_EXPONENT = 2.4
     }
 }
 
-/** Hex for failure messages, in whole bytes so it reads the same on every target. */
-private fun Color.hex(): String {
-    fun channel(value: Float): String =
-        round(value * 255f).toInt().toString(16).padStart(2, '0')
-    return "#" + channel(red) + channel(green) + channel(blue)
-}
-
 /**
- * Two decimal places, written out: `String.format` is JVM-only and does not compile for
- * Kotlin/Native, so the rounding is done in integer hundredths.
+ * Hex for failure messages, in whole bytes so it reads the same on every target.
+ *
+ * Both this file's `Color.hex()` and its `Double.ratioText()` now live in `PixelContrast.kt`.
+ * This file's sRGB breakpoint was **`0.04045`** where the other six in the module use
+ * **`0.03928`** — so the module was already measuring some tokens one way and some the other,
+ * and a colour in the narrow band between the two breakpoints would have read differently
+ * depending on which suite asked.
  */
-private fun Double.ratioText(): String {
-    val hundredths = round(this * 100).toInt()
-    return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
-}

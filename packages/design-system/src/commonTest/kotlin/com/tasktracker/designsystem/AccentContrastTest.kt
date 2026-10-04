@@ -1,10 +1,6 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.ui.graphics.Color
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -204,65 +200,12 @@ class AccentContrastTest {
         )
     }
 
-    private fun contrastRatio(first: Color, second: Color): Double {
-        val lighter = max(relativeLuminance(first), relativeLuminance(second))
-        val darker = min(relativeLuminance(first), relativeLuminance(second))
-        return (lighter + 0.05) / (darker + 0.05)
-    }
-
-    /**
-     * WCAG 2.x relative luminance: the sRGB components are linearised first, because
-     * contrast is defined in linear light and the raw 0-1 values are not.
-     */
-    private fun relativeLuminance(color: Color): Double {
-        val red = linearise(color.red)
-        val green = linearise(color.green)
-        val blue = linearise(color.blue)
-        return RED_COEFFICIENT * red + GREEN_COEFFICIENT * green + BLUE_COEFFICIENT * blue
-    }
-
-    private fun linearise(channel: Float): Double {
-        val value = channel.toDouble()
-        return if (value <= SRGB_LINEAR_THRESHOLD) {
-            value / SRGB_DIVISOR
-        } else {
-            ((value + SRGB_OFFSET) / SRGB_SCALE).pow(SRGB_EXPONENT)
-        }
-    }
-
     /** A variant of the accent, paired with the name used to describe it in a failure. */
     private class Variant(val name: String, val color: Color)
-
-    private fun Color.hex(): String = "#" + channel(red) + channel(green) + channel(blue)
-
-    /**
-     * One 0-1 channel as two hex digits.
-     *
-     * `red` is a `Float` in 0..1, so it has to be scaled to 0..255 rather than truncated:
-     * `0.20f.toInt()` is 0, and a helper that did that printed every colour as `#000000`,
-     * which is how a first draft of this suite reported a failing accent without saying
-     * which colour had failed.
-     */
-    private fun channel(value: Float): String =
-        round(value * 255f).toInt().toString(16).padStart(2, '0')
-
-    /**
-     * Two decimal places, written out.
-     *
-     * `String.format` is JVM-only, so it is not available in `commonTest` and does not
-     * compile for Kotlin/Native. The rounding is done in integer hundredths, which is
-     * exact across the range a contrast ratio occupies.
-     */
-    private fun Double.ratioText(): String {
-        val hundredths = round(this * HUNDREDTHS).toInt()
-        return "${hundredths / HUNDREDTHS}.${(hundredths % HUNDREDTHS).toString().padStart(2, '0')}"
-    }
 
     private companion object {
         const val TEXT_CONTRAST_MINIMUM = 4.5
         const val CONTROL_CONTRAST_MINIMUM = 3.0
-
-        const val HUNDREDTHS = 100
 
         /**
          * `UIColor.systemBackground` in light appearance, and Android's
@@ -276,15 +219,5 @@ class AccentContrastTest {
 
         /** Android's `?android:attr/colorBackground` under a dark platform theme. */
         val CANVAS_DARK_ANDROID = Color(0xFF121212)
-
-        const val SRGB_LINEAR_THRESHOLD = 0.03928
-        const val SRGB_DIVISOR = 12.92
-        const val SRGB_OFFSET = 0.055
-        const val SRGB_SCALE = 1.055
-        const val SRGB_EXPONENT = 2.4
-
-        const val RED_COEFFICIENT = 0.2126
-        const val GREEN_COEFFICIENT = 0.7152
-        const val BLUE_COEFFICIENT = 0.0722
     }
 }
