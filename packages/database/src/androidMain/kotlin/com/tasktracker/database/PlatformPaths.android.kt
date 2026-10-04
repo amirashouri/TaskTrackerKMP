@@ -32,3 +32,10 @@ actual fun createParentDirectory(path: String) {
         throw AppError.Storage("Could not create the database directory: ${parent.path}")
     }
 }
+
+internal actual fun deleteStoreFile(path: String) {
+    val file = File(path)
+    file.delete()
+    File("$path-wal").delete()
+    File("$path-shm").delete()
+}

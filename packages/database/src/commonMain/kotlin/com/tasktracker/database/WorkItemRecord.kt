@@ -38,7 +38,7 @@ import kotlin.time.Instant
      * a prefix scan and the per-column read exactly, so a second index on `projectID` alone
      * would only be a smaller copy of the left-hand edge of this one.
      */
-    indices = [Index(value = ["projectID", "statusRaw"])],
+    indices = [Index(value = ["projectID", "statusRaw"]), Index(value = ["sprintID"])],
 )
 data class WorkItemRecord(
     @PrimaryKey val id: String,
@@ -69,6 +69,24 @@ data class WorkItemRecord(
      * instead of trusting it — see `domainValue` in `:packages:feature-projects-data`.
      */
     val resolvedAt: Instant?,
+    /**
+     * The item's estimate in points; `null` means unestimated.
+     *
+     * Nullable in the store for the reason it is nullable in the domain: a non-null `0`
+     * makes "nobody estimated this" and "worth nothing" one value, and a sprint would then
+     * be able to claim it had measured its whole scope. Both columns added here default to
+     * `null`, which is what lets the `AutoMigration(3, 4)` bring every existing row across
+     * unestimated and in the backlog — and which keeps every existing construction site in
+     * `:packages:feature-projects-data` compiling without being edited.
+     */
+    val storyPoints: Int? = null,
+    /**
+     * The sprint this item is in, or `null` for the backlog.
+     *
+     * Indexed because the sprint detail screen reads by sprint, not by project, and
+     * `projectID, statusRaw` cannot serve it.
+     */
+    val sprintID: String? = null,
 )
 
 /**
@@ -103,6 +121,52 @@ interface WorkItemDao {
 
     @Query("SELECT * FROM work_items WHERE id = :id LIMIT 1")
     suspend fun byID(id: String): WorkItemRecord?
+
+    /**
+     * Every item in a sprint, in the board's own order.
+     *
+     * The four ordering columns are spelled out rather than shared with [byProject] on
+     * purpose: a SQL fragment cannot be shared between two `@Query` annotations without a
+     * constant that both interpolate, and the columns would then be stated once and
+     * checked twice — which is better than stated once and checked never.
+     */
+    @Query(
+        """
+        SELECT * FROM work_items
+        WHERE sprintID = :sprintID
+        ORDER BY rank ASC, priorityRaw DESC, createdAt ASC, key ASC
+        """,
+    )
+    suspend fun bySprint(sprintID: String): List<WorkItemRecord>
+
+    /**
+     * Moves items into a sprint, or back to the backlog when [sprintID] is `null`.
+     *
+     * `sprintID` and the [updatedAt] bump are set together, deliberately: a reassignment is
+     * an edit, so it has to queue for sync like one and be stamped like one.
+     *
+     * **`rank` is not touched.** It is the item's position in its *status column* on the
+     * board, and a sprint is not a column — letting the two interact is how a board starts
+     * reordering itself every time somebody tidies a sprint.
+     */
+    @Query(
+        """
+        UPDATE work_items
+        SET sprintID = :sprintID, updatedAt = :now
+        WHERE id IN (:workItemIDs)
+        """,
+    )
+    suspend fun assignToSprint(workItemIDs: List<String>, sprintID: String?, now: Instant)
+
+    /**
+     * Returns everything that was in [sprintID] to the backlog.
+     *
+     * One statement rather than a select-then-update pair, because a delete that orphaned
+     * its items would leave work items pointing at a sprint that no longer exists with
+     * nothing in the app to notice.
+     */
+    @Query("UPDATE work_items SET sprintID = NULL WHERE sprintID = :sprintID")
+    suspend fun releaseFromSprint(sprintID: String)
 
     /**
      * The lowest rank already used in one column, or `null` when the column is empty.

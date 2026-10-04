@@ -82,9 +82,28 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         ProjectRecord::class,
         WorkItemRecord::class,
         StatusChangeRecord::class,
+        SprintRecord::class,
     ],
-    version = 3,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    version = 4,
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+        AutoMigration(from = 2, to = 3),
+        // 3 → 4: the `sprints` table, and `storyPoints` + `sprintID` on `work_items`.
+        //
+        // Generated rather than hand-written, for the reason 1 → 2 states: a hand-written
+        // `CREATE TABLE` or `ALTER TABLE` here would be a second, unchecked statement of
+        // the same schema, and the two would be free to drift.
+        //
+        // Both new `work_items` columns are nullable, which is the whole reason this
+        // migration is additive and cannot lose data: every existing row arrives
+        // unestimated and in the backlog, which is what an item created before sprints
+        // existed actually was. A NOT NULL column with no default is what turns an
+        // auto-migration into a rebuild, and Room refuses those outright — a refusal that
+        // arrives as a build failure rather than as lost rows, which is the good outcome.
+        //
+        // `SprintMigrationTest` is the test that would notice if it stopped being true.
+        AutoMigration(from = 3, to = 4),
+    ],
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -100,6 +119,8 @@ abstract class TaskTrackerDatabase : RoomDatabase() {
     abstract fun workItemDao(): WorkItemDao
 
     abstract fun statusChangeDao(): StatusChangeDao
+
+    abstract fun sprintDao(): SprintDao
 
     companion object {
         /**

@@ -40,7 +40,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 | [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
 | [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
-| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain done, rest planned |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3655,17 +3655,132 @@ and `:androidApp:compileDebugKotlin` all pass, which is the check that the new e
 
 ### 23.2 Persistence
 
-- [ ] **23.2.1 `SprintRecord` + DAO + `version = 4`.** `TaskTrackerDatabase.kt` is at `version = 3`
+**All three done.** `:packages:database` **75** JVM tests (66 `commonTest` + 9 `jvmTest`),
+cross-checked against `@Test`. Eight new, no new failures.
+
+- [x] **23.2.1 `SprintRecord` + DAO + `version = 4`.** `TaskTrackerDatabase.kt` is at `version = 3`
   with `AutoMigration(1 → 2)` and `(2 → 3)` only, so the new table arrives as
   `AutoMigration(3 → 4)`. Two columns on `work_items`: `story_points` (nullable integer) and
   `sprint_id` (nullable, no foreign key — see 23.3.5).
-- [ ] **23.2.2 Record ↔ entity mapping.** Both nullable pairs in both directions. Test: a
+- [x] **23.2.2 Record ↔ entity mapping.** Both nullable pairs in both directions. Test: a
   stored `null` comes back `null` rather than as 0 or an empty string, for both columns.
-- [ ] **23.2.3 The migration test.** Open a v3 database that holds real rows at v4 and assert
+- [x] **23.2.3 The migration test.** Open a v3 database that holds real rows at v4 and assert
   the rows survived and the two new columns are `NULL`. **This is the task that catches a
   destructive migration**, and it is the one that must be written before the migration is
   trusted, not after — the failure it prevents is silent and only appears on a device that
   already has the user's data.
+
+#### 23.2.4 Three corrections to the plan, from building it
+
+**The column names are `storyPoints` and `sprintID`, not `story_points` and `sprint_id`.**
+Every existing column in this store is camelCase — `projectID`, `statusRaw`, `resolvedAt` —
+so the snake_case written above would have been the only two columns in the schema that did
+not match the module they sit in.
+
+**23.2.2's test lives here rather than in `:packages:feature-projects-data`.** The
+record ↔ domain mapper is in the feature module and grows in 23.3, but the *store* round trip
+is answerable here and belongs here: write a `WorkItemRecord` with both columns set, read it
+back, assert. Testing it in the feature module would have needed the feature module to
+exist first, and this is exactly the assertion that has to hold before the mapper is
+written against these columns.
+
+**Both new columns default to `null`, which is why nothing else needed editing.** Every
+existing `WorkItemRecord(...)` in `:packages:feature-projects-data` compiles untouched, so
+23.2 is additive rather than a 23.3-shaped change made in the wrong order. It also means the
+`AutoMigration(3, 4)` brings every existing row across unestimated and in the backlog — which
+is what an item created before sprints existed actually was.
+
+#### 23.2.5 Why the migration test does not use Room's helper, and what it does instead
+
+Room's `MigrationTestHelper` is Android only, and **this module's tests cannot run on the
+Android host at all** — `build.gradle.kts` disables `testAndroidHostTest` because Room's
+Android builder needs a real `Context` that a host JVM test cannot produce. So the helper
+would have put the one test that catches a destructive migration behind a platform this
+project cannot run Room tests on.
+
+Instead `SprintMigrationTest` builds a genuine version-3 file — all six tables and all four
+indices, transcribed from the committed `3.json`, executed through the same bundled SQLite
+driver the app uses, `PRAGMA user_version = 3` — seeds a project and two work items, closes
+it, and opens it through `TaskTrackerDatabase.open` so that **Room runs its own generated
+`AutoMigration(3, 4)`**. Nothing about the migration is stubbed.
+
+Three things about writing it that cost time and are worth keeping:
+
+- **`BundledSQLiteConnection` is not the obvious constructor it looks like.** Its parameter
+  is a raw native pointer on the JVM and Android, and only the native variant has a no-arg
+  form, so a test written against it compiles on one host and is uncompilable on the other.
+  The portable entry is the driver's own `open(path)`.
+- **`PRAGMA index_info` cannot be run while a `PRAGMA index_list` statement is still
+  stepping.** Both need the same connection, and doing so reuses the connection underneath
+  the open statement — which on the bundled driver threw rather than returning wrong rows.
+  The list is drained first and the columns read afterwards.
+- **A migration test that leaves its file behind stops testing anything**, because the next
+  run starts from whatever the last one wrote. `@AfterTest` deletes it, and `deleteStoreFile`
+  is `internal` in `PlatformPaths.kt` rather than a public API nobody calls: nothing in the
+  app deletes the store, and the `-wal`/`-shm` sidecars have to go with it or the next file
+  that reuses the path replays them.
+
+#### 23.2.6 The drift guard, and what each layer actually catches
+
+`SprintSchemaDriftTest` asks the only question that makes a hand-written DDL trustworthy:
+**does it describe the version 3 that actually shipped?** It executes the same
+`VersionThreeSchema` fixture and compares what SQLite *made* — read back through
+`PRAGMA table_info` and `PRAGMA index_list` — against the committed `3.json`. Comparing the
+DDL text with itself would find nothing.
+
+The guard is not decoration, but it is **not the primary defence**, and saying so is more
+useful than overclaiming. Room validates the whole schema after a migration, so a v3 literal
+with a wrong column or table usually fails the *open* first. What the guard adds is the
+readable failure and the two cases Room cannot see:
+
+- **an index that v3 had and v4 also has.** A missing index leaves a store that *works* —
+  slower, but correct — and there is nothing in the app that would notice. N7 below is that
+  case, and it is caught by both layers.
+- **a future column added at v5.** The v3 literal without it migrates to v4 and then to v5
+  perfectly happily, because neither v4 nor v5 requires it. Only the committed JSON says
+  version 3 had it.
+
+It is `jvmTest` for one reason: reading `3.json` off disk. `SprintMigrationTest` stays in
+`commonTest` and runs on both hosts that can run Room at all. Adding
+`kotlinx-serialization-json` to `:packages:database`'s **jvmTest** classpath is the only new
+dependency edge in this phase, and it is there because the artefact the guard has to read is
+a JSON file the module itself owns.
+
+#### 23.2.7 Mutation evidence — 8 run, 5 caught, 3 rejected at compile time
+
+Driven by `tools/mutate_23_2.py`.
+
+| # | the deliberate defect | outcome |
+| --- | --- | --- |
+| N1 | `storyPoints` made `Int = 0` — every pre-sprint item becomes "estimated as zero" | **rejected at compile time** |
+| N2 | `sprintID` made `String = ""` — every item arrives in a sprint named `""` | **rejected at compile time** |
+| N3 | `releaseFromSprint`'s `WHERE 0` | **rejected at compile time** |
+| N3b | `releaseFromSprint` narrowed to one status — compiles, and orphans items | caught by `deletingASprintReturnsItsItemsToTheBacklogRatherThanOrphaningThem` |
+| N4 | `assignToSprint` also setting `rank` | caught by `movingAnItemIntoASprintTouchesItsUpdatedAtAndNeverItsRank` |
+| N5 | a column dropped from the v3 literal | caught by the migration test **and** `everyTableInTheHandWrittenSchemaMatchesTheCommittedOneColumnForColumn` |
+| N6 | a table added to the literal's table list | caught by `everyTableInTheHandWrittenSchemaMatchesTheCommittedOneColumnForColumn` |
+| N7 | an index dropped from the v3 literal | caught by `everyIndexInTheHandWrittenSchemaMatchesTheCommittedOne` **and** both migration assertions |
+
+**"Rejected at compile time" is a real outcome and not a gap, but it is not the same evidence
+as a red test, so both are reported.** Room's auto-migration processor refuses a `NOT NULL`
+column with no default value outright, which moves N1 and N2 from "ships and eats every
+existing row" to "does not build" — which is the better outcome and is not one this phase
+earned. N3 is rejected because `WHERE 0` leaves the `:sprintID` parameter unused, and that
+left the release assertion with only a build failure as evidence; **N3b was added for exactly
+that reason**, as a mutation Room will compile so the assertion can be shown red at runtime.
+
+An earlier version of the script reported N1, N2 and N3 as **not caught**, because it read
+the *previous* run's XML after a run that produced none. Deleting the results directory
+before each mutation is what makes "caught", "rejected" and "nothing ran" three separable
+answers; the same class of bug made twelve mutations look uncaught in 23.1.
+
+#### 23.2.8 Baseline after 23.2
+
+Whole JVM host: **1137 tests, 7 failures** — the same seven, unchanged. iOS simulator:
+**1109 tests, same 7**. `verifyArchitectureGraph`, `verifyModuleImports` and
+`:androidApp:compileDebugKotlin` all pass; the new `SprintRecord` is in `:packages:database`
+where `ProjectRecord`'s KDoc says the schema has to live, and nothing outside that module
+names it.
 
 ### 23.3 Port and data
 
