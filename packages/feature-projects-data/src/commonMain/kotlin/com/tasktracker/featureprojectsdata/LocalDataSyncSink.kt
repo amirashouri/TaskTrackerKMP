@@ -9,6 +9,7 @@ import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -82,7 +83,53 @@ class LocalDataSyncSink(
                 val owner = applyWorkItem(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
             }
+
+            // A sprint write announces both kinds, for the reason
+            // `ProjectChangeBus.announceSprints` gives, and announced here rather than
+            // through that helper because the project id is read out of the change rather
+            // than supplied by a caller.
+            OutboxEntity.Sprint -> {
+                val owner = applySprint(change)
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = owner))
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
+            }
         }
+    }
+
+    /**
+     * @return the owning project, read **before** the delete — afterwards there is no row
+     *   left to ask. `null` when the row was already absent, which is the same idempotency
+     *   requirement as [applyWorkItem]: a re-delivered delete must succeed.
+     */
+    private suspend fun applySprint(change: RemoteChange): ProjectID? {
+        if (change.operation == OutboxOperation.Delete) {
+            val id = change.entityID
+            val owner = inTransaction(database) {
+                val existing = database.sprintDao().byID(id) ?: return@inTransaction null
+                // The items are released rather than left pointing at a sprint this device
+                // no longer has. Nothing local would ever clean that up, and the next pull
+                // would find a card belonging to a sprint that does not exist.
+                database.workItemDao().releaseFromSprint(id)
+                val projectID = parseProjectID(existing.projectID)
+                database.sprintDao().deleteByID(id)
+                projectID
+            }
+            return owner
+        }
+
+        val sprint = decode(Sprint.serializer(), change.payload, change.entity)
+        inTransaction(database) {
+            val existing = database.sprintDao().byID(sprint.id.stringValue)
+            if (existing == null) {
+                database.sprintDao().insert(sprint.toRecord())
+            } else {
+                // `SprintRecord.apply` copies `isFinished` — unlike `WorkItemRecord.apply`,
+                // which never copies a status — because closing a sprint happens on another
+                // device and the summary has to be able to arrive.
+                database.sprintDao().update(existing.apply(sprint))
+            }
+        }
+        return sprint.projectID
     }
 
     /**
@@ -102,6 +149,12 @@ class LocalDataSyncSink(
                 // them, and a later pull re-sending one of those ids would resurrect a card
                 // into a project that no longer exists.
                 database.workItemDao().deleteByProject(id)
+                // And the sprints, for the same reason. This is the *pulled* delete; the
+                // local one is `RoomProjectRepository.deleteProject`, which queues a delete
+                // row per sprint for exactly this path to receive.
+                for (sprint in database.sprintDao().byProject(id)) {
+                    database.sprintDao().deleteByID(sprint.id)
+                }
                 database.statusChangeDao().deleteByProject(id)
                 database.projectDao().deleteByID(id)
             }

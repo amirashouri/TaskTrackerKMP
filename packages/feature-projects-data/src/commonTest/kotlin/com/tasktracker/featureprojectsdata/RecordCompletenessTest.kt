@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdata
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomUserID
 import com.tasktracker.database.ProjectRecord
+import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.domain.Priority
@@ -90,9 +91,32 @@ class RecordCompletenessTest {
             createdAt = Moments.start,
             updatedAt = Moments.later,
             resolvedAt = null,
+            storyPoints = 5,
+            sprintID = "33333333-3333-4333-8333-333333333333",
         )
 
         assertEquals(expected, item.toRecord())
+    }
+
+    @Test
+    fun writingASprintNamesEveryColumn() {
+        val sprint = aSprint()
+
+        val expected = SprintRecord(
+            id = "33333333-3333-4333-8333-333333333333",
+            projectID = "11111111-1111-4111-8111-111111111111",
+            name = "Sprint 1",
+            goalStoryPoints = 21,
+            startDate = Moments.start,
+            endDate = Moments.day,
+            owner = "Ada",
+            isFinished = false,
+            finishedAt = null,
+            createdAt = Moments.start,
+            updatedAt = Moments.later,
+        )
+
+        assertEquals(expected, sprint.toRecord())
     }
 
     @Test
@@ -206,9 +230,78 @@ class RecordCompletenessTest {
             // Dated rather than copied: the incoming value had none, and a terminal status
             // with no date is an item the archive cannot file.
             resolvedAt = Moments.muchLater,
+            // Taken from the incoming value, unlike `resolvedAt` above: an estimate and a
+            // sprint are facts about the card rather than derivations, and a pull has to be
+            // able to teach a device that has been offline which sprint a card was put into.
+            storyPoints = 5,
+            sprintID = "33333333-3333-4333-8333-333333333333",
         )
 
         assertEquals(expected, stored.apply(incoming))
+    }
+
+    @Test
+    fun applyingASprintNamesEveryColumnItOwns() {
+        val stored = SprintRecord(
+            id = "33333333-3333-4333-8333-333333333333",
+            projectID = "11111111-1111-4111-8111-111111111111",
+            name = "Sprint 1",
+            goalStoryPoints = 21,
+            startDate = Moments.start,
+            endDate = Moments.day,
+            owner = "Ada",
+            isFinished = false,
+            finishedAt = null,
+            createdAt = Moments.start,
+            updatedAt = Moments.later,
+        )
+
+        val incoming = aSprint(
+            name = "Sprint 1 (extended)",
+            goalStoryPoints = 34,
+            startDate = Moments.later,
+            endDate = Moments.muchLater,
+            owner = null,
+            createdAt = Moments.muchLater,
+            updatedAt = Moments.muchLater,
+        )
+
+        val expected = SprintRecord(
+            // Identity, parent and age are the stored row's, not the payload's — see
+            // `SprintRecord.apply`, which is where that argument is made.
+            id = stored.id,
+            projectID = stored.projectID,
+            name = "Sprint 1 (extended)",
+            goalStoryPoints = 34,
+            startDate = Moments.later,
+            endDate = Moments.muchLater,
+            owner = null,
+            isFinished = false,
+            finishedAt = null,
+            createdAt = stored.createdAt,
+            updatedAt = Moments.muchLater,
+        )
+
+        assertEquals(expected, stored.apply(incoming))
+    }
+
+    @Test
+    fun applyingASprintCopiesItsFinishedFlagRatherThanRefusingIt() {
+        // The one asymmetry with `WorkItemRecord.apply`, and it is load-bearing: a sprint is
+        // closed on whichever device the owner is holding, and the summary — the entire point
+        // of closing one — has to be able to arrive on the second device. A mapper that
+        // refused `isFinished` would make the closed state unreceivable.
+        val stored = aSprint().toRecord()
+        val incoming = aSprint(isFinished = true, finishedAt = Moments.later)
+
+        val applied = stored.apply(incoming)
+
+        assertEquals(true, applied.isFinished)
+        assertEquals(Moments.later, applied.finishedAt)
+        // The stored row's identity and age survive a payload claiming otherwise.
+        assertEquals(stored.id, applied.id)
+        assertEquals(stored.projectID, applied.projectID)
+        assertEquals(stored.createdAt, applied.createdAt)
     }
 
     // MARK: The read direction
@@ -245,9 +338,48 @@ class RecordCompletenessTest {
             createdAt = Moments.start,
             updatedAt = Moments.later,
             resolvedAt = null,
+            storyPoints = 5,
+            sprintID = "33333333-3333-4333-8333-333333333333",
         )
 
         assertEquals(aWorkItem(), record.domainValue)
+    }
+
+    @Test
+    fun readingASprintBackReproducesEveryColumn() {
+        val record = SprintRecord(
+            id = "33333333-3333-4333-8333-333333333333",
+            projectID = "11111111-1111-4111-8111-111111111111",
+            name = "Sprint 1",
+            goalStoryPoints = 21,
+            startDate = Moments.start,
+            endDate = Moments.day,
+            owner = "Ada",
+            isFinished = false,
+            finishedAt = null,
+            createdAt = Moments.start,
+            updatedAt = Moments.later,
+        )
+
+        assertEquals(aSprint(), record.domainValue)
+    }
+
+    @Test
+    fun anUnestimatedItemStaysUnestimatedThroughTheStore() {
+        // `null` in, `null` out. A mapper that reached for `?: 0` here would turn every
+        // unestimated card into a card worth nothing, and a sprint would then be able to
+        // claim it had measured its whole scope — the exact conflation the nullable type
+        // exists to prevent.
+        val unestimated = aWorkItem(storyPoints = null).toRecord()
+        assertEquals(null, unestimated.storyPoints)
+        assertEquals(null, unestimated.domainValue?.storyPoints)
+    }
+
+    @Test
+    fun anItemWithNoSprintStaysInTheBacklogThroughTheStore() {
+        val loose = aWorkItem(sprintID = null).toRecord()
+        assertEquals(null, loose.sprintID)
+        assertEquals(null, loose.domainValue?.sprintID)
     }
 
     // MARK: The keys
@@ -283,9 +415,9 @@ class RecordCompletenessTest {
     // constructor call that omits a parameter does not compile — so the enumeration is the
     // compiler's, it runs on every target, and it cannot be stale. A reflective version would
     // have been a *report* of the same fact that could be out of date, rather than a build
-    // failure. The eight project columns, thirteen work-item columns and eight status-change
-    // columns are all here; `sequence` is the one column with no domain counterpart, and it
-    // is the one that is not named in an expected record.
+    // failure. The eight project columns, fifteen work-item columns, eleven sprint columns
+    // and eight status-change columns are all here; `sequence` is the one column with no
+    // domain counterpart, and it is the one that is not named in an expected record.
 
     private fun aChange(): StatusChange = StatusChange(
         workItemID = aWorkItem().id,

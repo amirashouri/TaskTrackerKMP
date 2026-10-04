@@ -3,15 +3,18 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -86,6 +89,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedProjects = mutableListOf<Project>()
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
+    private val storedSprints = mutableListOf<Sprint>()
 
     /** Written, so a test can assert which use case ran and with what. */
     val writes = mutableListOf<String>()
@@ -131,6 +135,131 @@ class FakeProjectRepository : ProjectRepositoryPort {
     }
 
     override suspend fun isEmpty(): Boolean = locked { storedProjects.isEmpty() }
+
+    // MARK: Sprints
+    //
+    // Real storage rather than stubs: this fake's whole value is that it cannot drift from
+    // the port, and a stubbed sprint path would drift the moment a model called it.
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> = locked {
+        storedSprints.filter { it.projectID == projectID }
+            .sortedWith(compareBy({ it.isFinished }, { it.startDate }))
+            .map { it.copy() }
+    }
+
+    override suspend fun sprint(id: SprintID): Sprint? = locked {
+        storedSprints.firstOrNull { it.id == id }?.copy()
+    }
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = locked {
+        storedItems.filter { it.sprintID == id }.sortedBy { it.rank }.map { it.copy() }
+    }
+
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint {
+        return sprintWrite({ projectID }) {
+            failIfSet()
+        storedSprints.firstOrNull { it.projectID == projectID && !it.isFinished }?.let {
+            throw AppError.Validation("'${it.name}' is still open.")
+        }
+        val sprint = Sprint(
+            id = randomSprintID(),
+            projectID = projectID,
+            name = ProjectRules.normaliseName(name),
+            goalStoryPoints = goalStoryPoints,
+            startDate = startDate,
+            endDate = endDate,
+            owner = owner,
+            createdAt = now,
+            updatedAt = now,
+        )
+        storedSprints += sprint
+            writes += "createSprint"
+            sprint.copy()
+        }
+    }
+
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint = sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+        failIfSet()
+        val existing = storedSprints.first { it.id == id }
+        if (name != null) existing.name = name
+        if (goalStoryPoints != null) existing.goalStoryPoints = goalStoryPoints
+        if (startDate != null) existing.startDate = startDate
+        if (endDate != null) existing.endDate = endDate
+        if (owner is Patch.Of) existing.owner = owner.value
+        existing.updatedAt = now
+        writes += "updateSprint"
+        existing.copy()
+    }
+
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint =
+        sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            if (existing.isFinished) throw AppError.Validation("'${existing.name}' has already been finished.")
+            existing.isFinished = true
+            existing.updatedAt = now
+            existing.reconcileFinishedAt(now)
+            writes += "finishSprint"
+            existing.copy()
+        }
+
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint =
+        sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            storedSprints.firstOrNull { it.projectID == existing.projectID && !it.isFinished }
+                ?.takeIf { it.id != existing.id }
+                ?.let { throw AppError.Validation("'${it.name}' is open, so '${existing.name}' cannot be reopened.") }
+            existing.isFinished = false
+            existing.updatedAt = now
+            existing.reconcileFinishedAt(now)
+            writes += "reopenSprint"
+            existing.copy()
+        }
+
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> = sprintWrite({ storedItems.first { it.id in workItemIDs }.projectID }) {
+        failIfSet()
+        val target = (sprintID as? Patch.Of)?.value
+        storedItems.filter { it.id in workItemIDs }.forEach {
+            it.sprintID = target
+            it.updatedAt = now
+        }
+        writes += "setWorkItemSprint"
+        storedItems.filter { it.id in workItemIDs }.map { it.copy() }
+    }
+
+    override suspend fun deleteSprint(id: SprintID, now: Instant) {
+        sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            storedSprints.remove(existing)
+            storedItems.filter { it.sprintID == id }.forEach {
+                it.sprintID = null
+                it.updatedAt = now
+            }
+            writes += "deleteSprint"
+        }
+    }
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> = locked {
         // Newest first, with the later-recorded change winning a tie: a card created and
@@ -347,6 +476,9 @@ class FakeProjectRepository : ProjectRepositoryPort {
     /** Adds a work item directly, without recording a write or a status change. */
     suspend fun seed(item: WorkItem) = locked { storedItems += item }
 
+    /** Adds a sprint directly, without recording a write. */
+    suspend fun seed(sprint: Sprint) = locked { storedSprints += sprint }
+
     /** How many subscribers the broadcaster currently has. Proves observation stopped. */
     val subscriberCount: Int get() = broadcaster.subscriberCount
 
@@ -382,6 +514,26 @@ class FakeProjectRepository : ProjectRepositoryPort {
             value
         }
         pending?.let { publish(it) }
+        return result
+    }
+
+    /**
+     * A sprint write, which moves *both* a sprint and the membership of its cards.
+     *
+     * Two kinds, published after the lock for the reason [writing] documents. The project is
+     * read inside the block because the row a write touches is only known there.
+     */
+    private suspend fun <T> sprintWrite(projectID: () -> ProjectID?, block: () -> T): T {
+        var owner: ProjectID? = null
+        var result: T
+        lock.withLock {
+            result = block()
+            owner = projectID()
+        }
+        owner?.let {
+            publish(ProjectChange(ProjectChange.Kind.Sprints, it))
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, it))
+        }
         return result
     }
 

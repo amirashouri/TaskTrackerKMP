@@ -1,10 +1,12 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -73,6 +75,25 @@ interface ProjectRepositoryPort {
     suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange>
 
     /**
+     * A project's sprints, open ones first and then by start date.
+     *
+     * The ordering is part of the read contract, not a display concern: the open sprint is
+     * the one being worked on and it has to lead every list that shows them.
+     */
+    suspend fun sprints(projectID: ProjectID): List<Sprint>
+
+    suspend fun sprint(id: SprintID): Sprint?
+
+    /**
+     * Every work item in a sprint, in the board's own order.
+     *
+     * The domain's [com.tasktracker.domain.sprintSummary] filters a list it is given, so
+     * this exists so a caller can hand it exactly the right items — and so the summary can
+     * also be reached for the *whole project's* list without a second shape of filter.
+     */
+    suspend fun sprintWorkItems(id: SprintID): List<WorkItem>
+
+    /**
      * Inserts the first-launch sample board if the store is completely empty.
      *
      * Returns whether anything was inserted, and does nothing once a single project
@@ -118,6 +139,90 @@ interface ProjectRepositoryPort {
     suspend fun setArchived(id: ProjectID, isArchived: Boolean, now: Instant): Project
 
     suspend fun deleteProject(id: ProjectID)
+
+    // MARK: Sprints
+
+    /**
+     * Creates a sprint, and refuses if the project already has an open one.
+     *
+     * **The one-open-sprint rule is enforced here rather than in a use case**, and the
+     * reason is that this is the only place that can see the project's other sprints. A
+     * check in a use case is bypassed by anyone holding this port, and a check outside the
+     * write is a race — two devices creating a sprint offline both pass it and both store
+     * theirs. Inside the transaction the count and the insert cannot interleave.
+     *
+     * Throws [com.tasktracker.core.AppError.Validation] rather than returning `null`: the
+     * caller asked for something the store refuses to hold, and a nullable return would
+     * make "created" and "refused" the same shape.
+     */
+    suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint
+
+    /**
+     * Applies a partial edit to a sprint.
+     *
+     * `name`, `goalStoryPoints`, `startDate` and `endDate` are plain optionals — `null`
+     * leaves the field alone. [owner] is a [Patch], because a sprint *can* be handed to
+     * nobody and "not mentioned" is a different instruction from "set it to nothing"; see
+     * [Patch].
+     *
+     * `isFinished` is deliberately absent: finishing is [finishSprint] and reopening is
+     * [reopenSprint], because each of them has an invariant the other does not — the date
+     * that goes with it, and the outbox row that tells the server. A setter could not
+     * maintain either.
+     */
+    suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint
+
+    /**
+     * Closes a sprint and dates it.
+     *
+     * The date is set here and not left to the caller, because "finished" without a date is
+     * the state [com.tasktracker.domain.Sprint.reconcileFinishedAt] exists to rule out, and
+     * a caller who passed it would be able to write the state that method forbids.
+     */
+    suspend fun finishSprint(id: SprintID, now: Instant): Sprint
+
+    /** Reopens a sprint and clears its finish date. See [finishSprint]. */
+    suspend fun reopenSprint(id: SprintID, now: Instant): Sprint
+
+    /**
+     * Moves work items into a sprint, or back to the backlog.
+     *
+     * [Patch] rather than a nullable argument for the same reason as every other patch: a
+     * caller that does not care about sprint membership and one that is emptying it are
+     * giving different instructions.
+     *
+     * Returns the items as they now stand, so a caller can render the result without a
+     * second read — the same contract as every other write on this interface.
+     */
+    suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem>
+
+    /**
+     * Deletes a sprint, returning its items to the backlog.
+     *
+     * Separate from the cascade in [deleteProject] because a sprint is deleted on its own:
+     * an abandoned sprint's *history* is worth keeping, and its tasks are not worth losing.
+     */
+    suspend fun deleteSprint(id: SprintID, now: Instant)
 
     suspend fun createWorkItem(
         projectID: ProjectID,
@@ -213,6 +318,16 @@ data class ProjectChange(
     enum class Kind {
         Projects,
         WorkItems,
+        /**
+         * A sprint, or the membership of one.
+         *
+         * Separate from [WorkItems] rather than folded into it, because a board watching
+         * this feature has to tell "the card moved" from "the card joined a sprint": the
+         * first re-reads one lane and the second re-reads the sprint's whole item list. One
+         * kind for both would make every board re-read every card whenever somebody tidied a
+         * sprint — which is the over-broadcast this whole type exists to avoid.
+         */
+        Sprints,
     }
 }
 

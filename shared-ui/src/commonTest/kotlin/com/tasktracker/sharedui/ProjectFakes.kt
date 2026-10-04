@@ -2,12 +2,14 @@ package com.tasktracker.sharedui
 
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -162,6 +164,44 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
         unused("statusChanges")
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> = unused("sprints")
+
+    override suspend fun sprint(id: SprintID): Sprint? = unused("sprint")
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = unused("sprintWorkItems")
+
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint = unused("createSprint")
+
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint = unused("updateSprint")
+
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint = unused("finishSprint")
+
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint = unused("reopenSprint")
+
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> = unused("setWorkItemSprint")
+
+    override suspend fun deleteSprint(id: SprintID, now: Instant): Unit = unused("deleteSprint")
 
     override suspend fun updateProject(
         id: ProjectID,

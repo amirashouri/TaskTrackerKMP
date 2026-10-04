@@ -24,6 +24,14 @@ enum class OutboxOperation(val wireValue: String) {
 enum class OutboxEntity(val wireValue: String) {
     Project("project"),
     WorkItem("workItem"),
+    /**
+     * A sprint, queued like any other entity.
+     *
+     * The wire value is `sprint`, matching `WorkItemRecord`'s camelCase columns rather than
+     * `ProjectRecord`'s singular convention — the same inconsistency that already exists
+     * between `workItem` and `project`, and changing either is a protocol change.
+     */
+    Sprint("sprint"),
     ;
 
     companion object {

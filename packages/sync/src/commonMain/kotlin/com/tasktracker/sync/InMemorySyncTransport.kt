@@ -112,7 +112,19 @@ class InMemorySyncTransport(
  */
 private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     OutboxEntity.Project -> SyncScope.Projects
-    OutboxEntity.WorkItem -> SyncScope.WorkItems
+    // Sprints ride the `workItems` stream rather than getting one of their own.
+    //
+    // A `SyncScope.Sprints` would be the tidier answer and is deliberately not done here.
+    // `SyncScope` is a **wire value** — the server names the streams — so adding one is a
+    // protocol change, and `SettingsScreen` renders a sync control per scope, so it is
+    // also a new user-facing switch. Neither belongs in the phase that adds a table.
+    //
+    // Filing them here is not a fudge: this doc already records that a project rename
+    // travels on the `workItems` stream too, so the scopes were never a strict partition of
+    // entities. A sprint exists only to group work items, and every change to one is only
+    // interesting next to the cards in it — so `workItems` is the stream a subscriber
+    // watching that project is already reading.
+    OutboxEntity.WorkItem, OutboxEntity.Sprint -> SyncScope.WorkItems
 }
 
 private fun OutboxEntry.toRemoteChange(): RemoteChange = RemoteChange(

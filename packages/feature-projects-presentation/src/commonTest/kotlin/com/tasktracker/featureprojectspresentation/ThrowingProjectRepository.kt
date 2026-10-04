@@ -1,10 +1,12 @@
 package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -49,6 +51,44 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> = boom()
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = boom()
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> = boom()
+
+    override suspend fun sprint(id: SprintID): Sprint? = boom()
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = boom()
+
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint = boom()
+
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint = boom()
+
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint = boom()
+
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint = boom()
+
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> = boom()
+
+    override suspend fun deleteSprint(id: SprintID, now: Instant): Unit = boom()
 
     override suspend fun createProject(
         name: String,

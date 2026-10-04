@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomProjectID
@@ -17,6 +18,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 
 /**
  * The repository, as the port describes it.
@@ -361,7 +363,18 @@ class RoomProjectRepositoryTest {
 
         harness.repository.deleteProject(project.id)
 
-        assertEquals(2, seen.size)
+        // Kinds rather than a count, because the count moved and the move is the point:
+        // deleting a project now takes its sprints with it, so a Sprints list has to wake
+        // up too or it shows a sprint for a project that no longer exists. This test caught
+        // the change on its own — it asserted `2` and got `3`.
+        assertEquals(
+            listOf(
+                ProjectChange.Kind.Projects,
+                ProjectChange.Kind.WorkItems,
+                ProjectChange.Kind.Sprints,
+            ),
+            seen.map { it.kind },
+        )
         assertTrue(seen.all { it.projectID == project.id })
     }
 
@@ -843,5 +856,326 @@ class RoomProjectRepositoryTest {
 
         assertEquals(listOf(project.id), harness.repository.projects(includeArchived = true).map { it.id })
         assertNotNull(parseProjectID(project.id.stringValue))
+    }
+}
+
+/**
+ * Sprints, through the repository.
+ *
+ * Separate from [RoomProjectRepositoryTest] rather than in it, because the file it would
+ * otherwise live in has a doc comment that describes its scope in terms of projects and
+ * work items, and appending a third aggregate to a class whose documentation does not
+ * mention it is how a file stops being readable.
+ *
+ * ## The three things worth stating before the tests
+ *
+ * 1. **Every write is asserted on the outbox as well as the return value**, for the reason
+ *    [RoomProjectRepositoryTest] gives. A sprint saved locally and never pushed is the same
+ *    failure it is.
+ * 2. **The one-open rule is a refusal, not a coalescing policy.** Creating a second sprint
+ *    while one is open throws rather than quietly closing the first, because "silently
+ *    finished my sprint" is not a thing anybody asked for.
+ * 3. **Reopening is refused when another sprint has opened since**, which is the only place
+ *    that can see both and therefore the only place the rule can hold.
+ */
+class RoomSprintRepositoryTest {
+
+    private suspend fun aProjectWithASprint(): Pair<Harness, ProjectID> {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        harness.repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 21,
+            startDate = Moments.start,
+            endDate = Moments.day,
+            owner = "Ada",
+            now = Moments.start,
+        )
+        return harness to project.id
+    }
+
+    @Test
+    fun aCreatedSprintIsStoredWithEveryFieldAndQueued() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+
+        val sprint = harness.repository.createSprint(
+            projectID = project.id,
+            name = "  Sprint 1  ",
+            goalStoryPoints = 21,
+            startDate = Moments.start,
+            endDate = Moments.day,
+            owner = "Ada",
+            now = Moments.start,
+        )
+
+        // Trimmed by the same rule a project name is, so "  Sprint 1  " cannot become a
+        // sprint whose name is two spaces wider than it looks.
+        assertEquals("Sprint 1", sprint.name)
+        assertEquals(21, sprint.goalStoryPoints)
+        assertEquals("Ada", sprint.owner)
+        assertEquals(false, sprint.isFinished)
+
+        val stored = assertNotNull(harness.repository.sprint(sprint.id))
+        assertEquals(sprint, stored)
+        assertEquals(listOf(sprint), harness.repository.sprints(project.id))
+
+        // And queued: an edit saved locally and never pushed is the failure the outbox
+        // exists to prevent. Filtered to sprints, because `createProject` above queued a row
+        // of its own and counting the whole queue here would assert on that instead.
+        val queued = harness.queued().filter { it.entityKind == "sprint" }
+        assertEquals(1, queued.size)
+        assertEquals(sprint.id.stringValue, queued.first().entityID)
+        assertEquals(sprint, harness.decodeSprint(queued.first()))
+    }
+
+    @Test
+    fun aSecondOpenSprintIsRefusedRatherThanSilentlyReplacingTheFirst() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+
+        val failure = assertFailsWith<AppError.Validation> {
+            harness.repository.createSprint(
+                projectID = projectID,
+                name = "Sprint 2",
+                goalStoryPoints = 13,
+                startDate = Moments.day,
+                endDate = Moments.muchLater,
+                owner = null,
+                now = Moments.later,
+            )
+        }
+
+        // The message names the sprint standing in the way, so the caller can offer to
+        // finish it rather than showing a dead end.
+        assertTrue(failure.message.orEmpty().contains("Sprint 1"))
+        assertEquals(1, harness.repository.sprints(projectID).size)
+    }
+
+    @Test
+    fun anotherOpenSprintIsAllowedOnceTheFirstIsFinished() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val first = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        harness.repository.finishSprint(first.id, Moments.later)
+
+        val second = harness.repository.createSprint(
+            project.id, "Sprint 2", 13, Moments.day, Moments.muchLater, null, Moments.later,
+        )
+
+        assertEquals(false, second.isFinished)
+        // Open first, then by start date — the read contract the Sprints tab depends on.
+        assertEquals(
+            listOf(second.id, first.id),
+            harness.repository.sprints(project.id).map { it.id },
+        )
+    }
+
+    @Test
+    fun finishingASprintDatesItAndRefusesToFinishItTwice() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val sprint = harness.repository.sprints(projectID).single()
+
+        val finished = harness.repository.finishSprint(sprint.id, Moments.later)
+
+        assertEquals(true, finished.isFinished)
+        assertEquals(Moments.later, finished.finishedAt)
+
+        // A second finish would silently move the date a reader is being told the sprint
+        // ended on — and the summary is computed from the items at the moment it is read.
+        assertFailsWith<AppError.Validation> {
+            harness.repository.finishSprint(sprint.id, Moments.muchLater)
+        }
+        assertEquals(
+            Moments.later,
+            assertNotNull(harness.repository.sprint(sprint.id)).finishedAt,
+        )
+    }
+
+    @Test
+    fun reopeningClearsTheDateAndIsRefusedWhileAnotherSprintIsOpen() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val first = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        harness.repository.finishSprint(first.id, Moments.later)
+        val second = harness.repository.createSprint(
+            project.id, "Sprint 2", 13, Moments.day, Moments.muchLater, null, Moments.later,
+        )
+
+        // Refused: reopening would produce two open sprints, the exact state createSprint
+        // exists to prevent.
+        assertFailsWith<AppError.Validation> { harness.repository.reopenSprint(first.id, Moments.later) }
+
+        harness.repository.finishSprint(second.id, Moments.later)
+        val reopened = harness.repository.reopenSprint(first.id, Moments.muchLater)
+
+        assertEquals(false, reopened.isFinished)
+        assertNull(reopened.finishedAt)
+    }
+
+    @Test
+    fun movingItemsIntoASprintQueuesEachOneAndLeavesTheirRankAlone() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val sprint = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        val first = harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+        )
+        val second = harness.repository.createWorkItem(
+            project.id, "Two", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+        )
+        val depthBefore = harness.queueDepth()
+
+        val changed = harness.repository.setWorkItemSprint(
+            workItemIDs = listOf(first.id, second.id),
+            sprintID = Patch.Of(sprint.id),
+            now = Moments.later,
+        )
+
+        assertEquals(setOf(sprint.id), changed.map { it.sprintID }.toSet())
+        // Rank is the item's position in its status column and a sprint is not a column.
+        assertEquals(listOf(first.rank, second.rank), changed.map { it.rank })
+
+        // Each item is an edit, and each edit has to be queued — a bulk UPDATE produces no
+        // payload for the queue, which is why this goes through the mapping.
+        assertEquals(depthBefore + 2, harness.queueDepth())
+        assertEquals(
+            setOf(sprint.id),
+            changed.map { item -> harness.repository.sprintWorkItems(sprint.id).first { it.id == item.id }.sprintID }.toSet(),
+        )
+    }
+
+    @Test
+    fun sendingItemsBackToTheBacklogIsDistinctFromNotMentioningTheirSprint() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val sprint = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        val item = harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+        )
+        harness.repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), Moments.start)
+
+        // "Not mentioned" is a caller that does not care — it must change nothing, and it
+        // must not read as "send it back". This is the collision a plain `SprintID?` would
+        // have made silently.
+        assertEquals(
+            emptyList(),
+            harness.repository.setWorkItemSprint(
+                listOf(item.id), Patch.Unmentioned, Moments.muchLater,
+            ),
+        )
+        assertEquals(
+            sprint.id,
+            assertNotNull(harness.repository.workItem(item.id)).sprintID,
+        )
+
+        val released = harness.repository.setWorkItemSprint(
+            listOf(item.id), Patch.Of(null), Moments.muchLater,
+        )
+        assertEquals(listOf(null), released.map { it.sprintID })
+    }
+
+    @Test
+    fun deletingASprintReturnsItsItemsToTheBacklogRatherThanOrphaningThem() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val sprint = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        val item = harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+        )
+        harness.repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), Moments.start)
+
+        harness.repository.deleteSprint(sprint.id, Moments.later)
+
+        assertNull(harness.repository.sprint(sprint.id))
+        // A card still claiming to be in a sprint is a card that reappears there on the next
+        // pull, so the release is part of the delete rather than a separate chore.
+        assertNull(assertNotNull(harness.repository.workItem(item.id)).sprintID)
+        assertTrue(harness.queued().any { it.entityKind == "sprint" })
+    }
+
+    @Test
+    fun deletingAProjectTakesItsSprintsWithItAndQueuesThem() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val depthBefore = harness.queueDepth()
+
+        harness.repository.deleteProject(projectID)
+
+        assertEquals(emptyList(), harness.repository.sprints(projectID))
+        // Queueing only the project would leave the server holding a sprint for a project
+        // nothing local references — the mirror of the bug `deleteProject`'s own doc warns
+        // about for work items, one level up.
+        assertTrue(harness.queued().drop(depthBefore).any { it.entityKind == "sprint" })
+    }
+
+    @Test
+    fun aSprintWriteAnnouncesSprintsAndWorkItems() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+
+        // Both kinds, every time: a subscriber hearing only the sprints half keeps showing
+        // the old membership, and one hearing only the items half never learns the sprint
+        // exists.
+        assertEquals(
+            listOf(ProjectChange.Kind.Sprints, ProjectChange.Kind.WorkItems),
+            seen.map { it.kind },
+        )
+        assertTrue(seen.all { it.projectID == project.id })
+    }
+
+    @Test
+    fun editingASprintIntoABackwardsWindowIsRefusedRatherThanStored() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val sprint = harness.repository.sprints(projectID).single()
+
+        assertFailsWith<AppError.Validation> {
+            harness.repository.updateSprint(
+                id = sprint.id,
+                name = null,
+                goalStoryPoints = null,
+                startDate = null,
+                endDate = Moments.start.minus(1.days),
+                owner = Patch.Unmentioned,
+                now = Moments.later,
+            )
+        }
+
+        // A backwards window is survivable if it arrived from a server; an *edit* that
+        // silently produces one is how a user ends up with a sprint that is never active.
+        assertEquals(sprint.endDate, assertNotNull(harness.repository.sprint(sprint.id)).endDate)
+    }
+
+    @Test
+    fun aNegativeGoalIsFlooredRatherThanStored() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val sprint = harness.repository.sprints(projectID).single()
+
+        val updated = harness.repository.updateSprint(
+            id = sprint.id,
+            name = null,
+            goalStoryPoints = -8,
+            startDate = null,
+            endDate = null,
+            owner = Patch.Unmentioned,
+            now = Moments.later,
+        )
+
+        assertEquals(0, updated.goalStoryPoints)
     }
 }

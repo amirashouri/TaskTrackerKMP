@@ -4,11 +4,13 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.database.NewOutboxEntry
@@ -16,6 +18,7 @@ import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.ProjectRecord
 import com.tasktracker.database.SessionCache
+import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.WorkItemRecord
@@ -23,6 +26,7 @@ import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
@@ -270,11 +274,255 @@ class RoomProjectRepository(
                 database.workItemDao().deleteByID(item.id)
                 enqueueDelete(OutboxEntity.WorkItem, item.id, stamp, item.updatedAt)
             }
+            // Sprints go before the project, and for the same reason the items do: queueing
+            // only the project would leave the server holding sprints for a project nothing
+            // local references and nothing will ever remove — the mirror of a lost edit, and
+            // just as permanent. `deleteProject` was written before sprints existed, so this
+            // is the exact omission this feature would have introduced had nobody re-read it.
+            for (sprint in database.sprintDao().byProject(id.stringValue)) {
+                database.sprintDao().deleteByID(sprint.id)
+                enqueueDelete(OutboxEntity.Sprint, sprint.id, stamp, sprint.updatedAt)
+            }
             database.statusChangeDao().deleteByProject(id.stringValue)
             database.projectDao().deleteByID(id.stringValue)
             enqueueDelete(OutboxEntity.Project, id.stringValue, stamp, project.updatedAt)
         }
-        changeBus.announceProjectChange(id)
+        changeBus.announceProjectDeletion(id)
+    }
+
+    // MARK: Sprint reads
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> =
+        database.sprintDao().byProject(projectID.stringValue).mapNotNull { it.domainValue }
+
+    override suspend fun sprint(id: SprintID): Sprint? =
+        database.sprintDao().byID(id.stringValue)?.domainValue
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> =
+        database.workItemDao().bySprint(id.stringValue).mapNotNull { it.domainValue }
+
+    // MARK: Sprint writes
+
+    /**
+     * Creates a sprint, refusing when the project already has an open one.
+     *
+     * The check is `openCount(...) != 0` rather than reading the open sprint and comparing
+     * ids, because it is the *count* that has to be zero and the query that answers it is
+     * the same one the board reads. It is inside the transaction on purpose: two devices
+     * creating a sprint offline both pass any check made outside it, and this store is
+     * local-first against a server that also merges.
+     *
+     * Refused with [AppError.Validation] rather than `null`, and the message names the open
+     * sprint so the caller can offer "finish that one first" rather than a dead end.
+     */
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint {
+        val normalisedName = ProjectRules.normaliseName(name)
+        val stamp = currentUserStamp()
+
+        val created = inTransaction(database) {
+            // Proves the project exists, and gives the "no project" refusal a better
+            // message than the id-only one `readProject` produces.
+            readProject(projectID)
+
+            val open = database.sprintDao().openByProject(projectID.stringValue)
+            if (open != null) {
+                throw AppError.Validation(
+                    "'${open.name}' is still open. Finish it before starting another.",
+                )
+            }
+
+            val sprint = Sprint(
+                id = randomSprintID(),
+                projectID = projectID,
+                name = normalisedName,
+                goalStoryPoints = goalStoryPoints,
+                startDate = startDate,
+                endDate = endDate,
+                owner = WorkItemRules.normaliseAssignee(owner),
+                isFinished = false,
+                finishedAt = null,
+                createdAt = now,
+                updatedAt = now,
+            )
+            database.sprintDao().insert(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(projectID)
+        return created
+    }
+
+    /**
+     * A partial edit.
+     *
+     * **Refuses to move the window past itself** — an end before a start is stored rather
+     * than thrown, per [Sprint]'s own KDoc, but *editing into* that state is refused here.
+     * A backwards window is survivable; an edit that silently produces one is how a user
+     * ends up with a sprint that is never active.
+     */
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint {
+        val normalisedName = name?.let { ProjectRules.normaliseName(it) }
+        val stamp = currentUserStamp()
+
+        val updated = inTransaction(database) {
+            val sprint = readSprint(id)
+            normalisedName?.let { sprint.name = it }
+            // Floored rather than refused, matching `Sprint`'s own `init`: a negative goal
+            // from a sync is normalised in place so every later reader sees one number.
+            goalStoryPoints?.let { sprint.goalStoryPoints = maxOf(0, it) }
+            startDate?.let { sprint.startDate = it }
+            endDate?.let { sprint.endDate = it }
+            if (owner is Patch.Of) sprint.owner = WorkItemRules.normaliseAssignee(owner.value)
+            sprint.updatedAt = now
+
+            if (sprint.startDate > sprint.endDate) {
+                throw AppError.Validation(
+                    "A sprint cannot end before it starts.",
+                )
+            }
+
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(updated.projectID)
+        return updated
+    }
+
+    /**
+     * Closes a sprint.
+     *
+     * The date is set here and not taken from the caller, so a caller cannot write
+     * "finished" without one — the state `Sprint.reconcileFinishedAt` exists to rule out.
+     * A **second** finish is refused rather than being a no-op: the summary is computed from
+     * the items' state at the moment it is read, so finishing twice would silently move
+     * the date a reader is being told the sprint ended on.
+     */
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint {
+        val stamp = currentUserStamp()
+
+        val finished = inTransaction(database) {
+            val sprint = readSprint(id)
+            if (sprint.isFinished) {
+                throw AppError.Validation("'${sprint.name}' has already been finished.")
+            }
+            sprint.isFinished = true
+            sprint.updatedAt = now
+            sprint.reconcileFinishedAt(now)
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(finished.projectID)
+        return finished
+    }
+
+    /**
+     * Reopens a sprint and clears its date.
+     *
+     * Refused once **another** sprint has been opened in the meantime, because reopening
+     * would then produce two open sprints — the exact state `createSprint` exists to
+     * prevent. This is the one place that can see both, so the rule lives here rather than
+     * being assumed.
+     */
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint {
+        val stamp = currentUserStamp()
+
+        val reopened = inTransaction(database) {
+            val sprint = readSprint(id)
+            val open = database.sprintDao().openByProject(sprint.projectID.stringValue)
+            if (open != null && open.id != sprint.id.stringValue) {
+                throw AppError.Validation(
+                    "'${open.name}' is open, so '${sprint.name}' cannot be reopened.",
+                )
+            }
+            sprint.isFinished = false
+            sprint.updatedAt = now
+            sprint.reconcileFinishedAt(now)
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(reopened.projectID)
+        return reopened
+    }
+
+    /**
+     * Moves items into a sprint, or back to the backlog.
+     *
+     * The work item rows are written **through the mapping rather than through
+     * [WorkItemRecord.assignToSprint]**, because every changed item is an edit and an edit
+     * has to queue for sync — and a bulk `UPDATE` produces no payload for the queue. So
+     * each item is read, changed, written and enqueued, and the batch is one transaction, so
+     * it either all happens or none of it does.
+     */
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> {
+        val stamp = currentUserStamp()
+        // Empty is a no-op rather than an error, because "these tasks are already where I
+        // asked" is a normal answer to a call like this and not a failure.
+        if (workItemIDs.isEmpty() || sprintID is Patch.Unmentioned) return emptyList()
+
+        val target = (sprintID as Patch.Of).value
+        val changed = inTransaction(database) {
+            workItemIDs.map { itemID ->
+                val item = readWorkItem(itemID)
+                item.sprintID = target
+                item.updatedAt = now
+                database.workItemDao().update(item.toRecord())
+                enqueueWorkItem(item, stamp, now)
+                item
+            }
+        }
+        val owner = changed.first().projectID
+        changeBus.announceSprints(owner)
+        return changed
+    }
+
+    /**
+     * Deletes a sprint and returns its items to the backlog.
+     *
+     * The items are released in the same transaction and each one is queued, because a
+     * card that still claims to be in a sprint on the server is a card that reappears there
+     * on the next pull.
+     */
+    override suspend fun deleteSprint(id: SprintID, now: Instant) {
+        val stamp = currentUserStamp()
+
+        val projectID = inTransaction(database) {
+            val sprint = readSprint(id)
+            for (item in database.workItemDao().bySprint(id.stringValue)) {
+                val value = item.domainValue ?: continue
+                value.sprintID = null
+                value.updatedAt = now
+                database.workItemDao().update(value.toRecord())
+                enqueueWorkItem(value, stamp, now)
+            }
+            database.sprintDao().deleteByID(id.stringValue)
+            enqueueDelete(OutboxEntity.Sprint, id.stringValue, stamp, now)
+            sprint.projectID
+        }
+        changeBus.announceSprints(projectID)
+        changeBus.announceWorkItems(projectID)
     }
 
     // MARK: Work item writes
@@ -628,6 +876,15 @@ class RoomProjectRepository(
     private suspend fun recordForWorkItem(id: WorkItemID): WorkItemRecord? =
         database.workItemDao().byID(id.stringValue)
 
+    /** As [readProject]. */
+    private suspend fun readSprint(id: SprintID): Sprint {
+        val record = database.sprintDao().byID(id.stringValue) ?: throw missingSprint(id)
+        return record.domainValue ?: throw missingSprint(id)
+    }
+
+    private fun missingSprint(id: SprintID): AppError.Storage =
+        AppError.Storage("No sprint $id in the local store.")
+
     // MARK: Ranks
 
     /**
@@ -728,6 +985,29 @@ class RoomProjectRepository(
                 id = newOutboxID(OutboxEntity.WorkItem, item.id.stringValue, OutboxOperation.Upsert),
                 entity = OutboxEntity.WorkItem,
                 entityID = item.id.stringValue,
+                operation = OutboxOperation.Upsert,
+                payload = payload.encodeToByteArray(),
+                createdAt = now,
+                userID = userID,
+            ).toRecord(),
+        )
+    }
+
+    /**
+     * As [enqueueProject].
+     *
+     * The payload is the **domain** `Sprint`, not the record, for the same protocol reason:
+     * adding a column to [SprintRecord] must not be a wire change. It does mean the server
+     * is being told the field is called `goalStoryPoints` rather than whatever the column
+     * ends up being called, which is the right way round.
+     */
+    private suspend fun enqueueSprint(sprint: Sprint, userID: String?, now: Instant) {
+        val payload = JSONCoding.json.encodeToString(Sprint.serializer(), sprint)
+        database.outboxDao().insert(
+            NewOutboxEntry(
+                id = newOutboxID(OutboxEntity.Sprint, sprint.id.stringValue, OutboxOperation.Upsert),
+                entity = OutboxEntity.Sprint,
+                entityID = sprint.id.stringValue,
                 operation = OutboxOperation.Upsert,
                 payload = payload.encodeToByteArray(),
                 createdAt = now,

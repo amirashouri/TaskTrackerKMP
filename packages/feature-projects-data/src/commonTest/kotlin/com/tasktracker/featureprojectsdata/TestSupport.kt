@@ -2,10 +2,12 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.database.CachedSession
@@ -14,6 +16,7 @@ import com.tasktracker.database.SessionCache
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -77,6 +80,13 @@ internal class Harness(
     /** As [queuedProject], for a row the test already has in hand. */
     fun decodeProject(record: OutboxRecord): Project =
         JSONCoding.json.decodeFromString(Project.serializer(), record.payload.decodeToString())
+
+    suspend fun queuedSprint(index: Int = 0): Sprint =
+        JSONCoding.json.decodeFromString(Sprint.serializer(), queued()[index].payload.decodeToString())
+
+    /** As [queuedSprint], for a row the test already has in hand. */
+    fun decodeSprint(record: OutboxRecord): Sprint =
+        JSONCoding.json.decodeFromString(Sprint.serializer(), record.payload.decodeToString())
 
     /** As [queuedWorkItem], for a row the test already has in hand. */
     fun decodeWorkItem(record: OutboxRecord): WorkItem =
@@ -192,6 +202,11 @@ internal fun aWorkItem(
     createdAt: Instant = Moments.start,
     updatedAt: Instant = Moments.later,
     resolvedAt: Instant? = null,
+    // Non-default on purpose: the completeness test has to *name* these two, and a default
+    // of null would let an `expected` record omit them and match a mapping that dropped
+    // both. A value here is what makes forgetting one a visible difference.
+    storyPoints: Int? = 5,
+    sprintID: SprintID? = parseSprintID("33333333-3333-4333-8333-333333333333"),
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -206,4 +221,33 @@ internal fun aWorkItem(
     createdAt = createdAt,
     updatedAt = updatedAt,
     resolvedAt = resolvedAt,
+    storyPoints = storyPoints,
+    sprintID = sprintID,
+)
+
+/** As [aProject], for a sprint. */
+internal fun aSprint(
+    id: SprintID = parseSprintID("33333333-3333-4333-8333-333333333333")!!,
+    projectID: ProjectID = parseProjectID("11111111-1111-4111-8111-111111111111")!!,
+    name: String = "Sprint 1",
+    goalStoryPoints: Int = 21,
+    startDate: Instant = Moments.start,
+    endDate: Instant = Moments.day,
+    owner: String? = "Ada",
+    isFinished: Boolean = false,
+    finishedAt: Instant? = null,
+    createdAt: Instant = Moments.start,
+    updatedAt: Instant = Moments.later,
+): Sprint = Sprint(
+    id = id,
+    projectID = projectID,
+    name = name,
+    goalStoryPoints = goalStoryPoints,
+    startDate = startDate,
+    endDate = endDate,
+    owner = owner,
+    isFinished = isFinished,
+    finishedAt = finishedAt,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
 )

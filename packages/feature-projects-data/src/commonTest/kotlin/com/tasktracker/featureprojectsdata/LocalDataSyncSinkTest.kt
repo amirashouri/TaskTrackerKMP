@@ -8,6 +8,7 @@ import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -425,6 +426,94 @@ class LocalDataSyncSinkTest {
         assertEquals("APO-1", readBack.key.rawValue)
     }
 
+
+    // MARK: Sprints
+
+    @Test
+    fun aPulledSprintIsInsertedAndAnnounced() = runTest {
+        val harness = Harness()
+        val sprint = aSprint()
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.sink.apply(upsert(OutboxEntity.Sprint, sprint))
+
+        assertEquals(sprint, harness.repository.sprint(sprint.id))
+        // Both kinds: a subscriber hearing only the sprints half keeps showing the old
+        // membership, and one hearing only the items half never learns the sprint exists.
+        assertEquals(
+            listOf(ProjectChange.Kind.Sprints, ProjectChange.Kind.WorkItems),
+            seen.map { it.kind },
+        )
+        // The pull never writes to the outbox — the rule this whole file is built on.
+        assertEquals(0, harness.queueDepth())
+    }
+
+    @Test
+    fun aPulledSprintCanArriveClosed() = runTest {
+        // The one asymmetry with a work item, and the reason it is here rather than in the
+        // mapping test: a sprint is closed on whichever device its owner is holding, so the
+        // closed state *has* to be receivable — and the summary, which is the entire point
+        // of closing one, is computed from it.
+        val harness = Harness()
+        val open = aSprint()
+        harness.sink.apply(upsert(OutboxEntity.Sprint, open))
+
+        val closed = open.copy(isFinished = true, finishedAt = Moments.later)
+        harness.sink.apply(upsert(OutboxEntity.Sprint, closed))
+
+        val stored = assertNotNull(harness.repository.sprint(open.id))
+        assertEquals(true, stored.isFinished)
+        assertEquals(Moments.later, stored.finishedAt)
+    }
+
+    @Test
+    fun aPulledSprintDeleteReturnsItsItemsToTheBacklog() = runTest {
+        // Nothing local would ever clean this up otherwise, and the next pull would find a
+        // card belonging to a sprint that does not exist. The *local* delete does the same
+        // and is tested in `RoomSprintRepositoryTest`; this is the same requirement from the
+        // pull side, which is a different code path and the one a re-delivered page takes.
+        val harness = Harness()
+        val sprint = aSprint()
+        val item = aWorkItem(sprintID = sprint.id)
+        harness.sink.apply(upsert(OutboxEntity.Sprint, sprint))
+        harness.sink.apply(upsert(OutboxEntity.WorkItem, item))
+
+        harness.sink.apply(delete(OutboxEntity.Sprint, sprint.id.stringValue))
+
+        assertNull(harness.repository.sprint(sprint.id))
+        assertNull(assertNotNull(harness.repository.workItem(item.id)).sprintID)
+    }
+
+    @Test
+    fun aPulledProjectDeleteTakesItsSprintsWithIt() = runTest {
+        // The mirror of the local cascade, and on the path a *server-driven* deletion takes.
+        // Leaving the sprints behind would show a sprint on a Sprints tab whose project no
+        // longer exists.
+        val harness = Harness()
+        val sprint = aSprint()
+        harness.sink.apply(upsert(OutboxEntity.Sprint, sprint))
+        harness.sink.apply(upsert(OutboxEntity.Project, aProject()))
+
+        harness.sink.apply(delete(OutboxEntity.Project, aProject().id.stringValue))
+
+        assertNull(harness.repository.sprint(sprint.id))
+    }
+
+    @Test
+    fun applyingAPulledSprintTwiceLeavesTheSameStore() = runTest {
+        // The idempotency requirement this whole file is built on, for the third aggregate.
+        val harness = Harness()
+        val sprint = aSprint()
+        val change = upsert(OutboxEntity.Sprint, sprint)
+
+        harness.sink.apply(change)
+        harness.sink.apply(change)
+
+        assertEquals(1, harness.repository.sprints(sprint.projectID).size)
+        assertEquals(sprint, harness.repository.sprint(sprint.id))
+    }
+
     // MARK: Helpers
 
     private fun upsert(entity: OutboxEntity, value: Any): RemoteChange =
@@ -458,12 +547,14 @@ class LocalDataSyncSinkTest {
 
     private fun idOf(value: Any): String = when (value) {
         is Project -> value.id.stringValue
+        is Sprint -> value.id.stringValue
         is WorkItem -> value.id.stringValue
         else -> error("not a projects payload: $value")
     }
 
     private fun encode(value: Any): ByteArray = when (value) {
         is Project -> JSONCoding.json.encodeToString(Project.serializer(), value).encodeToByteArray()
+        is Sprint -> JSONCoding.json.encodeToString(Sprint.serializer(), value).encodeToByteArray()
         is WorkItem -> JSONCoding.json.encodeToString(WorkItem.serializer(), value).encodeToByteArray()
         else -> error("not a projects payload: $value")
     }

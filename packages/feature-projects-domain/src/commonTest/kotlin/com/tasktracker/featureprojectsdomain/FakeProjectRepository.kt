@@ -3,11 +3,15 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -51,6 +55,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedProjects = mutableListOf<Project>()
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
+    private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
     private var itemCounter = 0
@@ -120,6 +125,162 @@ class FakeProjectRepository : ProjectRepositoryPort {
                         .thenByDescending { it.index },
                 )
                 .map { it.value }
+        }
+    }
+
+    // MARK: Sprints
+    //
+    // Not exercised by any use-case test yet - the sprint use cases are a later phase - but
+    // implemented rather than stubbed, because a fake that threw here would be a landmine
+    // for the first test written against it, and a fake that silently did nothing would be
+    // a worse one. The rules below are the store's, deliberately: a fake that diverges
+    // from `:packages:feature-projects-data` is how the two would drift apart unnoticed.
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> {
+        throwIfFailing()
+        return lock.withLock {
+            storedSprints.filter { it.projectID == projectID }
+                .sortedWith(compareBy({ it.isFinished }, { it.startDate }))
+        }
+    }
+
+    override suspend fun sprint(id: SprintID): Sprint? {
+        throwIfFailing()
+        return lock.withLock { storedSprints.firstOrNull { it.id == id } }
+    }
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> {
+        throwIfFailing()
+        return lock.withLock {
+            storedItems.filter { it.sprintID == id }.sortedBy { it.rank }
+        }
+    }
+
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            storedSprints.firstOrNull { it.projectID == projectID && !it.isFinished }?.let {
+                throw AppError.Validation("'${it.name}' is still open.")
+            }
+            val sprint = Sprint(
+                id = randomSprintID(),
+                projectID = projectID,
+                name = ProjectRules.normaliseName(name),
+                goalStoryPoints = goalStoryPoints,
+                startDate = startDate,
+                endDate = endDate,
+                owner = owner,
+                createdAt = now,
+                updatedAt = now,
+            )
+            storedSprints += sprint
+            publish(ProjectChange(ProjectChange.Kind.Sprints, projectID))
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
+            sprint
+        }
+    }
+
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            if (name != null) sprint.name = name
+            if (goalStoryPoints != null) sprint.goalStoryPoints = goalStoryPoints
+            if (startDate != null) sprint.startDate = startDate
+            if (endDate != null) sprint.endDate = endDate
+            if (owner is Patch.Of) sprint.owner = owner.value
+            sprint.updatedAt = now
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            if (sprint.isFinished) throw AppError.Validation("'${sprint.name}' has already been finished.")
+            sprint.isFinished = true
+            sprint.updatedAt = now
+            sprint.reconcileFinishedAt(now)
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            storedSprints.firstOrNull { it.projectID == sprint.projectID && !it.isFinished }
+                ?.takeIf { it.id != sprint.id }
+                ?.let { throw AppError.Validation("'${it.name}' is open, so '${sprint.name}' cannot be reopened.") }
+            sprint.isFinished = false
+            sprint.updatedAt = now
+            sprint.reconcileFinishedAt(now)
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> {
+        throwIfFailing()
+        return lock.withLock {
+            val target = (sprintID as? Patch.Of)?.value
+            val moved = workItemIDs.map { wanted ->
+                storedItems.firstOrNull { it.id == wanted }
+                    ?: throw AppError.Validation("No such work item.")
+            }
+            moved.forEach {
+                it.sprintID = target
+                it.updatedAt = now
+            }
+            // Both kinds, because a sprint's membership is both: the sprint's own item list
+            // and every board the cards moved off.
+            val projectID = moved.firstOrNull()?.projectID
+            if (projectID != null) {
+                publish(ProjectChange(ProjectChange.Kind.Sprints, projectID))
+                publish(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
+            }
+            moved.toList()
+        }
+    }
+
+    override suspend fun deleteSprint(id: SprintID, now: Instant) {
+        throwIfFailing()
+        lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            storedSprints.remove(sprint)
+            storedItems.filter { it.sprintID == id }.forEach {
+                it.sprintID = null
+                it.updatedAt = now
+            }
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, sprint.projectID))
         }
     }
 

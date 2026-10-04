@@ -40,7 +40,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 | [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
 | [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
 | [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
-| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence done |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -3784,27 +3784,126 @@ names it.
 
 ### 23.3 Port and data
 
-- [ ] **23.3.1 Port reads.** `sprints(projectID)`, `sprint(id)`, `sprintWorkItems(id)`, on
+**176 tests in `:packages:feature-projects-data`, 3 failing** — the pre-existing `SeedingTest`
+trio, unchanged. 23 new assertions; the mutation table is in 23.3.7.
+
+- [x] **23.3.1 Port reads.** `sprints(projectID)`, `sprint(id)`, `sprintWorkItems(id)`, on
   `ProjectRepositoryPort`. Reads return domain values, never records, as the interface's own
   KDoc already insists.
-- [ ] **23.3.2 Port writes.** `createSprint`, `updateSprint`, `finishSprint`, `reopenSprint`,
-  `setWorkItemSprint`. `now` is a parameter on every one of them, per the interface's stated
-  rule — a port method that reads the clock is a method whose tests can only run on a
-  particular day.
-- [ ] **23.3.3 The implementations**, writing through the same outbox path as every other write
+- [x] **23.3.2 Port writes.** `createSprint`, `updateSprint`, `finishSprint`, `reopenSprint`,
+  `setWorkItemSprint`, `deleteSprint`. `now` is a parameter on every one of them, per the
+  interface's stated rule — a port method that reads the clock is a method whose tests can only
+  run on a particular day.
+- [x] **23.3.3 The implementations**, writing through the same outbox path as every other write
   so sprint changes are queued for sync rather than becoming a side door. While here, confirm
   the outbox payload carries the two new work-item columns: a record that serialises without
   them would silently drop a user's estimate on the next push.
-- [ ] **23.3.4 `setWorkItemSprint`.** One item, one sprint, one write. Moving an item between
+- [x] **23.3.4 `setWorkItemSprint`.** One item, one sprint, one write. Moving an item between
   sprints must **not** touch `rank` — the rank is the item's position in its *status column*
   on the board, and a sprint is not a column, so letting the two interact is how a board ends
   up reordering itself. Test: assigning, reassigning and clearing all leave `rank` alone.
-- [ ] **23.3.5 At most one **open** sprint per project.** Two concurrent open sprints make
+- [x] **23.3.5 At most one **open** sprint per project.** Two concurrent open sprints make
   "the sprint's items" ambiguous for the board and double the "what is in progress" question.
   Enforced in the domain, so the data layer cannot create the state by accident. Test: a second
   `createSprint` on a project with an open one is rejected; it is allowed once the first is
   finished. *(Decide here whether a project may have several **future** sprints — the reading
   is yes, and only the *open* one is exclusive.)*
+
+#### 23.3.6 Five decisions that changed while building it
+
+**The one-open rule moved from the domain to the transaction.** 23.3.5 says "enforced in the
+domain", and the first cut put it there. That is wrong for a reason this codebase already
+knows: this store is local-first against a server that also merges, so a check made *outside*
+the write is a race — two devices each creating a sprint offline both pass it and both store
+theirs, and the invariant this phase exists to establish does not hold. It is now inside
+`inTransaction`, next to the `openByProject` query, so the count and the insert cannot
+interleave. A use-case check is also not enough on its own: anyone holding the port bypasses
+it. Refusals are `AppError.Validation` and the message **names the offending sprint**, so the
+caller can offer "finish that one first" instead of a dead end.
+
+**`isFinished` is absent from `updateSprint`.** A partial edit that could set it would have to
+maintain the date that goes with it *and* queue the outbox row that tells the server, and a
+setter cannot do either. Finishing is `finishSprint`, which dates it and refuses a second
+call; reopening is `reopenSprint`, which clears the date and refuses when another sprint has
+opened since. Both refusals exist because each has an invariant the other does not — see
+`reopeningClearsTheDateAndIsRefusedWhileAnotherSprintIsOpen`, which is the one place that can
+see both sprints and therefore the only place the rule can be stated.
+
+**`setWorkItemSprint` takes `Patch<SprintID?>`, not a nullable argument.** Same reason as every
+other patch in this file: "the caller does not care about sprint membership" and "the caller is
+emptying this sprint" are different instructions, and a nullable parameter collapses them into
+one where `null` means both. `sendingItemsBackToTheBacklogIsDistinctFromNotMentioningTheirSprint`
+is the assertion that would fail if it were collapsed.
+
+**`deleteProject` cascades to sprints; `deleteSprint` releases its items.** Two different
+directions, and both were missing. The cascade exists because leaving sprints behind would
+show a sprint on a Sprints tab whose project no longer exists. The release exists because a
+card pointing at a sprint that does not exist is the state the next pull would find and could
+not explain.
+
+**`Sprint` rides the `WorkItems` sync scope.** `SyncScope.Sprints` would be the honest name, but
+adding it is a protocol change — a server that scopes its log per entity would need to answer
+the new scope — so `InMemorySyncTransport.scopeFor` maps `OutboxEntity.Sprint` to
+`SyncScope.WorkItems` and the real transport is untouched. Flagged for 23.6, where the tab
+that makes the scope observable arrives.
+
+#### 23.3.7 Mutation evidence — 13 run, 13 caught
+
+Driven by `tools/mutate_23_3.py`.
+
+| # | the deliberate defect | outcome |
+| --- | --- | --- |
+| M1 | `storyPoints` written as `?: 0` — every unestimated item becomes "estimated as zero" | caught by `anUnestimatedItemStaysUnestimatedThroughTheStore` |
+| M2 | `sprintID` dropped on the way to the record | caught by `aWorkItemSurvivesTheRoundTripThroughItsRecord` |
+| M3 | `SprintRecord.apply` refusing a closed sprint | caught by `applyingASprintCopiesItsFinishedFlagRatherThanRefusingIt` |
+| M4 | `createSprint`'s guard asking the dao for a sprint that can never be open | caught by `aSecondOpenSprintIsRefusedRatherThanSilentlyReplacingTheFirst` |
+| M5 | `reopenSprint`'s guard inverted, so reopening beside a live sprint goes through | caught by `reopeningClearsTheDateAndIsRefusedWhileAnotherSprintIsOpen` |
+| M6 | `finishSprint`'s double-finish guard disabled | caught by `finishingASprintDatesItAndRefusesToFinishItTwice` |
+| M7 | `setWorkItemSprint` also setting `rank = 0` | caught by `movingItemsIntoASprintQueuesEachOneAndLeavesTheirRankAlone` |
+| M8 | `setWorkItemSprint` dropping the outbox enqueue | caught by `movingItemsIntoASprintQueuesEachOneAndLeavesTheirRankAlone` |
+| M9 | `deleteProject`'s sprint cascade emptied | caught by `deletingAProjectTakesItsSprintsWithItAndQueuesThem` |
+| M10 | `deleteSprint` leaving its items pointing at it | caught by `deletingASprintReturnsItsItemsToTheBacklogRatherThanOrphaningThem` |
+| M11 | `announceSprints` sending only the `Sprints` half | caught by `aSprintWriteAnnouncesSprintsAndWorkItems` |
+| M12 | the sink's pulled-sprint delete not releasing items | caught by `aPulledSprintDeleteReturnsItsItemsToTheBacklog` |
+| M13 | the sink's pulled-sprint upsert forcing `isFinished = false` | caught by `aPulledSprintCanArriveClosed` |
+
+**The first run of this table reported M12 and M13 as caught, by the wrong assertion.** They
+were caught only by the three pre-existing `SeedingTest` failures, which fail on every run of
+this module regardless of what was mutated — so "caught" there means nothing at all, and the
+sync sink's sprint path had *no test*. That is the same shape as the 23.1 M6 hole and the 23.2
+N3 one: a mutation runner reporting red for a reason unrelated to the defect. Five tests in
+`LocalDataSyncSinkTest` were added for exactly this, and the table above is the second run,
+where each is caught by its own name. **M4, M5 and M6 were then rewritten**, because their
+first forms did not compile — `val open = null` and `if (false)` are rejected by the type
+system, and a mutation the compiler refuses is not evidence about a test. Each is now a
+*wrong-but-well-typed* defect: M4 asks the dao for a sprint that can never be open, M5 inverts
+the guard, M6 disables the branch with `&& false`. The lesson is the 23.2 N3b one and it is
+worth stating plainly: **an assertion that has only ever been shown red by a build failure has
+not been shown red.**
+
+#### 23.3.8 Baseline after 23.3
+
+Whole JVM host: **1160 tests, 7 failures** — the same seven, unchanged. iOS simulator:
+**1132 tests, same 7**. `verifyArchitectureGraph`, `verifyModuleImports` and
+`:androidApp:compileDebugKotlin` all pass. Counts are from the JUnit XML, cross-checked against
+`@Test`: 5 in `LocalDataSyncSinkTest`, 12 in `RoomSprintRepositoryTest`, 6 in
+`RecordCompletenessTest` — 23 new, and both hosts moved by 23 (1137 → 1160, 1109 → 1132).
+
+Two fixtures outside this phase had to change, and both are worth recording because the second
+one was a real trap:
+
+- **Five `ProjectRepositoryPort` implementations** needed the nine new members:
+  `RoomProjectRepository`, `ViewPreviewData`'s `PreviewRepository`, and the four test fakes.
+  The three in-memory fakes implement sprints for real rather than stubbing them — a fake that
+  threw would be a landmine for the first test written against it, and one that silently did
+  nothing would be worse, because it would pass. `shared-ui`'s fake follows its own file's
+  existing convention (`unused("createSprint")`), since the shell has no path that calls these.
+- **`TransportTest` picked the wrong example.** Its
+  `a change naming an entity this build does not know is a decoding error` used `"sprint"` as
+  the name no `OutboxEntity` carries — and 23.2 made `sprint` one. The test went red for a
+  reason that had nothing to do with decoding. It now uses `"milestone"`. This is the general
+  hazard in an exhaustive-decode test: **the unknown value is a claim about the present, and
+  adding to the enum invalidates it.**
 
 ### 23.4 Design system
 

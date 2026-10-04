@@ -1,15 +1,19 @@
 package com.tasktracker.featureprojectsdata
 
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseStatusChangeID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.database.ProjectRecord
+import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemOrderingKey
@@ -170,6 +174,11 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         createdAt = reconciled.createdAt,
         updatedAt = reconciled.updatedAt,
         resolvedAt = reconciled.resolvedAt,
+        // The point of `copy()` above applies twice over: the caller still holds this
+        // `WorkItem`, and a repository that quietly changed its `sprintID` would be editing
+        // a value its caller goes on to re-save.
+        storyPoints = reconciled.storyPoints,
+        sprintID = reconciled.sprintID?.stringValue,
     )
 }
 
@@ -202,6 +211,12 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         rank = reconciled.rank,
         updatedAt = reconciled.updatedAt,
         resolvedAt = reconciled.resolvedAt,
+        storyPoints = reconciled.storyPoints,
+        // Sprint membership is a pulled value like any other: a device that has been offline
+        // for a week has to be able to *learn* which sprint a card was put into, not only
+        // ever add one locally. The incoming value wins outright, including its absence —
+        // the same treatment every other field here gets.
+        sprintID = reconciled.sprintID?.stringValue,
     )
 }
 
@@ -221,6 +236,13 @@ internal val WorkItemRecord.domainValue: WorkItem?
     get() {
         val itemID = parseWorkItemID(id) ?: return null
         val owner = parseProjectID(projectID) ?: return null
+        // An unreadable sprint id reads as `null` — "no sprint" — which is the same trade as
+        // an unreadable `statusRaw` one line below, and it is the smaller of the two lies
+        // available: a card listed in the backlog is still a card somebody can open, where
+        // dropping the row loses the work entirely. The limitation is that a sprint id from
+        // a future build silently returns its card to the backlog, and it cannot be recorded
+        // here because this level has nowhere to record it.
+        val parsedSprint = sprintID?.let { parseSprintID(it) }
         val value = WorkItem(
             id = itemID,
             projectID = owner,
@@ -235,6 +257,8 @@ internal val WorkItemRecord.domainValue: WorkItem?
             createdAt = createdAt,
             updatedAt = updatedAt,
             resolvedAt = resolvedAt,
+            storyPoints = storyPoints,
+            sprintID = parsedSprint,
         )
         value.reconcileResolutionAt(updatedAt)
         return value
@@ -257,6 +281,98 @@ internal val WorkItemRecord.orderingKey: WorkItemOrderingKey
         createdAt = createdAt,
         tieBreaker = key,
     )
+
+// MARK: - Sprint
+
+/**
+ * A new row for [this], with `finishedAt` reconciled first.
+ *
+ * Reconciled on the way in as well as out, for the reason `WorkItem.toRecord` gives: a row
+ * written from a value that arrived finished and undated is dated immediately rather than
+ * waiting for whoever reads it next to heal it. A row that is only correct while nobody is
+ * looking is a row that a projection built by a different reader will file wrongly.
+ *
+ * The value is copied, so the caller's `Sprint` is untouched — it is a class full of `var`s
+ * and a repository that quietly fixed up the object it was handed would be editing a value
+ * its caller still holds.
+ */
+internal fun Sprint.toRecord(): SprintRecord {
+    val reconciled = copy().also { it.reconcileFinishedAt(it.updatedAt) }
+    return SprintRecord(
+        id = reconciled.id.stringValue,
+        projectID = reconciled.projectID.stringValue,
+        name = reconciled.name,
+        goalStoryPoints = reconciled.goalStoryPoints,
+        startDate = reconciled.startDate,
+        endDate = reconciled.endDate,
+        owner = reconciled.owner,
+        isFinished = reconciled.isFinished,
+        finishedAt = reconciled.finishedAt,
+        createdAt = reconciled.createdAt,
+        updatedAt = reconciled.updatedAt,
+    )
+}
+
+/**
+ * A copy of this row carrying the state in [value], without touching
+ * [SprintRecord.id], [SprintRecord.projectID] or [SprintRecord.createdAt].
+ *
+ * See [ProjectRecord.apply] for why this returns a copy rather than mutating, and
+ * [WorkItemRecord.apply] for why `projectID` is the load-bearing exclusion: a record is
+ * found by id, so a payload naming a different parent would move a sprint between projects
+ * without a delete row, and nobody would be told.
+ *
+ * **Unlike a work item, `isFinished` *is* copied**, and that asymmetry is deliberate. A
+ * card's status is a local edit that has to be pushed; a sprint's open/closed state arrives
+ * from whichever device closed it, and a pull has to be able to say so. Refusing it would
+ * make the closed state un-receivable, and the summary — which is the whole point of
+ * closing one — would never arrive on the second device.
+ */
+internal fun SprintRecord.apply(value: Sprint): SprintRecord {
+    val reconciled = value.copy().also { it.reconcileFinishedAt(it.updatedAt) }
+    return copy(
+        name = reconciled.name,
+        goalStoryPoints = reconciled.goalStoryPoints,
+        startDate = reconciled.startDate,
+        endDate = reconciled.endDate,
+        owner = reconciled.owner,
+        isFinished = reconciled.isFinished,
+        finishedAt = reconciled.finishedAt,
+        updatedAt = reconciled.updatedAt,
+    )
+}
+
+/**
+ * `null` for a row whose id cannot be parsed, for the reason [ProjectRecord.domainValue]
+ * gives: inventing one produces a phantom that behaves like data.
+ *
+ * An unreadable [SprintRecord.projectID] drops the row rather than defaulting it, because a
+ * sprint belongs to a project and a sprint attached to a guessed parent would show up on
+ * somebody else's Sprints tab.
+ */
+internal val SprintRecord.domainValue: Sprint?
+    get() {
+        val sprintID = parseSprintID(id) ?: return null
+        // Named `projectID` rather than `owner`, because `Sprint.owner` is the sprint's own
+        // free-text owner and a local called `owner` holding a `ProjectID` reads as though
+        // the two were the same thing.
+        val projectID = parseProjectID(this.projectID) ?: return null
+        val value = Sprint(
+            id = sprintID,
+            projectID = projectID,
+            name = name,
+            goalStoryPoints = goalStoryPoints,
+            startDate = startDate,
+            endDate = endDate,
+            owner = owner,
+            isFinished = isFinished,
+            finishedAt = finishedAt,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
+        value.reconcileFinishedAt(updatedAt)
+        return value
+    }
 
 // MARK: - Status change
 

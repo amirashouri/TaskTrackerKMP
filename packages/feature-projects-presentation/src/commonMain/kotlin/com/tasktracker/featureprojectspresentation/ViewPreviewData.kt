@@ -6,11 +6,14 @@ import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -261,6 +264,11 @@ private class PreviewRepository(
 
     private val storedProjects = projects.map { it.copy() }.toMutableList()
     private val storedItems = items.map { it.copy() }.toMutableList()
+    // Sprints are not part of the preview fixtures yet, so this starts empty. It exists as
+    // real storage rather than as `emptyList()` returns because a preview that is handed a
+    // sprint — or that creates one — should behave, and `setWorkItemSprint` has to be able
+    // to write here for the same reason.
+    private val storedSprints = mutableListOf<Sprint>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val broadcaster = Broadcaster<ProjectChange>()
 
@@ -287,6 +295,115 @@ private class PreviewRepository(
         storedStatusChanges.filter { it.workItemID == workItemID }
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = false
+
+    // MARK: Sprints
+
+    override suspend fun sprints(projectID: ProjectID): List<Sprint> = storedSprints
+        .filter { it.projectID == projectID }
+        .sortedWith(compareBy({ it.isFinished }, { it.startDate }))
+
+    override suspend fun sprint(id: SprintID): Sprint? =
+        storedSprints.firstOrNull { it.id == id }?.copy()
+
+    override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = storedItems
+        .filter { it.sprintID == id }
+        .sortedBy { it.rank }
+
+    override suspend fun createSprint(
+        projectID: ProjectID,
+        name: String,
+        goalStoryPoints: Int,
+        startDate: Instant,
+        endDate: Instant,
+        owner: String?,
+        now: Instant,
+    ): Sprint {
+        // The one-open rule holds here too: a preview that could show two open sprints
+        // would hide the very thing the Sprints tab is built to make visible.
+        storedSprints.firstOrNull { it.projectID == projectID && !it.isFinished }
+            ?.let { throw com.tasktracker.core.AppError.Validation("'${it.name}' is still open.") }
+        val sprint = Sprint(
+            id = randomSprintID(),
+            projectID = projectID,
+            name = ProjectRules.normaliseName(name),
+            goalStoryPoints = goalStoryPoints,
+            startDate = startDate,
+            endDate = endDate,
+            owner = owner,
+            createdAt = now,
+            updatedAt = now,
+        )
+        storedSprints += sprint
+        broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, projectID))
+        return sprint.copy()
+    }
+
+    override suspend fun updateSprint(
+        id: SprintID,
+        name: String?,
+        goalStoryPoints: Int?,
+        startDate: Instant?,
+        endDate: Instant?,
+        owner: Patch<String?>,
+        now: Instant,
+    ): Sprint = storedSprints.first { it.id == id }.also {
+        if (name != null) it.name = name
+        if (goalStoryPoints != null) it.goalStoryPoints = goalStoryPoints
+        if (startDate != null) it.startDate = startDate
+        if (endDate != null) it.endDate = endDate
+        if (owner is Patch.Of) it.owner = owner.value
+        it.updatedAt = now
+    }.also {
+        broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+    }.copy()
+
+    override suspend fun finishSprint(id: SprintID, now: Instant): Sprint =
+        storedSprints.first { it.id == id }.also {
+            it.isFinished = true
+            it.updatedAt = now
+            it.reconcileFinishedAt(now)
+        }.also {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+        }.copy()
+
+    override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint =
+        storedSprints.first { it.id == id }.also {
+            it.isFinished = false
+            it.updatedAt = now
+            it.reconcileFinishedAt(now)
+        }.also {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+        }.copy()
+
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> = workItemIDs.map { id ->
+        storedItems.first { it.id == id }
+    }.also { moved ->
+        val target = (sprintID as? Patch.Of)?.value
+        val projectID = moved.firstOrNull()?.projectID
+        moved.forEach {
+            it.sprintID = target
+            it.updatedAt = now
+        }
+        if (projectID != null) {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, projectID))
+            broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
+        }
+    }.map { it.copy() }
+
+    override suspend fun deleteSprint(id: SprintID, now: Instant) {
+        val sprint = storedSprints.first { it.id == id }
+        storedSprints.removeAll { it.id == id }
+        storedItems.filter { it.sprintID == id }.forEach {
+            it.sprintID = null
+            it.updatedAt = now
+        }
+        broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+        broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, sprint.projectID))
+    }
 
     override suspend fun createProject(
         name: String,

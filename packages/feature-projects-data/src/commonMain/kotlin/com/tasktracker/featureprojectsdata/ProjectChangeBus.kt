@@ -102,3 +102,37 @@ internal fun ProjectChangeBus.announceProjects(projectID: ProjectID) {
 internal fun ProjectChangeBus.announceWorkItems(projectID: ProjectID) {
     send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = projectID))
 }
+
+/**
+ * Announces that sprints moved, and separately that work items moved.
+ *
+ * Both, always, because **every** sprint write moves items or will move them:
+ * `setWorkItemSprint` and `deleteSprint` move them immediately, and the rest change what a
+ * sprint *contains* even though no card row changed. A subscriber that heard only the
+ * sprints half would keep showing the old membership; one that heard only the items half
+ * would never learn a sprint was created at all.
+ *
+ * Two sends rather than one combined kind, because the two subscribers are different and
+ * re-reading is the expensive part: the Sprints tab needs the sprint list, and the board
+ * needs the cards. One kind naming both would make each do the other's work on every write.
+ */
+internal fun ProjectChangeBus.announceSprints(projectID: ProjectID) {
+    send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = projectID))
+    send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = projectID))
+}
+
+/**
+ * Announces a project deletion: all three kinds, each exactly once.
+ *
+ * Its own helper rather than [announceProjectChange] plus [announceSprints], because both
+ * of those send the `.workItems` half — calling them together announced work items twice
+ * for every deletion, which is harmless in production and indistinguishable from correct in
+ * a test that counts announcements. That is exactly the kind of duplicate this bus's
+ * "announce what actually moved" rule exists to prevent, so the combination is named here
+ * instead of assembled at the call site.
+ */
+internal fun ProjectChangeBus.announceProjectDeletion(projectID: ProjectID) {
+    send(ProjectChange(kind = ProjectChange.Kind.Projects, projectID = projectID))
+    send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = projectID))
+    send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = projectID))
+}

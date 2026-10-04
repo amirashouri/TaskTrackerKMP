@@ -191,9 +191,11 @@ class HttpSyncTransportTest {
 
     @Test
     fun `a change naming an entity this build does not know is a decoding error`() = runTest {
+        // `milestone`, not `sprint`: the point is a name no `OutboxEntity` carries, and
+        // `sprint` stopped being one when the sprint work added it.
         val client = StubHttpClient(
             body(
-                """{"changes":[{"entity":"sprint","entityID":"s-1","operation":"upsert","payload":"{}"}],"hasMore":false}""",
+                """{"changes":[{"entity":"milestone","entityID":"m-1","operation":"upsert","payload":"{}"}],"hasMore":false}""",
             ),
         )
         val transport = HttpSyncTransport(client)
@@ -201,7 +203,7 @@ class HttpSyncTransportTest {
         val failure = assertFailsWith<AppError.Decoding> {
             transport.pull(SyncScope.WorkItems, cursor = null, limit = 10)
         }
-        assertTrue(failure.detail.contains("sprint"))
+        assertTrue(failure.detail.contains("milestone"))
     }
 
     @Test
