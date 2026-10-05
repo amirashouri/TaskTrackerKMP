@@ -99,7 +99,7 @@ class SeedingTest {
 
         val item = harness.repository.createWorkItem(
             project.id, "Mine", "", WorkItemStatus.Todo,
-            Priority.Medium, null, null, Moments.later,
+            Priority.Medium, null, null, null, null, Moments.later,
         )
 
         assertEquals("APO-9", item.key.rawValue)

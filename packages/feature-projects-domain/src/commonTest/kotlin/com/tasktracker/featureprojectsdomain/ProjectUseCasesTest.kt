@@ -13,7 +13,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
@@ -289,6 +291,66 @@ class ProjectUseCasesTest {
     }
 
     @Test
+    fun `a create from a sprint board joins that sprint and carries its estimate`() = runTest {
+        // The board shows only the active sprint's items, so the sprint id handed at creation
+        // is the whole difference between a task that appears when the sheet closes and one
+        // that saves into the store and never shows up. Deliberately asserting both fields off
+        // the one write: the regression to watch is the editor routing `initialSprintID` as
+        // `null` while the user types points into the estimate field.
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 20,
+            startDate = now,
+            endDate = now + 7.days,
+            owner = null,
+            now = now,
+        )
+        val save = SaveWorkItem(repository, TestDateProvider(now))
+
+        save(
+            projectID = project.id,
+            title = "Wired through the sprint filter",
+            status = WorkItemStatus.Todo,
+            storyPoints = 5,
+            initialSprintID = sprint.id,
+        )
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals(sprint.id, stored.sprintID, "the task must land in the sprint the add came from")
+        assertEquals(5, stored.storyPoints, "the estimate must not be dropped on the floor")
+    }
+
+    @Test
+    fun `an unestimated create still joins the sprint and stays unestimated`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 20,
+            startDate = now,
+            endDate = now + 7.days,
+            owner = null,
+            now = now,
+        )
+        val save = SaveWorkItem(repository, TestDateProvider(now))
+
+        save(
+            projectID = project.id,
+            title = "No estimate yet",
+            status = WorkItemStatus.Todo,
+            initialSprintID = sprint.id,
+        )
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals(sprint.id, stored.sprintID)
+        assertNull(stored.storyPoints, "absent input must not become zero")
+    }
+
+    @Test
     fun `editing fields without touching the status does not move the item`() = runTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
@@ -396,6 +458,7 @@ class ProjectUseCasesTest {
             priority = null,
             assignee = Patch.Unmentioned,
             dueDate = Patch.Unmentioned,
+            storyPoints = Patch.Unmentioned,
             now = now + 60.seconds,
         )
 

@@ -151,6 +151,7 @@
     -->
     <string name="story_points_format">%1$d pts</string>
     <string name="story_points_unestimated">—</string>
+    <string name="work_item_story_points_label">Points</string>
 
     <!--
       The project list, and the row under it.

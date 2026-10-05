@@ -374,7 +374,7 @@ class LocalDataSyncSinkTest {
         // these two payloads in the other order would end with a stale counter and this test
         // would fail about half the time.
         val item = source.repository.createWorkItem(
-            project.id, "One", "more", WorkItemStatus.Done, Priority.High, "Ada", Moments.day, Moments.later,
+            project.id, "One", "more", WorkItemStatus.Done, Priority.High, "Ada", Moments.day, null, null, Moments.later,
         )
         val queued = source.queued()
 
@@ -406,7 +406,7 @@ class LocalDataSyncSinkTest {
         val source = Harness()
         val project = source.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = source.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Done, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Done, Priority.Medium, null, null, null, null, Moments.start,
         )
         val queued = source.queued().last { it.entityKind == "workItem" }
 

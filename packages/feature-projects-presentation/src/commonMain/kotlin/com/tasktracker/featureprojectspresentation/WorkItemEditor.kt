@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
@@ -59,6 +60,7 @@ import com.tasktracker.resources.work_item_expand
 import com.tasktracker.resources.work_item_key_read_only
 import com.tasktracker.resources.work_item_priority_label
 import com.tasktracker.resources.work_item_status_label
+import com.tasktracker.resources.work_item_story_points_label
 import com.tasktracker.resources.work_item_title_label
 import org.jetbrains.compose.resources.stringResource
 
@@ -90,6 +92,7 @@ import org.jetbrains.compose.resources.stringResource
 fun WorkItemEditorScreen(
     title: String,
     details: String,
+    storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
     assignee: String,
@@ -103,6 +106,7 @@ fun WorkItemEditorScreen(
     errorMessage: String?,
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
@@ -116,6 +120,7 @@ fun WorkItemEditorScreen(
     WorkItemEditorForm(
         title = title,
         details = details,
+        storyPointsText = storyPointsText,
         status = status,
         priority = priority,
         assignee = assignee,
@@ -129,6 +134,7 @@ fun WorkItemEditorScreen(
         errorMessage = errorMessage,
         onTitleChanged = onTitleChanged,
         onDetailsChanged = onDetailsChanged,
+        onStoryPointsChanged = onStoryPointsChanged,
         onStatusChanged = onStatusChanged,
         onPriorityChanged = onPriorityChanged,
         onAssigneeChanged = onAssigneeChanged,
@@ -164,6 +170,7 @@ fun WorkItemEditorScreen(
 fun WorkItemEditorSheet(
     title: String,
     details: String,
+    storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
     assignee: String,
@@ -177,6 +184,7 @@ fun WorkItemEditorSheet(
     errorMessage: String?,
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
@@ -221,6 +229,7 @@ fun WorkItemEditorSheet(
             ProjectsEditorFullScreen(
                 title = editTitle,
                 details = details,
+                storyPointsText = storyPointsText,
                 status = status,
                 priority = priority,
                 assignee = assignee,
@@ -234,6 +243,7 @@ fun WorkItemEditorSheet(
                 errorMessage = errorMessage,
                 onTitleChanged = onTitleChanged,
                 onDetailsChanged = onDetailsChanged,
+                onStoryPointsChanged = onStoryPointsChanged,
                 onStatusChanged = onStatusChanged,
                 onPriorityChanged = onPriorityChanged,
                 onAssigneeChanged = onAssigneeChanged,
@@ -256,6 +266,7 @@ fun WorkItemEditorSheet(
                 WorkItemEditorForm(
                     title = title,
                     details = details,
+                    storyPointsText = storyPointsText,
                     status = status,
                     priority = priority,
                     assignee = assignee,
@@ -269,6 +280,7 @@ fun WorkItemEditorSheet(
                     errorMessage = errorMessage,
                     onTitleChanged = onTitleChanged,
                     onDetailsChanged = onDetailsChanged,
+                    onStoryPointsChanged = onStoryPointsChanged,
                     onStatusChanged = onStatusChanged,
                     onPriorityChanged = onPriorityChanged,
                     onAssigneeChanged = onAssigneeChanged,
@@ -298,6 +310,7 @@ fun WorkItemEditorSheet(
 private fun ProjectsEditorFullScreen(
     title: String,
     details: String,
+    storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
     assignee: String,
@@ -311,6 +324,7 @@ private fun ProjectsEditorFullScreen(
     errorMessage: String?,
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
@@ -380,6 +394,13 @@ private fun ProjectsEditorFullScreen(
             onValueChange = onDetailsChanged,
             singleLine = false,
             minLines = DETAILS_MIN_LINES,
+            imeAction = ImeAction.Next,
+        )
+        ProjectsTextField(
+            title = stringResource(Res.string.work_item_story_points_label),
+            value = storyPointsText,
+            onValueChange = onStoryPointsChanged,
+            keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Next,
         )
         if (selectableStatuses.size > 1) {
@@ -481,6 +502,7 @@ const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
 private fun WorkItemEditorForm(
     title: String,
     details: String,
+    storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
     assignee: String,
@@ -494,6 +516,7 @@ private fun WorkItemEditorForm(
     errorMessage: String?,
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
@@ -555,6 +578,13 @@ private fun WorkItemEditorForm(
             onValueChange = onDetailsChanged,
             singleLine = false,
             minLines = DETAILS_MIN_LINES,
+            imeAction = ImeAction.Next,
+        )
+        ProjectsTextField(
+            title = stringResource(Res.string.work_item_story_points_label),
+            value = storyPointsText,
+            onValueChange = onStoryPointsChanged,
+            keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Next,
         )
         if (selectableStatuses.size > 1) {
@@ -652,6 +682,7 @@ private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
     WorkItemEditorScreen(
         title = "Crash on launch when the vault is empty",
         details = "Reported on a cold install with no keychain entry.",
+        storyPointsText = "5",
         status = WorkItemStatus.InProgress,
         priority = Priority.Critical,
         assignee = "Amir",
@@ -665,6 +696,7 @@ private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         errorMessage = null,
         onTitleChanged = {},
         onDetailsChanged = {},
+        onStoryPointsChanged = {},
         onStatusChanged = {},
         onPriorityChanged = {},
         onAssigneeChanged = {},
@@ -682,6 +714,7 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
     WorkItemEditorSheet(
         title = "Archive the old sync experiments",
         details = "",
+        storyPointsText = "",
         status = WorkItemStatus.Closed,
         priority = Priority.Low,
         assignee = "",
@@ -695,6 +728,7 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
         errorMessage = null,
         onTitleChanged = {},
         onDetailsChanged = {},
+        onStoryPointsChanged = {},
         onStatusChanged = {},
         onPriorityChanged = {},
         onAssigneeChanged = {},

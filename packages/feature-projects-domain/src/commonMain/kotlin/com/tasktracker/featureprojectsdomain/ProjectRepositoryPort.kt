@@ -232,6 +232,8 @@ interface ProjectRepositoryPort {
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int? = null,
+        sprintID: SprintID? = null,
         now: Instant,
     ): WorkItem
 
@@ -252,6 +254,7 @@ interface ProjectRepositoryPort {
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem
 

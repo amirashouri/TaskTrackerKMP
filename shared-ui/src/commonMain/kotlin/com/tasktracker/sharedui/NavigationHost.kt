@@ -243,6 +243,7 @@ fun NavigationHost(
                         projectID = editorRoute.projectID,
                         workItemID = editorRoute.workItemID,
                         initialStatus = editorRoute.initialStatus,
+                        initialSprintID = editorRoute.initialSprintID,
                         repository = environment.repository,
                         dateProvider = environment.dateProvider,
                         scope = scope,
@@ -463,6 +464,7 @@ private fun PushedRoute(
                 projectID = route.projectID,
                 workItemID = route.workItemID,
                 initialStatus = route.initialStatus,
+                initialSprintID = route.initialSprintID,
                 repository = environment.repository,
                 dateProvider = environment.dateProvider,
                 scope = scope,
@@ -694,6 +696,11 @@ private fun BoardDestination(
                     projectID = projectID,
                     workItemID = null,
                     initialStatus = status,
+                    // The board shows the active sprint's items only, so a task added from it
+                    // joins that sprint — otherwise it saves into the store and never appears:
+                    // the sprint filter silently drops it the frame after the save. `null` is
+                    // correct only when no sprint is running, which is what the model holds.
+                    initialSprintID = model.activeSprint?.id,
                 ),
             )
         },
@@ -1020,6 +1027,7 @@ private fun WorkItemEditorDestination(
     projectID: ProjectID,
     workItemID: WorkItemID?,
     initialStatus: WorkItemStatus?,
+    initialSprintID: SprintID?,
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     scope: CoroutineScope,
@@ -1042,8 +1050,11 @@ private fun WorkItemEditorDestination(
     // the only work involved is a local store read on a route the user just navigated to.
     val existing = loaded ?: return
 
-    val model = remember(projectID, workItemID, repository, existing, initialStatus) {
-        WorkItemEditorModel(projectID, existing.item, repository, dateProvider, initialStatus)
+    // `initialSprintID` is a model key alongside `initialStatus`: both are create-time facts
+    // frozen into the draft, so a different sprint pair must build a different model rather
+    // than have the remembered one hold the old sprint forever.
+    val model = remember(projectID, workItemID, repository, existing, initialStatus, initialSprintID) {
+        WorkItemEditorModel(projectID, existing.item, repository, dateProvider, initialStatus, initialSprintID)
     }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
@@ -1065,6 +1076,7 @@ private fun WorkItemEditorDestination(
     WorkItemEditorSheet(
         title = model.title,
         details = model.details,
+        storyPointsText = model.storyPointsText,
         status = model.status,
         priority = model.priority,
         assignee = model.assignee,
@@ -1082,6 +1094,7 @@ private fun WorkItemEditorDestination(
         errorMessage = model.errorMessage,
         onTitleChanged = model::onTitleChanged,
         onDetailsChanged = model::onDetailsChanged,
+        onStoryPointsChanged = model::onStoryPointsChanged,
         onStatusChanged = model::onStatusChanged,
         onPriorityChanged = model::onPriorityChanged,
         onAssigneeChanged = model::onAssigneeChanged,

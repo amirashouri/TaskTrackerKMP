@@ -83,7 +83,14 @@ data class ArchiveProjection(
     val months: List<Month> = items
         .filter { it.status.isTerminal }
         .groupBy { it.archivedOn.startOfMonthIn(timeZone) }
-        .map { (monthStart, monthItems) -> Month(monthStart, monthItems) }
+        .map { (monthStart, monthItems) ->
+            // The KDoc promises the same newest-first order the top-level `items` arrive in,
+            // but `groupBy` preserves encounter order *within* a month, which is store order —
+            // an archive section rendered from this read the list back front-to-back. Measured
+            // against `ProjectionsTest`: three same-month items arrived TT-1, TT-2, TT-3 by
+            // resolution date and read back in exactly that order, not [TT-2, TT-3, TT-1].
+            Month(monthStart, monthItems.sortedByDescending { it.archivedOn.epochSeconds })
+        }
         .sortedByDescending { it.monthStart }
 
     val itemCount: Int get() = months.sumOf { it.count }

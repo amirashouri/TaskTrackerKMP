@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -91,6 +92,31 @@ class WorkItemEditorModelTest {
 
         val created = assertIs<WorkItemSaveOutcome.Created>(outcome)
         assertEquals(created.workItemID, model.savedWorkItemID)
+    }
+
+    /**
+     * The add-task button's whole reason for carrying `initialSprintID` in the route: the
+     * board shows only the active sprint's items, so a create that drops the sprint id saves
+     * successfully into the store and is still invisible — the exact bug this seam exists
+     * to prevent. The estimate rides the same write because the editor routes both at once.
+     */
+    @Test
+    fun `a create seeded with the sprint id and estimate routes both into the saved item`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sprint = testSprint(projectID = project.id)
+        repository.seed(project)
+        repository.seed(sprint)
+
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider(), null, sprint.id)
+        model.onTitleChanged("Board lane task")
+        model.onStoryPointsChanged("5")
+
+        assertNotNull(model.save())
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals(sprint.id, stored.sprintID, "a create from a sprint board must join that sprint")
+        assertEquals(5, stored.storyPoints, "the estimate must not be dropped on the floor")
     }
 
     // MARK: Editing

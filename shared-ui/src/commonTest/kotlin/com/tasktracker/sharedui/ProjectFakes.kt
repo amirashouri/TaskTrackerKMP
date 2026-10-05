@@ -246,6 +246,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int?,
+        sprintID: SprintID?,
         now: Instant,
     ): WorkItem = unused("createWorkItem")
 
@@ -256,6 +258,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem = unused("updateWorkItem")
 

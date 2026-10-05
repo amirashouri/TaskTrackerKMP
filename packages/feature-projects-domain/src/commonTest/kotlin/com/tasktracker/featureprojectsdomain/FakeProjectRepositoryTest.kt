@@ -355,6 +355,7 @@ class FakeProjectRepositoryTest {
                 priority = null,
                 assignee = Patch.Unmentioned,
                 dueDate = Patch.Unmentioned,
+                storyPoints = Patch.Unmentioned,
                 now = now,
             )
         }

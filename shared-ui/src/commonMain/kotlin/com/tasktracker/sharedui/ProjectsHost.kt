@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectEditorModel
@@ -104,12 +105,18 @@ fun ProjectsHost(
                 scope = scope,
                 onSelectProject = { router.openProject(it, AppTab.Projects) },
                 onBackToProjects = { router.popToRoot(AppTab.Projects) },
-                onAddTask = { status ->
+                // The board's model owns the answer (which sprint is running), so it rides as a
+                // callback argument here — the same reason the board carries `our onFileAway` as
+                // a function rather than a bare route: the host holding the closure cannot see
+                // the model, and pushing a stale or absent sprint id from here would recreate
+                // the same invisible-save the active-sprint wiring fixes.
+                onAddTask = { status, sprintID ->
                     router.push(
                         AppRoute.WorkItemEditor(
                             projectID = route.projectID,
                             workItemID = null,
                             initialStatus = status,
+                            initialSprintID = sprintID,
                         ),
                         AppTab.Projects,
                     )
@@ -230,7 +237,8 @@ private fun ProjectBoardDestination(
     scope: CoroutineScope,
     onSelectProject: (ProjectID) -> Unit,
     onBackToProjects: () -> Unit,
-    onAddTask: (WorkItemStatus) -> Unit,
+    /** The status, and the sprint a new task joins — the board model's active sprint or null. */
+    onAddTask: (WorkItemStatus, SprintID?) -> Unit,
 ) {
     val model = remember(projectID, environment) {
         ProjectBoardModel(
@@ -266,7 +274,7 @@ private fun ProjectBoardDestination(
             onOpenSwitcher = onBackToProjects,
             projects = picker.projects,
             onSelectProject = onSelectProject,
-            onAddTask = onAddTask,
+            onAddTask = { status -> onAddTask(status, model.activeSprint?.id) },
             showOnlyMyTasks = model.showOnlyMyTasks,
             onToggleMyTasks = model::toggleShowOnlyMyTasks,
             activeSprint = model.activeSprint,

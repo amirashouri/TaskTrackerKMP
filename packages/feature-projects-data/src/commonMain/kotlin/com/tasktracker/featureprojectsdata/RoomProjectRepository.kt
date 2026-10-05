@@ -545,6 +545,8 @@ class RoomProjectRepository(
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int?,
+        sprintID: SprintID?,
         now: Instant,
     ): WorkItem {
         val normalisedTitle = WorkItemRules.normaliseTitle(title)
@@ -566,6 +568,8 @@ class RoomProjectRepository(
                 priority = priority,
                 assignee = normalisedAssignee,
                 dueDate = dueDate,
+                storyPoints = storyPoints,
+                sprintID = sprintID,
                 rank = topRankIn(projectID, status),
                 createdAt = now,
                 updatedAt = now,
@@ -618,6 +622,7 @@ class RoomProjectRepository(
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem {
         val normalisedTitle = title?.let { WorkItemRules.normaliseTitle(it) }
@@ -635,6 +640,7 @@ class RoomProjectRepository(
             // reading.
             if (assignee is Patch.Of) item.assignee = WorkItemRules.normaliseAssignee(assignee.value)
             if (dueDate is Patch.Of) item.dueDate = dueDate.value
+            if (storyPoints is Patch.Of) item.storyPoints = storyPoints.value
             item.updatedAt = now
 
             database.workItemDao().update(item.toRecord())

@@ -378,6 +378,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int?,
+        sprintID: SprintID?,
         now: Instant,
     ): WorkItem {
         throwIfFailing()
@@ -395,6 +397,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 priority = priority,
                 assignee = assignee,
                 dueDate = dueDate,
+                storyPoints = storyPoints,
+                sprintID = sprintID,
                 rank = itemCounter,
                 createdAt = now,
                 updatedAt = now,
@@ -427,6 +431,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem {
         throwIfFailing()
@@ -447,6 +452,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             when (dueDate) {
                 is Patch.Unmentioned -> Unit
                 is Patch.Of -> item.dueDate = dueDate.value
+            }
+            when (storyPoints) {
+                is Patch.Unmentioned -> Unit
+                is Patch.Of -> item.storyPoints = storyPoints.value
             }
             item.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))

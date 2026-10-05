@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Priority
@@ -60,6 +61,7 @@ class WorkItemEditorModel(
     private val repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     initialStatus: WorkItemStatus? = null,
+    private val initialSprintID: SprintID? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -73,6 +75,14 @@ class WorkItemEditorModel(
 
     /** The description. The card shows at most a couple of lines of this. */
     var details: String by mutableStateOf(existing?.details.orEmpty())
+        private set
+
+    /** The story points estimate, or `null` for unestimated. */
+    var storyPoints: Int? by mutableStateOf(existing?.storyPoints)
+        private set
+
+    /** The story points text field value as typed. */
+    var storyPointsText: String by mutableStateOf(existing?.storyPoints?.toString().orEmpty())
         private set
 
     /**
@@ -154,6 +164,7 @@ class WorkItemEditorModel(
                 priority = priority,
                 assignee = assignee.trim(),
                 dueDate = dueDate,
+                storyPoints = storyPoints,
             )
             return original == null || current != original
         }
@@ -169,6 +180,15 @@ class WorkItemEditorModel(
     /** Sets the description. */
     fun onDetailsChanged(value: String) {
         details = value
+    }
+
+    fun onStoryPointsChanged(value: String) {
+        storyPointsText = value
+        val trimmed = value.trim()
+        storyPoints = when {
+            trimmed.isEmpty() -> null
+            else -> trimmed.toIntOrNull()?.takeIf { it >= 0 }
+        }
     }
 
     /** Sets the status. Ignored for a closed task, which has left the workflow. */
@@ -211,6 +231,8 @@ class WorkItemEditorModel(
                 priority = priority,
                 assignee = assignee,
                 dueDate = dueDate,
+                storyPoints = storyPoints,
+                initialSprintID = if (savedWorkItemID == null) initialSprintID else null,
             )
         } ?: return null
 
@@ -269,6 +291,7 @@ class WorkItemEditorModel(
         val priority: Priority,
         val assignee: String,
         val dueDate: Instant?,
+        val storyPoints: Int?,
     ) {
         companion object {
             fun of(item: WorkItem) = Draft(
@@ -278,6 +301,7 @@ class WorkItemEditorModel(
                 priority = item.priority,
                 assignee = item.assignee.orEmpty().trim(),
                 dueDate = item.dueDate,
+                storyPoints = item.storyPoints,
             )
         }
     }

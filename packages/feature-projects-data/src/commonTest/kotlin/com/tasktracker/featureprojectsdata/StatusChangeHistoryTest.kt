@@ -32,7 +32,7 @@ class StatusChangeHistoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val history = harness.repository.statusChanges(item.id)
@@ -49,7 +49,7 @@ class StatusChangeHistoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals(userID, harness.repository.statusChanges(item.id)[0].changedBy?.stringValue)
@@ -64,7 +64,7 @@ class StatusChangeHistoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val history = harness.repository.statusChanges(item.id)
@@ -77,7 +77,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         harness.repository.moveWorkItem(item.id, WorkItemStatus.InProgress, rank = null, now = Moments.later)
@@ -94,7 +94,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, rank = null, now = Moments.start)
@@ -121,7 +121,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, rank = null, now = Moments.start)
@@ -140,7 +140,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, rank = null, now = Moments.start)
         harness.repository.moveWorkItem(item.id, WorkItemStatus.InProgress, rank = null, now = Moments.start)
@@ -157,10 +157,10 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createWorkItem(
-            project.id, "First", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "First", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         val second = harness.repository.createWorkItem(
-            project.id, "Second", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "Second", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.repository.moveWorkItem(first.id, WorkItemStatus.Done, rank = null, now = Moments.later)
 
@@ -175,7 +175,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals(1, harness.repository.statusChanges(item.id).size)
@@ -198,7 +198,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, rank = null, now = Moments.later)
         harness.database.statusChangeDao().insert(
@@ -217,7 +217,7 @@ class StatusChangeHistoryTest {
         harness.session.signIn()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         val first = harness.repository.statusChanges(item.id)[0]
 
@@ -236,7 +236,7 @@ class StatusChangeHistoryTest {
         harness.session.signIn(userID = "not-a-uuid")
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val history = harness.repository.statusChanges(item.id)
@@ -253,7 +253,7 @@ class StatusChangeHistoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Backlog, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.database.statusChangeDao().insert(
             aChange(item.id, project.id).toRecord().copy(changedByUserID = "not-a-uuid"),

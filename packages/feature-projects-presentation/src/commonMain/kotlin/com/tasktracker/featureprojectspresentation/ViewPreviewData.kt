@@ -559,6 +559,8 @@ private class PreviewRepository(
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int?,
+        sprintID: SprintID?,
         now: Instant,
     ): WorkItem {
         val project = storedProjects.first { it.id == projectID }
@@ -572,6 +574,8 @@ private class PreviewRepository(
             priority = priority,
             assignee = assignee,
             dueDate = dueDate,
+            storyPoints = storyPoints,
+            sprintID = sprintID,
             createdAt = now,
             updatedAt = now,
         )
@@ -588,6 +592,7 @@ private class PreviewRepository(
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem = storedItems.first { it.id == id }.also {
         if (title != null) it.title = title
@@ -595,6 +600,7 @@ private class PreviewRepository(
         if (priority != null) it.priority = priority
         if (assignee is Patch.Of) it.assignee = assignee.value
         if (dueDate is Patch.Of) it.dueDate = dueDate.value
+        if (storyPoints is Patch.Of) it.storyPoints = storyPoints.value
         it.updatedAt = now
     }.also {
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, it.projectID))

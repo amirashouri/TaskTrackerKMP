@@ -21,6 +21,7 @@ object WorkItemEditorScenarios {
                 WorkItemEditorSheet(
                     title = "Fix crash on launch",
                     details = "Details here",
+                    storyPointsText = "5",
                     status = WorkItemStatus.InProgress,
                     priority = Priority.High,
                     assignee = "Amir",
@@ -34,6 +35,7 @@ object WorkItemEditorScenarios {
                     errorMessage = null,
                     onTitleChanged = {},
                     onDetailsChanged = {},
+                    onStoryPointsChanged = {},
                     onStatusChanged = {},
                     onPriorityChanged = {},
                     onAssigneeChanged = {},
@@ -60,6 +62,7 @@ object WorkItemEditorScenarios {
                 WorkItemEditorSheet(
                     title = "Fix crash on launch",
                     details = "Details here",
+                    storyPointsText = "5",
                     status = WorkItemStatus.InProgress,
                     priority = Priority.High,
                     assignee = "Amir",
@@ -73,6 +76,7 @@ object WorkItemEditorScenarios {
                     errorMessage = null,
                     onTitleChanged = {},
                     onDetailsChanged = {},
+                    onStoryPointsChanged = {},
                     onStatusChanged = {},
                     onPriorityChanged = {},
                     onAssigneeChanged = {},

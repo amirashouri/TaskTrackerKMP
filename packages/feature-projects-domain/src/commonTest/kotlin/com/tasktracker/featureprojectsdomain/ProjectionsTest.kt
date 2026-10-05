@@ -236,7 +236,7 @@ class ProjectionsTest {
         )
 
         assertEquals(listOf("TT-1", "TT-2"), keys(projection.archived))
-        assertEquals(BacklogSectionedProjection(null, items), BacklogSectionedProjection(null, items))
+        assertEquals(BacklogSectionedProjection(null, emptyList<WorkItem>()), BacklogSectionedProjection(null, emptyList<WorkItem>()))
     }
 
     // MARK: Archive

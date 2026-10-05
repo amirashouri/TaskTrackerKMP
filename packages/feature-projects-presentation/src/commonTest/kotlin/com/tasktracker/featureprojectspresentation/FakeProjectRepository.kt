@@ -365,6 +365,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority,
         assignee: String?,
         dueDate: Instant?,
+        storyPoints: Int?,
+        sprintID: SprintID?,
         now: Instant,
     ): WorkItem = writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID) }) {
         failIfSet()
@@ -381,6 +383,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
             priority = priority,
             assignee = assignee,
             dueDate = dueDate,
+            storyPoints = storyPoints,
+            sprintID = sprintID,
             createdAt = now,
             updatedAt = now,
         )
@@ -398,6 +402,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         priority: Priority?,
         assignee: Patch<String?>,
         dueDate: Patch<Instant?>,
+        storyPoints: Patch<Int?>,
         now: Instant,
     ): WorkItem = writing({
         ProjectChange(ProjectChange.Kind.WorkItems, storedItems.first { it.id == id }.projectID)
@@ -413,6 +418,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
         when (dueDate) {
             is Patch.Of -> existing.dueDate = dueDate.value
+            Patch.Unmentioned -> Unit
+        }
+        when (storyPoints) {
+            is Patch.Of -> existing.storyPoints = storyPoints.value
             Patch.Unmentioned -> Unit
         }
         existing.updatedAt = now

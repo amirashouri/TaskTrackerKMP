@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
@@ -220,6 +221,8 @@ class SaveWorkItem(
         priority: Priority = Priority.Medium,
         assignee: String? = null,
         dueDate: Instant? = null,
+        storyPoints: Int? = null,
+        initialSprintID: SprintID? = null,
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
@@ -234,6 +237,8 @@ class SaveWorkItem(
                 priority = priority,
                 assignee = assignee,
                 dueDate = dueDate,
+                storyPoints = storyPoints,
+                sprintID = initialSprintID,
                 now = dateProvider.now(),
             )
             return WorkItemSaveOutcome.Created(created.id)
@@ -253,6 +258,7 @@ class SaveWorkItem(
             // [Patch.Unmentioned] here would silently keep the previous value.
             assignee = Patch.Of(assignee),
             dueDate = Patch.Of(dueDate),
+            storyPoints = Patch.Of(storyPoints),
             now = dateProvider.now(),
         )
 

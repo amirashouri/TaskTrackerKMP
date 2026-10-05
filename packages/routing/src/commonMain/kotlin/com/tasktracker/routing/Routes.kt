@@ -87,6 +87,7 @@ sealed interface AppRoute {
         val projectID: ProjectID,
         val workItemID: WorkItemID?,
         val initialStatus: WorkItemStatus? = null,
+        val initialSprintID: SprintID? = null,
     ) : AppRoute
 
     data object Settings : AppRoute
