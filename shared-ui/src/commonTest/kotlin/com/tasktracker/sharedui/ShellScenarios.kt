@@ -4,6 +4,8 @@ package com.tasktracker.sharedui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
@@ -26,6 +28,9 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.NavigationEventDispatcher
+import androidx.navigationevent.NavigationEventDispatcherOwner
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
@@ -48,6 +53,7 @@ import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
+import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
@@ -55,6 +61,8 @@ import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintRowTag
+import com.tasktracker.featureprojectspresentation.SprintDetailSummaryTag
+import com.tasktracker.featureprojectspresentation.SprintSummaryBackTag
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.SettingsForceOfflineTag
@@ -133,6 +141,7 @@ object ShellScenarios {
         preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         splashHold: Long = 0L,
         width: Dp? = null,
+        navigationEventOwner: NavigationEventDispatcherOwner? = null,
     ): FakeResolver {
         val resolver = if (omitProjects) {
             FakeResolver.withoutProjects(session = session, router = router, preferences = preferences)
@@ -157,11 +166,28 @@ object ShellScenarios {
         // system — which is the whole reason this is done this way. See
         // [fiveTabsFitAtPhoneWidth].
         setContent {
-            if (width == null) {
-                TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
-            } else {
-                Box(modifier = Modifier.width(width)) {
+            val app: @Composable () -> Unit = {
+                if (width == null) {
                     TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+                } else {
+                    Box(modifier = Modifier.width(width)) {
+                        TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+                    }
+                }
+            }
+            // An explicit provider shadows the host default on *every* host,
+            // Android included, so one simulation of a system-back press works
+            // on all three. On Android it replaces the activity's dispatcher
+            // for this subtree — the shell's `BackHandler` registers with
+            // whichever owner the local holds — while the activity-side chain
+            // itself is the platform's, not the shell's, and is unchanged.
+            if (navigationEventOwner == null) {
+                app()
+            } else {
+                CompositionLocalProvider(
+                    LocalNavigationEventDispatcherOwner provides navigationEventOwner,
+                ) {
+                    app()
                 }
             }
         }
@@ -668,6 +694,48 @@ object ShellScenarios {
     }
 
     /**
+     * The sprints tab's project switcher navigates on `openProject` in the sprints tab.
+     *
+     * `ProjectSwitcherButton` is the same control the board uses, but its `onSelectProject`
+     * is wired to `router.openProject(it, AppTab.Sprints)` here rather than to the board's
+     * push, so the same tap must land on the sprint list of the *new* project and leave the
+     * tab on Sprints. Asserted on the router state directly, because the board's switcher has
+     * the same tag as the sprints' one and a tag-only check could not tell the two apart.
+     */
+    val switchingProjectsFromTheSprintsTabCallsOpenProject: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        val other = shellTestProject(name = "Viking", keyPrefix = "VI")
+        projects.seed(project)
+        projects.seed(other)
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+        )
+
+        waitForIdle()
+        // Start from the first project so the sprints tab has a non-null project to switch away from.
+        onNodeWithTag(ProjectRowTag(ProjectSummary(project, itemCount = 0))).performClick()
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+
+        // Open the switcher and pick the other project.
+        onNodeWithTag(ProjectSwitcherTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectSwitcherOptionTag(other.id)).performClick()
+        waitForIdle()
+
+        // The active project changed and the tab stayed on Sprints.
+        assertEquals(other.id, router.state.value.activeProjectID, "expected openProject to set the active project to the selected one")
+        assertEquals(AppTab.Sprints, router.state.value.selectedTab, "expected the sprints tab to stay selected after a project switch")
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+    }
+
+    /**
      * The bar floats: inset from the left and right edges, sitting on the bottom edge.
      *
      * This is the inverse of the assertion it replaces, and deliberately so. That one demanded
@@ -829,7 +897,81 @@ object ShellScenarios {
         )
     }
 
-        /**
+    /**
+     * System back pops the sprint detail, and stops at the tab root.
+     *
+     * The Android defect: on the sprint detail the system back button
+     * closed the whole app, because nothing in the signed-in tree consumed
+     * the back event — the only way off the screen was the tab bar. The
+     * shell now answers back with the rule every pushed screen's chevron
+     * already carries: pop exactly one route, never leave the tab.
+     *
+     * The press enters through [pressSystemBack], which is host-specific
+     * for a measured reason: the JVM and iOS hosts' `BackHandler`
+     * registers with the dispatcher the scenario provides (see
+     * [setUpShell]'s `navigationEventOwner`), while the Android host's
+     * registers with the activity's own dispatcher. The split and the
+     * measurements behind it live on the [pressSystemBack] declaration.
+     */
+    val systemBackPopsTheSprintDetail: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        val dispatcher = NavigationEventDispatcher()
+        val owner = object : NavigationEventDispatcherOwner {
+            override val navigationEventDispatcher: NavigationEventDispatcher = dispatcher
+        }
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            navigationEventOwner = owner,
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+        assertEquals(
+            listOf(AppRoute.SprintList(project.id), AppRoute.SprintDetail(project.id, sprint.id)),
+            router.path(AppTab.Sprints),
+        )
+
+        // One system back pops the detail route, exactly as the chevron does.
+        pressSystemBack(dispatcher)
+        waitForIdle()
+        assertEquals(
+            listOf(AppRoute.SprintList(project.id)),
+            router.path(AppTab.Sprints),
+            "system back should pop the sprint detail, not close the app",
+        )
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+
+        // At the tab root the handler is disabled, so the OS default governs.
+        // On the Android host that default is the activity's own back, which a
+        // test cannot assert from here; what can be asserted is that the press
+        // does not pop anything off the stack.
+        pressSystemBack(dispatcher)
+        waitForIdle()
+        assertEquals(
+            listOf(AppRoute.SprintList(project.id)),
+            router.path(AppTab.Sprints),
+            "system back at the tab root should be a no-op, not a pop",
+        )
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+    }
+
+    /**
      * A link to one sprint selects the tab, installs the stack, and shows the detail screen.
      *
      * Distinct from [aSprintOpensAndALinkLandsOnIt] because it enters through

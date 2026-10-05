@@ -1,3 +1,6 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+@file:Suppress("DEPRECATION")
+
 package com.tasktracker.sharedui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +29,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -40,6 +45,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -63,6 +70,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -172,7 +180,20 @@ fun NavigationHost(
     val tabBarInset = remember { mutableStateOf(0.dp) }
     // Read here rather than inside the `onSizeChanged` lambda, which is not a composable scope.
     val tabBarDensity = LocalDensity.current
-    CompositionLocalProvider(LocalTabBarScrollUnderInset provides tabBarInset.value) {
+    // `BackHandler` needs a `NavigationEventDispatcherOwner` in this composition
+    // local. The Android host supplies one as the local's *host default* — the
+    // activity's own dispatcher, so the shell's handler rides the real system-back
+    // chain with no further wiring. The JVM and iOS hosts supply none, and the
+    // handler throws without one, so a root dispatcher is installed there: with no
+    // `NavigationEventInput` attached it is detached and receives no events, which
+    // is exactly right for a host with no system back. The system-back tests drive
+    // that dispatcher with a synthetic input.
+    val hostDispatcherOwner = LocalNavigationEventDispatcherOwner.current
+    val fallbackDispatcherOwner = rememberNavigationEventDispatcherOwner(parent = null)
+    CompositionLocalProvider(
+        LocalTabBarScrollUnderInset provides tabBarInset.value,
+        LocalNavigationEventDispatcherOwner provides (hostDispatcherOwner ?: fallbackDispatcherOwner),
+    ) {
         Box(modifier = modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize()) {
                 val path = navigation.pathFor(tab)
@@ -180,6 +201,26 @@ fun NavigationHost(
                 val previousRoute = path.dropLast(1).lastOrNull()
                 val editorOverProjectRoot = pushed is AppRoute.WorkItemEditor &&
                     previousRoute == null && (tab == AppTab.Board || tab == AppTab.Backlog)
+
+                // System back mirrors the chevron every pushed screen carries: pop
+                // exactly one route, never leave the tab. The gate is `path.size > 1`,
+                // not `pushed != null` — the Sprints tab's *root* stack is
+                // `[SprintList]`, so `pushed` is non-null even at the tab root and
+                // would wrongly enable the handler there and eat the OS default (on
+                // Android, finishing the activity) as a silent no-op. At the root the
+                // handler stays disabled and the OS default governs. The lambda
+                // re-reads `router.path(tab)` rather than closing over `path`, the
+                // same guard the editor's `onDismiss` below uses: the lambda runs
+                // after the gesture, on a stack that may have moved.
+                BackHandler(
+                    enabled = path.size > 1,
+                    onBack = {
+                        val currentPath = router.path(tab)
+                        if (currentPath.size > 1) {
+                            router.setPath(currentPath.dropLast(1), tab)
+                        }
+                    },
+                )
 
                 // Keep the root in this same composition slot while a task editor is shown over
                 // a project tab. Routing into a separate PushedRoute branch used to dispose and
@@ -787,6 +828,22 @@ private fun SprintsDestination(
         onDispose { model.stopObserving() }
     }
 
+    // The switcher reads the project list so the dropdown can name every project. Sitting
+    // here rather than on `SprintListModel` because the list is owned by the shell's picker,
+    // not by the sprint list model — the same split `BoardDestination` draws.
+    val picker = remember(environment.repository) { ProjectPickerModel(environment.repository) }
+    DisposableEffect(picker) {
+        picker.observe(scope)
+        onDispose { picker.stopObserving() }
+    }
+
+    // The current project's name and prefix, shown in the switcher pill. Loaded here rather
+    // than on `SprintListModel` because the model's `isRelevant` only watches sprint-level
+    // changes and would miss a project rename; this read is independent of the sprint list.
+    val currentProject by produceState<Project?>(initialValue = null, projectID, environment) {
+        value = runCatching { environment.repository.project(projectID) }.getOrNull()
+    }
+
     // `null` for creating, a `SprintID` for editing. Named rather than a separate boolean
     // because "creating" and "editing sprint X" are one state with two shapes, and two
     // booleans would allow the impossible third.
@@ -800,6 +857,7 @@ private fun SprintsDestination(
         isEmpty = model.isEmpty,
         canCreate = !model.hasOpenSprint,
         errorMessage = model.errorMessage,
+        project = currentProject,
         onOpen = { sprintID ->
             // `openSprint` rather than `push`, because the list belongs *underneath* the detail and a
             // `push` onto an empty stack — which is what a plain tab switch leaves — would
@@ -812,6 +870,9 @@ private fun SprintsDestination(
             isEditorVisible = true
         },
         onDismissError = model::dismissError,
+        onOpenSwitcher = { router.popToRoot() },
+        projects = picker.projects,
+        onSelectProject = { router.openProject(it, AppTab.Sprints) },
     )
 
     // Open the editor for a sprint by id, reading it first. `null` when it has gone — the
@@ -924,6 +985,7 @@ private fun SprintDetailDestination(
     if (isSummaryOpen) {
         SprintSummaryScreen(
             summary = detail.summary,
+            onBack = { isSummaryOpen = false },
             modifier = Modifier.testTag(SprintSummaryDestinationTag),
         )
         return

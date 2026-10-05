@@ -45,6 +45,20 @@ dependencies {
     // `verifyArchitectureGraph` filters `ProjectDependency`, and neither it nor
     // `verifyModuleImports` reads a `libs.` coordinate.
     commonMainImplementation(libs.kotlinx.datetime)
+
+    // For `BackHandler`: system back is a shell concern — pop exactly one
+    // route, never leave the tab — which is a rule about the shell's own
+    // stacks and not about any feature screen.
+    //
+    // A **library** edge, so `allowedLibraryTable` and `packageOwnersTable` are
+    // untouched: `verifyArchitectureGraph` filters `ProjectDependency`, and neither
+    // it nor `verifyModuleImports` reads a `libs.` coordinate.
+    commonMainImplementation(libs.compose.backhandler)
+    // `BackHandler`'s POM carries `navigationevent-compose` at *runtime*
+    // scope, which keeps it off the compile classpath — and the shell
+    // imports `LocalNavigationEventDispatcherOwner` to hand the handler a
+    // dispatcher owner. Same library-edge reasoning as the line above.
+    commonMainImplementation(libs.navigationevent.compose)
 }
 
 // The single framework the SwiftUI Liquid Glass shell links against. iOS entry

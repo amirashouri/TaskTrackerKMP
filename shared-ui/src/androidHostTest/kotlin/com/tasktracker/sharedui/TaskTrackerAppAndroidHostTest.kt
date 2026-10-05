@@ -79,6 +79,8 @@ class TaskTrackerAppAndroidHostTest {
     @Test
     fun switchingTabsKeepsTheProject() = runComposeUiTest(block = ShellScenarios.switchingTabsKeepsTheProject)
     @Test
+    fun switchingProjectsFromTheSprintsTabCallsOpenProject() = runComposeUiTest(block = ShellScenarios.switchingProjectsFromTheSprintsTabCallsOpenProject)
+    @Test
     fun theTabBarFloatsAboveTheBottomEdge() = runComposeUiTest(block = ShellScenarios.theTabBarFloatsAboveTheBottomEdge)
     @Test
     fun theTabBarIsWiderThanItsTabs() = runComposeUiTest(block = ShellScenarios.theTabBarIsWiderThanItsTabs)
@@ -88,6 +90,10 @@ class TaskTrackerAppAndroidHostTest {
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)
     @Test
     fun aDeepLinkToOneSprintLandsOnItsScreen() = runComposeUiTest(block = ShellScenarios.aDeepLinkToOneSprintLandsOnItsScreen)
+
+    /** System back pops the sprint detail route and stops at the tab root. The defect was Android's: the system back button closed the whole app from the sprint detail, because nothing in the signed-in tree consumed the back event. This host presses through the real `activity.onBackPressed()` chain — the dispatcher the androidx `BackHandler` registers with — so the press here is the device's path, not a simulation of it (see `SystemBackSupport`). */
+    @Test
+    fun systemBackPopsTheSprintDetail() = runComposeUiTest(block = ShellScenarios.systemBackPopsTheSprintDetail)
     @Test
     fun everyTabScrollsBehindTheTabBar() = runComposeUiTest(block = ShellScenarios.everyTabScrollsBehindTheTabBar)
     @Test

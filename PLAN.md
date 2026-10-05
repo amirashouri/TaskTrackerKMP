@@ -5195,4 +5195,97 @@ to [DateFieldInteractionTest] 13 → 15. The Android host went to 150/15 on the 
 to 150/14 once the guard moved — which is the second time this phase that measuring the baseline
 rather than assuming it has been what caught the mistake.
 
+### 23.15 Project switcher on the sprints tab
+
+The sprints tab had no way to switch projects without leaving it: it showed the current project's
+sprint list but offered no control to move to another. The board tab already had one, so the
+sprints tab now mirrors the `BoardDestination` pattern — a `ProjectPickerModel` observed against
+the repository, a `produceState` read of the current project, and a `ProjectSwitcherButton` handed
+four params (`project`, `onOpenSwitcher = { router.popToRoot() }`, `projects`, `onSelectProject =
+{ router.openProject(it, AppTab.Sprints) }`). The `ProjectSwitcherButton` itself is reused as-is;
+only its wiring in `SprintsDestination` changed.
+
+The `project` param on `SprintListScreen` got a `= null` default so the two existing previews
+keep compiling without it; production call sites always supply it.
+
+#### Test
+
+[`switchingProjectsFromTheSprintsTabCallsOpenProject`] in `ShellScenarios.kt`, registered in
+`TaskTrackerAppJvmTest`, `TaskTrackerAppIosTest`, and `TaskTrackerAppAndroidHostTest`. Two
+seeded projects (Apollo/AP, Viking/VI so their `ProjectRowTag`s don't collide), open the first,
+switch to the sprints tab, open the switcher, select the second — then assert
+`router.state.value.activeProjectID == other.id` and `router.state.value.selectedTab == AppTab.Sprints`.
+
+The two-project setup matters: `shellTestProject` defaults both to `keyPrefix = "AP"`, and
+the first attempt failed with "Expected exactly '1' node but found '2' nodes that satisfy:
+TestTag = 'projects.row.AP'".
+
+#### Mutation
+
+One mutation, one caught: inverting `AppTab.Sprints` → `AppTab.Board` in `onSelectProject`
+makes the test go red on the `selectedTab` assertion. Restored and green.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1301 | **1302** | 7, unchanged |
+| iOS simulator | 1273 | **1274** | 7, unchanged |
+| Android host (`:shared-ui`) | 31 | **32** | 7, unchanged |
+
++1 on both deciding hosts, from the JUnit XML and cross-checked against `@Test`: one scenario
+added and registered on all three entry points. The Android host count is up by one but its
+17 pre-existing Compose-layout failures are unchanged; that host is outside the deciding command.
+
+### 23.16 System back pops one route
+
+On Android the system back button closed the whole app from the sprint detail: nothing in the
+signed-in tree consumed the back event, so the press reached the activity default. `NavigationHost`
+now installs a `BackHandler` that pops exactly one route — `router.setPath(currentPath.dropLast(1),
+tab)` — guarded by `enabled = path.size > 1`. The guard is the stack *size*, not `pushed != null`,
+because the sprints tab's root stack is `[SprintList]` (size 1): a `pushed`-based guard would
+wrongly enable back at the tab root and let the press fall through to the activity default there.
+The lambda re-reads `router.path(tab)` instead of closing over `path`, the same discipline the
+editor's `onDismiss` carries: the lambda runs after the gesture, on a stack that may have moved.
+
+#### Test
+
+[`systemBackPopsTheSprintDetail`] in `ShellScenarios.kt`, registered in `TaskTrackerAppJvmTest`,
+`TaskTrackerAppIosTest`, and `TaskTrackerAppAndroidHostTest`. It opens a project, taps to the
+sprints tab, taps a sprint row, asserts the stack is `[SprintList, SprintDetail]`, presses system
+back, and asserts the stack is `[SprintList]` with the list screen displayed — then presses back
+again at the root and asserts the stack is unchanged.
+
+The press goes through `pressSystemBack`, an `expect`/`actual` split in `SystemBackSupport`, and
+the split is measured rather than stylistic. On the Android host an explicit
+`LocalNavigationEventDispatcherOwner` provide *is* the one the composition local resolves (a
+diagnostic printed `resolved isOurOwner=true dispatcherIsOurs=true`), yet the androidx `BackHandler`
+that the platform delegate installs registers with the *activity's* dispatcher: the provided
+dispatcher's history stayed empty, a synthetic `dispatchOnBackCompleted()` on it fired no handler,
+and `activity.onBackPressed()` did. So the Android actual presses the real activity chain, and the
+JVM and iOS actuals — whose `BackHandler` registers with the provided dispatcher — dispatch on it.
+The scenario itself stays common; only the press is per-host.
+
+#### Mutation
+
+Two mutations, two caught, one on each press path: replacing `dropLast(1)` with the unmodified
+`currentPath` in the `BackHandler` makes the test red on the JVM (`expected:<[SprintList…]> but
+was:<[SprintList…, SprintDetail…]>`) and red on the Android host through the real
+`activity.onBackPressed()` chain with the same assertion message. Restored and green on both.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1302 | **1303** | 7, unchanged |
+| iOS simulator | 1274 | **1275** | 7, unchanged |
+| Android host (`:shared-ui`) | 32 | **33** | 7, unchanged |
+
++1 on all three hosts, from the JUnit XML and cross-checked against `@Test`: one scenario added
+and registered on all three entry points. The failure sets are the documented pre-existing ones —
+`SeedingTest` ×3 in `:packages:feature-projects-data`, the two glass-contrast assertions in
+`:packages:design-system`, and `aChosenThemeOutlivesTheProcess` plus `theBoardReturnsToTheList`
+in `:shared-ui` on the deciding hosts; the seven Robolectric-viewport layout failures in
+`:shared-ui` on the Android host. None moved.
+
 </details>

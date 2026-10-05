@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -46,6 +47,7 @@ import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Project
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.sprintSummary
@@ -118,9 +120,13 @@ fun SprintListScreen(
     isEmpty: Boolean?,
     canCreate: Boolean,
     errorMessage: String?,
+    project: Project? = null,
     onOpen: (SprintID) -> Unit,
     onNewSprint: () -> Unit,
     onDismissError: () -> Unit,
+    onOpenSwitcher: (() -> Unit)? = null,
+    projects: List<PickableProject> = emptyList(),
+    onSelectProject: ((ProjectID) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -140,12 +146,15 @@ fun SprintListScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             ) {
-                ttText(
-                    text = stringResource(Res.string.sprint_list_title),
-                    style = ttTypography.largeTitle,
-                    color = ttLabel(),
-                    modifier = Modifier.weight(1f),
-                )
+                onOpenSwitcher?.let { openSwitcher ->
+                    ProjectSwitcherButton(
+                        project = project,
+                        onClick = openSwitcher,
+                        modifier = Modifier.weight(1f),
+                        projects = projects,
+                        onSelectProject = onSelectProject,
+                    )
+                }
                 // Absent rather than disabled when a sprint is already open — see the class
                 // comment. A disabled control with no explanation is worse than no control.
                 if (canCreate) {
@@ -664,6 +673,7 @@ private fun SprintItemRow(
 @Composable
 fun SprintSummaryScreen(
     summary: SprintSummary,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -673,11 +683,24 @@ fun SprintSummaryScreen(
             .testTag(SprintSummaryScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
-        ttText(
-            text = stringResource(Res.string.sprint_summary_title, summary.sprint.name),
-            style = ttTypography.largeTitle,
-            color = ttLabel(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttGlassIconButton(
+                image = ttActionIcons.chevronLeft,
+                contentDescription = stringResource(Res.string.common_cancel),
+                onClick = onBack,
+                modifier = Modifier.testTag(SprintSummaryBackTag),
+            )
+            ttText(
+                text = stringResource(Res.string.sprint_summary_title, summary.sprint.name),
+                style = ttTypography.largeTitle,
+                color = ttLabel(),
+                modifier = Modifier.weight(1f),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
@@ -862,6 +885,7 @@ const val SprintEditorCancelTag = "sprints.editor.cancel"
 
 /** The summary screen. */
 const val SprintSummaryScreenTag = "sprints.summary"
+const val SprintSummaryBackTag = "sprints.summary.back"
 const val SprintSummaryVerdictTag = "sprints.summary.verdict"
 const val SprintSummaryEmptyTag = "sprints.summary.empty"
 const val SprintSummaryDoneTag = "sprints.summary.done"
@@ -1025,11 +1049,12 @@ private fun SprintSummaryScreenPreview() = ProjectsPreview(ThemeScheme.Light) {
     val sprint = ViewPreviewData.finishedSprint
     SprintSummaryScreen(
         summary = sprintSummary(sprint, ViewPreviewData.sprintWorkItems(sprint)),
+        onBack = {},
     )
 }
 
 @Preview(name = "Sprint summary, empty", showBackground = true, widthDp = 380, heightDp = 420)
 @Composable
 private fun SprintSummaryScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    SprintSummaryScreen(summary = sprintSummary(ViewPreviewData.finishedSprint, emptyList()))
+    SprintSummaryScreen(summary = sprintSummary(ViewPreviewData.finishedSprint, emptyList()), onBack = {})
 }

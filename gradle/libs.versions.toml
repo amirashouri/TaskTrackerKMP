@@ -23,6 +23,13 @@ sqlite = "2.6.2"
 ktor = "3.6.0"
 koin = "4.2.2"
 
+# The compose-local API `BackHandler` registers with. `ui-backhandler`
+# depends on this at *runtime* scope only, so a module that imports the
+# `LocalNavigationEventDispatcherOwner` compose local needs it as a
+# compile dependency of its own. Pinned to the version `ui-backhandler`
+# 1.12.1 asks for.
+navigationevent = "1.1.0"
+
 coroutines = "1.11.0"
 serialization = "1.11.0"
 datetime = "0.8.0"
@@ -80,6 +87,15 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMul
 compose-uiTooling = { module = "org.jetbrains.compose.ui:ui-tooling", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 compose-uiTest = { module = "org.jetbrains.compose.ui:ui-test", version.ref = "composeMultiplatform" }
+# System-back consumption for the signed-in shell. `BackHandler` is the
+# Compose Multiplatform 1.12 API that registers with the host's
+# `NavigationEventDispatcher` — on Android that is the activity's own back
+# dispatcher, so the handler rides the real system-back chain. It carries a
+# deprecation pointing at `NavigationEventHandler`; that replacement is the
+# same wiring without the annotation, and the shell moves to it when the rest
+# of its navigation-event consumers do.
+compose-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
+navigationevent-compose = { module = "org.jetbrains.androidx.navigationevent:navigationevent-compose", version.ref = "navigationevent" }
 # `androidx`, not `org.jetbrains.compose.ui`. The JetBrains coordinate was never published
 # for any version -- `org.jetbrains.compose.ui:ui-test-manifest` 404s on Maven Central -- so
 # the `org.jetbrains.compose.ui:ui-test` dependency is a dead end for the Android host's
