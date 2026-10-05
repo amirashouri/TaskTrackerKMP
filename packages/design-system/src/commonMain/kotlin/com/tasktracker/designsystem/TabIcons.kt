@@ -362,25 +362,32 @@ object ttActionIcons {
      * contour walked from the other corner, so the 3.5-unit thickness sits across the
      * diagonal exactly as it does in the original — which is what makes the three read as
      * one family rather than as a down arrow and two approximations of it.
+     *
+     * The apex is the vertex furthest from the trailing edge, and here it is at **x = 7** —
+     * the minimum x in the contour — so this glyph points left. That is the whole contract,
+     * and it is what this pair of declarations got wrong: both bodies were correct rotations
+     * of `chevronDown`, but they sat on each other's names, so the month grid's left arrow
+     * stepped *forward*. `TabIconsGeometryTest` reads the apex off the path itself, so a swap
+     * cannot come back.
      */
     val chevronLeft: ImageVector = icon("ChevronLeft") {
-        moveTo(8.0f, 3.0f)
-        lineTo(17.0f, 12.0f)
-        lineTo(8.0f, 21.0f)
-        lineTo(11.5f, 21.0f)
-        lineTo(20.5f, 12.0f)
-        lineTo(11.5f, 3.0f)
-        close()
-    }
-
-    /** [chevronDown] turned the other way. See [chevronLeft] for why this is drawn. */
-    val chevronRight: ImageVector = icon("ChevronRight") {
         moveTo(16.0f, 3.0f)
         lineTo(7.0f, 12.0f)
         lineTo(16.0f, 21.0f)
         lineTo(12.5f, 21.0f)
         lineTo(3.5f, 12.0f)
         lineTo(12.5f, 3.0f)
+        close()
+    }
+
+    /** [chevronDown] turned the other way. See [chevronLeft] for why this is drawn. */
+    val chevronRight: ImageVector = icon("ChevronRight") {
+        moveTo(8.0f, 3.0f)
+        lineTo(17.0f, 12.0f)
+        lineTo(8.0f, 21.0f)
+        lineTo(11.5f, 21.0f)
+        lineTo(20.5f, 12.0f)
+        lineTo(11.5f, 3.0f)
         close()
     }
 

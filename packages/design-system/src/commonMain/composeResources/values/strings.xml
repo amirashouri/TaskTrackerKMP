@@ -119,6 +119,8 @@
       indistinguishable is a header that cannot be read, and the cell widths are wide enough
       for three letters at `captionSmall`.
     -->
+    <string name="date_choose_year">Choose year</string>
+    <string name="date_done">Done</string>
     <string name="date_placeholder">No date</string>
     <string name="date_next_month">Next month</string>
     <string name="date_previous_month">Previous month</string>

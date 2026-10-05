@@ -31,12 +31,13 @@ import kotlin.test.assertTrue
  *
  * ## What this deliberately does not assert
  *
- * It does not compare against reference images and it does not assert the *shape*. Rasterising
- * these to compare would make the test unreadable and would fail on an anti-aliasing change
- * rather than on a fault. Whether a drawing is recognisably the right icon is a design question;
- * the question that *can* be answered mechanically — does every tab have a glyph, and does each
- * one stand in for the symbol the native app names — is answered by the `when` in
- * `tabIcon`, which is exhaustive over `AppTab` and therefore a compile error rather than a test.
+ * It does not compare against reference images and it does not assert the *shape* of a glyph.
+ * Rasterising these to compare would make the test unreadable and would fail on an
+ * anti-aliasing change rather than on a fault. Whether a drawing is recognisably the right
+ * icon is a design question; the questions that *can* be answered mechanically — does every
+ * tab have a glyph, does each one stand in for the symbol the native app names, and does each
+ * chevron point the way its name says — are answered here and by the `when` in `tabIcon`,
+ * which is exhaustive over `AppTab` and therefore a compile error rather than a test.
  */
 class TabIconsGeometryTest {
 
@@ -225,6 +226,137 @@ class TabIconsGeometryTest {
         )
     }
 
+    // MARK: - Which way a chevron points
+
+    /**
+     * The regression: the month grid's two arrows were on each other's bodies.
+     *
+     * Both contours were correct rotations of `chevronDown` — the left one was exactly
+     * `chevronDown` turned a quarter turn clockwise, apex at x = 17 — but they sat on each
+     * other's names, so the arrow on the left of "March 2026" stepped *forward* and the one
+     * on the right stepped back.
+     *
+     * Nothing else in this file could have caught it. Both paths are non-empty, inside the
+     * viewport, and 18x18 units, so "every glyph has geometry", "every glyph is drawn inside
+     * the viewport" and "every glyph fills the grid" all passed on a backwards arrow. And it
+     * is invisible in review as a *drawing*, because both drawings are right; only the binding
+     * of drawing to name is wrong, and a diff of two hexagons does not show that.
+     *
+     * So the assertion is about direction: a chevron's **apex** is the vertex at the extreme
+     * of its own bounding box along the axis it points, and it must be that extreme *alone*
+     * and sit on the centre line of the other axis. Read off the geometry, so it cannot pass
+     * on a glyph pointing the wrong way.
+     */
+    @Test
+    fun `each chevron's apex is the extreme that matches its name`() {
+        assertPointsLeft(ttActionIcons.chevronLeft)
+        assertPointsRight(ttActionIcons.chevronRight)
+        assertPointsDown(ttActionIcons.chevronDown)
+    }
+
+    /**
+     * The two horizontal chevrons face away from each other, which is the direction claim
+     * stated *relationally* rather than against each glyph's own name.
+     *
+     * This is the assertion that is left if somebody renames a glyph, drops one, or draws a
+     * new month arrow: whatever the declarations are called, the left-pointing one has to sit
+     * to the left of the right-pointing one. A swap of two identical hexagons satisfies every
+     * per-glyph property *and* fails this one, which is why it is here as well as above.
+     */
+    @Test
+    fun `the horizontal chevrons' apexes face away from each other`() {
+        val left = ttActionIcons.chevronLeft.points()
+        val right = ttActionIcons.chevronRight.points()
+        assertTrue(
+            left.minOf { it.x } < right.minOf { it.x },
+            "the left-facing chevron's apex (x=${left.minOf { it.x }}) is not left of the " +
+                "right-facing one's (x=${right.minOf { it.x }}), so both point the same way",
+        )
+        assertTrue(
+            right.maxOf { it.x } > left.maxOf { it.x },
+            "the right-facing chevron's apex (x=${right.maxOf { it.x }}) is not right of the " +
+                "left-facing one's (x=${left.maxOf { it.x }}), so both point the same way",
+        )
+    }
+
+    /**
+     * The horizontal pair are mirror images of each other.
+     *
+     * Not a style preference — it is what makes the two read as one family, and it is what
+     * makes a swap of their *bodies* the only thing that could have produced the bug above.
+     * Asserting it means the fix cannot drift into two independently-drawn arrows that look
+     * like a matched pair.
+     */
+    @Test
+    fun `the horizontal chevrons are mirror images`() {
+        val left = ttActionIcons.chevronLeft.points().map { it.x to it.y }
+        val right = ttActionIcons.chevronRight.points().map { it.x to it.y }
+        val mirrored = right.map { (x, y) -> (VIEWPORT - x) to y }
+        assertEquals(
+            left.size,
+            mirrored.size,
+            "the two chevrons are built from different numbers of points: $left vs $mirrored",
+        )
+        for (i in left.indices) {
+            assertEquals(
+                left[i].first,
+                mirrored[i].first,
+                EPSILON,
+                "point $i is at x=${left[i].first} on the left chevron but its mirror is at " +
+                    "x=${mirrored[i].first}",
+            )
+            assertEquals(left[i].second, mirrored[i].second, EPSILON, "point $i differs in y")
+        }
+    }
+
+    /**
+     * The apex of [points], along [axis], must be a single vertex at the [extreme] of the
+     * glyph's own bounds — and centred on the other axis.
+     */
+    private fun assertApex(
+        icon: ImageVector,
+        axis: Axis,
+        extreme: (List<Offset>) -> Float,
+    ) {
+        val points = icon.points()
+        val edge = extreme(points)
+        val atEdge = points.filter { if (axis == Axis.Horizontal) it.x == edge else it.y == edge }
+        assertEquals(
+            1,
+            atEdge.size,
+            "${icon.name} has ${atEdge.size} vertices at the ${axis.label} extreme " +
+                "($edge): a chevron's apex is one vertex, and an edge here means it is a " +
+                "block rather than an arrow",
+        )
+        val apex = atEdge.single()
+        val bounds = points.bounds()
+        val centre = if (axis == Axis.Horizontal) {
+            (bounds.top + bounds.bottom) / 2f
+        } else {
+            (bounds.left + bounds.right) / 2f
+        }
+        val actual = if (axis == Axis.Horizontal) apex.y else apex.x
+        assertTrue(
+            kotlin.math.abs(actual - centre) <= CENTRE_TOLERANCE,
+            "${icon.name}'s apex is at ${axis.label} $actual but its ${axis.other} centre line " +
+                "is $centre, so the point is off-axis and the chevron reads as skewed",
+        )
+    }
+
+    private fun assertPointsLeft(icon: ImageVector) =
+        assertApex(icon, Axis.Horizontal) { points -> points.minOf { it.x } }
+
+    private fun assertPointsRight(icon: ImageVector) =
+        assertApex(icon, Axis.Horizontal) { points -> points.maxOf { it.x } }
+
+    private fun assertPointsDown(icon: ImageVector) =
+        assertApex(icon, Axis.Vertical) { points -> points.maxOf { it.y } }
+
+    private enum class Axis(val label: String, val other: String) {
+        Horizontal("x", "y"),
+        Vertical("y", "x"),
+    }
+
     // MARK: - Walking the vector
 
     private fun ImageVector.paths(): List<VectorPath> {
@@ -351,6 +483,17 @@ class TabIconsGeometryTest {
     private companion object {
         /** The drawing grid, as `ttTabIcons` states it. */
         const val VIEWPORT = 24f
+
+        /**
+         * How far off the centre line a chevron's apex may sit.
+         *
+         * The drawn contours put it exactly on it, so this is not slack for a sloppy drawing —
+         * it absorbs the arithmetic of comparing two floats, and nothing else.
+         */
+        const val CENTRE_TOLERANCE = 0.01f
+
+        /** Float comparison for the mirror-image test. Same reasoning as above. */
+        const val EPSILON = 0.01f
 
         /**
          * How far a point may stray outside the viewport before it is clipped rather than merely

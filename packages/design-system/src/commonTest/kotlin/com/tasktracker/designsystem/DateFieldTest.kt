@@ -8,11 +8,15 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
+import kotlin.time.Clock
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -429,6 +433,115 @@ class DateFieldTest {
         )
     }
 
+    // ---------------------------------------------------------------------------------------
+    // The year window, and the clamp that keeps navigation inside it
+    //
+    // These exist because the calendar could not be used to choose a year at all, and because
+    // opening a brand-new sprint's picker showed January 1970 with arrows that moved nothing.
+    // Both were one line — a nullable seed — and both are arithmetic, so they are tested as
+    // arithmetic. The rendered behaviour that depends on them is in `DateFieldInteractionTest`.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    fun `the year window is five years either side of today`() {
+        val today = LocalDate(2026, Month.MARCH, 16)
+
+        assertEquals(
+            2021..2031,
+            ttYearWindow(today),
+            "the window should reach back past the last fiscal year and forward past the next",
+        )
+        assertEquals(
+            2 * TT_YEAR_WINDOW_SPAN + 1,
+            ttYearWindow(today).count(),
+            "the window is span either side plus today itself",
+        )
+    }
+
+    @Test
+    fun `the year window follows today rather than a fixed year`() {
+        // A window pinned to a literal year is the bug in a different costume: it would be
+        // correct in the year it was written and wrong in every other one.
+        assertEquals(2020..2030, ttYearWindow(LocalDate(2025, Month.JUNE, 1)))
+        assertEquals(2021..2031, ttYearWindow(LocalDate(2026, Month.JUNE, 1)))
+    }
+
+    @Test
+    fun `a month inside the window is left exactly as it was`() {
+        val today = LocalDate(2026, Month.MARCH, 16)
+
+        for (month in listOf(Month.JANUARY, Month.JUNE, Month.DECEMBER)) {
+            val date = LocalDate(2026, month, 1)
+            assertEquals(date, ttClampToYearWindow(date, today), "$month 2026 is inside the window")
+        }
+    }
+
+    @Test
+    fun `stepping off either end lands on the nearest month in that direction`() {
+        val today = LocalDate(2026, Month.MARCH, 16)
+
+        // Forward off the last December: the last December, not the first January. Landing on
+        // January of the *first* year would move the user backwards from the arrow they pressed.
+        assertEquals(
+            LocalDate(2031, Month.DECEMBER, 1),
+            ttClampToYearWindow(LocalDate(2032, Month.JANUARY, 1), today),
+            "stepping forward past the window should stop at December of the last year",
+        )
+        // And back off the first January, symmetrically.
+        assertEquals(
+            LocalDate(2021, Month.JANUARY, 1),
+            ttClampToYearWindow(LocalDate(2020, Month.DECEMBER, 1), today),
+            "stepping back past the window should stop at January of the first year",
+        )
+    }
+
+    @Test
+    fun `stepping a month clamps rather than leaving the window`() {
+        val today = LocalDate(2026, Month.MARCH, 16)
+
+        assertEquals(
+            LocalDate(2026, Month.APRIL, 1),
+            ttStepMonthInWindow(LocalDate(2026, Month.MARCH, 1), 1, today),
+        )
+        // The reason the clamp is on month stepping and not only on the year list: a window the
+        // month arrows can walk out of is a picker showing a year its own list does not contain,
+        // which is how the 1970 view is reachable in the first place.
+        assertEquals(
+            LocalDate(2031, Month.DECEMBER, 1),
+            ttStepMonthInWindow(LocalDate(2031, Month.DECEMBER, 1), 1, today),
+            "stepping forward off the end of the window should not produce 2032",
+        )
+        assertEquals(
+            LocalDate(2021, Month.JANUARY, 1),
+            ttStepMonthInWindow(LocalDate(2021, Month.JANUARY, 1), -1, today),
+            "stepping back off the start of the window should not produce 2020",
+        )
+    }
+
+    @Test
+    fun `the year grid lays eleven years out in rows of four`() {
+        val rows = ttYearRows(2021..2031)
+
+        assertEquals(listOf(4, 4, 3), rows.map { it.size }, "11 years at 4 per row is 4, 4, 3")
+        assertEquals((2021..2031).toList(), rows.flatten(), "every year in the window is offered once")
+    }
+
+    @Test
+    fun `the system clock fallback is this year and not 1970`() {
+        // The 1970 was a literal at the one place that needed a date and had none. Comparing
+        // against the clock rather than against a literal is what makes this fail if a literal
+        // comes back, and what keeps it correct in any year the test is run.
+        assertEquals(
+            Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).year,
+            ttSystemToday().year,
+            "the fallback date should be the current year, whatever the current year is",
+        )
+        assertTrue(
+            ttSystemToday().year >= 2026,
+            "the fallback opened a new sprint's picker on January 1970; it is now ${ttSystemToday()}",
+        )
+    }
+
     /** The two week starts the app offers, so both are exercised by everything above. */
     private companion object {
 
@@ -476,5 +589,71 @@ class DateFieldTest {
             Month.NOVEMBER to 30,
             Month.DECEMBER to 31,
         )
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Where the popup goes
+    // ---------------------------------------------------------------------------------
+
+    /**
+     * A centred popup leaves the same margin on both sides, and never a negative offset.
+     *
+     * Asserted here rather than on a rendered frame, and the reason is a limitation rather than
+     * a preference: **a popup's rendered position cannot be read back.** A `Popup` is its own
+     * composition root — once one is open, `onRoot()` finds two of them — and the content's
+     * bounds are reported in the popup's own coordinate space, before the window offset is
+     * applied. The width half of this fix *is* measured on a frame, in
+     * `DateFieldInteractionTest`; this is where the placement half can honestly be asserted.
+     *
+     * The claims are the two that make it "centred" rather than "near the middle": the leftover
+     * space is the same on both sides to within a pixel, and a popup larger than its window
+     * starts at the top-left rather than at a negative offset that would push the month arrows
+     * off-screen.
+     *
+     * **One pixel, not zero.** The leftover is 419px vertically here, which cannot be split
+     * evenly by an integer offset, so one margin is 209 and the other 210. Asserting exact
+     * equality is asserting that a remainder does not exist; the first version of this test
+     * did, and failed on correct code.
+     */
+    @Test
+    fun `the popup is centred with equal margins and never offset off screen`() {
+        val window = IntSize(1024, 768)
+        val content = IntSize(332, 349)
+
+        val offset = ttCentredPopupOffset(window, content)
+
+        assertEquals(
+            (window.width - content.width) / 2,
+            offset.x,
+            "a 332px popup in a 1024px window is not horizontally centred",
+        )
+        assertEquals(
+            (window.height - content.height) / 2,
+            offset.y,
+            "a 349px popup in a 768px window is not vertically centred",
+        )
+        val horizontalGap = (window.width - content.width) - offset.x - offset.x
+        val verticalGap = (window.height - content.height) - offset.y - offset.y
+        assertTrue(
+            horizontalGap == 0 || horizontalGap == 1,
+            "the horizontal margins differ by $horizontalGap, so it is offset rather than " +
+                "centred: left $offset.x, right ${window.width - content.width - offset.x}",
+        )
+        assertTrue(
+            verticalGap == 0 || verticalGap == 1,
+            "the vertical margins differ by $verticalGap, so it is offset rather than " +
+                "centred: top $offset.y, bottom ${window.height - content.height - offset.y}",
+        )
+    }
+
+    @Test
+    fun `a popup larger than the window starts at the top left rather than off screen`() {
+        val window = IntSize(320, 480)
+        val content = IntSize(332, 900)
+
+        val offset = ttCentredPopupOffset(window, content)
+
+        assertEquals(0, offset.x, "a popup wider than the window was pushed off its left edge")
+        assertEquals(0, offset.y, "a popup taller than the window was pushed off its top edge")
     }
 }

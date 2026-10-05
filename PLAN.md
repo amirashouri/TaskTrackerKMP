@@ -7,40 +7,64 @@ Kotlin Multiplatform.
 **Every task below is a checkbox. Tick it when it is done. Start any session by
 finding the first unticked box.**
 
+<a id="index"></a>
+<details open>
+<summary><b>Index</b></summary>
+
 ## Index
 
 Phases are listed **in the order they appear in this file**, not in phase order — Phase 13
 (part 1) was pulled forward to unblock a running app, so the document is not monotonic. The
 `file:line` column is the jump target if your viewer takes you to the raw file.
 
+**Every section below is collapsible, and the finished ones start closed.** The open ones are
+exactly the unfinished work — Phases 14, 15, 22 and 23 — because "find the first unticked box"
+is the first thing a new session has to do, and a list of collapsed bars is the fastest way to
+see it. The `state` on each collapsed bar says the same thing without expanding anything.
+
+**Do not hand-edit the `file:line` numbers.** A line number in a link is a claim about this file
+that the file itself invalidates: any edit above a row moves every row below it. This table had
+drifted on **25 of its 26 rows**, by −4 to −323 lines, and one row's anchor matched no heading
+at all and had never resolved. `tools/plan_index.py` recomputes the numbers from the real
+headings and owns the anchors:
+
+```bash
+python3 tools/plan_index.py --check   # exit 1 on any drift; run before committing
+python3 tools/plan_index.py --fix     # recompute the numbers, re-collapse, re-anchor
+```
+
+Each section also carries an explicit `<a id>` **outside** its `<details>`, so a jump still lands
+when the section is closed instead of depending on the renderer to derive an id from a heading
+nobody can see.
+
 | phase | module / subject | file:line | state |
 | --- | --- | --- | --- |
-| [0](#phase-0--build-foundation) | build foundation, convention plugins | [PLAN.md:219](#phase-0--build-foundation) | done |
-| [1](#phase-1--packagescore--packagesdomain) | `core` + `domain` | [PLAN.md:260](#phase-1--packagescore--packagesdomain) | done |
-| [2](#phase-2--packagesrouting) | `routing` | [PLAN.md:400](#phase-2--packagesrouting) | done |
-| [3](#phase-3--keychain--userdefaults) | keychain + user-defaults | [PLAN.md:449](#phase-3--keychain--userdefaults) | done |
-| [4](#phase-4--packagesdatabase-room-kmp) | `database` (Room KMP) | [PLAN.md:511](#phase-4--packagesdatabase-room-kmp) | done |
-| [5](#phase-5--packagesnetwork-ktor-360) | `network` (Ktor) | [PLAN.md:591](#phase-5--packagesnetwork-ktor-360) | done |
-| [6](#phase-6--packagessync) | `sync` | [PLAN.md:707](#phase-6--packagessync) | done |
-| [7](#phase-7--packagesfeature-projects-domain) | `feature-projects-domain` | [PLAN.md:799](#phase-7--packagesfeature-projects-domain) | done |
-| [8](#phase-8--packagesfeature-projects-data) | `feature-projects-data` | [PLAN.md:868](#phase-8--packagesfeature-projects-data) | done |
-| [9](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | auth domain + data | [PLAN.md:982](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | done |
-| [10](#phase-10--design-system-completion) | design system | [PLAN.md:1103](#phase-10--design-system-completion) | done |
-| [11](#phase-11--packagesfeature-auth-presentation) | `feature-auth-presentation` | [PLAN.md:1248](#phase-11--packagesfeature-auth-presentation) | done |
-| [13 pt 1](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | **pulled forward** — sign-in reachable | [PLAN.md:1344](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | done |
-| [13 pt 1 follow-ups](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | sign-in button invisible; projects list + New Project | [PLAN.md:1421](#phase-13-part-1-follow-up--the-sign-in-button-was-invisible-and-it-was-three-bugs) | done |
-| [12](#phase-12--packagesfeature-projects-presentation) | `feature-projects-presentation` | [PLAN.md:1692](#phase-12--packagesfeature-projects-presentation) | done |
-| [13](#phase-13--settings--composition-root--shared-ui-shell) | settings + composition-root + shared-ui | [PLAN.md:1838](#phase-13--settings--composition-root--shared-ui-shell) | done |
-| [14](#phase-14--ios-shell) | iOS shell | [PLAN.md:1915](#phase-14--ios-shell) | open |
-| [15](#phase-15--verification-and-documentation) | verification + docs | [PLAN.md:1968](#phase-15--verification-and-documentation) | open |
-| [16](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | glass slider intensity | [PLAN.md:2498](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | done |
-| [17](#phase-17--the-project-picker-was-not-using-the-scaffold) | project picker scaffold | [PLAN.md:2682](#phase-17--the-project-picker-was-not-using-the-scaffold) | done |
-| [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:2795](#phase-18--the-app-had-no-icon) | done |
-| [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:2935](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
-| [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3083](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
-| [21](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3267](#phase-21--ttbodylabel-adopted-and--shared-ui-back) | done |
-| [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3338](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
-| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3514](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port + design system + models and screens + the Sprints tab (23.5.1–23.5.4, 23.6.1–23.6.6) done |
+| [0](#phase-0--build-foundation) | build foundation, convention plugins | [PLAN.md:394](#phase-0--build-foundation) | done |
+| [1](#phase-1--packagescore--packagesdomain) | `core` + `domain` | [PLAN.md:445](#phase-1--packagescore--packagesdomain) | done |
+| [2](#phase-2--packagesrouting) | `routing` | [PLAN.md:591](#phase-2--packagesrouting) | done |
+| [3](#phase-3--keychain--userdefaults) | keychain + user-defaults | [PLAN.md:648](#phase-3--keychain--userdefaults) | done |
+| [4](#phase-4--packagesdatabase-room-kmp) | `database` (Room KMP) | [PLAN.md:718](#phase-4--packagesdatabase-room-kmp) | done |
+| [5](#phase-5--packagesnetwork-ktor-360) | `network` (Ktor) | [PLAN.md:807](#phase-5--packagesnetwork-ktor-360) | done |
+| [6](#phase-6--packagessync) | `sync` | [PLAN.md:931](#phase-6--packagessync) | done |
+| [7](#phase-7--packagesfeature-projects-domain) | `feature-projects-domain` | [PLAN.md:1032](#phase-7--packagesfeature-projects-domain) | done |
+| [8](#phase-8--packagesfeature-projects-data) | `feature-projects-data` | [PLAN.md:1109](#phase-8--packagesfeature-projects-data) | done |
+| [9](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | auth domain + data | [PLAN.md:1232](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | done |
+| [10](#phase-10--design-system-completion) | design system | [PLAN.md:1362](#phase-10--design-system-completion) | done |
+| [11](#phase-11--packagesfeature-auth-presentation) | `feature-auth-presentation` | [PLAN.md:1518](#phase-11--packagesfeature-auth-presentation) | done |
+| [13 pt 1](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | **pulled forward** — sign-in reachable | [PLAN.md:1622](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | done |
+| [13 pt 1 follow-ups](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | sign-in button invisible; projects list + New Project | [PLAN.md:1814](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | done |
+| [12](#phase-12--packagesfeature-projects-presentation) | `feature-projects-presentation` | [PLAN.md:2012](#phase-12--packagesfeature-projects-presentation) | done |
+| [13](#phase-13--settings--composition-root--shared-ui-shell) | settings + composition-root + shared-ui | [PLAN.md:2190](#phase-13--settings--composition-root--shared-ui-shell) | done |
+| [14](#phase-14--ios-shell) | iOS shell | [PLAN.md:2287](#phase-14--ios-shell) | open |
+| [15](#phase-15--verification-and-documentation) | verification + docs | [PLAN.md:2461](#phase-15--verification-and-documentation) | open |
+| [16](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | glass slider intensity | [PLAN.md:2710](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | done |
+| [17](#phase-17--the-project-picker-was-not-using-the-scaffold) | project picker scaffold | [PLAN.md:2902](#phase-17--the-project-picker-was-not-using-the-scaffold) | done |
+| [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:3015](#phase-18--the-app-had-no-icon) | done |
+| [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:3161](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
+| [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3314](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
+| [21](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3503](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | done |
+| [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3581](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3759](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port + design system + models and screens + the Sprints tab (23.5.1–23.5.4, 23.6.1–23.6.6) done |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -62,6 +86,12 @@ Per-phase notes live under their own phase heading, marked `### Phase N notes` o
 `### What was written, and where it differs from the plan above`. Those carry the
 reasoning a checkbox cannot: why a decision was reversed, what was measured, and what was
 deliberately left out.
+
+</details>
+
+<a id="where-things-stand"></a>
+<details open>
+<summary><b>Where things stand</b></summary>
 
 ## Where things stand
 
@@ -109,6 +139,12 @@ with `shared-ui`'s 25 shell scenarios counted separately per host.
 `testAndroidHostTest` is **still not green**, but its shape changed and reason 2 is now fixed —
 see the Android-host note below.
 
+</details>
+
+<a id="decisions-taken"></a>
+<details>
+<summary><b>Decisions taken</b></summary>
+
 ## Decisions taken
 
 - **Navigation** — hand-rolled `Router` ported verbatim as pure state in
@@ -149,6 +185,12 @@ see the Android-host note below.
   reach an in-memory store by omission. A configuration also keeps the graph buildable
   on a target that cannot *open* a store, which is what the Android test host is.
 
+</details>
+
+<a id="non-negotiable-invariants-from-the-originals-design"></a>
+<details>
+<summary><b>Non-negotiable invariants (from the original's design)</b></summary>
+
 ## Non-negotiable invariants (from the original's design)
 
 These are the four sync invariants, the transaction atomicity, and the ordering
@@ -169,6 +211,12 @@ rules. Each has already caused a real bug when broken in the original.
    user's unsaved work over the dead-letter limit.
 7. **`resolvedAt != null` exactly when `isTerminal`**, enforced on the *read* path
    as well as the write path.
+
+</details>
+
+<a id="rules-that-apply-to-every-task"></a>
+<details>
+<summary><b>Rules that apply to every task</b></summary>
 
 ## Rules that apply to every task
 
@@ -195,6 +243,12 @@ rules. Each has already caused a real bug when broken in the original.
   find it. The second class is also the honest contract: a suspended save that was
   cancelled is not a failed one, and a `catch (e: AppError)` that swallowed it would
   report a user-facing error for a screen the user already closed.
+
+</details>
+
+<a id="how-to-build"></a>
+<details>
+<summary><b>How to build</b></summary>
 
 ## How to build
 
@@ -313,6 +367,7 @@ once, upward, by the same 182 tests the earlier phases actually added. They are 
 check a phase against, not targets to hit exactly; the per-phase notes record what was
 really written where it differs.
 
+<a id="kotlinnative-constraints-hit-while-writing-tests"></a>
 ### Kotlin/Native constraints hit while writing tests
 
 - **`.` and `,` are illegal inside backtick test names.** Kotlin/Native rejects them.
@@ -329,6 +384,12 @@ really written where it differs.
   the channel is a 0-1 `Float`. Scale by 255 first.
 
 ---
+
+</details>
+
+<a id="phase-0--build-foundation"></a>
+<details>
+<summary><b>Phase 0 — Build foundation</b> &mdash; <i>done</i></summary>
 
 ## Phase 0 — Build foundation
 
@@ -374,6 +435,12 @@ really written where it differs.
 
 
 ---
+
+</details>
+
+<a id="phase-1--packagescore--packagesdomain"></a>
+<details>
+<summary><b>Phase 1 — <code>:packages:core</code> + <code>:packages:domain</code></b> &mdash; <i>done</i></summary>
 
 ## Phase 1 — `:packages:core` + `:packages:domain`
 
@@ -515,6 +582,12 @@ architecture guards passing.
 
 ---
 
+</details>
+
+<a id="phase-2--packagesrouting"></a>
+<details>
+<summary><b>Phase 2 — <code>:packages:routing</code></b> &mdash; <i>done</i></summary>
+
 ## Phase 2 — `:packages:routing`
 
 > **See also:** [`Project.md` — Cross-cutting, the bottom of the stack](Project.md#cross-cutting--the-bottom-of-the-stack).
@@ -565,6 +638,12 @@ renders it.
 the original's early return.
 
 ---
+
+</details>
+
+<a id="phase-3--keychain--userdefaults"></a>
+<details>
+<summary><b>Phase 3 — Keychain + UserDefaults</b> &mdash; <i>done</i></summary>
 
 ## Phase 3 — Keychain + UserDefaults
 
@@ -629,6 +708,12 @@ Two asymmetries that are deliberate and each have a test pinning it:
   real build.
 
 ---
+
+</details>
+
+<a id="phase-4--packagesdatabase-room-kmp"></a>
+<details>
+<summary><b>Phase 4 — <code>:packages:database</code> (Room KMP)</b> &mdash; <i>done</i></summary>
 
 ## Phase 4 — `:packages:database` (Room KMP)
 
@@ -712,6 +797,12 @@ migration diff shows in review.
 plan had been carrying; Phase 3's own count was off by three). `packages/database/schemas/`
 committed.
 ---
+
+</details>
+
+<a id="phase-5--packagesnetwork-ktor-360"></a>
+<details>
+<summary><b>Phase 5 — <code>:packages:network</code> (Ktor 3.6.0)</b> &mdash; <i>done</i></summary>
 
 ## Phase 5 — `:packages:network` (Ktor 3.6.0)
 
@@ -831,6 +922,12 @@ a real Ktor client on the JVM and on an iOS simulator.
 
 ---
 
+</details>
+
+<a id="phase-6--packagessync"></a>
+<details>
+<summary><b>Phase 6 — <code>:packages:sync</code></b> &mdash; <i>done</i></summary>
+
 ## Phase 6 — `:packages:sync`
 
 > **See also:** [`Project.md` — Infrastructure, one layer above core](Project.md#infrastructure--one-layer-above-core)
@@ -926,6 +1023,12 @@ architecture table was corrected to match rather than a dependency invented to s
 
 ---
 
+</details>
+
+<a id="phase-7--packagesfeature-projects-domain"></a>
+<details>
+<summary><b>Phase 7 — <code>:packages:feature-projects-domain</code></b> &mdash; <i>done</i></summary>
+
 ## Phase 7 — `:packages:feature-projects-domain`
 
 > **See also:** [`Project.md` — Feature modules](Project.md#feature-modules--each-is-a-domain--data--presentation-triplet).
@@ -996,6 +1099,12 @@ Three things surfaced here that the original never had to answer.
 (498 on `jvmTest`, 424 on `testAndroidHostTest`), both architecture guards passing.
 
 ---
+
+</details>
+
+<a id="phase-8--packagesfeature-projects-data"></a>
+<details>
+<summary><b>Phase 8 — <code>:packages:feature-projects-data</code></b> &mdash; <i>done</i></summary>
 
 ## Phase 8 — `:packages:feature-projects-data`
 
@@ -1113,6 +1222,12 @@ whole-second wire format of this project's own, and the v1→v2 Room migration i
 Android-only and has no runtime test.
 
 ---
+
+</details>
+
+<a id="phase-9--packagesfeature-auth-domain--packagesfeature-auth-data"></a>
+<details>
+<summary><b>Phase 9 — <code>:packages:feature-auth-domain</code> + <code>:packages:feature-auth-data</code></b> &mdash; <i>done</i></summary>
 
 ## Phase 9 — `:packages:feature-auth-domain` + `:packages:feature-auth-data`
 
@@ -1237,6 +1352,12 @@ It cost real debugging time here. Left alone: it is a `core` change that affects
 feature's error handling, and it belongs in its own phase rather than inside auth.
 
 ---
+
+</details>
+
+<a id="phase-10--design-system-completion"></a>
+<details>
+<summary><b>Phase 10 — Design system completion</b> &mdash; <i>done</i></summary>
 
 ## Phase 10 — Design system completion
 
@@ -1388,6 +1509,12 @@ yet to put them in. That is Phase 12.
 
 ---
 
+</details>
+
+<a id="phase-11--packagesfeature-auth-presentation"></a>
+<details>
+<summary><b>Phase 11 — <code>:packages:feature-auth-presentation</code></b> &mdash; <i>done</i></summary>
+
 ## Phase 11 — `:packages:feature-auth-presentation`
 
 > **See also:** [`Project.md` — Signing in](Project.md#signing-in).
@@ -1485,6 +1612,12 @@ produce and the mismatch is documented in `AuthPreviewData.failingSession` and p
 non-null `String` — which is why two tests need `requireNotNull` around it.
 
 ---
+
+</details>
+
+<a id="phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable"></a>
+<details>
+<summary><b>Phase 13 (part 1, pulled forward) — making the sign-in screen reachable</b> &mdash; <i>done</i></summary>
 
 ## Phase 13 (part 1, pulled forward) — making the sign-in screen reachable
 
@@ -1672,6 +1805,12 @@ change shifts the whole lower half up without changing anything about the banner
 
 ---
 
+</details>
+
+<a id="phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not"></a>
+<details>
+<summary><b>Phase 13 (part 1) follow-up #2 — the projects list became reachable, and the New Project button did not</b> &mdash; <i>done</i></summary>
+
 ## Phase 13 (part 1) follow-up #2 — the projects list became reachable, and the New Project button did not
 
 > **See also:** [`Project.md` — Application shell](Project.md#application-shell--above-the-architecture).
@@ -1824,6 +1963,12 @@ of thing that leaves a suite quietly weaker on one platform than the other.
 `{}` in `ProjectsHost` because a work item's editor has no route in this host yet. It is left
 explicit rather than left looking wired.
 
+</details>
+
+<a id="test-count-baseline"></a>
+<details>
+<summary><b>Test-count baseline</b></summary>
+
 ## Test-count baseline
 
 | suite | target | tests |
@@ -1857,6 +2002,12 @@ above. It runs with one pre-existing failure on JVM and iOS (`BoardLaneSnapTest`
 Android host (that one plus three lane scenarios that do not fit Robolectric's window).
 
 ---
+
+</details>
+
+<a id="phase-12--packagesfeature-projects-presentation"></a>
+<details>
+<summary><b>Phase 12 — <code>:packages:feature-projects-presentation</code></b> &mdash; <i>done</i></summary>
 
 ## Phase 12 — `:packages:feature-projects-presentation`
 
@@ -2030,6 +2181,12 @@ checks remain green.
 
 ---
 
+</details>
+
+<a id="phase-13--settings--composition-root--shared-ui-shell"></a>
+<details>
+<summary><b>Phase 13 — Settings + composition root + shared-ui shell</b> &mdash; <i>done</i></summary>
+
 ## Phase 13 — Settings + composition root + shared-ui shell
 
 > **See also:** [`Project.md` — Application shell](Project.md#application-shell--above-the-architecture),
@@ -2120,6 +2277,12 @@ in [test-count baseline](#test-count-baseline); it was already red before this p
 phase's contribution to it is a real capability gap rather than a new fault.
 
 ---
+
+</details>
+
+<a id="phase-14--ios-shell"></a>
+<details open>
+<summary><b>Phase 14 — iOS shell</b></summary>
 
 ## Phase 14 — iOS shell
 
@@ -2215,6 +2378,7 @@ What remains is verifying the link and filling in the behaviours.
       and an `<intent-filter>` for `tasktracker://` on the Android launcher activity.
 - [ ] **14.11** Port the 10 XCUITests once there are screens to drive.
 
+<a id="scroll-under-the-two-assertions"></a>
 ### Scroll-under: the two assertions
 
 The bar was the second child of a `Column`, so the content box ended where the bar began. A
@@ -2288,6 +2452,12 @@ the bar *is* covered, by the first scenario.
 
 ---
 
+</details>
+
+<a id="phase-15--verification-and-documentation"></a>
+<details open>
+<summary><b>Phase 15 — Verification and documentation</b></summary>
+
 ## Phase 15 — Verification and documentation
 
 > **See also:** [`Project.md` — Tests](Project.md#tests) and
@@ -2310,6 +2480,12 @@ the bar *is* covered, by the first scenario.
       were already listed as known gaps in the original's `AGENTS.md:538-539`.
 
 ---
+
+</details>
+
+<a id="follow-up--the-tab-lens-drew-its-corners-square"></a>
+<details>
+<summary><b>Follow-up — the tab lens drew its corners square</b></summary>
 
 ## Follow-up — the tab lens drew its corners square
 
@@ -2387,6 +2563,12 @@ because this is the third time these two numbers have drifted apart, and the dri
 baseline rather than in a count taken from the build.
 
 ---
+
+</details>
+
+<a id="follow-up--the-floating-create-buttons-covered-the-rows-underneath-them"></a>
+<details>
+<summary><b>Follow-up — the floating create buttons covered the rows underneath them</b></summary>
 
 ## Follow-up — the floating create buttons covered the rows underneath them
 
@@ -2475,6 +2657,12 @@ button and its layout, and it is worth doing deliberately rather than as a side 
 
 ---
 
+</details>
+
+<a id="known-product-gaps-carried-over-from-the-original"></a>
+<details>
+<summary><b>Known product gaps carried over from the original</b></summary>
+
 ## Known product gaps carried over from the original
 
 Do not treat these as regressions.
@@ -2488,6 +2676,12 @@ Do not treat these as regressions.
 3. No typography or spacing scale in the original; added in Phase 10.
 4. Dark mode recolours the accent only; surfaces stay semantic by decision, so there
    is no charcoal surface treatment.
+
+</details>
+
+<a id="highest-risk-items"></a>
+<details>
+<summary><b>Highest-risk items</b></summary>
 
 ## Highest-risk items
 
@@ -2506,6 +2700,12 @@ Do not treat these as regressions.
    reorders, and the resulting bug is a sign-in that appears to work.
 
 ---
+
+</details>
+
+<a id="phase-16--the-glass-slider-ttglasssurface-learns-an-intensity"></a>
+<details>
+<summary><b>Phase 16 — the glass slider (<code>ttGlassSurface</code> learns an intensity)</b> &mdash; <i>done</i></summary>
 
 ## Phase 16 — the glass slider (`ttGlassSurface` learns an intensity)
 
@@ -2608,6 +2808,7 @@ measured; the intermediate positions are not.** That caveat was written before t
 user actually tried — 20% — was among the unmeasured ones. [16.9](#169-still-unverified) states
 where that stands after the fix.
 
+<a id="167-the-defect-the-feature-reported-on-itself"></a>
 ### 16.7 The defect the feature reported on itself
 
 The user set the slider to 20% and reported that the app "gets too dark" and that it "changes the
@@ -2682,6 +2883,7 @@ The alpha-only assertions in `GlassIntensityTest` **stayed green** through all t
 demonstration that the pre-existing suite could not have caught this and the reason the new
 assertions had to be about colour rather than a stronger version of the same arithmetic.
 
+<a id="169-still-unverified"></a>
 ### 16.9 Still unverified
 
 The three panels are the travel's ends and the reported 20%. The other 98 positions are an
@@ -2690,6 +2892,12 @@ and is unchanged by this fix — but it now interpolates *two* quantities rather
 "unverified intermediate" caveat covers a surface with two moving parts instead of one.
 
 ---
+
+</details>
+
+<a id="phase-17--the-project-picker-was-not-using-the-scaffold"></a>
+<details>
+<summary><b>Phase 17 — the project picker was not using the scaffold</b> &mdash; <i>done</i></summary>
 
 ## Phase 17 — the project picker was not using the scaffold
 
@@ -2755,6 +2963,7 @@ the JVM**. They agree because the probe point is a flat padding strip rather tha
 is the whole reason it is a padding strip. The bar is 51 channels: 31 above the correct reading
 for compositing rounding, 127 below the defect's.
 
+<a id="174-where-it-samples-and-the-mutation-that-cost-a-cycle"></a>
 ### 17.4 Where it samples, and the mutation that cost a cycle
 
 The measurement is a horizontal strip just below the sheet's content, inside the scaffold's own
@@ -2796,6 +3005,12 @@ The exit transition's *timing* is not asserted anywhere, only that the sheet sta
 enough for one to run. And nothing here proves the picker looks right — that is a person opening
 the app. The numbers above prove the sheet stopped transmitting the page; they cannot say whether
 the result is *pleasant*.
+
+</details>
+
+<a id="phase-18--the-app-had-no-icon"></a>
+<details>
+<summary><b>Phase 18 — the app had no icon</b> &mdash; <i>done</i></summary>
 
 ## Phase 18 — the app had no icon
 
@@ -2936,6 +3151,12 @@ Nothing here proves the icon looks *good*. It proves the mark clears the text co
 everywhere it is drawn, that it sits inside the tightest adaptive mask, and that both
 platforms compile the same geometry. Whether three lanes at 18% read as a board or as noise
 is a person putting the app on a home screen.
+
+</details>
+
+<a id="phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar"></a>
+<details>
+<summary><b>Phase 19 — the palette audit: the error red was never held to the accent's bar</b> &mdash; <i>done</i></summary>
 
 ## Phase 19 — the palette audit: the error red was never held to the accent's bar
 
@@ -3083,6 +3304,12 @@ compositor. 1.37:1 and 3.55:1 are far enough below their bars that the verdict i
 2.81:1 and 1.08:1 are not, and both need rendered pixels on **both** the JVM and the iOS
 rasteriser before either is called a defect. The design-system test hosts can do this and are
 unaffected by the `ShellPreferences.kt` break.
+
+</details>
+
+<a id="phase-20--the-design-system-review-and-four-things-it-was-missing"></a>
+<details>
+<summary><b>Phase 20 — the design system review, and four things it was missing</b> &mdash; <i>done</i></summary>
 
 ## Phase 20 — the design system review, and four things it was missing
 
@@ -3267,6 +3494,12 @@ Identical set on both: 3 `SeedingTest`, 2 `:shared-ui`, 1 deliberate error-token
 `verifyArchitectureGraph` and `verifyModuleImports` pass. All figures from the JUnit XML the
 build writes, cross-checked against `@Test` declarations.
 
+</details>
+
+<a id="phase-21--ttbodylabel-adopted-and-shared-ui-back"></a>
+<details>
+<summary><b>Phase 21 — <code>ttBodyLabel</code> adopted, and <code>:shared-ui</code> back</b> &mdash; <i>done</i></summary>
+
 ## Phase 21 — `ttBodyLabel` adopted, and `:shared-ui` back
 
 ### 21.1 `:shared-ui` needed nothing from this phase
@@ -3338,6 +3571,12 @@ declarations exactly. `:packages:feature-auth-presentation` and
 `:packages:feature-projects-presentation` both fully green.
 
 ---
+
+</details>
+
+<a id="phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured"></a>
+<details open>
+<summary><b>Phase 22 — the error red meets its bar, and the glass hairline is measured</b> &mdash; <i>2 findings open</i></summary>
 
 ## Phase 22 — the error red meets its bar, and the glass hairline is measured
 
@@ -3510,6 +3749,12 @@ empty states sit" lost its comma: a backtick test name may not contain one, and
 the reason the deciding command includes it.
 
 ---
+
+</details>
+
+<a id="phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict"></a>
+<details open>
+<summary><b>Phase 23 — Sprints: a time-boxed goal, a set of tasks, and a verdict</b> &mdash; <i>23.5.5-23.5.7, 23.6 partial</i></summary>
 
 ## Phase 23 — Sprints: a time-boxed goal, a set of tasks, and a verdict
 
@@ -4524,3 +4769,430 @@ and no port without the entity. `23.4.1` is independent and can be built in para
 nothing else blocks on it and it is the one piece with no precedent in this codebase.
 `23.5` follows `23.3`. `23.6.6` is last because five tabs cannot be measured until there are
 five.
+
+### 23.10 The date field could not be used to choose a year
+
+Found by using the app rather than by reading it, which is the argument for doing that.
+
+#### Three defects, one cause
+
+A sprint's start and end dates are the only dates 23.5 added, and **all three of these are on
+that path**:
+
+| Symptom | Cause |
+| --- | --- |
+| The month arrows did nothing | `shownMonth = shownMonth?.let { ttShiftMonth(it, step) }` |
+| The picker opened on January 1970 | `shownMonth ?: today ?: value ?: LocalDate(1970, 1, 1)` |
+| A year could not be chosen at all | there was no year control; only two month arrows |
+
+The first two are **one line of code**. `shownMonth` was seeded from `value ?: today`, and for a
+sprint being *created* both are null — `SprintEditorSheet` declares `today: LocalDate? = null` and
+`NavigationHost` never passes it, despite the model already holding a `dateProvider`. A null seed
+made `shownMonth?.let { … }` assign null to null, so the arrows were inert **permanently**, not
+just on the first press, and the last fallback standing was a literal 1970.
+
+**Nothing about this is visible in a test.** The old and new grids are identical whenever `today`
+is non-null, which is the case every existing test used. The defect only appeared when a caller
+omitted `today`, and the only such caller was the one screen the feature shipped with.
+
+#### What it is fixed with
+
+- `anchorToday = today ?: ttSystemToday()`, resolved once, so the seed and the year window cannot
+  disagree about which day it is. `today` stays the test seam and every test still passes it.
+- `shownMonth` seeded and clamped, and `onStepMonth` shifting the **displayed** month rather than
+  a nullable one — which makes the handler total instead of conditional.
+- The **month-and-year label is the control** that opens a year grid, carrying a `chevronDown`
+  rather than a new glyph because it is the same affordance the closed field already uses. It
+  swaps the grid's *contents* rather than opening a second popup: the field's popup already has a
+  position provider that flips above the field for the end date at the bottom of a form, and a
+  popup of a popup would need that logic twice.
+- A window of **[ttYearWindow](today) = today ± [TT_YEAR_WINDOW_SPAN] (5)**, enforced on month
+  stepping too. Clamping to the *nearest reachable month in the direction pressed* — forward off
+  the last December lands on December of the last year, not January of the first — because
+  landing on January would move the user backwards from the arrow they pressed.
+
+#### 15 tests, 10 mutations, 10 caught
+
+`tools/mutate_datefield_year.py`. Seven are arithmetic ([ttYearWindow], [ttClampToYearWindow],
+[ttStepMonthInWindow], [ttYearRows], [ttSystemToday]) and eight operate the composed calendar.
+
+**Every interaction assertion is about a day cell, never about text.** "Is March 2026 showing" is
+answered by the presence of `TTDayCellTag(LocalDate(2026, 3, 1))` — one unambiguous node — rather
+than by parsing a label whose text comes from `ttMonthName`, a resource lookup that would fail
+these tests on a locale change for a reason that has nothing to do with the calendar.
+
+**Y1 and Y2 were first written as the literal old expressions and were compile-rejected.** The fix
+changed `shownMonth`'s *inferred type* from `LocalDate?` to `LocalDate`, so
+`shownMonth?.let { … }` no longer assigns. That is the better outcome of the two — the compiler
+now refuses the bug's original form — but it is **not** evidence that anything is tested, so both
+were rewritten to reproduce the same two observable faults in a form that does compile. This is
+the seventh compile-rejected case in the project, and the first where the rejection was the fix
+working as intended rather than the mutation being malformed.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1272 | **1287** | 7, unchanged |
+| iOS simulator | 1244 | **1259** | 7, unchanged |
+
++15 on both, from the JUnit XML, cross-checked against `@Test`: `DateFieldTest` 18 → 25 and
+`DateFieldInteractionTest` 0 → 8.
+
+**Android host: measured, not assumed.** `:packages:design-system:testAndroidHostTest` is
+**136 tests / 14 failed** after the change and was **121 / 14** before it — the original files
+restored from `HEAD` to measure that, then restored again. Identical failures, +15 tests. The eight
+interaction tests report **8 passed, 0 failed** there: they are behind `thisHostRasterisesText()`,
+which registers the skip as a pass on that host, and which is the honest outcome for a `Popup`.
+
+`TTDateMonthStepTag` was removed rather than kept: it built a tag out of a *localised string*, so a
+test asserting "the next-month arrow" would fail on a translation instead of on a defect.It is replaced by [TTMonthStepTag], addressed by the step it performs.
+
+### 23.11 The month arrows pointed the wrong way, and the year screen opened elsewhere
+
+Reported as one message and three defects, none of which shares a cause with 23.10.
+
+#### Three defects, three causes
+
+| Symptom | Cause |
+| --- | --- |
+| The left arrow stepped forward | `chevronLeft` and `chevronRight` had each other's bodies |
+| The arrows were slabs, not chevrons | `MonthStepGlyph` sized the `Image` to `ttSpacing.iconButtonSize` |
+| The year screen opened somewhere else | a popup's y offset is a function of its height, and the year grid is half as tall |
+
+#### The glyphs were on each other's names
+
+`chevronLeft`'s contour is the exact quarter turn of `chevronDown` with its apex at **x = 17** —
+which is the *maximum* x, so it points right. Both bodies were correct rotations of
+`chevronDown`; they were simply bound to each other's names, so the arrow left of "March 2026"
+stepped forward and the one on the right stepped back.
+
+**Every existing assertion passed on a backwards arrow.** A chevron does not have to point
+anywhere for `every glyph has path nodes`, `every glyph is drawn inside the viewport` or
+`every glyph fills the grid` to be true of it, and both bodies are non-empty, inside the
+viewport and 18x18 units. A review diff of two hexagons does not show that only the *binding*
+is wrong either. So the direction is now read off the geometry: a chevron's **apex** is the
+vertex at the extreme of its own bounds along the axis it points, it must be that extreme
+alone, and it must sit on the other axis's centre line — plus the relational claim that the
+left-facing apex is left of the right-facing one, which is what a swap cannot satisfy.
+
+#### The binding to the slots was separately unguarded
+
+Swapping the two `glyph =` lines at the `TTDayGrid` call site is a **different defect** from the
+one above, and nothing in the suite could see it: [TTMonthStepTag] is built from the `step`
+argument, not from the glyph, so both tags, both click handlers and all nine
+`DateFieldInteractionTest` cases stay green while the calendar's arrows read backwards.
+
+There is no way to read "which vector did this node draw" off the semantics tree — the painter
+is not in the node — and the slots do not move, so a position assertion does not close the gap
+either. Per `AGENTS.md`'s table a direction claim is a **silhouette claim, which is a pixel
+claim**, so [MonthArrowRenderTest] renders the real header and measures ink.
+
+**The centroid, not the bounding box.** A chevron is symmetric about its own axis, so its ink
+*extent* says nothing about direction — the left-facing and right-facing glyphs have identical
+bounds. The *centroid* does say: the apex is the thick end of the mark and the terminals are cut
+square, so the ink leans towards the point. Measured on the JVM and on the iOS simulator, which
+agree to the pixel: **19.5 against a box centred on 22.0** for the previous arrow, **1003.5
+against 1002.0** for the next. Margins of 2.5px and 1.5px, with a backwards chevron measuring
+about 5px the other way, so the truth sits in the middle of a 5px separation. Thin, and written
+down rather than widened — and the numbers are in the failure message so a false red is
+diagnosable.
+
+#### The arrows were 44dp of chevron in a 44dp target
+
+`MonthStepGlyph` sized the `Image` to `ttSpacing.iconButtonSize`, so the glyph spanning 18 of its
+vector's 24 units rendered 33dp across inside a 44dp box — three quarters of it, flanking a row
+whose other content is a word. The 44dp is now the `Box` and the chevron is
+[dateFieldChevronSize], the same "half the target, reads as an affordance" figure the closed
+field's own chevron already used.
+
+Measured, and **identical on both rasterisers**: the arrow's ink spans **11px of its 44px box**
+and covers **72 pixels**, against **22px** and **270 pixels** at the old size — 0.25 against
+0.50 of the box. Those are the numbers the test bounds. The ink threshold stops short of the
+antialiased edge, so the drawn extent is larger than 11px; the *ratio* is what the assertion
+uses, not the absolute.
+
+#### The year screen opened on the other side of the field
+
+A popup's offset is computed from its own measured size:
+[DateFieldPopupPositionProvider] opens **below** the field when the popup fits and **above** it
+when it does not. The day grid is six rows and the year grid is three, which is enough to cross
+that line for a field low in a sheet — and the end date of a sprint is exactly that field. So
+the calendar opened above and the years opened below, and tapping the month label appeared to
+throw the picker across the screen.
+
+Fixed where the height varies, not in the provider: `TTDateField` learns the popup's content
+height from the day grid with `onSizeChanged` and imposes it on both grids. **Measured rather
+than computed**, because the height is a sum of tokens and a typed line height and a constant
+would silently stop matching the day grid the first time the typography scale changed.
+
+The assertion is about the popup's **size**, not its offset — the offset is a function of the
+size, and a popup is its own composition root, so `size` needs no mapping into any captured
+image's coordinate space.
+
+**The width pin was written, measured, and deleted.** The provider also clamps `x` to
+`windowWidth - contentWidth`, so a narrower grid would in principle shift sideways, and the
+first version pinned both axes. Unpinning the width went **green**: every row of both grids is
+`fillMaxWidth()`, so both resolve to the popup's own maximum width and the popup is always
+window-width — **1000px on the JVM host, in both states**. The constraint was dead code, so it
+went, and with it a comment defending a case that cannot occur. The width half of the test
+stayed, because it is what would say so if that ever stopped being true.
+
+#### Three things the mutation ritual caught that reading would not have
+
+- **C3 went green on the first pass, and the test was at fault.** The size bound was 0.55 of the
+  box, from a geometric estimate of 0.36 for the draw mark and 0.75 for the oversized one. The
+  estimate was wrong in the one direction that mattered: the ink threshold truncates the span,
+  so the measured fractions are **0.25 and 0.50**, and the bound sat *above* the oversized
+  arrow. It is 0.35 now, between the two measured numbers.
+- **A red baseline produced four green ticks.** Removing the width pin also removed the `then`
+  branch that guarded `popupContentHeightPx == 0`. Without that guard the first layout is
+  `height(0.dp)`, `onSizeChanged` reports zero, the value stays zero for the life of the field,
+  and the popup **never opens** — seven of the nine `DateFieldInteractionTest` cases failed with
+  "could not find any node". Every one of the four mutations then reported itself *caught*, on
+  the strength of those seven. That is the whole argument for measuring the baseline instead of
+  assuming it: [tools/mutate_datefield_chevrons.py] now runs the unmutated tree first and
+  refuses to report any verdict unless it is green. A mutation runner that cannot tell a caught
+  mutation from a pre-existing failure is worse than no runner.
+- **`String.format` is JVM-only.** A failure message built with `"%.2f".format(x)` compiles for
+  `jvmTest` and breaks `iosSimulatorArm64Test`, which has no equivalent. Only the second host
+  finds it.
+
+#### Mutations
+
+`tools/mutate_datefield_chevrons.py`: **5 mutations, 5 caught, 0 compile-rejected**, and each by
+exactly the assertion it should be — C1 the four geometry assertions, C2 (the gap) the ink
+centroid alone, C3 the ink span alone, C4 and C6 the popup size alone. C6 is the zero guard,
+recorded because it is a defect that actually shipped into this working tree.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1287 | **1293** | 7, unchanged |
+| iOS simulator | 1259 | **1265** | 7, unchanged |
+
++6 on both, from the JUnit XML, cross-checked against `@Test`:
+[TabIconsGeometryTest] 9 → 12, [DateFieldInteractionTest] 8 → 9, and a new
+[MonthArrowRenderTest] 0 → 2.
+
+### 23.12 The calendar filled the screen and had no way out
+
+> *"The calendar opens as a full screen page and there is no way to close it. Make the calendar
+> popup open in the middle of the screen and the popup should be the size of the calendar itself
+> not whole page size."*
+
+One sentence, three defects, and **the first one had already been measured in 23.11 and written
+off.**
+
+#### The number was in the record and was read as a curiosity
+
+23.11 measured the popup's contents and reported: **1000px wide inside a 1024px window**, and
+"every row of both grids is `fillMaxWidth()`, so both resolve to the popup's own maximum width
+and the popup is always window-width". That was correct, and it was treated as an inert
+observation — the width was pinned, found to make no difference, unpinned, and a comment was
+written defending the x-clamp case that could not occur. The number was the defect, sitting in
+the paragraph that described it.
+
+The mechanism is one modifier. `TTDayGrid`'s header, weekday and six day rows are all
+`fillMaxWidth()` and its cells are `weight(1f)`, so given nothing to bound them they resolve to
+the popup's **maximum** width, which is the window's. Anchoring the popup to the field could not
+have fixed it, because the width is settled before any offset is asked for — `popupContentSize`
+arrives already measured.
+
+#### Why "no way to close it" is the same defect
+
+`onDismissRequest` is reached by an outside tap or by back. **A popup that fills the window has
+no outside left to tap.** So the picker read as a page with no exit for the same reason it read
+as full-screen, and the two halves of the report are one bug.
+
+#### The fix
+
+- **Width**, from [dateFieldPopupWidth]: seven 44dp cells and the surface's own padding, computed
+  from the two tokens the grid already uses rather than written as a number — **332dp**. Applied
+  before `.padding`, so it is the popup's whole width, and Compose coerces it into the popup
+  window's constraints, so a narrow screen shrinks it rather than letting it overhang.
+- **Placement**: [DateFieldPopupPositionProvider] is now a plain centring provider,
+  `ttCentredPopupOffset`. The anchor is ignored *because* centring makes it irrelevant. A popup
+  taller than its window starts at the top rather than at a negative offset, which is the
+  `coerceAtLeast(0)` on both axes.
+- **A Done button**, in a footer below the grid, calling the same `dismissPicker` lambda as
+  `onDismissRequest`. It does **not** assign: choosing a day already closes the picker, so a Done
+  that also assigned would be a second, invisible way to answer the question.
+
+**A footer, not the header.** The header row is where the month arrows live, at sizes and
+positions `MonthArrowRenderTest` measures; a third control there would move both of them for no
+gain. `End` alignment and the `resting` style, not `fillMaxWidth` and `prominent`: closing a
+picker is not the sheet's primary action, and a full-width accent button would claim to be the
+most important thing on screen when what the user came for is a date.
+
+#### This reverses 23.4, deliberately
+
+23.4 anchored the popup beside the field so the field stayed in view as the reference for what
+was being changed. That reference is given up on purpose and is recorded here as a decision
+rather than a drift: a picker the user can see all of, read at its own size, and dismiss three
+ways is worth more than one beside a field it covers. The height pin from 23.11 is **kept**, but
+its reason has changed — centring removed its dependency on position, and what remains is that
+the popup should not visibly resize under the user's finger when the calendar becomes the year
+list.
+
+#### Half of this cannot be asserted on a frame, and the split is not arbitrary
+
+**A popup's rendered position cannot be read back.** A `Popup` is its own composition root —
+once one is open, `onRoot()` finds *two* of them — and the content's bounds are reported in the
+popup's own coordinate space, before the window offset is applied. So the **width** is measured
+on a rendered frame (`the popup is the width of the calendar and not the width of the window`,
+which was 308 and should have been 332, see below) and the **placement** is asserted on
+[ttCentredPopupOffset] as a plain function. Which is the right way round: the width was the
+defect, and the placement is two subtractions that cannot silently change behaviour on one host.
+
+#### Two of the new tests were wrong on their first run, and both were informative
+
+- **[TTDateFieldPopupTag] sat after `.padding`**, so it marked the 308dp content rather than the
+  332dp surface — and had done so since 23.4. The tag now goes outside the padding, so it means
+  the popup's own size. A tag in the wrong place is a measurement that is quietly 24dp short of
+  the thing it names.
+- **The centring test asserted exactly equal margins**, which is asserting that a remainder does
+  not exist: 768 − 349 = 419 is odd, so one margin is 209 and the other 210 and the popup *is*
+  centred. The bound is now "equal to within a pixel", with the arithmetic written down.
+
+#### A hole in the Done test, found by writing its mutation
+
+The first version of `Done closes the picker without choosing a date` asserted only that the
+popup closed, under a KDoc claiming Done must not change the date. P5 — Done also assigns — went
+green against it. The test was fixed rather than the mutation dropped: `withField` now collects
+every date the field reports, so the test asserts the field reported **none**.
+
+#### Mutations
+
+- [tools/mutate_datefield_popup.py]: **5 mutations, 5 caught, 0 compile-rejected**. P1 (no width
+  constraint) caught by the width assertion *and* by the 44dp cell width, P2 (anchor instead of
+  centre) and P3 (no `coerceAtLeast`) by the placement assertions, P4 and P5 by Done.
+- [tools/mutate_datefield_chevrons.py] re-run against the changed file: **5 mutations, 5 caught**,
+  baseline green.
+
+The new runner's first act is to run the **unmutated** tree and refuse to report anything unless
+it is green. That guard earned its place immediately: on its first run it reported
+`BASELINE DID NOT RUN` because a missing test import had stopped the task compiling, and without
+the check that would have read as "caught" for every mutation in the file.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1293 | **1299** | 7, unchanged |
+| iOS simulator | 1265 | **1271** | 7, unchanged |
+| Android host (`:packages:design-system`) | 136 | **148** | 14, unchanged |
+
++6 on both deciding hosts, from the JUnit XML and cross-checked against `@Test`:
+[DateFieldInteractionTest] 9 → 13 and [DateFieldTest] 25 → 27. The Android host figure spans
+23.11 and 23.12 together — 136 + 6 + 6 — and its 14 failures are unchanged across all three.
+
+### 23.13 The calendar was still stuck to the top — a pixel count read as a dp count
+
+> *"Its horizontally centered now but vertically its not, still a long top to buttom background
+> and also the calendar is sticked to the top of the page."*
+
+The width half of 23.12 worked. This is the height half, and the cause is one line:
+
+```kotlin
+.onSizeChanged { popupContentHeightPx = it.height }   // pixels
+.height(popupContentHeightPx.dp)                       // ...applied as dp
+```
+
+**At the tests' density of 1 a pixel count *is* a dp count**, so this is arithmetically
+invisible on every host this project runs and wrong by exactly the density factor everywhere
+else. A 419dp calendar measures 1257px on a density-3 phone, and reading that back as `1257.dp`
+asks for a card three times too tall. A card taller than the window has nowhere to be centred:
+`ttCentredPopupOffset`'s `coerceAtLeast(0)` puts `y` at **0**, the card sits at the top, and its
+background runs the full height of the window — all three halves of the report, from one unit
+error.
+
+Reproduced before fixing, by rendering at density 3: **a popup 996x768px inside a 768px window,
+its grid clamped from 696px, `y = 0`.** That is the reported symptom with the numbers attached.
+
+#### Two phases of measurement, all of it at density 1
+
+23.11 and 23.12 both measured the popup's size and both were correct — 1000px wide, then 332dp
+— and neither could see this, because a test host's density of 1 makes the two units identical.
+The lesson is not "measure more" but that **a unit error is invisible to every measurement you
+take in the unit you happen to be in**, and the assertion has to be about the *relationship*
+between densities rather than about any one card.
+
+#### The fix
+
+The pinned height is a `Dp`, converted at the point of measurement:
+
+- `popupContentHeight` is `Dp`, set from `with(density) { size.height.toDp() }`, so the unit
+  travels with the value and the same mistake cannot be made twice. `BoardColumn`'s
+  `headerHeight` is the same idiom and was in the tree already.
+- `Dp.Unspecified` replaces `0` as the "not measured yet" sentinel. `0.dp` is a value this must
+  never hold — applying it collapses the grid, `onSizeChanged` reports zero back, and the popup
+  never opens at all. That is not hypothetical: it is what happened in 23.11 when a tidy `then`
+  branch took the guard with it.
+- The density is read in the composable scope, **not** inside the `onSizeChanged` lambda, which
+  is not a composable and cannot read a `CompositionLocal` at all. The compiler says so.
+
+#### One instance of the shape, not a class
+
+`grep` for a px-valued name applied as `.dp` across the tree returns **one** hit — the line
+above. The three sibling measurements are all correct: `BoardColumn` converts with
+`LocalDensity`, `ProjectSwitcherButton` converts inside a `Density` scope, and `Slider` only
+does px arithmetic and never converts.
+
+#### The second cause of the same symptom: a window shorter than the calendar
+
+The unit fix is not sufficient on a **landscape phone**, whose window is about 360dp against a
+card that wants 419dp. Clipped at the top again, from the other direction. So:
+
+- The popup takes at most [TT_DATE_FIELD_MAX_HEIGHT_FRACTION] of the **window's** height, read
+  from `BoxWithConstraints`'s `maxHeight` — there is no other way to ask, because the popup is
+  its own composition root and `LocalWindowInfo` is not the app's window from inside it.
+- The grid takes what is left after the footer (`weight(1f, fill = false)`, with the pin applied
+  only if it fits inside that budget), and the overflow **scrolls**.
+- **The footer is outside the scroller**, so `Done` stays reachable when space runs out. That is
+  the one that matters: a footer that scrolls away is a picker with no way out, which is the
+  defect this whole phase was opened for.
+
+#### Two things the mutations caught that reading would not have
+
+- **P7 went green until the test density was chosen properly.** At density 2.5 the card is 136%
+  of the window, so the *window* clamps it whether or not the cap exists, and deleting the cap
+  changed nothing observable. The cap only binds when the card is **between 90% and 100%** of the
+  window — a narrow band, and one that has to be aimed at deliberately. Density **1.75** puts a
+  419dp card into a 439dp window and P7 goes red immediately.
+- **The host guard was in the wrong place, and it hid a pass.** The `thisHostRasterisesText()`
+  check sat inside `probePopup`, which returned a zeroed measurement, so on the Android host the
+  two probes were compared against each other: the density test passed **vacuously** (0 == 0) and
+  the short-window test failed on `0px` — a new failure on a host that was previously at 14. A
+  skip that is allowed to reach an assertion is not a skip; the guard belongs at the top of the
+  test.
+
+Also: the scroll semantics live on the scrolling `Box`, not on the grid inside it, so
+`TTDayGridTag` cannot answer "does the calendar scroll" — hence [TTDateScrollTag]. And `Done` is
+asserted **displayed**, not merely present: P8, which deletes the `weight`, leaves the footer in
+the tree at zero height, and an existence assertion cannot see that.
+
+#### Mutations
+
+- [tools/mutate_datefield_popup.py]: **8 mutations, 8 caught, 0 compile-rejected**. P6 is the
+  unit error, caught by the density-invariance assertion *and* the short-window one; P7 and P8
+  by the short-window test.
+- [tools/mutate_datefield_chevrons.py]: **5 mutations, 5 caught**, after updating C4 and C6 for
+  the `Px` → `Dp` rename. Both of those had gone stale — `PATTERN NOT FOUND` rather than a
+  silent pass, which is the failure mode worth having from a mutation runner.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1299 | **1301** | 7, unchanged |
+| iOS simulator | 1271 | **1273** | 7, unchanged |
+| Android host (`:packages:design-system`) | 148 | **150** | 14, unchanged |
+
++2 on both deciding hosts, from the JUnit XML and cross-checked against `@Test`: two tests added
+to [DateFieldInteractionTest] 13 → 15. The Android host went to 150/15 on the first run and back
+to 150/14 once the guard moved — which is the second time this phase that measuring the baseline
+rather than assuming it has been what caught the mistake.
+
+</details>
