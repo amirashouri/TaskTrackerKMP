@@ -159,8 +159,33 @@ object ttGlass {
      */
     const val LENS_ALPHA: Float = 0.08f
 
-    /** The hairline that draws the material's edge: `white.opacity(0.14)`, `lineWidth: 0.5`. */
+    /**
+     * The dark-appearance hairline that draws the material's edge:
+     * `white.opacity(0.14)`, `lineWidth: 0.5`.
+     *
+     * White carries the edge only where the fill is dark enough to sit under it:
+     * over the dark fill the rim renders 1.54:1, which is the bar
+     * `GlassSurfacePixelTest` holds both appearances to. The light fill already
+     * composites to about #C2CBD7, so white over it measures 1.07:1 and no white
+     * above that fill reaches the bar — the light rim is [LIGHT_HAIRLINE_ALPHA],
+     * a shadow, instead.
+     */
     const val HAIRLINE_ALPHA: Float = 0.14f
+
+    /**
+     * The light-appearance hairline: black at 0.22, a shadow line rather than a
+     * highlight.
+     *
+     * The light glass fill composites to about #C2CBD7, which is darker than the
+     * canvas and near the top of what white can reach: measured, the white rim is
+     * 1.07:1 as shipped, 1.30:1 at 0.5, and 1.64:1 fully opaque — a stark line,
+     * not a hairline, and only barely over the 1.5:1 the dark appearance reaches.
+     * A rim that reads in light has to come from the other direction: black at
+     * 0.22 over the fill renders 1.65:1 on both rasterisers
+     * (`GlassSurfacePixelTest`), a quiet shadow that reads as the same raised edge
+     * the white line is in dark.
+     */
+    const val LIGHT_HAIRLINE_ALPHA: Float = 0.22f
     val hairlineWidth: Dp = 0.5.dp
 
     /** Press scale, from `TTGlassButtonStyle`'s `scaleEffect(0.95)`. */
@@ -451,13 +476,15 @@ fun Modifier.ttGlassSurface(
                 ),
             )
         }
-        // The hairline, in white on both appearances. It is not `ttSeparator`, because a
-        // separator is a *structural* divider and this is a highlight: the point of a rim
-        // highlight is that it is lighter than its surroundings at the top and edge, which
-        // is true of white everywhere and is what makes the surface read as raised.
+        // The hairline. It is not `ttSeparator`, because a separator is a
+        // *structural* divider and this is an edge: the point of a rim is that the
+        // surface reads as raised, which is lighter-than-the-fill in dark and —
+        // because the light fill is already near the top of what white can reach —
+        // darker-than-the-fill in light. See [ttGlass.HAIRLINE_ALPHA] and
+        // [ttGlass.LIGHT_HAIRLINE_ALPHA] for the measurements behind both.
         .border(
             width = borderWidth,
-            color = Color.White.copy(alpha = ttGlassHairlineAlpha()),
+            color = ttGlassHairline(),
             shape = shape,
         )
 }

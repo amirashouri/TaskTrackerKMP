@@ -60,8 +60,8 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **green** (1097 tests, 6 failed — pre-existing `SeedingTest` ×3, `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`, and design-system's deliberate error-token bar) |
-| iOS simulator | `iosSimulatorArm64Test` | **green** (1072 tests, 6 failed — the same 6) |
+| JVM | `jvmTest` | **green** (1303 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
+| iOS simulator | `iosSimulatorArm64Test` | **green** (1275 tests, 5 failed — the same 5) |
 | Android host | `testAndroidHostTest` | **red** — 17 `testAndroidHostTest` failures, all Compose UI layout failures (Robolectric's default viewport is far smaller); not a regression, the count rose 5 → 17 only because the two modules named below began executing again |
 
 The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.

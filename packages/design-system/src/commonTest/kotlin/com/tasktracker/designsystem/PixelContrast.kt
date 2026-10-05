@@ -58,7 +58,9 @@ import kotlin.math.round
  * `AGENTS.md` rule 2's reason is that the model is not the compositor: `PLAN.md` Phase 19
  * modelled `ttLabelSecondary` over a glass card at 2.81:1 and the two rasterisers both
  * reported 2.88:1, and modelled the hairline at 1.08:1 against a rendered 1.07:1. The model
- * was *close*, and being close is what made it believable.
+ * was *close*, and being close is what made it believable — but both defects were repaired
+ * at the token only after the rendered reading said which number to change (the caption now
+ * renders 3.09:1 and the light rim 1.65:1).
  *
  * So anything whose answer is about legibility reads its two colours out of a rendered frame.
  * `strongestPixel` exists for that: the furthest pixel from a background inside a glyph's

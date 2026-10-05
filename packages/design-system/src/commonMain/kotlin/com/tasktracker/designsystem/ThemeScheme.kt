@@ -270,7 +270,7 @@ object ttFixedColours {
     val labelDark: Color = Color(0xFFFFFFFF)
 
     /**
-     * `ttLabelSecondary`, pinned: `secondaryLabel` at 60% — `(60, 60, 67)` on light and
+     * `ttLabelSecondary`: `secondaryLabel` at 60% — `(52, 52, 58)` on light and
      * `(235, 235, 245)` on dark — rather than an opaque grey.
      *
      * Pre-composited the same way [separatorLight] is, as an RGBA with alpha below 1, so a
@@ -279,12 +279,11 @@ object ttFixedColours {
      *
      * The 60% is what makes this token *secondary* — and it is also this token's one
      * accessibility cost, which a caller needs before using it. Composited over its canvas
-     * it measures **3.44:1** on light and **6.36:1** on dark.
+     * it measures **3.68:1** on light and **6.36:1** on dark.
      *
-     * The two are not the same measurement, and the difference is worth stating rather
-     * than averaging away. On light the token fails WCAG's 4.5:1 body-text bar and clears
-     * only the 3:1 large-text bar; on dark it clears the body-text bar comfortably. That
-     * asymmetry is inherent to the colour pair, not a defect in the port: UIKit's
+     * The dark value is the platform's own pale grey; the light value is eight channels
+     * darker than the platform's `(60, 60, 67)`, and the glass surface below is why. The
+     * rest of the asymmetry is inherent to the colour pair, not a defect in the port:
      * `secondaryLabel` is a *dark* grey at 60% on light and a *pale* grey at 60% on dark,
      * and 60% of white text on black is a much lighter result than 60% of black text on
      * white. Any statement about this token has to be per-appearance, and an averaged
@@ -298,14 +297,18 @@ object ttFixedColours {
      *    because a caller that reads this token is reaching for de-emphasis; the fact that
      *    dark happens to afford it is not a reason to use it as the default ink.
      *
-     * One more surface, and it is the one that bites: this token is **worse over glass than
-     * over the canvas**. An untinted glass surface composites to `#C2CBD7` in light, which
-     * is *darker* than a white canvas and therefore closer to this token's own dark grey —
-     * so the same 60% alpha measures **2.81:1** there, below even the 3:1 large-text bar.
-     * Eleven files in `:packages:feature-projects-presentation` use this token and all
-     * eleven also build glass surfaces, so this is not hypothetical. A caption on a glass
-     * card in light appearance is the worst case in the app, and it is not reachable by
-     * reading either number above.
+     * One more surface, and it is the one that decided the light RGB: this token is
+     * **worse over glass than over the canvas**. An untinted glass surface composites to
+     * about `#C8D0DB` a quarter of the way down in light — darker than the canvas and
+     * therefore closer to the token's own grey. Eleven files in
+     * `:packages:feature-projects-presentation` use this token and all eleven also build
+     * glass surfaces, so this is not hypothetical. The platform grey measured **2.88:1**
+     * over that rendered fill, below even the 3:1 large-text bar, so the light RGB was
+     * darkened to `(52, 52, 58)`: the same caption now measures **3.09:1** over the glass
+     * fill and 3.68:1 over the bare canvas, on both rasterisers
+     * (`GlassSurfacePixelTest`). A caption on a glass card in light appearance is still
+     * the worst case in the app for this token, but it is now reachable at the numbers
+     * above.
      *
      * `PinnedAppearanceTest` asserts this token stays at or above 3:1 against the canvas in
      * both appearances. It deliberately does **not** assert the exact ratio: it is the one
@@ -315,7 +318,7 @@ object ttFixedColours {
      * wrong by a factor of 1.75, and nothing caught it because the test only ever checked
      * `>= 3f`.
      */
-    val labelSecondaryLight: Color = Color(0x993C3C43)
+    val labelSecondaryLight: Color = Color(0x9934343A)
     val labelSecondaryDark: Color = Color(0x99EBEBF5)
 
     /**

@@ -208,12 +208,18 @@ class PinnedAppearanceTest {
      *
      * ## The bar is 3:1, not 4.5:1, and that is a real finding rather than a convenience
      *
-     * Composited over its canvas this token measures **3.44:1** on light and **3.64:1** on
-     * dark. It does not meet WCAG AA's 4.5:1 for body text, and the reason it is still
-     * correct is that the token resolves UIKit's `secondaryLabel`, which does not either —
-     * 3.44:1 is what the platform itself ships. Raising the alpha until it passes would
-     * make the port a worse match for the design it is porting, and the change belongs to
-     * the design rather than to the tokens.
+     * Composited over its canvas this token measures **3.68:1** on light and **6.36:1** on
+     * dark (the earlier revision of this comment claimed 3.64:1 on dark — wrong by a factor
+     * of 1.75, the same error `ThemeScheme` records). It does not meet WCAG AA's 4.5:1 for
+     * body text, and the reason it is still correct is that the token resolves UIKit's
+     * `secondaryLabel`, which does not meet it either: the platform's own grey composites to
+     * 3.44:1 on the light canvas, and the dark value is still the platform's pale grey at
+     * 60%. The light RGB is the one number that is *not* the platform's — it was darkened
+     * eight channels, from `(60, 60, 67)` to `(52, 52, 58)`, because a glass surface in
+     * light composites darker than the canvas and the platform grey measured 2.88:1 there,
+     * below even this bar (see `GlassSurfacePixelTest`). Raising the alpha until the token
+     * passes would make the port a worse match for the design it is porting, and the change
+     * belongs to the design rather than to the tokens.
      *
      * So the test holds the bar that was actually chosen, states the measured number, and
      * records the consequence where a caller will meet it: **3:1 is WCAG's bar for large

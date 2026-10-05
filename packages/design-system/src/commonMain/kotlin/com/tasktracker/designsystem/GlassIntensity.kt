@@ -2,6 +2,7 @@ package com.tasktracker.designsystem
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.util.lerp
 
 /**
@@ -53,16 +54,28 @@ internal fun glassFillAlpha(intensity: Float): Float =
 fun ttGlassLensAlpha(): Float = ttGlass.LENS_ALPHA * LocalGlassIntensity.current.coerceIn(0f, 1f)
 
 /**
- * The rim highlight at [intensity]: [ttGlass.HAIRLINE_ALPHA] at full intensity, nothing at
- * zero.
+ * The rim at [intensity]: [ttGlass.HAIRLINE_ALPHA] of white at full intensity in dark,
+ * [ttGlass.LIGHT_HAIRLINE_ALPHA] of black in light, nothing at zero.
  *
  * The hairline is not decoration and it is not a border — it is what makes a surface read as
- * *raised* (see [ttGlassSurface]), and it works by being lighter than what surrounds it. On
- * an opaque fill that job is already done by the fill's own edge, so keeping a translucent
- * white rim at `0f` would draw a highlight over a surface that has stopped being a lens.
+ * *raised* (see [ttGlassSurface]). In dark that job is done by being lighter than what
+ * surrounds it, which white is. In light there is nothing lighter worth having: the glass
+ * fill already composites to about #C2CBD7, so a white rim over it measures 1.07:1 and even
+ * a fully opaque white line only 1.64:1 (both rendered, `GlassSurfacePixelTest`). The light
+ * rim therefore comes from the other direction — a shadow, darker than its fill — and reads
+ * as the same raised edge from underneath. Both branches fade with the slider because on an
+ * opaque fill the job is already done by the fill's own edge, and a rim kept at `0f` would
+ * draw an edge over a surface that has stopped being a lens.
  */
 @Composable
-internal fun ttGlassHairlineAlpha(): Float = ttGlass.HAIRLINE_ALPHA * LocalGlassIntensity.current.coerceIn(0f, 1f)
+internal fun ttGlassHairline(): Color {
+    val scaled = LocalGlassIntensity.current.coerceIn(0f, 1f)
+    return if (ttIsDarkTheme()) {
+        Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA * scaled)
+    } else {
+        Color.Black.copy(alpha = ttGlass.LIGHT_HAIRLINE_ALPHA * scaled)
+    }
+}
 
 /**
  * How far the fill's hue travels toward the canvas by the bottom edge, at [intensity].

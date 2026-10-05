@@ -38,33 +38,39 @@ import kotlin.test.assertTrue
  * model is not the compositor:
  *
  *  - **`ttLabelSecondary` over a glass card modelled 2.81:1** in light — below even the 3:1
- *    large-text bar, and worse than the 3.44:1 the same token manages on the bare canvas,
- *    because the accent-tinted fill darkens toward the token's own grey.
+ *    large-text bar, and worse than the 3.44:1 the platform grey manages on the bare
+ *    canvas, because the accent-tinted fill darkens toward the token's own grey.
  *  - **The hairline modelled 1.08:1** against its own fill in light, so light-mode glass was
  *    said to have no lit edge at all. In dark it modelled 1.55:1 and the rim was said to be
  *    doing real work.
  *
  * Both were plausible and neither was believed, because they were computed. This suite reads
- * the pixels a Compose frame actually produced, and **both rasterisers report the same
- * figures to the digit**:
+ * the pixels a Compose frame actually produced, and both rasterisers reported the same
+ * figures to the digit — 2.88:1 for the caption, 1.07:1 for the rim. Those were real
+ * defects, and both were repaired by changing the tokens they named rather than by
+ * re-tuning the measurement: the light `ttLabelSecondary` was darkened off the platform
+ * grey to `(52, 52, 58)` at the same 60% alpha, and the light rim stopped being white —
+ * the light fill is already near the top of what white can reach, so light gets a shadow
+ * line, black at [ttGlass.LIGHT_HAIRLINE_ALPHA]. The table below is the fixed state, and
+ * the two hosts still agree to the digit:
  *
- * | | modelled | rendered, JVM | rendered, iOS |
+ * | | before, rendered | rendered, JVM | rendered, iOS |
  * | --- | --- | --- | --- |
- * | `ttLabelSecondary` on the glass fill, light | 2.81:1 | **2.88:1** | **2.88:1** |
- * | the same caption, dark | 5.85:1 | **6.01:1** | **6.01:1** |
- * | the hairline against its own fill, light | 1.08:1 | **1.07:1** | **1.07:1** |
- * | the hairline against its own fill, dark | 1.55:1 | **1.54:1** | **1.54:1** |
+ * | `ttLabelSecondary` on the glass fill, light | 2.88:1 | **3.09:1** | **3.09:1** |
+ * | the same caption, dark | 6.01:1 | **6.01:1** | **6.01:1** |
+ * | the hairline against its own fill, light | 1.07:1 | **1.65:1** | **1.65:1** |
+ * | the hairline against its own fill, dark | 1.54:1 | **1.54:1** | **1.54:1** |
  *
- * The model was within 0.01 on both rim figures and within 0.16 on the captions. That is not
- * a licence to keep modelling: the numbers being right is a fact about these tokens on these
- * two appearances, and it was established by rendering, not by asking nicely. That the two
- * hosts agree is also the point — these are flat fills, so they are expected to, and a
- * disagreement would have meant the reading was measuring something rasteriser-specific
- * rather than the composite.
+ * The Phase-19 model was within 0.01 on both rim figures and within 0.16 on the captions.
+ * That is not a licence to keep modelling: the numbers being right is a fact about these
+ * tokens on these two appearances, and it was established by rendering, not by asking
+ * nicely. That the two hosts agree is also the point — these are flat fills, so they are
+ * expected to, and a disagreement would have meant the reading was measuring something
+ * rasteriser-specific rather than the composite.
  *
- * **Two of the four tests below are red by design and are meant to stay red** until someone
- * changes the tokens they name. They are detectors, not gates, and PLAN.md records what
- * each one is waiting for.
+ * All four tests below are gates. The two light cases are the ones that were red and were
+ * repaired; they now hold the fixed numbers, and a regression in either token turns the
+ * corresponding test red with the measured composite in its message.
  *
  * ## How the rim is measured, which is the awkward part
  *
@@ -131,13 +137,13 @@ class GlassSurfacePixelTest {
                 "the *rendered* glass fill ${reading.fill.hex()}, which is ${ratio.ratioText()}:1" +
                 " - below the ${LARGE_TEXT_MINIMUM}:1 large-text bar, and worse than the " +
                 "${reading.secondaryOnCanvas.ratioText()}:1 the same token manages on the bare " +
-                "canvas. The model said 2.81:1 and was close; the difference is that this " +
-                "number was rendered rather than derived, which is the only reason it can be " +
-                "trusted to fail.\nGlass is *costing* this caption contrast rather than adding " +
+                "canvas.\nGlass is *costing* this caption contrast rather than adding " +
                 "any: the accent-tinted fill darkens toward the token's own grey, so putting a " +
                 "surface behind a secondary label makes it less legible, not more. The fill " +
                 "cannot be lightened without changing ttGlass.FILL_ALPHA for every card in the " +
-                "app; the cheaper repair is a caption token that is darker over glass.",
+                "app, so the repair was the caption token: labelSecondaryLight was darkened off " +
+                "the platform grey to (52, 52, 58) at the same 60% alpha, which renders 3.09:1 " +
+                "here. If this fails, that token has been lightened back toward the platform grey.",
         )
     }
 
@@ -162,15 +168,16 @@ class GlassSurfacePixelTest {
     /**
      * The hairline in light, read off the card's top edge against a borderless twin.
      *
-     * Red by design, and it is a real defect rather than a strict threshold: the light rim
-     * renders at [RIM_MINIMUM]-1 or below because **white cannot carry it**. Measured, the
-     * rim is 1.07:1 as shipped at [ttGlass.HAIRLINE_ALPHA]; raising that to 0.5 moves it to
-     * 1.30:1 and raising it to a full 1.0 — an opaque white line, no longer a hairline —
-     * reaches only **1.64:1**. The light fill is already at #c2cbd7, so there is no white
-     * above it worth having. A rim that reads as a lit edge in light has to be a *darker*
-     * line than its fill, which is a shadow rather than a highlight and a different design
-     * grammar from the one `ttGlassSurface` claims to port. Dark reaches 1.54:1 on the same
-     * token with no change at all, because dark fill is dark enough for white to be lighter.
+     * The light rim is a shadow, not a highlight, and that is the repair rather
+     * than a workaround: white cannot carry an edge over the light fill, which is
+     * already at #c2cbd7. Measured, white was 1.07:1 as shipped at
+     * [ttGlass.HAIRLINE_ALPHA]; raising that to 0.5 moved it to 1.30:1, and a
+     * fully opaque white line — no longer a hairline — reached only **1.64:1**.
+     * So the light rim is black at [ttGlass.LIGHT_HAIRLINE_ALPHA], which renders
+     * **1.65:1**: darker than its fill, the same raised edge arriving from the
+     * other direction. Dark keeps the white rim at [ttGlass.HAIRLINE_ALPHA] and
+     * reaches 1.54:1 with no change at all, because dark fill is dark enough for
+     * white to be lighter.
      */
     @Test
     fun `the hairline reads as a lit edge in light`() {
@@ -186,12 +193,12 @@ class GlassSurfacePixelTest {
             "light appearance: the hairline rendered ${reading.rim.hex()} against the fill " +
                 "underneath it, ${reading.fill.hex()}, which is ${reading.ratio.ratioText()}:1" +
                 " over ${reading.bandRows} device rows at ${ttGlass.hairlineWidth} on a " +
-                "${RIM_DENSITY}x display - below the ${RIM_MINIMUM}:1 that the dark " +
-                "appearance reaches with the same token.\nA rim highlight only reads as a " +
-                "raised edge if it is measurably lighter than what it sits on, and in light " +
-                "nothing is: raising HAIRLINE_ALPHA to 0.5 was measured at 1.30:1 and a fully " +
-                "opaque white rim at 1.64:1, so the token cannot be tuned into this. The light " +
-                "rim needs to be darker than its fill, not lighter.",
+                "${RIM_DENSITY}x display - below the ${RIM_MINIMUM}:1 the dark appearance " +
+                "reaches with its white rim.\nThe light rim is a shadow line, black at " +
+                "ttGlass.LIGHT_HAIRLINE_ALPHA, because white over this fill cannot reach the " +
+                "bar: measured, white at HAIRLINE_ALPHA was 1.07:1 and even an opaque white " +
+                "line only 1.64:1. If this fails, the shadow token has drifted back toward " +
+                "white, or the intensity scaling has been removed from it.",
         )
     }
 

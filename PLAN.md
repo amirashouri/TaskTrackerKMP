@@ -5288,4 +5288,81 @@ and registered on all three entry points. The failure sets are the documented pr
 in `:shared-ui` on the deciding hosts; the seven Robolectric-viewport layout failures in
 `:shared-ui` on the Android host. None moved.
 
+### 23.17 The light glass caption and rim, repaired at the token
+
+Phase 19 recorded two findings (§19.4, §19.5) and deliberately left them unfixed as design
+questions. `GlassSurfacePixelTest` was written to settle them by rendering rather than by
+arithmetic, and both rasterisers reported the same figures to the digit — **2.88:1** for a
+`ttLabelSecondary` caption over the rendered light glass fill (`#747780` over `#c8d0db`),
+below the 3:1 large-text bar *and* below the 3.44:1 the same token manages on the bare
+canvas, so glass was *costing* the caption contrast rather than adding it; and **1.07:1** for
+the light hairline (`#cad2dc` over `#c2cbd7` — white at `HAIRLINE_ALPHA`, blended over 1
+device row at 0.5dp on a 3× display), so light-mode glass had no lit edge at all. Both were
+real defects, and both are repaired at the token they named, not by re-tuning the measurement.
+
+**The caption.** The fill cannot be lightened — `ttGlass.FILL_ALPHA` is every card's contrast
+budget, and spending it to carry one token is the wrong direction. So `labelSecondaryLight`
+was darkened eight channels, `(60, 60, 67)` → `(52, 52, 58)`, at the unchanged 0.60 alpha.
+It renders **#6f727a over #c8d0db = 3.09:1** (3.68:1 on the bare canvas, against the
+platform `secondaryLabel`'s own 3.44:1). It deliberately still does not meet the 4.5:1 body
+bar — the token resolves UIKit's `secondaryLabel`, which does not either — and
+`PinnedAppearanceTest`'s ordering (3:1 ≤ secondary < label over the canvas) still holds at
+3.68:1. Dark is untouched: `#97989f` over `#191b1e` = 6.01:1, and 6.36:1 on canvas.
+
+**The rim.** No value of `HAIRLINE_ALPHA` fixes the light edge, and that is measured, not
+assumed: white at 0.14 was 1.07:1, at 0.5 it was 1.30:1, and a fully opaque white line —
+no longer a hairline — reached only **1.64:1**, because the light fill (`#c2cbd7`) is already
+near the top of what white can reach. So light gets the opposite rim grammar: a **shadow
+line**, black at the new `ttGlass.LIGHT_HAIRLINE_ALPHA = 0.22f`, which renders **#979ea7 =
+1.65:1** over the same fill — darker than its fill, the same raised edge arriving from the
+other direction. Dark keeps the white rim at `HAIRLINE_ALPHA` and its 1.54:1 with no change
+at all, because dark fill is dark enough for white to be lighter. The resolver
+`ttGlassHairlineAlpha(): Float` became `@Composable internal fun ttGlassHairline(): Color` in
+`GlassIntensity.kt` — white at `HAIRLINE_ALPHA × intensity` in dark, black at
+`LIGHT_HAIRLINE_ALPHA × intensity` in light — so the rim still scales with
+`LocalGlassIntensity` and still paints nothing at zero intensity, and `ttGlassSurface`'s
+border binds to it. The Phase-19 model was within 0.01 on both rim figures and 0.16 on the
+captions; close, but the rendered reading decided which number to change.
+
+Both hosts agree to the digit on every figure in this entry. These are flat fills, so they
+are expected to, and the agreement is itself the check that each reading measured the
+composite and not something rasteriser-specific.
+
+#### Test
+
+No test was added; the two gates in `GlassSurfacePixelTest` already existed and now hold the
+fixed numbers, with the repair and its measurements in their failure messages so a regression
+says what drifted. Green-compatibility of the neighbours was checked, not assumed:
+`PinnedAppearanceTest` (alpha 0.60 ± 0.005, light ≠ dark as full RGBA, 3.68:1 inside its
+3:1-to-label band), `BrandConstantsTest` (`HAIRLINE_ALPHA < 1f` still true),
+`GlassIntensityRenderTest` (samples panel centres, never the hairline), and `Avatar` /
+`TabBar`, which carry their own rim alphas by design and are untouched.
+
+#### Mutation
+
+Two mutations, both caught, one per repair:
+
+- Reverting `labelSecondaryLight` to `0x993C3C43` made `a caption on the rendered glass fill
+  still clears the large-text bar` fail at **2.88:1** (`#747780` over `#c8d0db`), the
+  message naming the old composite.
+- Reverting the rim to white on both appearances made `the hairline reads as a lit edge in
+  light` fail at **1.07:1** (`#cad2dc` over `#c2cbd7`).
+
+Both fixes restored; both hosts green.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1303 | **1303** | 7 → **5** |
+| iOS simulator | 1275 | **1275** | 7 → **5** |
+
+No test was added or removed — the totals are unchanged and only the failure sets shrank, to
+the documented pre-existing set: `SeedingTest` ×3 in `:packages:feature-projects-data` and
+`aChosenThemeOutlivesTheProcess` plus `theBoardReturnsToTheList` in `:shared-ui`. The
+deciding command (`jvmTest iosSimulatorArm64Test verifyArchitectureGraph
+verifyModuleImports :androidApp:compileDebugKotlin`) now reports exactly those five per host.
+`AGENTS.md`'s test-host table was re-measured to the same figures; it had stood at the
+Phase-15 counts.
+
 </details>
