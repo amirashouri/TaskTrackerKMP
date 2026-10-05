@@ -38,6 +38,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_my_tasks
@@ -121,6 +122,7 @@ fun ProjectBoardScreen(
     onAddTask: ((WorkItemStatus) -> Unit)? = null,
     showOnlyMyTasks: Boolean = false,
     onToggleMyTasks: () -> Unit = {},
+    activeSprint: Sprint? = null,
 ) {
     Column(
         modifier = modifier
@@ -187,6 +189,14 @@ fun ProjectBoardScreen(
                 message = message,
                 onDismiss = onDismissError,
                 modifier = Modifier.fillMaxWidth().horizontalGutter(),
+            )
+        }
+        activeSprint?.let { sprint ->
+            ttBanner(
+                message = "Active Sprint: ${sprint.name}",
+                tone = ttBannerTone.Accent,
+                onDismiss = {},
+                modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBoardActiveSprintTag),
             )
         }
         if (projection.project == null && !isLoading) {
@@ -447,6 +457,7 @@ const val ProjectBoardScreenTag = "board.screen"
 const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
 const val ProjectBoardMyTasksTag = "board.myTasks"
+const val ProjectBoardActiveSprintTag = "board.activeSprint"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 

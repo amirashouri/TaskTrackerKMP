@@ -251,6 +251,22 @@
     <string name="backlog_empty_title">The backlog is empty</string>
     <string name="backlog_empty_body">Tasks that have not been put on a board yet collect here.</string>
     <string name="backlog_put_on_board">Put on board</string>
+
+    <!--
+      The backlog tab's two sections. One label names the pile, the other names the pile that
+      is already filed away, so a user who lands here does not have to guess which side of the
+      tab is which.
+    -->
+    <string name="backlog_section_backlog">Backlog</string>
+    <string name="backlog_section_archived">Archived</string>
+    <!--
+      The archived section's empty state is its own sentence rather than a copy of the backlog's,
+      because the two sections are different questions: one is "nothing still to do" and the
+      other is "nothing filed away yet", and a user who filed the last backlogged task away has
+      just done something worth acknowledging in the words.
+    -->
+    <string name="backlog_archived_empty_title">Nothing filed away</string>
+    <string name="backlog_archived_empty_body">Tasks you file away from this backlog appear here.</string>
     <string name="archive_empty_title">Nothing filed away</string>
     <string name="archive_empty_body">Tasks you file away appear here, grouped by the month they left the flow.</string>
     <string name="archive_reopen">Reopen</string>

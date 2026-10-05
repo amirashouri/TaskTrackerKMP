@@ -6,6 +6,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
+import kotlin.time.Duration.Companion.days
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -270,6 +271,55 @@ class ProjectBoardModelTest {
         assertTrue(model.showOnlyMyTasks)
         assertEquals(1, model.projection.itemCount)
         assertEquals("Amir", model.projection.items.single().assignee)
+    }
+
+    @Test
+    fun `the board filters work items by active sprint when an active sprint exists`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+        val sprint = repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 10,
+            startDate = now - 1.days,
+            endDate = now + 1.days,
+            owner = null,
+            now = now,
+        )
+        val itemInSprint = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, sprintID = sprint.id)
+        val itemOutSprint = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo, sprintID = null)
+        repository.seed(itemInSprint)
+        repository.seed(itemOutSprint)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertNotNull(model.activeSprint)
+        assertEquals(sprint.id, model.activeSprint?.id)
+        assertEquals(1, model.projection.itemCount)
+        assertEquals("AP-1", model.projection.items.single().key.rawValue)
+    }
+
+    @Test
+    fun `the board falls back to all project work items when no active sprint exists`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+        val item1 = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, sprintID = null)
+        val item2 = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo, sprintID = null)
+        repository.seed(item1)
+        repository.seed(item2)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertNull(model.activeSprint)
+        assertEquals(2, model.projection.itemCount)
     }
 }
 

@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
@@ -36,7 +37,7 @@ class ProjectBoardModel(
     /** The project whose board this is. */
     val projectID: ProjectID,
     repository: ProjectRepositoryPort,
-    dateProvider: DateProvider,
+    private val dateProvider: DateProvider,
     private val currentUserName: String? = null,
 ) : ObservingProjectModel(repository) {
 
@@ -55,6 +56,10 @@ class ProjectBoardModel(
 
     /** The card currently being moved, so its row can show the wait. `null` when idle. */
     var movingItemID: WorkItemID? by mutableStateOf(null)
+        private set
+
+    /** The active sprint for this board, if any. */
+    var activeSprint: Sprint? by mutableStateOf(null)
         private set
 
     private var rawItems: List<WorkItem> = emptyList()
@@ -77,15 +82,23 @@ class ProjectBoardModel(
             currentFirst.equals(targetFirst, ignoreCase = true)
     }
 
-    private fun updateProjection() {
-        val filtered = if (showOnlyMyTasks) {
-            rawItems.filter { assigneeMatchesCurrentUser(it.assignee) }
+    private fun currentFilteredItems(): List<WorkItem> {
+        val sprintFiltered = if (activeSprint != null) {
+            rawItems.filter { it.sprintID == activeSprint?.id }
         } else {
             rawItems
         }
+        return if (showOnlyMyTasks) {
+            sprintFiltered.filter { assigneeMatchesCurrentUser(it.assignee) }
+        } else {
+            sprintFiltered
+        }
+    }
+
+    private fun updateProjection() {
         projection = BoardProjection(
             project = projection.project,
-            items = filtered,
+            items = currentFilteredItems(),
         )
     }
 
@@ -95,14 +108,14 @@ class ProjectBoardModel(
     override suspend fun reload() {
         val project = repository.project(projectID)
         rawItems = repository.workItems(projectID)
-        val filtered = if (showOnlyMyTasks) {
-            rawItems.filter { assigneeMatchesCurrentUser(it.assignee) }
-        } else {
-            rawItems
-        }
+        val sprints = repository.sprints(projectID)
+        val now = dateProvider.now()
+        activeSprint = sprints.firstOrNull { !it.isFinished && it.isActiveOn(now) }
+            ?: sprints.firstOrNull { !it.isFinished }
+
         projection = BoardProjection(
             project = project,
-            items = filtered,
+            items = currentFilteredItems(),
         )
     }
 

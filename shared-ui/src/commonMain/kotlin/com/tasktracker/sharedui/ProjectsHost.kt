@@ -269,6 +269,7 @@ private fun ProjectBoardDestination(
             onAddTask = onAddTask,
             showOnlyMyTasks = model.showOnlyMyTasks,
             onToggleMyTasks = model::toggleShowOnlyMyTasks,
+            activeSprint = model.activeSprint,
         )
     }
 }

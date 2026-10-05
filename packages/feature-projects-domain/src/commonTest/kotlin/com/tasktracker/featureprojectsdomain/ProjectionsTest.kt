@@ -147,6 +147,98 @@ class ProjectionsTest {
         assertEquals(listOf("TT-1", "TT-2", "TT-3"), keys(projection.untriaged))
     }
 
+    // MARK: Sectioned backlog
+
+    @Test
+    fun `the sectioned backlog splits backlog and closed into two disjoint partitions`() {
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog),
+                item("TT-2", WorkItemStatus.Todo),
+                item("TT-3", WorkItemStatus.InProgress),
+                item("TT-4", WorkItemStatus.InReview),
+                item("TT-5", WorkItemStatus.Done, resolvedAt = origin),
+                item("TT-6", WorkItemStatus.Closed, resolvedAt = origin),
+            ),
+        )
+
+        assertEquals(listOf("TT-1"), keys(projection.backlog))
+        assertEquals(listOf("TT-6"), keys(projection.archived))
+        assertEquals(1, projection.backlogItemCount)
+        assertEquals(1, projection.archivedItemCount)
+        assertEquals(2, projection.totalItemCount)
+        assertFalse(projection.backlogIsEmpty)
+        assertFalse(projection.archivedIsEmpty)
+        assertFalse(projection.bothAreEmpty)
+        assertTrue(projection.hasAnyContent)
+        assertTrue(projection.backlog.intersect(projection.archived).isEmpty())
+    }
+
+    @Test
+    fun `a backlog-only project has nothing in the archived section`() {
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog),
+                item("TT-2", WorkItemStatus.Backlog),
+            ),
+        )
+
+        assertEquals(2, projection.backlogItemCount)
+        assertEquals(0, projection.archivedItemCount)
+        assertTrue(projection.archivedIsEmpty)
+        assertFalse(projection.bothAreEmpty)
+        assertEquals(BacklogSection.Backlog, projection.currentSection)
+    }
+
+    @Test
+    fun `a completely empty backlog shows nothing and starts on the backlog section`() {
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = emptyList(),
+        )
+
+        assertTrue(projection.backlogIsEmpty)
+        assertTrue(projection.archivedIsEmpty)
+        assertTrue(projection.bothAreEmpty)
+        assertFalse(projection.hasAnyContent)
+        assertEquals(BacklogSection.Backlog, projection.currentSection)
+    }
+
+    @Test
+    fun `archived items come back newest first`() {
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 1, 10)),
+                item("TT-2", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 3, 1)),
+                item("TT-3", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 2, 15)),
+            ),
+        )
+
+        assertEquals(listOf("TT-2", "TT-3", "TT-1"), keys(projection.archived))
+    }
+
+    @Test
+    fun `the sectioned backlog stays the same when dual-authored closed items share a moment`() {
+        // Closed is a `data class`-derivable partition, like the backlog's untriaged. When
+        // two items close at the same instant the secondary sort is the wire value, which is
+        // stable and so deterministic per fixture. The point is the same order every read:
+        // a backlog section that re-sorts on its own would disagree with a test that reads
+        // the domain value.
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 3, 14)),
+                item("TT-2", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 3, 14)),
+            ),
+        )
+
+        assertEquals(listOf("TT-1", "TT-2"), keys(projection.archived))
+        assertEquals(BacklogSectionedProjection(null, items), BacklogSectionedProjection(null, items))
+    }
+
     // MARK: Archive
 
     @Test

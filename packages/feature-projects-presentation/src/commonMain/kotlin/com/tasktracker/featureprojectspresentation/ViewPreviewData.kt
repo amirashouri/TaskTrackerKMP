@@ -18,6 +18,7 @@ import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogProjection
+import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -294,11 +295,18 @@ object ViewPreviewData {
     fun emptyBoardProjection(project: Project = seededProject): BoardProjection =
         BoardProjection(project = project, items = emptyList())
 
-    /** A backlog with two untriaged tasks. */
+    /** A backlog with two untriaged tasks and one already filed away. */
     fun backlogProjection(project: Project = seededProject): BacklogProjection = BacklogProjection(
         project = project,
         items = workItems.filter { it.projectID == project.id },
     )
+
+    /** The same work, split into the backlog tab's two sections. */
+    fun backlogSectionedProjection(project: Project = seededProject): BacklogSectionedProjection =
+        BacklogSectionedProjection(
+            project = project,
+            items = workItems.filter { it.projectID == project.id },
+        )
 
     /** Rows for the projects list, newest activity first. */
     fun summaries(): List<ProjectSummary> = listOf(

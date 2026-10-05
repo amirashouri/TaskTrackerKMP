@@ -181,7 +181,7 @@ class ArchiveRoundTripTest {
         backlog.observe(eagerScope())
         board.observe(eagerScope())
 
-        val backlogItem = backlog.projection.untriaged.first()
+        val backlogItem = backlog.projection.backlog.first()
         val boardItem = board.projection.items.first { it.status.appearsOnBoard }
 
         assertTrue(backlog.fileAway(backlogItem.id), "the backlog's own verb files away")
@@ -243,13 +243,13 @@ class ArchiveRoundTripTest {
             dateProvider = TestDateProvider(ViewPreviewData.instant),
         )
         backlog.observe(eagerScope())
-        val startingCount = backlog.projection.untriaged.size
+        val startingCount = backlog.projection.backlog.size
         assertTrue(startingCount > 0, "the fixture has something to triage")
 
-        val target: WorkItem = backlog.projection.untriaged.first()
+        val target: WorkItem = backlog.projection.backlog.first()
         backlog.fileAway(target.id)
 
-        assertEquals(startingCount - 1, backlog.projection.untriaged.size)
-        assertTrue(backlog.projection.untriaged.none { it.id == target.id })
+        assertEquals(startingCount - 1, backlog.projection.backlog.size)
+        assertTrue(backlog.projection.backlog.none { it.id == target.id })
     }
 }

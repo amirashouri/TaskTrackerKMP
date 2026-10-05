@@ -16,10 +16,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The backlog: the untriaged end of a project, and the two ways work leaves it.
+ * The backlog tab: the untriaged work, the work filed away from it, and the two ways work
+ * leaves the first.
  *
  * Both actions here are one-way, so the tests are about the *refusals* as much as the
  * successes - each of them refuses on an item that has already been dealt with.
+ *
+ * The tab now splits into two sections - backlog and archived - but the model beneath it has
+ * not changed its verbs: "put on board" still moves a backlogged task to `Todo`, and
+ * "file away" still moves it to `Closed`. The sections are a view-layer split, and the only
+ * model behaviour they add is that filing a backlogged task moves it from the backlog section
+ * into the archived section of the same tab.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectBacklogModelTest {
@@ -49,9 +56,9 @@ class ProjectBacklogModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertEquals(listOf("AP-1"), model.projection.untriaged.map { it.key.toString() })
-        assertEquals(1, model.projection.itemCount)
-        assertFalse(model.projection.isEmpty)
+        assertEquals(listOf("AP-1"), model.projection.backlog.map { it.key.toString() })
+        assertEquals(1, model.projection.backlogItemCount)
+        assertFalse(model.projection.backlogIsEmpty)
     }
 
     @Test
@@ -64,8 +71,9 @@ class ProjectBacklogModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertTrue(model.projection.isEmpty)
-        assertEquals(0, model.projection.itemCount)
+        assertTrue(model.projection.backlogIsEmpty)
+        assertTrue(model.projection.archivedIsEmpty)
+        assertEquals(0, model.projection.totalItemCount)
     }
 
     @Test
@@ -100,8 +108,8 @@ class ProjectBacklogModelTest {
 
         assertTrue(repository.writes.contains("moveWorkItem:Todo"))
         assertNull(model.busyItemID)
-        // And it has left the backlog, so the list is not showing work the board now owns.
-        assertTrue(model.projection.untriaged.isEmpty())
+        // And it has left the backlog section, so this tab is not showing work the board now owns.
+        assertTrue(model.projection.backlogIsEmpty)
     }
 
     @Test
@@ -121,7 +129,7 @@ class ProjectBacklogModelTest {
         advanceUntilIdle()
 
         assertEquals(AppError.Offline.message, model.errorMessage)
-        assertEquals(1, model.projection.itemCount)
+        assertEquals(1, model.projection.backlogItemCount)
         assertNull(model.busyItemID)
     }
 
@@ -143,7 +151,7 @@ class ProjectBacklogModelTest {
         advanceUntilIdle()
 
         assertTrue(repository.writes.any { it == "moveWorkItem:Closed" })
-        assertTrue(model.projection.isEmpty)
+        assertTrue(model.projection.backlogIsEmpty)
     }
 
     /**

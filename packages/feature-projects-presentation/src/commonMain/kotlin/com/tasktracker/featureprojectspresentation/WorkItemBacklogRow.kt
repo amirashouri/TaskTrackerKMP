@@ -149,9 +149,11 @@ private fun WorkItemBacklogRowPreview() = ProjectsPreview(ThemeScheme.Dark) {
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        ViewPreviewData.backlogProjection().untriaged.forEach { item ->
+        ViewPreviewData.backlogProjection().items
+            .filter { it.status == com.tasktracker.domain.WorkItemStatus.Backlog }
+            .forEach { workItem ->
             WorkItemBacklogRow(
-                item = item,
+                item = workItem,
                 onPutOnBoard = {},
                 onFileAway = {},
             )

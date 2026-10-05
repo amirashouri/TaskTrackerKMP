@@ -9,6 +9,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.BacklogProjection
+import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectsdomain.MoveWorkItem
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
@@ -46,8 +47,23 @@ class ProjectBacklogModel(
     private val moveWorkItem = MoveWorkItem(repository, dateProvider)
     private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
 
-    /** The backlog, or an empty projection until the first read. */
-    var projection: BacklogProjection by mutableStateOf(BacklogProjection(project = null, items = emptyList()))
+    /**
+     * The backlog, or an empty projection until the first read.
+     *
+     * Two sections — backlog and archived — because the backlog tab now answers "what still
+     * needs doing" and "what was filed away from here" without leaving the tab. The backlog
+     * section is `WorkItemStatus.Backlog` only and the archived section is `WorkItemStatus.Closed`
+     * only, so the two stay disjoint by construction and neither re-lists a card the board is
+     * already showing.
+     *
+     * A `data class` value over the same input the rest of the app uses, so a section switch
+     * that does not change the underlying items does not recompute the partitions — only the
+     * selected section changes, which is one of the cheap recompositions this screen is built
+     * to make.
+     */
+    var projection: BacklogSectionedProjection by mutableStateOf(
+        BacklogSectionedProjection(project = null, items = emptyList()),
+    )
         private set
 
     /** The row currently being acted on, so it can show the wait. `null` when idle. */
@@ -58,7 +74,7 @@ class ProjectBacklogModel(
         change.projectID == null || change.projectID == projectID
 
     override suspend fun reload() {
-        projection = BacklogProjection(
+        projection = BacklogSectionedProjection(
             project = repository.project(projectID),
             items = repository.workItems(projectID),
         )

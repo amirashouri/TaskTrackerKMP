@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -524,6 +525,7 @@ fun <Option> TTGlassSegmentedPicker(
     onSelect: (Option) -> Unit,
     modifier: Modifier = Modifier,
     tint: Color? = null,
+    testTag: @Composable (Option) -> String? = { null },
     // `@Composable`, not a plain lambda. Every label in this app comes from a string
     // resource, and `stringResource` is `@Composable` - so a non-composable `title` makes
     // the control unusable for its actual purpose, and the only way out is for a caller to
@@ -550,13 +552,14 @@ fun <Option> TTGlassSegmentedPicker(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (option in options) {
+            val optionTestTag = testTag(option)
             Segment(
                 label = title(option),
                 isSelected = option == selection,
                 accent = accent,
                 canvas = canvas,
                 onClick = { onSelect(option) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).let { if (optionTestTag != null) it.testTag(optionTestTag) else it },
             )
         }
     }

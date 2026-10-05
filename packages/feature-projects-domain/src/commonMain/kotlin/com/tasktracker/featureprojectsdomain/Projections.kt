@@ -5,6 +5,8 @@ import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemGrouping
+import com.tasktracker.domain.WorkItemStatus
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.onDay
@@ -38,97 +40,91 @@ data class BoardProjection(
 
     val columns: List<BoardColumn> = WorkItemGrouping.boardColumns(items)
 
-    /** Total cards across every column, for a dashboard badge. */
-    val itemCount: Int get() = columns.sumOf { it.count }
+    val isEmpty: Boolean get() = columns.all { it.items.isEmpty() }
+
+    val itemCount: Int get() = columns.sumOf { it.items.size }
 }
 
 /**
- * The backlog as the view layer wants it: the work that has not been put on a board yet.
- *
- * Flat, where it used to be sectioned. Two sections only made sense while the second one
- * held in-flight work borrowed from the board's columns, and that borrowed set is exactly
- * what caused the bug: the backlog listed cards the board was already showing. With only
- * `Backlog` items here, every one of them is somewhere the board is not, so there is
- * nothing left to divide.
+ * The backlog: only the untriaged work.
  */
 data class BacklogProjection(
     val project: Project?,
     val items: List<WorkItem>,
 ) {
-
     val untriaged: List<WorkItem> = WorkItemGrouping.untriaged(items)
-
     val itemCount: Int get() = untriaged.size
-
     val isEmpty: Boolean get() = untriaged.isEmpty()
 }
 
 /**
- * The archive as the view layer wants it: finished and closed work, by the month it left
- * the flow.
+ * A month's worth of resolved work, used by [ArchiveProjection].
  *
- * @param timeZone the zone months are cut on. Injectable so a test can pin it, and
- *   because a month boundary is a real answer that depends on the answerer: an instant at
- *   23:30 UTC on the last day of a month falls in the *next* month for anyone a few hours
- *   east, and the same archive would then list one item under two different sections.
+ * The items are already sorted newest-first by [ArchiveProjection], so this does not
+ * repeat that order — it is just a grouping boundary.
+ */
+data class Month(
+    val monthStart: Instant,
+    val items: List<WorkItem>,
+) {
+    val count: Int get() = items.size
+}
+
+/**
+ * The archive: all resolved (done or closed) work, grouped by month.
  *
- *   The original passed a `Calendar` and defaulted it to `.current`. A [TimeZone] is the
- *   narrower thing that actually changes the answer — of a `Calendar`, only the zone
- *   participates in where the cut falls; its calendar system and locale do not, because
- *   the grouping reads year and month as numbers and never formats anything.
- *
- *   Kept as a property rather than consumed and forgotten, so that equality stays honest:
- *   the same items cut in two zones really are two different projections, and pretending
- *   otherwise would let a locale change leave a stale grouping on screen.
+ * Sorted newest-first, because an archive is read backwards, from now towards the past.
  */
 data class ArchiveProjection(
     val project: Project?,
     val items: List<WorkItem>,
-    val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    val timeZone: TimeZone,
 ) {
-
-    /** One month's worth of resolved work. */
-    data class Month(
-        /**
-         * The first instant of the month, and the section's identity.
-         *
-         * An instant rather than a formatted title so that grouping is a comparison of
-         * instants and the wording stays the view's decision. A locale-sensitive string
-         * would be an identity that changed when the device's language did, turning every
-         * list key and every lazy-list item id into something that has to be re-keyed on a
-         * locale change.
-         *
-         * The view recovers the calendar month from this with its own zone, which is
-         * correct: the section header is a caption, and the caption's wording and calendar
-         * are the view's decisions, not the grouping's.
-         */
-        val monthStart: Instant,
-        val items: List<WorkItem>,
-    ) {
-        val count: Int get() = items.size
-    }
-
-    val months: List<Month> = WorkItemGrouping.resolved(items)
+    val months: List<Month> = items
+        .filter { it.status.isTerminal }
         .groupBy { it.archivedOn.startOfMonthIn(timeZone) }
         .map { (monthStart, monthItems) -> Month(monthStart, monthItems) }
-        // Newest month first: an archive is read backwards, from now towards the past.
         .sortedByDescending { it.monthStart }
 
     val itemCount: Int get() = months.sumOf { it.count }
-
     val isEmpty: Boolean get() = itemCount == 0
 }
 
 /**
+ * The backlog as two sections: the untriaged work, and the work already filed away.
+ */
+enum class BacklogSection {
+    /** The tasks that have not been put on a board yet. */
+    Backlog,
+
+    /** Tasks filed away into the archive — the `Closed`-only section of this tab. */
+    Archived,
+}
+
+/**
+ * Two partitions of the same project work, for the backlog tab's two sections.
+ */
+data class BacklogSectionedProjection(
+    val project: Project?,
+    val items: List<WorkItem>,
+) {
+    val backlog: List<WorkItem> = WorkItemGrouping.untriaged(items)
+    val archived: List<WorkItem> = items
+        .filter { it.status == WorkItemStatus.Closed }
+        .sortedByDescending { it.archivedOn.epochSeconds }
+
+    val currentSection: BacklogSection = BacklogSection.Backlog
+    val backlogItemCount: Int get() = backlog.size
+    val archivedItemCount: Int get() = archived.size
+    val totalItemCount: Int get() = backlogItemCount + archivedItemCount
+    val backlogIsEmpty: Boolean get() = backlog.isEmpty()
+    val archivedIsEmpty: Boolean get() = archived.isEmpty()
+    val bothAreEmpty: Boolean get() = backlogIsEmpty && archivedIsEmpty
+    val hasAnyContent: Boolean get() = !(backlogIsEmpty && archivedIsEmpty)
+}
+
+/**
  * A one-line description of a project for a list row.
- *
- * A projection rather than a `Project` with a count bolted on, so a list row's shape is
- * stated once here instead of every screen remembering which six fields it wanted.
- *
- * The fields are copied rather than delegated to the [Project] because `Project` is
- * mutable: a summary that read straight through to it would change under the row that is
- * already displaying it, and the list would need a `State` around a value it believes is
- * immutable.
  */
 data class ProjectSummary(
     val id: ProjectID,
@@ -138,7 +134,6 @@ data class ProjectSummary(
     val isArchived: Boolean,
     val itemCount: Int,
 ) {
-
     constructor(project: Project, itemCount: Int) : this(
         id = project.id,
         keyPrefix = project.keyPrefix,
@@ -151,15 +146,6 @@ data class ProjectSummary(
 
 /**
  * The first instant of the month this falls in, as seen in [timeZone].
- *
- * Taken as a local date first and then cut the month on it, rather than done in UTC: UTC
- * would silently file every item in a zone behind UTC under the previous month for the
- * first few hours of the month, which is the bug the injected zone exists to rule out.
- *
- * Uses [kotlinx.datetime.atStartOfDayIn] rather than assuming the first instant of a
- * month is midnight, because that assumption is false in any zone whose offset changes
- * within the month — the day a zone springs forward is twenty-three hours long, and its
- * midnight belongs to the day before.
  */
 private fun Instant.startOfMonthIn(timeZone: TimeZone): Instant =
     toLocalDateTime(timeZone).date.yearMonth.onDay(1).atStartOfDayIn(timeZone)
