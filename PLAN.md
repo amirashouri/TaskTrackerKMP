@@ -5501,11 +5501,44 @@ under 24.1. The `NavigationHost` `activeSprint` wire lands on the Board tab but 
 until `:shared-ui` compiles — same blocker; the wire is two lines.
 
 ### 24.3 A task added without an active sprint lands on the Kanban board
-- [ ] **24.3.1** Write the failing test first: board with `activeSprint == null` → add task in a
+
+**Both done.** With no sprint running, the board host seeds the editor with
+`initialSprintID = activeSprint?.id` (null) and the lane's status; `SaveWorkItem` writes both
+through. Nothing needed fixing — §19 pins the sprint-carrying side (`WorkItemEditorModelTest` and
+`ProjectUseCasesTest`), and `the board falls back to all project work items when no active sprint
+exists` pins the filter's open side. What no test held was the **round trip**: the composition the
+hosts actually perform, which is where a regression would most likely be introduced (scissoring
+the sprint seed, as §19's bug did, or over-applying the filter).
+
+- [x] **24.3.1** Write the failing test first: board with `activeSprint == null` → add task in a
       lane → item keeps its lane status, `sprintID == null`, and appears on the board, unchanged
       by the board screen's sprint filter.
-- [ ] **24.3.2** If already green, the deliverable is the mutation-checked pin; if red, fix the
+- [x] **24.3.2** If already green, the deliverable is the mutation-checked pin; if red, fix the
       create path (`SaveWorkItem`, `WorkItemEditorModel.save`) until the invariant holds.
+
+#### Test
+
+`a task added from a sprintless board keeps its lane status and shows up on the board` in
+`ProjectBoardModelTest` composes `ProjectBoardModel` and `WorkItemEditorModel` exactly as the two
+hosts do — `initialStatus = WorkItemStatus.Todo`, `initialSprintID = board.activeSprint?.id` —
+saves, advances the board's reload, and asserts all three halves: the item keeps its lane status,
+keeps `sprintID == null`, and sits in the board's Todo column. It runs on all three hosts via
+`commonTest` (the UI scenarios on the Android host — the unrelated 3 below — are unaffected).
+
+#### Mutation
+
+Two mutations, both caught, both red on no other test:
+
+1. Dropping `initialStatus` from the editor's status init (`existing?.status ?: initialStatus
+   ?: Backlog`) → the new task is created Backlog → fails `expected:<Todo> but was:<Backlog>`
+   and the board column. Prior coverage missed this because every existing editor test creates
+   with the default status.
+2. Making the no-sprint filter hide sprintless items (`rawItems.filter { it.sprintID != null }`)
+   → the Todo column is empty (silently, the save having "succeeded") → fails the board
+   assertion naming all four empty columns. (The inverse filter — show only sprintless items —
+   turns out to *preserve* the invariant and was rejected as a mutation for that reason.)
+
+Restored, green on JVM, iOS simulator, and Android host. JVM module: 218 → **219**, 0 failures.
 
 ### 24.4 The backlog gains a Kanban segment
 - [ ] **24.4.1** `Projections.kt`: `BacklogSection.Kanban`; partition = `status.appearsOnBoard`

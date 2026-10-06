@@ -321,6 +321,58 @@ class ProjectBoardModelTest {
         assertNull(model.activeSprint)
         assertEquals(2, model.projection.itemCount)
     }
+
+    /**
+     * The invariant 24.3 exists to pin: a lane-add on a sprintless board must survive the
+     * round trip. The board host seeds the editor with `initialSprintID = activeSprint?.id`
+     * (NavigationHost) or the same value handed to `onAddTask` (ProjectsHost) — both null
+     * here — and the lane's status. If either is dropped on the way into `SaveWorkItem`, the
+     * task saves into the store but never shows up: an identical bug to the sprint-board one
+     * §19 documents, just on the far side of the sprint filter. So the test composes the two
+     * models exactly as the hosts do, and asserts the item keeps both create-time facts and
+     * lands on the board in the column belonging to the lane it was added from.
+     */
+    @Test
+    fun `a task added from a sprintless board keeps its lane status and shows up on the board`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+
+        val board = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        board.observe(eagerScope())
+        advanceUntilIdle()
+        assertNull(board.activeSprint)
+
+        val editor = WorkItemEditorModel(
+            projectID = project.id,
+            existing = null,
+            repository = repository,
+            dateProvider = TestDateProvider(now),
+            initialStatus = WorkItemStatus.Todo,
+            initialSprintID = board.activeSprint?.id,
+        )
+        editor.onTitleChanged("Sprintless board task")
+        assertNotNull(editor.save())
+        advanceUntilIdle()
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals(
+            WorkItemStatus.Todo,
+            stored.status,
+            "a lane-add must keep the lane status it was created with",
+        )
+        assertNull(
+            stored.sprintID,
+            "with no active sprint the add must join no sprint",
+        )
+
+        val column = board.projection.columns.single { it.status == stored.status }
+        assertTrue(
+            column.items.any { it.id == stored.id },
+            "the new task must appear on the board in the lane it was added from; columns were ${board.projection.columns}",
+        )
+    }
 }
 
 private fun repositoryClock(): kotlin.time.Instant = kotlin.time.Instant.fromEpochSeconds(1_760_000_000)
