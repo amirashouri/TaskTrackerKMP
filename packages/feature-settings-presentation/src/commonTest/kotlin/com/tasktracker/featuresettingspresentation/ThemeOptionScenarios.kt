@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -32,48 +31,46 @@ import kotlin.math.roundToInt
 import kotlin.test.assertTrue
 
 /**
- * The theme dropdown's selection ring and the accent caption, as scenarios.
+ * The theme dropdown's selection wash and the accent caption, as scenarios.
  *
- * ## Why the ring is measured and not read off the modifier chain
+ * ## Why the wash is measured and not read off the modifier chain
  *
- * "The selected option has a width-2 accent ring" is spelled in the code, but spelling is not
- * drawing: the ring is a `border` on a row the test cannot see through semantics, and a
- * source-level assertion could not tell it apart from a ring the compositor dropped. This is
- * the case the repo's pixel rule exists for — a hairline whose absence reads as a defect
- * (`rendered-ui-measurement`). The ring lives on a `Popup` in the real screen, though, and a
- * popup is a second composition root; mapping its coordinates onto a captured frame is exactly
- * the guesswork `MonthArrowRenderTest` warns about. So the scenario does what that test does
- * for `TTDayGrid`: it composes the extracted [ThemePickerOption] in the *main* root, where
- * bounds and frame share one coordinate space, and reads the ring there.
+ * "The selected option carries an accent wash at [SelectedOptionFillAlpha]" is spelled in the
+ * code, but spelling is not drawing: the wash is a colour-and-alpha change on a row the test
+ * cannot see through semantics, and a source-level assertion could not tell it apart from one
+ * the compositor dropped. This is the case the repo's pixel rule exists for — a fill whose
+ * absence reads as a defect (`rendered-ui-measurement`). The wash lives on a `Popup` in the
+ * real screen, though, and a popup is a second composition root; mapping its coordinates onto a
+ * captured frame is exactly the guesswork `MonthArrowRenderTest` warns about. So the scenario
+ * does what that test does for `TTDayGrid`: it composes the extracted [ThemePickerOption] in
+ * the *main* root, where bounds and frame share one coordinate space, and reads the wash there.
  *
- * ## Two rows, one assertion each
+ * ## Two rows, one assertion each, both measured against the known backdrop
  *
- * The selected option's ring is `ttAccent()` and the others' is `ttSeparator()` — the same
- * vocabulary the accent-palette circles use. Sampling only the top edge keeps the title and
- * check-mark ink out of the measurement: in the dark theme the selected title is *also* accent
- * coloured, so a whole-row sample would pass a ringless option that still showed an accent
- * title. The top four pixels of a 48dp-tall row contain no text.
+ * The scenario composes over an opaque [OptionBackdrop], so "painted" is a distance from one
+ * known colour rather than from an expectation. Sampling only the top edge keeps the title ink
+ * out of the measurement: in the dark theme the selected title is *also* accent coloured, so a
+ * whole-row sample would pass a rowless-wash option that still showed an accent title. The top
+ * six pixels of a 48dp-tall row contain no text — and none of the rounded corner, which is why
+ * the bar for "painted" sits at 400 rather than at the strip's full width.
  *
- * The thresholds at the bottom are generous on purpose. The ring is 2px of near-pure accent at
- * the host density against a near-black backdrop, so any count above noise is a real ring; the
- * bar is set high enough that an absent ring cannot cross it and low enough that two
- * rasterisers cannot argue about it.
+ * The unselected assertion is the one that holds the removal: the option used to carry a
+ * 1/2dp capsule border, and a hairline back on an unselected row is painted pixels along the
+ * same edge, so it crosses the ≤16 bar the backdrop itself sits far under.
  */
 @OptIn(ExperimentalTestApi::class)
 object ThemeOptionScenarios {
 
-    /** The selected theme option paints an accent ring; the others paint none. */
-    val theSelectedSchemeOptionDrawsAnAccentRing: suspend ComposeUiTest.() -> Unit = {
+    /** The selected theme option is washed in accent; the others paint nothing at all. */
+    val theSelectedSchemeOptionIsWashedWithAccent: suspend ComposeUiTest.() -> Unit = {
         if (!thisHostRasterisesText()) {
-            println("skipped: the Android host rasterises differently from Skia, so the ring is not measured there")
+            println("skipped: the Android host rasterises differently from Skia, so the wash is not measured there")
         } else {
-            var accent = Color.Transparent
             setContent {
                 ttTheme(ThemeScheme.Dark) {
-                    accent = ttAccent()
-                    // Opaque paper, so the ring is read against a known backdrop instead of
+                    // Opaque paper, so the wash is read against a known backdrop instead of
                     // whatever the transparent area of a captured frame shows through to.
-                    Box(modifier = Modifier.fillMaxSize().background(Color(0xFF1B1B1F))) {
+                    Box(modifier = Modifier.fillMaxSize().background(OptionBackdrop)) {
                         Column(modifier = Modifier.width(216.dp)) {
                             ThemePickerOption(
                                 scheme = ThemeScheme.System,
@@ -97,25 +94,26 @@ object ThemeOptionScenarios {
             val selected = onNodeWithTag(ThemeOptionTag(ThemeScheme.System)).getBoundsInRoot()
             val unselected = onNodeWithTag(ThemeOptionTag(ThemeScheme.Light)).getBoundsInRoot()
 
-            val selectedRing = accentPixelsAlongTopEdge(frame, selected, scale, accent, insetRows = 0)
-            // The rows are flush, so the selected row's *bottom* accent ring antialiases a row
-            // or two into the next row's bounds. The unselected scan starts two rows inside its
-            // own edge so that bleed is not read as an accent ring on the row below it.
-            val unselectedRing = accentPixelsAlongTopEdge(frame, unselected, scale, accent, insetRows = 2)
+            val selectedPainted = paintedPixelsAlongTopEdge(frame, selected, scale, insetRows = 0)
+            // The rows are flush, so the selected row's wash edge antialiases a row or two into
+            // the next row's bounds. The unselected scan starts two rows inside its own edge so
+            // that bleed is not read as paint on the row below it.
+            val unselectedPainted = paintedPixelsAlongTopEdge(frame, unselected, scale, insetRows = 2)
 
             assertTrue(
-                selectedRing >= 200,
-                "the selected theme option painted only $selectedRing accent-coloured pixels " +
-                    "along its frame. A ringless row is indistinguishable from the glass, which " +
-                    "is exactly the bug reported — the check mark and accent title alone were " +
-                    "not finding the selected option. Expected a 2px accent ring across the " +
-                    "216px row (roughly 430 pixels), saw $selectedRing",
+                selectedPainted >= 400,
+                "the selected theme option painted only $selectedPainted pixels of its top strip " +
+                    "against the $OptionBackdrop backdrop. A washless row is indistinguishable " +
+                    "from the glass, which is exactly the defect the ring used to prevent and " +
+                    "the accent title alone does not prevent — expected the accent-at-" +
+                    "${(SelectedOptionFillAlpha * 100).toInt()}% wash across a 216px row minus " +
+                    "its rounded corners (roughly 1000 pixels), saw $selectedPainted",
             )
             assertTrue(
-                unselectedRing <= 16,
-                "the unselected theme option painted $unselectedRing accent-coloured pixels " +
-                    "along its frame, but its ring is ttSeparator(), which is grey. An " +
-                    "accent-coloured ring on every option would defeat the point of the border",
+                unselectedPainted <= 16,
+                "the unselected theme option painted $unselectedPainted pixels of its top strip " +
+                    "against the $OptionBackdrop backdrop, but it has no wash and no border — " +
+                    "anything above backdrop noise is the capsule border creeping back",
             )
         }
     }
@@ -174,19 +172,17 @@ object ThemeOptionScenarios {
     // --- measurement ------------------------------------------------------------------------------
 
     /**
-     * How many pixels in a strip just inside the row's top edge are near-enough to [accent] to
-     * be the ring.
+     * How many pixels in a strip just inside the row's top edge differ from [OptionBackdrop].
      *
-     * The strip is [STRIP_ROWS] rows deep: enough for a 2dp ring plus the clip's own
-     * antialiasing at any host density, and text never reaches it. [insetRows] rows are
-     * skipped at the top so a flush neighbour's ring antialiasing is not counted — see the
-     * caller.
+     * The strip is [STRIP_ROWS] rows deep: deep enough for the wash plus the clip's own
+     * antialiasing at any host density, and shallow enough that text never reaches it.
+     * [insetRows] rows are skipped at the top so a flush neighbour's edge antialiasing is not
+     * counted — see the caller.
      */
-    private fun accentPixelsAlongTopEdge(
+    private fun paintedPixelsAlongTopEdge(
         frame: PixelMap,
         bounds: DpRect,
         scale: Float,
-        accent: Color,
         insetRows: Int,
     ): Int {
         val left = (bounds.left.value * scale).toInt().coerceAtLeast(0)
@@ -197,11 +193,23 @@ object ThemeOptionScenarios {
         var count = 0
         for (y in strip..bottom) {
             for (x in left..right) {
-                if (channelDistance(frame[x, y], accent) <= 64) count++
+                if (channelDistance(frame[x, y], OptionBackdrop) > PAINTED_BAR) count++
             }
         }
         return count
     }
+
+    /** The known backdrop the rows are composed over, so "painted" is one distance from it. */
+    private val OptionBackdrop = Color(0xFF1B1B1F)
+
+    /**
+     * Distance from the backdrop above which a pixel counts as painted, measured rather than
+     * guessed: at [SelectedOptionFillAlpha] over 0xFF1B1B1F the *dimmest* palette's dark
+     * accent — the default Classic, 0xFF5F6873 — composites to a distance of 21, and the
+     * palette sweep runs 21…47. Backdrop pixels are exactly 0, so 12 sits between the two
+     * with margin on both sides.
+     */
+    private const val PAINTED_BAR = 12
 
     private const val STRIP_ROWS = 6
 

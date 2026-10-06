@@ -55,6 +55,14 @@ class SettingsViewAndroidHostTest {
     fun theVersionRowHidesItselfWithNoVersion() =
         runComposeUiTest(block = SettingsScenarios.theVersionRowHidesItselfWithNoVersion)
 
+    @Test
+    fun theUserDetailsSectionIsOnThePage() =
+        runComposeUiTest(block = SettingsScenarios.theUserDetailsSectionIsOnThePage)
+
+    @Test
+    fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
+        runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
+
     /**
      * [GlassIntensityScenarios] on the Android host.
      *
@@ -83,14 +91,14 @@ class SettingsViewAndroidHostTest {
     /**
      * [ThemeOptionScenarios] on the Android host.
      *
-     * The caption scenario runs here. The ring scenario measures rendered pixels and skips on
+     * The caption scenario runs here. The wash scenario measures rendered pixels and skips on
      * this host (the skip records as a pass) because Robolectric's rasteriser disagrees with
      * Skia — same reason as the design system's own pixel gates.
      */
 
     @Test
-    fun theSelectedSchemeOptionDrawsAnAccentRing() =
-        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+    fun theSelectedSchemeOptionIsWashedWithAccent() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent)
 
     @Test
     fun theLongAccentCaptionWrapsInsteadOfClipping() =

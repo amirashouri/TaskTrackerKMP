@@ -9,6 +9,7 @@ import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncNow
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +69,9 @@ class SettingsModel(private val port: SettingsPort) {
     var isForceOffline: Boolean by mutableStateOf(false)
         private set
 
+    var userDetails: UserDetails by mutableStateOf(UserDetails())
+        private set
+
     /** Read once, because a running app's version cannot change. */
     val version: AppVersion = port.appVersion()
 
@@ -87,8 +91,10 @@ class SettingsModel(private val port: SettingsPort) {
             reload()
             val connectivityUpdates: Flow<ConnectivitySummary> = port.connectivityUpdates()
             val syncUpdates: Flow<SyncActivity> = port.syncUpdates()
+            val userDetailsUpdates: Flow<UserDetails> = port.userDetailsUpdates()
             launch { connectivityUpdates.collect { connectivity = it } }
             launch { syncUpdates.collect { activity = it } }
+            launch { userDetailsUpdates.collect { userDetails = it } }
         }
     }
 
@@ -101,6 +107,7 @@ class SettingsModel(private val port: SettingsPort) {
     suspend fun reload() {
         connectivity = port.connectivity()
         activity = port.syncActivity()
+        userDetails = port.userDetails()
     }
 
     // MARK: - Commands
@@ -137,6 +144,15 @@ class SettingsModel(private val port: SettingsPort) {
      */
     suspend fun signOut() {
         port.endSession()
+    }
+
+    suspend fun applyUserDetails(details: UserDetails) {
+        userDetails = details
+        port.setUserDetails(details)
+    }
+
+    fun restoreUserDetails(details: UserDetails) {
+        userDetails = details
     }
 
     /** Clears [commandOutcome], for a screen that shows the banner only until it is read. */

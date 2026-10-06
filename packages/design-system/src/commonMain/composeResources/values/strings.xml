@@ -371,6 +371,16 @@
     -->
     <string name="settings_title">Settings</string>
     <string name="settings_appearance_section">Appearance</string>
+    <string name="settings_user_details_section">User details</string>
+    <string name="settings_fullname_label">Full name</string>
+    <string name="settings_avatar_label">Avatar</string>
+    <string name="settings_position_label">Position</string>
+    <string name="settings_position_developer">Developer</string>
+    <string name="settings_position_designer">Designer</string>
+    <string name="settings_position_product_owner">Product owner</string>
+    <string name="settings_position_data_engineer">Data engineer</string>
+    <string name="settings_position_manager">Manager</string>
+
     <string name="settings_theme_label">Theme</string>
     <!--
       The glass amount. The label is the noun on its own rather than "Glass effect", because

@@ -5,6 +5,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -100,8 +101,15 @@ class PreviewSettingsPort(
 
     override suspend fun endSession() = Unit
 
-    override fun appVersion(): AppVersion = version
+        override fun appVersion(): AppVersion = version
+
+    override suspend fun userDetails(): UserDetails = UserDetails()
+
+    override fun userDetailsUpdates(): kotlinx.coroutines.flow.Flow<UserDetails> = kotlinx.coroutines.flow.flowOf(UserDetails())
+
+    override suspend fun setUserDetails(details: UserDetails) = Unit
 }
+
 
 @Preview(name = "Settings, quiet", showBackground = true)
 @Composable

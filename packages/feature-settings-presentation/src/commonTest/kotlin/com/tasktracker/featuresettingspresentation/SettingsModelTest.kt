@@ -5,6 +5,7 @@ import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -269,4 +270,11 @@ class RecordingSettingsPort(
         versionReads++
         return version
     }
+
+    override suspend fun userDetails(): UserDetails = UserDetails()
+
+    override fun userDetailsUpdates(): kotlinx.coroutines.flow.Flow<UserDetails> = kotlinx.coroutines.flow.flowOf(UserDetails())
+
+    override suspend fun setUserDetails(details: UserDetails) = Unit
 }
+

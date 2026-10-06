@@ -1229,6 +1229,11 @@ private fun SettingsDestination(
         // to know what a session is. The graph binds that call to the session coordinator, so
         // this is the tap on the control that did not exist when the header was removed.
         onSignOut = { scope.launch { model.signOut() } },
+        // Read from the model's observed state and written through `applyUserDetails`, which
+        // both updates the state and dispatches to the port — a write that only touched the
+        // state would look correct until the next reload put the stored value back.
+        userDetails = model.userDetails,
+        onUserDetailsChange = { details -> scope.launch { model.applyUserDetails(details) } },
     )
 }
 

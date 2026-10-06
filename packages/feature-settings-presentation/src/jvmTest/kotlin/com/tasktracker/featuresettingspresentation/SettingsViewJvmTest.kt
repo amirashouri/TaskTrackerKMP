@@ -48,6 +48,14 @@ class SettingsViewJvmTest {
     fun theVersionRowHidesItselfWithNoVersion() =
         runComposeUiTest(block = SettingsScenarios.theVersionRowHidesItselfWithNoVersion)
 
+    @Test
+    fun theUserDetailsSectionIsOnThePage() =
+        runComposeUiTest(block = SettingsScenarios.theUserDetailsSectionIsOnThePage)
+
+    @Test
+    fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
+        runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
+
     /**
      * [GlassIntensityScenarios] on the JVM.
      *
@@ -76,13 +84,13 @@ class SettingsViewJvmTest {
     /**
      * [ThemeOptionScenarios] on the JVM.
      *
-     * The ring scenario reads rendered pixels, so it runs only where a frame can be measured —
+     * The wash scenario reads rendered pixels, so it runs only where a frame can be measured —
      * see [com.tasktracker.designsystem.TextRasterSupport] for why the Android host skips it.
      */
 
     @Test
-    fun theSelectedSchemeOptionDrawsAnAccentRing() =
-        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+    fun theSelectedSchemeOptionIsWashedWithAccent() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent)
 
     @Test
     fun theLongAccentCaptionWrapsInsteadOfClipping() =

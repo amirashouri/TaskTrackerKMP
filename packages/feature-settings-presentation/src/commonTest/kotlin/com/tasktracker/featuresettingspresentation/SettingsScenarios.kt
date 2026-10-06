@@ -12,12 +12,17 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
 import org.jetbrains.compose.resources.getString
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_activity_idle
@@ -26,8 +31,10 @@ import com.tasktracker.resources.settings_activity_waiting
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
+import com.tasktracker.resources.settings_position_label
 import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
+import com.tasktracker.resources.settings_user_details_section
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -84,9 +91,11 @@ object SettingsScenarios {
         // The number, not just the label: "Waiting to sync" with nothing beside it would be a
         // row that promises an answer it does not give.
         onNodeWithText("7").assertIsDisplayed()
-        onNodeWithTag(SettingsStuckRowTag).assertIsDisplayed()
+        // Scrolled because the User details header above pushed the sync section past the fold
+        // — `assertIsDisplayed` is about pixels, and a row below the fold has none.
+        onNodeWithTag(SettingsStuckRowTag).performScrollTo().assertIsDisplayed()
         onNodeWithText("2").assertIsDisplayed()
-        onNodeWithTag(SettingsFailuresTag).assertIsDisplayed()
+        onNodeWithTag(SettingsFailuresTag).performScrollTo().assertIsDisplayed()
         onNodeWithText("TT-3: the server rejected the priority value.").assertIsDisplayed()
     }
 
@@ -180,8 +189,16 @@ object SettingsScenarios {
             }
         }
 
+        // The list is scrolled *to* each control rather than the control into view: a
+        // LazyColumn that has not reached an item leaves it out of the tree entirely, so
+        // `performScrollTo` on the node itself has nothing to act on — `performScrollToNode`
+        // walks the list until the row is composed. The User details header above pushed all
+        // three rows past the fold on a short viewport.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSyncNowTag))
         onNodeWithTag(SettingsSyncNowTag).performClick()
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsForceOfflineTag))
         onNodeWithTag(SettingsForceOfflineTag).performClick()
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
         onNodeWithTag(SettingsSignOutTag).performClick()
         waitForIdle()
 
@@ -190,9 +207,81 @@ object SettingsScenarios {
         assertEquals(1, signsOut)
     }
 
+    /**
+     * The User details section leads the Settings page: its heading, the identity row and the
+     * position picker, all read **on mount, without scrolling**.
+     *
+     * The missing scroll is the assertion. A LazyColumn drops items below its composition
+     * window from the tree entirely, so these nodes exist on first frame only when the section
+     * is at the top — filed anywhere past the fold the same assertions go red with "could not
+     * find any node". `assertIsDisplayed`, not `assertExists`: existence alone would pass for a
+     * section composed one screen down.
+     */
+    val theUserDetailsSectionIsOnThePage: suspend ComposeUiTest.() -> Unit = {
+        screenShowing()
+        onNodeWithTag(SettingsUserDetailsTag).assertIsDisplayed()
+        onNodeWithTag(SettingsPositionRowTag).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_user_details_section)).assertIsDisplayed()
+        // The position picker labels itself, which is the string the section ships with.
+        onNodeWithText(getString(Res.string.settings_position_label)).assertIsDisplayed()
+    }
+
+    /**
+     * Tapping the avatar opens the portrait picker, all ten bundled portraits answer, and the
+     * choice reaches the callback as `avatarId` with the rest of the details untouched.
+     *
+     * The count matters as much as the click: a picker that rendered one swatch would pass a
+     * test that only tapped the row it happened to show. And the expected value is a whole
+     * [UserDetails], because `copy(avatarId = …)` that dropped the name would be a portrait
+     * picker that quietly renames its user.
+     */
+    val choosingAnAvatarRoutesItsIdIntoTheDetails: suspend ComposeUiTest.() -> Unit = {
+        var chosen: UserDetails? = null
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    isForceOffline = false,
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onForceOfflineChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    userDetails = UserDetails(fullName = "Sam", avatarId = null),
+                    onUserDetailsChange = { chosen = it },
+                )
+            }
+        }
+
+        // The placeholder is the button: the picker is closed until the disc is tapped.
+        onNodeWithTag(SettingsAvatarTag).assertIsDisplayed()
+        onNodeWithTag(AvatarPickerTag).assertDoesNotExist()
+
+        onNodeWithTag(SettingsAvatarTag).performClick()
+        waitForIdle()
+        onNodeWithTag(AvatarPickerTag).assertIsDisplayed()
+        (0..9).forEach { id -> onNodeWithTag(AvatarOptionTag(id)).assertExists() }
+
+        onNodeWithTag(AvatarOptionTag(7)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            UserDetails(fullName = "Sam", avatarId = 7),
+            chosen,
+            "picking portrait 7 must route details.copy(avatarId = 7) with the name intact — " +
+                "a null or partial value here is the picker silently not saving",
+        )
+        onNodeWithTag(AvatarPickerTag).assertDoesNotExist()
+    }
+
     /** The About row is present when there is a version and absent when there is not. */
     val theVersionRowHidesItselfWithNoVersion: suspend ComposeUiTest.() -> Unit = {
         screenShowing(version = SettingsPreviewData.version)
+        // 6: the User details section leads the list (index 1), pushing About to 6.
+        onNodeWithTag(SettingsScreenTag).performScrollToIndex(6)
         onNodeWithTag(SettingsVersionRowTag).assertIsDisplayed()
 
         // Remounted rather than re-composed with a new argument: `AppVersion.display` is a

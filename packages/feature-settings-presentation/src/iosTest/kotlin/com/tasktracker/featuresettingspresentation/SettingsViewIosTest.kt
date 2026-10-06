@@ -38,6 +38,14 @@ class SettingsViewIosTest {
     fun theVersionRowHidesItselfWithNoVersion() =
         runComposeUiTest(block = SettingsScenarios.theVersionRowHidesItselfWithNoVersion)
 
+    @Test
+    fun theUserDetailsSectionIsOnThePage() =
+        runComposeUiTest(block = SettingsScenarios.theUserDetailsSectionIsOnThePage)
+
+    @Test
+    fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
+        runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
+
     /**
      * [GlassIntensityScenarios] on the iOS simulator.
      *
@@ -66,12 +74,12 @@ class SettingsViewIosTest {
     /**
      * [ThemeOptionScenarios] on the iOS simulator.
      *
-     * The ring scenario reads rendered pixels — this host is one of the two that can.
+     * The wash scenario reads rendered pixels — this host is one of the two that can.
      */
 
     @Test
-    fun theSelectedSchemeOptionDrawsAnAccentRing() =
-        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+    fun theSelectedSchemeOptionIsWashedWithAccent() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent)
 
     @Test
     fun theLongAccentCaptionWrapsInsteadOfClipping() =

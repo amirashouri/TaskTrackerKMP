@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import com.tasktracker.designsystem.ThemeScheme
@@ -122,6 +123,10 @@ object GlassIntensityScenarios {
         sliderShowing(intensity = 1f, onPreview = { previews += it }, onCommit = { commits += it })
 
         val slider = onNodeWithTag(GlassSliderTag)
+        // Scrolled into view first: the User details header above pushed the glass row past the
+        // fold on a short viewport, and a touch injected at off-screen coordinates lands on
+        // nothing — which reads as "the slider ignored the gesture", the exact defect below.
+        slider.performScrollTo()
         slider.performTouchInput {
             down(centerLeft)
             moveTo(center + Offset(width * 0.25f, 0f))
@@ -170,6 +175,8 @@ object GlassIntensityScenarios {
         sliderShowing(intensity = 1f, onCommit = { commits += it })
 
         onNodeWithTag(GlassSliderTag)
+            // Scrolled for the same reason as the drag above: off-screen touch, no commit.
+            .performScrollTo()
             .performTouchInput {
                 down(centerLeft)
                 up()

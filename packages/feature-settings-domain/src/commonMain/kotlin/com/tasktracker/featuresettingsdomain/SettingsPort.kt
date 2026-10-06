@@ -75,6 +75,12 @@ interface SettingsPort {
     @Throws(AppError::class, CancellationException::class)
     suspend fun endSession()
 
+    suspend fun userDetails(): UserDetails
+
+    fun userDetailsUpdates(): Flow<UserDetails>
+
+    suspend fun setUserDetails(details: UserDetails)
+
     /** Read once, not streamed: a running app's version cannot change. */
     fun appVersion(): AppVersion
 }

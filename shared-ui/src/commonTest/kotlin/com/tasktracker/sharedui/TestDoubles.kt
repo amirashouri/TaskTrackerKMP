@@ -14,6 +14,7 @@ import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -277,6 +278,12 @@ class FakeShellSettingsPort(
     }
 
     override fun appVersion(): AppVersion = AppVersion(marketing = "1.0", build = "1")
+
+    override suspend fun userDetails(): UserDetails = UserDetails()
+
+    override fun userDetailsUpdates(): Flow<UserDetails> = emptyFlow()
+
+    override suspend fun setUserDetails(details: UserDetails) = Unit
 }
 
 /** A signed-in state for tests, with a recognisable address. */

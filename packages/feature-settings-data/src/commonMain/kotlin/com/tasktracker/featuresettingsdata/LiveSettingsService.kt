@@ -5,12 +5,14 @@ import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncStatus
 import com.tasktracker.sync.SyncTrigger
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 
 /**
@@ -90,6 +92,18 @@ class LiveSettingsService(
     // MARK: - Version
 
     override fun appVersion(): AppVersion = version
+
+    // MARK: - User Details
+
+    private val userDetailsFlow = MutableStateFlow(UserDetails())
+
+    override suspend fun userDetails(): UserDetails = userDetailsFlow.value
+
+    override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
+
+    override suspend fun setUserDetails(details: UserDetails) {
+        userDetailsFlow.value = details
+    }
 
     // MARK: - Translation
 

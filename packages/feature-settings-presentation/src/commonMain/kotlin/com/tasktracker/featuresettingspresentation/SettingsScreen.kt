@@ -3,6 +3,7 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.selection.selectable
@@ -29,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -51,6 +54,8 @@ import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlass
+import com.tasktracker.designsystem.ttInitialsAvatar
+import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -70,7 +75,19 @@ import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.UserDetails
+import com.tasktracker.featuresettingsdomain.UserPosition
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.avatar_0
+import com.tasktracker.resources.avatar_1
+import com.tasktracker.resources.avatar_2
+import com.tasktracker.resources.avatar_3
+import com.tasktracker.resources.avatar_4
+import com.tasktracker.resources.avatar_5
+import com.tasktracker.resources.avatar_6
+import com.tasktracker.resources.avatar_7
+import com.tasktracker.resources.avatar_8
+import com.tasktracker.resources.avatar_9
 import com.tasktracker.resources.settings_about_section
 import com.tasktracker.resources.settings_account_section
 import com.tasktracker.resources.settings_activity_failed
@@ -89,6 +106,7 @@ import com.tasktracker.resources.settings_force_offline
 import com.tasktracker.resources.settings_glass_label
 import com.tasktracker.resources.settings_glass_reduced
 import com.tasktracker.resources.settings_appearance_section
+import com.tasktracker.resources.settings_avatar_label
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_sign_out
@@ -99,8 +117,13 @@ import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
 import com.tasktracker.resources.settings_theme_label
 import com.tasktracker.resources.settings_title
+import com.tasktracker.resources.settings_user_details_section
+import com.tasktracker.resources.settings_position_label
+import com.tasktracker.resources.settings_fullname_label
 import com.tasktracker.resources.settings_version
 import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.DrawableResource
 
 /**
  * Settings: appearance, the connection, the state of sync, and the way out.
@@ -149,7 +172,10 @@ fun SettingsScreen(
     glassIntensity: Float = 1f,
     onGlassIntensityPreview: (Float) -> Unit = {},
     onGlassIntensityCommit: (Float) -> Unit = {},
-) {
+    userDetails: UserDetails = UserDetails(),
+    onUserDetailsChange: (UserDetails) -> Unit = {},
+)
+ {
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -175,6 +201,28 @@ fun SettingsScreen(
                 color = ttLabel(),
                 modifier = Modifier.padding(bottom = ttSpacing.xs),
             )
+        }
+        // First section on the page, directly under the title: it is the identity the rest of
+        // the screen belongs to, not a preference filed with the others. It renders even when
+        // empty — the row that reads "—" is the honest answer, whereas a section that hides
+        // itself would leave the user with no idea where their profile went. The position picker
+        // dispatches through the same callback as every other edit here; the model persists it.
+        item {
+            SettingsSection(title = stringResource(Res.string.settings_user_details_section)) {
+                UserDetailsRow(
+                    details = userDetails,
+                    onDetailsChange = onUserDetailsChange,
+                    modifier = Modifier.testTag(SettingsUserDetailsTag),
+                )
+                SettingsDivider()
+                UserPositionPickerRow(
+                    selected = userDetails.position,
+                    onSelect = { position ->
+                        onUserDetailsChange(userDetails.copy(position = position))
+                    },
+                    modifier = Modifier.testTag(SettingsPositionRowTag),
+                )
+            }
         }
         item {
             SettingsSection(title = stringResource(Res.string.settings_appearance_section)) {
@@ -639,7 +687,7 @@ private fun ThemePickerRow(
             ) {
                 Column(
                     modifier = Modifier
-                        .width(216.dp)
+                        .width(ThemeDropdownWidth)
                         .ttGlassSurface(
                             shape = RoundedCornerShape(ttRadius.control),
                             fillAlpha = 0.81f,
@@ -663,13 +711,44 @@ private fun ThemePickerRow(
 }
 
 /**
+ * The selected option's wash, as a share of the accent.
+ *
+ * 25%: composited over the pixel test's near-black backdrop it lands at a channel distance of
+ * 21 for the *dimmest* palette (the default Classic, 0xFF5F6873) and 47 for the most vivid, so
+ * every palette clears the test's 12-channel bar with margin, while the row still reads as
+ * glass rather than as a filled chip.
+ *
+ * `internal` so [ThemeOptionScenarios] measures the same alpha the render paints.
+ */
+internal const val SelectedOptionFillAlpha = 0.25f
+
+/**
+ * The shared option-row surface for both dropdowns: clipped, and washed in the accent when
+ * selected — deliberately unbordered.
+ *
+ * One function because the two dropdowns are one control and changed together when the capsule
+ * border was removed on request; a ring spelled in two copies is a ring that gets removed once
+ * and then still drawn somewhere.
+ */
+@Composable
+private fun Modifier.dropdownOptionSurface(isSelected: Boolean): Modifier =
+    clip(RoundedCornerShape(ttRadius.control))
+        .background(
+            color = if (isSelected) ttAccent().copy(alpha = SelectedOptionFillAlpha) else Color.Transparent,
+            shape = RoundedCornerShape(ttRadius.control),
+        )
+
+/**
  * One theme scheme, as a selectable option row in the theme dropdown.
  *
- * The selected option is signalled twice: the old way (accent title + a check mark) and a
- * ring. The ring is not decoration — in the light theme the title and check are rendered in
- * `Color.White` on the glass, so the check mark's position was the only thing telling the
- * selected row apart from its neighbours. The ring reuses the exact accent-circle vocabulary
- * from [AccentPalettePickerRow] so the page has one kind of emphasis, not two.
+ * ## No border: the capsule ring was removed on request, the selection cue was not
+ *
+ * Each option used to carry a 1/2dp `border` — the capsule this screen was told to drop. What
+ * the ring was *for* survives as the accent wash in [dropdownOptionSurface]: the selected row
+ * has to be findable, and the accent title alone already failed at that once in the light
+ * theme, where every title is `Color.White` on glass. The wash is a colour-and-alpha change,
+ * which is exactly the class of thing a source-level assertion cannot see, so it is measured —
+ * see [ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent].
  *
  * `internal`, not `private`, so the pixel test can compose one option in the main root
  * instead of opening the `Popup` — a popup is a second composition root, and mapping its
@@ -687,16 +766,7 @@ internal fun ThemePickerOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(ttRadius.control))
-            .border(
-                width = if (isSelected) 2.dp else 1.dp,
-                color = if (isSelected) ttAccent() else if (ttIsDarkTheme()) {
-                    Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA)
-                } else {
-                    Color.Black.copy(alpha = ttGlass.LIGHT_HAIRLINE_ALPHA)
-                },
-                shape = RoundedCornerShape(ttRadius.control),
-            )
+            .dropdownOptionSurface(isSelected = isSelected)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
@@ -789,9 +859,264 @@ const val SettingsStuckRowTag = "settings.stuckRow"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
+const val SettingsUserDetailsTag = "settings.userDetails"
+const val SettingsPositionRowTag = "settings.positionRow"
+const val SettingsAvatarTag = "settings.avatar"
+const val AvatarPickerTag = "settings.avatarPicker"
+
+/** Per-portrait tag, so a scenario can pick "7" without a positional matcher. */
+fun AvatarOptionTag(id: Int): String = "settings.avatarOption.$id"
 const val ThemeDropdownTag = "settings.themeDropdown"
 const val GlassSliderTag = "settings.glassSlider"
 const val GlassAmountTag = "settings.glassAmount"
 
 /** Per-scheme test tag, so a scenario can tap "Dark" without a positional matcher. */
 fun ThemeOptionTag(scheme: ThemeScheme): String = "settings.theme.${scheme.wireValue}"
+
+
+/**
+ * The identity header: a large centred disc with the name beneath it, the way a profile reads
+ * on a social app rather than a settings row — and the disc is also the button that opens
+ * the portrait picker.
+ *
+ * 72dp, not the 48dp row height the rest of this screen uses — a profile picture is sized to be
+ * recognisable at a glance, and centred rather than led inline, because beside the name it reads
+ * as one more label/value row instead of as the page's subject.
+ *
+ * ## One control for the placeholder and the picture
+ *
+ * Until [UserDetails.avatarId] names one of the ten bundled portraits, the initials disc stands
+ * in — and it is tappable, because a placeholder that cannot be tapped is a dead end: it would
+ * leave the user no way to reach the picker that is the only way to set `avatarId`. Tapping
+ * again closes the grid; picking a portrait routes `details.copy(avatarId = …)` through the same
+ * callback every other edit here uses, so persistence stays the model's job.
+ */
+@Composable
+private fun UserDetailsRow(
+    details: UserDetails,
+    onDetailsChange: (UserDetails) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var avatarPickerOpen by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = ttSpacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(CircleShape)
+                .clickable(role = Role.Button) { avatarPickerOpen = !avatarPickerOpen }
+                .testTag(SettingsAvatarTag),
+            contentAlignment = Alignment.Center,
+        ) {
+            val avatarId = details.avatarId
+            if (avatarId != null && avatarId in AvatarIdRange) {
+                Image(
+                    painter = painterResource(avatarResource(avatarId)),
+                    contentDescription = avatarPortraitLabel(avatarId),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(UserDetailsAvatarSize)
+                        .clip(CircleShape),
+                )
+            } else {
+                ttInitialsAvatar(
+                    initials = if (details.fullName.isNotBlank()) ttInitialsFor(details.fullName) else "U",
+                    size = UserDetailsAvatarSize,
+                )
+            }
+        }
+        ttText(
+            text = if (details.fullName.isNotBlank()) details.fullName else "—",
+            style = ttTypography.headline,
+            color = ttLabel(),
+            textAlign = TextAlign.Center,
+        )
+        if (avatarPickerOpen) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(AvatarPickerTag),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+            ) {
+                AvatarIdRange.chunked(AvatarsPerRow).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
+                        row.forEach { id ->
+                            AvatarPortraitOption(
+                                id = id,
+                                isSelected = id == details.avatarId,
+                                onClick = {
+                                    onDetailsChange(details.copy(avatarId = id))
+                                    avatarPickerOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One of the ten bundled portraits, in the grid: 44dp, tappable, and selected-state marked by
+ * opacity rather than a ring — the capsule border this screen was told to drop would be exactly
+ * the wrong vocabulary to reintroduce here.
+ */
+@Composable
+private fun AvatarPortraitOption(
+    id: Int,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    Image(
+        painter = painterResource(avatarResource(id)),
+        contentDescription = avatarPortraitLabel(id),
+        contentScale = ContentScale.Crop,
+        modifier = Modifier
+            .size(UserDetailsAvatarOptionSize)
+            .clip(CircleShape)
+            .alpha(if (isSelected) SelectedAvatarAlpha else UnselectedAvatarAlpha)
+            .selectable(selected = isSelected, role = Role.Button, onClick = onClick)
+            .testTag(AvatarOptionTag(id)),
+    )
+}
+
+/** "Avatar 7" — the label a screen reader announces for a portrait. */
+@Composable
+private fun avatarPortraitLabel(id: Int): String =
+    "${stringResource(Res.string.settings_avatar_label)} $id"
+
+/** One of the ten bundled portraits; ids outside the range fall back to the first. */
+private fun avatarResource(id: Int): DrawableResource = when (id) {
+    0 -> Res.drawable.avatar_0
+    1 -> Res.drawable.avatar_1
+    2 -> Res.drawable.avatar_2
+    3 -> Res.drawable.avatar_3
+    4 -> Res.drawable.avatar_4
+    5 -> Res.drawable.avatar_5
+    6 -> Res.drawable.avatar_6
+    7 -> Res.drawable.avatar_7
+    8 -> Res.drawable.avatar_8
+    9 -> Res.drawable.avatar_9
+    else -> Res.drawable.avatar_0
+}
+
+/** The profile picture's diameter. A named constant so the KDoc's 72 and the render agree. */
+private val UserDetailsAvatarSize = 72.dp
+
+/** The grid thumb: 44dp × 5 with `ttSpacing.xs` gaps is 236dp, inside the section's 264dp. */
+private val UserDetailsAvatarOptionSize = 44.dp
+
+private val AvatarIdRange = 0..9
+private const val AvatarsPerRow = 5
+private const val SelectedAvatarAlpha = 1f
+private const val UnselectedAvatarAlpha = 0.55f
+
+/**
+ * The position picker, drawn in the theme dropdown's vocabulary: icon well, label, the current
+ * value right-aligned under the same chevron, and the same Popup — width, surface and option
+ * styling — so the two dropdowns on this screen are one control, not two that resemble each
+ * other. The option is the same borderless, accent-washed row [ThemePickerOption] draws.
+ */
+@Composable
+private fun UserPositionPickerRow(
+    selected: UserPosition?,
+    onSelect: (UserPosition) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIconWell(icon = ttSettingsIcons.account, tint = ttAccent())
+            ttText(
+                text = stringResource(Res.string.settings_position_label),
+                style = ttTypography.body,
+                color = ttLabel(),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            ttText(
+                text = selected?.displayName ?: "—",
+                style = ttTypography.subheadline,
+                color = ttLabelSecondary(),
+            )
+            ttText(text = "⌄", style = ttTypography.body, color = ttLabelSecondary())
+        }
+
+        if (expanded) {
+            Popup(
+                popupPositionProvider = SettingsDropdownPositionProvider,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(ThemeDropdownWidth)
+                        .ttGlassSurface(
+                            shape = RoundedCornerShape(ttRadius.control),
+                            fillAlpha = 0.81f,
+                        )
+                        .padding(vertical = ttSpacing.xs),
+                ) {
+                    UserPosition.all.forEach { position ->
+                        UserPositionOption(
+                            position = position,
+                            isSelected = position == selected,
+                            onClick = {
+                                onSelect(position)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The theme dropdown's own width, shared so the two popups on this page are the same size. */
+private val ThemeDropdownWidth = 216.dp
+
+@Composable
+private fun UserPositionOption(
+    position: UserPosition,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val isDarkTheme = ttIsDarkTheme()
+    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .dropdownOptionSurface(isSelected = isSelected)
+            .selectable(
+                selected = isSelected,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        ttText(
+            text = position.displayName,
+            style = ttTypography.body,
+            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+        )
+    }
+}

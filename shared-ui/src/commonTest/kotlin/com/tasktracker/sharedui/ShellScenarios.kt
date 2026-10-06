@@ -364,6 +364,11 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
+        // Scrolled to, not merely clicked: the User details header now leads the list, so on a
+        // short viewport the sign-out row is past the fold and — a LazyColumn that has not
+        // reached it leaves it out of the tree entirely, where a plain click finds nothing.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
+        waitForIdle()
         onNodeWithTag(SettingsSignOutTag).performClick()
         waitForIdle()
 

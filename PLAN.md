@@ -5691,3 +5691,120 @@ column in 24.4's table already reads the post-24.6 numbers (**1332 / 1304 / 788*
 "baseline in the same change" rule updates that table too — the one-scenario-per-host growth from
 24.4 is this change's, not the backlog work's.
 </details>
+
+### 24.7 The Settings screen gains its User details section
+
+**Defect.** The `UserDetails` feature was wired end to end — domain model, port methods,
+`LiveSettingsService` flow, `SettingsModel.userDetails` + `applyUserDetails`, screen parameters,
+two composables and the strings — and never rendered: `SettingsScreen`'s `LazyColumn` had no
+`item` for it, so `UserDetailsRow` and `UserPositionPickerRow` were dead code and the
+`userDetails`/`onUserDetailsChange` parameters were unread. The `NavigationHost` call site did not
+pass them either, so even a rendered section would have shown the empty default.
+
+**Fix.** `SettingsScreen.kt` renders a "User details" item as the **first section on the page,
+under the title** — identity leads the list rather than being filed with the preferences.
+`UserDetailsRow` is the profile header: `UserDetailsAvatarSize` = **72dp** centred disc (the
+page's other rows are 48dp) with the name under it in `headline`, `—` when blank. Below a
+divider, `UserPositionPickerRow` is drawn in `ThemePickerRow`'s vocabulary — `SettingsIconWell`,
+label, right-aligned value, the same chevron, and the same Popup (`ThemeDropdownWidth` = 216dp,
+now shared by both dropdowns so they are the same control) with the same border-and-ring option
+row. Position changes dispatch `details.copy(position = …)` through `onUserDetailsChange`.
+`NavigationHost.kt`'s settings destination passes `userDetails = model.userDetails` and
+`onUserDetailsChange = { scope.launch { model.applyUserDetails(it) } }` — through
+`applyUserDetails`, which both sets the state and writes the port, so a reload cannot put the
+old value back. Test tags: `SettingsUserDetailsTag`, `SettingsPositionRowTag`.
+
+**Test.** `theUserDetailsSectionIsOnThePage` (`SettingsScenarios`, registered on all three
+hosts) asserts the heading, both rows and the picker's label **on mount, without scrolling** —
+the missing scroll is the assertion: a LazyColumn drops items below its composition window from
+the tree entirely, so these nodes are present on first frame only while the section leads the
+list. `assertIsDisplayed`, not `assertExists`, so a section composed one screen down also goes
+red. The header's height also moved three existing scenarios to scroll-before-act, all for one
+reason — a row pushed past the fold has no pixels to show and no tree node to click:
+`theControlsDispatchTheirCommands` and `offlineWorkIsExplainedRatherThanHidden` scroll the list
+with `performScrollToNode` (a `LazyColumn` item past the window is *not in the tree*, so
+`performScrollTo` on the node itself has nothing to act on), the glass drag and tap scenarios
+`performScrollTo` the slider before injecting touch, and shared-ui's
+`theSettingsTabEndsTheSession` scrolls to sign-out before clicking it.
+
+**Mutation.** Two rounds. (1) Deleting the item: red with "Expected exactly '1' node ... could
+not find any node that satisfies: (TestTag = 'settings.userDetails')". (2) The first version of
+the position test scrolled to index 5 and asserted existence — **it missed a mutation that
+moved the section to the bottom**, because index 5 was still inside the composition window.
+Rewritten to assert displayed-on-mount with no scroll, the same mutation then went red with
+"The component with TestTag = 'settings.positionRow' is not displayed!". Restored, green —
+the missed mutation is recorded because it is the same failure the file already documents: an
+assertion that leaves the defect inside its own window is not measuring it.
+
+**Baseline.** Deciding command (`jvmTest iosSimulatorArm64Test verifyArchitectureGraph
+verifyModuleImports :androidApp:compileDebugKotlin`, run with `--continue`): JVM **1335**, iOS
+simulator **1307**, both with the unchanged 5-failure set (`SeedingTest` ×3 in
+`:feature-projects-data`, `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList` in
+`:shared-ui`); `verifyArchitectureGraph` and every `verifyModuleImports` green;
+`:androidApp:compileDebugKotlin` green. Android host, measured from the JUnit XML of a full
+`testAndroidHostTest`: **1065 tests, 30 failures** — design-system 14, feature-settings-
+presentation **6**, feature-projects-presentation 3, shared-ui 7. The settings module dropped
+from the documented 7 because the scroll fixes repaired `theControlsDispatchTheirCommands`;
+`aDragPreviewsEveryStepAndPersistsOnce` and `aTapOnTheTrackMovesItWithoutADrag` briefly joined
+the red mid-change (touch injected below the fold) and are fixed by the same scroll, so no new
+failure class was added. AGENTS.md's host table updated in the same change.
+
+### 24.8 Dropdown items lose their capsule border; the avatar becomes a ten-portrait picker
+
+**Asked for.** (1) Remove the capsule border from the position and theme dropdown *items*.
+(2) Let the user tap the avatar placeholder and choose between `avatar_0` and `avatar_9`.
+
+**Fix 1 — border out, selection cue kept.** Both option rows spelled their own copy of a 1/2dp
+`border`; both now call one shared `Modifier.dropdownOptionSurface(isSelected)` — clipped, and
+washed in `ttAccent()` at `SelectedOptionFillAlpha = 0.25f` when selected, `Transparent` when
+not. The wash is not decoration being added back as a fill: the ring test's own failure message
+records why the border existed ("the check mark and accent title alone were not finding the
+selected option"), and in the light theme every title is `Color.White` on glass — borderless
+with no cue at all would re-report that bug on day one. One function for both dropdowns because
+they are one control; a ring spelled in two copies is a ring that gets removed once and then
+still drawn somewhere. The theme popup's width became `ThemeDropdownWidth` (216dp) shared with
+the position popup in the previous round, so the two stay one control in both dimensions.
+
+**Fix 2 — the avatar is a button.** `UserDetailsRow`'s disc is now tappable
+(`SettingsAvatarTag`): `avatarId == null` shows the initials placeholder (still tappable — a
+placeholder that cannot be tapped is a dead end, since the picker is the only way to set
+`avatarId`), and a chosen id renders `Res.drawable.avatar_N` circle-cropped with content
+description "Avatar N". Tapping opens a grid inside the section (`AvatarPickerTag`, rows of
+five at 44dp — 236dp wide against the section's 264dp), each portrait an option
+(`AvatarOptionTag(id)`, opacity 1f/0.55f for selected/not, deliberately *not* a ring: the
+vocabulary just removed must not be reintroduced), and picking routes
+`details.copy(avatarId = id)` through `onUserDetailsChange` and closes the grid.
+
+**Test changes, and why one check had to change.**
+- `theSelectedSchemeOptionDrawsAnAccentRing` asserted the exact border that was removed, so it
+  had to change with the behaviour — not weakened, *retargeted*: renamed
+  `theSelectedSchemeOptionIsWashedWithAccent`, still a rendered-pixel measurement (a colour and
+  an alpha are on the pixel-rule's mandatory list), now counting pixels in the option's top
+  strip that differ from the known `OptionBackdrop` by more than `PAINTED_BAR`. The unselected
+  assertion (`≤ 16`) is what holds the *removal*: a hairline creeping back is painted pixels
+  along the same edge and crosses that bar.
+- New `choosingAnAvatarRoutesItsIdIntoTheDetails` (all three hosts): placeholder visible and
+  picker closed on mount → tap → all ten `AvatarOptionTag(0..9)` present → pick 7 → the callback
+  received the **whole** `UserDetails("Sam", avatarId = 7)` and the grid closed. The whole value,
+  not just the id: a `copy` that dropped the name would be a picker that renames its user.
+
+**Measurement, and a bar that was guessed wrong once.** The first run of the retargeted pixel
+test failed honestly: painted = 0. The bar had been set at 32 on the assumption that the
+*dimmest* accent composites to 43 — the default `AccentPalette.Classic` dark accent is
+`0xFF5F6873`, a muted slate, and at 25% over `0xFF1B1B1F` it lands at a channel distance of
+**21**. The palette sweep at that alpha runs 21 (Classic) … 47 (Music), backdrop is exactly 0,
+so `PAINTED_BAR = 12` sits between them with margin on both sides — that number and the sweep
+are now in the constant's KDoc.
+
+**Mutation.** Both new behaviours sabotaged in one run, each caught by its own test with its
+own defect named: wash set to `Transparent` → "painted only 0 pixels of its top strip"; dispatch
+removed from the portrait click → "picking portrait 7 must route details.copy(avatarId = 7) …
+expected … avatarId=7 but was null". Restored, green on both.
+
+**Baseline.** Deciding command (`jvmTest iosSimulatorArm64Test verifyArchitectureGraph
+verifyModuleImports :androidApp:compileDebugKotlin`, `--continue`): JVM **1336**, iOS simulator
+**1308**, both with the unchanged 5-failure set (`SeedingTest` ×3, `aChosenThemeOutlivesTheProcess`
++ `theBoardReturnsToTheList`); verify tasks and `:androidApp:compileDebugKotlin` green. Settings
+module: 28/28 JVM, 28 iOS, Android host 28 with the same documented 6. Full Android host from the
+JUnit XML: **1066 tests, 30 failures** (design-system 14, settings 6, projects-presentation 3,
+shared-ui 7). AGENTS.md host table updated in the same change.

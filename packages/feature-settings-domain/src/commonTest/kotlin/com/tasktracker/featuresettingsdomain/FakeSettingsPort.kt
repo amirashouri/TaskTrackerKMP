@@ -1,6 +1,7 @@
 package com.tasktracker.featuresettingsdomain
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 
 /**
@@ -70,4 +71,16 @@ class FakeSettingsPort(
     }
 
     override fun appVersion(): AppVersion = version
+
+    private var userDetailsValue: UserDetails = UserDetails()
+    private val userDetailsFlow = MutableStateFlow(UserDetails())
+
+    override suspend fun userDetails(): UserDetails = userDetailsValue
+
+    override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
+
+    override suspend fun setUserDetails(details: UserDetails) {
+        userDetailsValue = details
+        userDetailsFlow.value = details
+    }
 }
