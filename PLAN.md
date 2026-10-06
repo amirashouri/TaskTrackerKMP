@@ -18,7 +18,7 @@ Phases are listed **in the order they appear in this file**, not in phase order 
 `file:line` column is the jump target if your viewer takes you to the raw file.
 
 **Every section below is collapsible, and the finished ones start closed.** The open ones are
-exactly the unfinished work — Phases 14, 15, 22 and 23 — because "find the first unticked box"
+exactly the unfinished work — Phases 14, 15, 22, 23 and 24 — because "find the first unticked box"
 is the first thing a new session has to do, and a list of collapsed bars is the fastest way to
 see it. The `state` on each collapsed bar says the same thing without expanding anything.
 
@@ -39,32 +39,33 @@ nobody can see.
 
 | phase | module / subject | file:line | state |
 | --- | --- | --- | --- |
-| [0](#phase-0--build-foundation) | build foundation, convention plugins | [PLAN.md:394](#phase-0--build-foundation) | done |
-| [1](#phase-1--packagescore--packagesdomain) | `core` + `domain` | [PLAN.md:445](#phase-1--packagescore--packagesdomain) | done |
-| [2](#phase-2--packagesrouting) | `routing` | [PLAN.md:591](#phase-2--packagesrouting) | done |
-| [3](#phase-3--keychain--userdefaults) | keychain + user-defaults | [PLAN.md:648](#phase-3--keychain--userdefaults) | done |
-| [4](#phase-4--packagesdatabase-room-kmp) | `database` (Room KMP) | [PLAN.md:718](#phase-4--packagesdatabase-room-kmp) | done |
-| [5](#phase-5--packagesnetwork-ktor-360) | `network` (Ktor) | [PLAN.md:807](#phase-5--packagesnetwork-ktor-360) | done |
-| [6](#phase-6--packagessync) | `sync` | [PLAN.md:931](#phase-6--packagessync) | done |
-| [7](#phase-7--packagesfeature-projects-domain) | `feature-projects-domain` | [PLAN.md:1032](#phase-7--packagesfeature-projects-domain) | done |
-| [8](#phase-8--packagesfeature-projects-data) | `feature-projects-data` | [PLAN.md:1109](#phase-8--packagesfeature-projects-data) | done |
-| [9](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | auth domain + data | [PLAN.md:1232](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | done |
-| [10](#phase-10--design-system-completion) | design system | [PLAN.md:1362](#phase-10--design-system-completion) | done |
-| [11](#phase-11--packagesfeature-auth-presentation) | `feature-auth-presentation` | [PLAN.md:1518](#phase-11--packagesfeature-auth-presentation) | done |
-| [13 pt 1](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | **pulled forward** — sign-in reachable | [PLAN.md:1622](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | done |
-| [13 pt 1 follow-ups](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | sign-in button invisible; projects list + New Project | [PLAN.md:1814](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | done |
-| [12](#phase-12--packagesfeature-projects-presentation) | `feature-projects-presentation` | [PLAN.md:2012](#phase-12--packagesfeature-projects-presentation) | done |
-| [13](#phase-13--settings--composition-root--shared-ui-shell) | settings + composition-root + shared-ui | [PLAN.md:2190](#phase-13--settings--composition-root--shared-ui-shell) | done |
-| [14](#phase-14--ios-shell) | iOS shell | [PLAN.md:2287](#phase-14--ios-shell) | open |
-| [15](#phase-15--verification-and-documentation) | verification + docs | [PLAN.md:2461](#phase-15--verification-and-documentation) | open |
-| [16](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | glass slider intensity | [PLAN.md:2710](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | done |
-| [17](#phase-17--the-project-picker-was-not-using-the-scaffold) | project picker scaffold | [PLAN.md:2902](#phase-17--the-project-picker-was-not-using-the-scaffold) | done |
-| [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:3015](#phase-18--the-app-had-no-icon) | done |
-| [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:3161](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
-| [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3314](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
-| [21](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3503](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | done |
-| [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3581](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
-| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3759](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port + design system + models and screens + the Sprints tab (23.5.1–23.5.4, 23.6.1–23.6.6) done |
+| [0](#phase-0--build-foundation) | build foundation, convention plugins | [PLAN.md:395](#phase-0--build-foundation) | done |
+| [1](#phase-1--packagescore--packagesdomain) | `core` + `domain` | [PLAN.md:446](#phase-1--packagescore--packagesdomain) | done |
+| [2](#phase-2--packagesrouting) | `routing` | [PLAN.md:592](#phase-2--packagesrouting) | done |
+| [3](#phase-3--keychain--userdefaults) | keychain + user-defaults | [PLAN.md:649](#phase-3--keychain--userdefaults) | done |
+| [4](#phase-4--packagesdatabase-room-kmp) | `database` (Room KMP) | [PLAN.md:719](#phase-4--packagesdatabase-room-kmp) | done |
+| [5](#phase-5--packagesnetwork-ktor-360) | `network` (Ktor) | [PLAN.md:808](#phase-5--packagesnetwork-ktor-360) | done |
+| [6](#phase-6--packagessync) | `sync` | [PLAN.md:932](#phase-6--packagessync) | done |
+| [7](#phase-7--packagesfeature-projects-domain) | `feature-projects-domain` | [PLAN.md:1033](#phase-7--packagesfeature-projects-domain) | done |
+| [8](#phase-8--packagesfeature-projects-data) | `feature-projects-data` | [PLAN.md:1110](#phase-8--packagesfeature-projects-data) | done |
+| [9](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | auth domain + data | [PLAN.md:1233](#phase-9--packagesfeature-auth-domain--packagesfeature-auth-data) | done |
+| [10](#phase-10--design-system-completion) | design system | [PLAN.md:1363](#phase-10--design-system-completion) | done |
+| [11](#phase-11--packagesfeature-auth-presentation) | `feature-auth-presentation` | [PLAN.md:1519](#phase-11--packagesfeature-auth-presentation) | done |
+| [13 pt 1](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | **pulled forward** — sign-in reachable | [PLAN.md:1623](#phase-13-part-1-pulled-forward--making-the-sign-in-screen-reachable) | done |
+| [13 pt 1 follow-ups](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | sign-in button invisible; projects list + New Project | [PLAN.md:1815](#phase-13-part-1-follow-up-2--the-projects-list-became-reachable-and-the-new-project-button-did-not) | done |
+| [12](#phase-12--packagesfeature-projects-presentation) | `feature-projects-presentation` | [PLAN.md:2013](#phase-12--packagesfeature-projects-presentation) | done |
+| [13](#phase-13--settings--composition-root--shared-ui-shell) | settings + composition-root + shared-ui | [PLAN.md:2191](#phase-13--settings--composition-root--shared-ui-shell) | done |
+| [14](#phase-14--ios-shell) | iOS shell | [PLAN.md:2288](#phase-14--ios-shell) | open |
+| [15](#phase-15--verification-and-documentation) | verification + docs | [PLAN.md:2462](#phase-15--verification-and-documentation) | open |
+| [16](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | glass slider intensity | [PLAN.md:2711](#phase-16--the-glass-slider-ttglasssurface-learns-an-intensity) | done |
+| [17](#phase-17--the-project-picker-was-not-using-the-scaffold) | project picker scaffold | [PLAN.md:2903](#phase-17--the-project-picker-was-not-using-the-scaffold) | done |
+| [18](#phase-18--the-app-had-no-icon) | launcher icon, iOS + Android | [PLAN.md:3016](#phase-18--the-app-had-no-icon) | done |
+| [19](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | palette + glass audit, dark/light | [PLAN.md:3162](#phase-19--the-palette-audit-the-error-red-was-never-held-to-the-accents-bar) | done |
+| [20](#phase-20--the-design-system-review-and-four-things-it-was-missing) | design system review, banner/spinner/tokens/previews | [PLAN.md:3315](#phase-20--the-design-system-review-and-four-things-it-was-missing) | done |
+| [21](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | `ttBodyLabel` adoption, `:shared-ui` verified | [PLAN.md:3504](#phase-21--ttbodylabel-adopted-and-shared-ui-back) | done |
+| [22](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | error red pinned; glass hairline + caption measured in pixels | [PLAN.md:3582](#phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured) | 2 findings open |
+| [23](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | **sprints** — goal, dates, owner, finish, story-point summary | [PLAN.md:3760](#phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict) | domain + persistence + port + design system + models and screens + the Sprints tab (23.5.1–23.5.4, 23.6.1–23.6.6) done |
+| [24](#phase-24--board-identity-and-the-backlogs-third-segment) | **board identity** — switcher initials, sprint/Kanban title, Kanban backlog segment | [PLAN.md:5375](#phase-24--board-identity-and-the-backlogs-third-segment) | open |
 
 **First unticked box: [14.1](#phase-14--ios-shell)**, at
 [PLAN.md:1915](#phase-14--ios-shell). Phase 13 is closed, so Phase 14 is where work
@@ -5365,4 +5366,118 @@ verifyModuleImports :androidApp:compileDebugKotlin`) now reports exactly those f
 `AGENTS.md`'s test-host table was re-measured to the same figures; it had stood at the
 Phase-15 counts.
 
+</details>
+
+<a id="phase-24--board-identity-and-the-backlogs-third-segment"></a>
+<details open>
+<summary><b>Phase 24 — Board identity and the backlog's third segment</b> &mdash; <i>open</i></summary>
+
+## Phase 24 — Board identity and the backlog's third segment
+
+**Nothing in this phase is built yet.** This is the breakdown, written down before any of it so
+that the order is a decision rather than a sequence discovered halfway through. Each `### 24.N`
+is small enough to start and finish in one session, and each appends its own
+`#### Test` / `#### Mutation` / `#### Baseline` when executed, exactly like Phase 23's tasks.
+
+### 24.0 What was asked, and the four decisions it turns on
+
+The board's project switcher repeats the full project name on a header line whose remaining
+space is empty; the sprint title, or the word the board goes by when there is no sprint, belongs
+there. The backlog tab has two sections (Backlog, Archived) but no home for a task that is
+already on a board.
+
+| decision | choice | why this and not the other |
+| --- | --- | --- |
+| switcher pill | **initials avatar + chevron only, Board only** | The monogram already carries the project's key prefix; dropping the name frees the header space the title needs. The other three screens (backlog, sprints, archive) keep the full name — their headers give the switcher `weight(1f)` and have no title row to make room for. |
+| the title row | **sprint name, or "Kanban" when there is no active sprint** | The sprint is the board's identity while one is open; the board's identity otherwise. The old full-width `Active Sprint:` banner (`ProjectBoardScreen.kt:194-201`) is redundant and removed — its tag `board.activeSprint` is asserted by no test. |
+| a task added with no active sprint | **keeps its lane status and `sprintID = null`, and stays visible** | Already the runtime contract (`initialSprintID = model.activeSprint?.id`, `NavigationHost.kt:699-703`): with `activeSprint == null` the model filters nothing, so the new task is on the Kanban board. 24.3 pins it, because a filter change that silently drops it is exactly the defect this repo keeps meeting. |
+| the backlog's third segment | **Kanban = everything with `status.appearsOnBoard`; verbs = open + file away** | The board is already a pure partition of `WorkItemStatus`; no new field exists or is needed. Archive is `Closed`-only (`Projections.kt:119-121`), so Kanban sits between Backlog and Archive and overlaps nothing. |
+
+### 24.1 Switcher shows initials on the board
+
+**All three done.** `ProjectSwitcherButton` gained `showName: Boolean = true`; when false, the
+pill renders the monogram, the chevron and nothing else. A null project still shows the "No
+project" words even in compact mode, because "a project is selected" is the one state the pill
+identifies and two bare marks would misname the screen. The dropdown is untouched and still
+lists every project's full name. `ProjectBoardScreen` is the only caller passing `showName =
+false`; backlog, sprints and archive keep their defaults.
+
+- [x] **24.1.1** `ProjectSwitcherButton.kt`: a board-only flag (default keeps today's behaviour)
+      renders the pill as monogram + chevron with no name text; the dropdown is unchanged.
+- [x] **24.1.2** Wire it from `ProjectBoardScreen.kt:164-171`; backlog/sprints/archive keep full names.
+- [x] **24.1.3** Adjust the bounds assertions in `BoardLaneScenarios.kt`
+      (`theSwitcherIsNoWiderThanItsContentAllows`, :144-158, and friends); mutate by flipping the
+      flag and expect the assertion to go red.
+
+#### Test
+
+[`theSwitcherShowsTheMonogramAndNotTheName`] in `BoardLaneScenarios.kt`, registered in
+`ProjectsUiJvmTest`, `ProjectsUiIosTest` and `ProjectsUiAndroidHostTest`. It asserts the
+monogram and chevron exist (on the unmerged tree — the pill is a clickable `Row`, which merges
+its descendants' semantics, the same reason the stack discs read `useUnmergedTree`) and that the
+project's name text node is absent: `onAllNodesWithText("Task Tracker").assertCountEquals(0)`.
+The `theSwitcherIsNoWiderThanItsContentAllows` scenario survived unchanged — the compact pill is
+still content-width and still capped.
+
+#### Mutation
+
+One mutation, caught, on the production flag: flipping `showName = false` back to `true` at the
+board call site makes the name text reappear, and the test goes red with the defect named:
+`Did not expect any node but found '1' node that satisfies: (Text ... contains 'Task Tracker')`,
+the node being `board.switcher`. Restored, green again.
+
+#### Baseline
+
+The two hosts that can run without `:shared-ui` (see the phase note below):
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM (`:packages:feature-projects-presentation`) | 215 | **216** | 0, unchanged |
+| iOS simulator (same module) | 215 | **216** | 0, unchanged |
+
++1 per host from the JUnit XML, cross-checked against `@Test` (`ProjectsUiJvmTest` 42 → 43,
+`ProjectsUiIosTest` 41 → 42, `ProjectsUiAndroidHostTest` 42 → 43).
+
+**Pre-existing blocker, not this change:** `:shared-ui` does not compile in the current tree —
+`ShellScenarios.kt` references `BacklogSectionScenarios` (its `projectBacklogScenarios` list,
+lines 1654-1662) but no mechanism exposes `<feature-projects-presentation>:commonTest` to
+`:shared-ui`'s test compile, so `Unresolved reference 'BacklogSectionScenarios'` fails
+`compileTestKotlinJvm`. Confirmed by stashing this change and rebuilding. That is 24.4's surface
+(its "add the open callback through `BacklogDestination`" and the three-host registration), and
+it is why the whole-command baseline cannot be re-measured yet; the AGENTS.md global numbers
+(1303/1275) wait for 24.5 when `:shared-ui` compiles again.
+
+### 24.2 Header title: sprint name, or "Kanban"
+- [ ] **24.2.1** `ProjectBoardScreen.kt` header row: add a headline in the free space (left weight
+      group, :159-177) reading `activeSprint?.name` when one exists, else a new string resource
+      "Kanban"; remove the `Active Sprint:` banner (:194-201).
+- [ ] **24.2.2** Pass `activeSprint = model.activeSprint` into `NavigationHost.kt`'s
+      `BoardDestination` (:682-715) — the only board host that currently drops it.
+- [ ] **24.2.3** Structural tests for the title (present, pinned to sprint name / "Kanban") and
+      the banner's absence; mutate by deleting the wiring.
+
+### 24.3 A task added without an active sprint lands on the Kanban board
+- [ ] **24.3.1** Write the failing test first: board with `activeSprint == null` → add task in a
+      lane → item keeps its lane status, `sprintID == null`, and appears on the board, unchanged
+      by the board screen's sprint filter.
+- [ ] **24.3.2** If already green, the deliverable is the mutation-checked pin; if red, fix the
+      create path (`SaveWorkItem`, `WorkItemEditorModel.save`) until the invariant holds.
+
+### 24.4 The backlog gains a Kanban segment
+- [ ] **24.4.1** `Projections.kt`: `BacklogSection.Kanban`; partition = `status.appearsOnBoard`
+      (board order, then rank); counts/emptiness mirror the existing two.
+- [ ] **24.4.2** `ProjectBacklogScreen.kt`: options, titles, tags and the render branch (:154-191)
+      — the exhaustive `when` makes the compiler find every site; a `KanbanSectionList` + empty
+      state, rows = tap-to-open + File away (`WorkItemBacklogRow`); add the open callback through
+      `BacklogDestination` (`NavigationHost.kt:719-764`).
+- [ ] **24.4.3** Strings: `backlog_section_kanban` = "Kanban", and `backlog_section_archived` = "Archive".
+- [ ] **24.4.4** Tests: partition assertions in `ProjectionsTest.kt:154-240`,
+      `BacklogSectionScenarios` (`ProjectBacklogScenarios.kt:266+`), three-host registration in
+      `ShellScenarios.kt:1654-1662`.
+
+### 24.5 Baseline and full matrix
+- [ ] **24.5.1** Run
+      `./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin`.
+- [ ] **24.5.2** Update the test-count baseline in `AGENTS.md` and PLAN's own baseline tables in
+      the same change (JVM 1303 → ?, iOS 1275 → ?, same 5 pre-existing failures).
 </details>

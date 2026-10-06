@@ -77,6 +77,7 @@ fun ProjectSwitcherButton(
     modifier: Modifier = Modifier,
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
+    showName: Boolean = true,
 ) {
     val shape = RoundedCornerShape(ttRadius.control)
     var expanded by remember { mutableStateOf(false) }
@@ -124,14 +125,22 @@ fun ProjectSwitcherButton(
                     modifier = Modifier.testTag(ProjectSwitcherMonogramTag),
                 )
             }
-            ttText(
-                text = project?.name ?: noProjectLabel,
-                style = ttTypography.callout,
-                color = if (project == null) ttLabelSecondary() else ttLabel(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
-            )
+            // The board's header has a sprint/Kanban title of its own to make room for, so it
+            // collapses this pill to the monogram and the chevron. A null project still keeps the
+            // words: "a project is selected" is the one state this pill identifies, and an
+            // unselected pill of two meaningless marks (instead of the gap that "no project"
+            // leaves) would misname the screen. The dropdown always renders full names, whatever
+            // the pill does.
+            if (showName || project == null) {
+                ttText(
+                    text = project?.name ?: noProjectLabel,
+                    style = ttTypography.callout,
+                    color = if (project == null) ttLabelSecondary() else ttLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             ttIcon(
                 image = ttActionIcons.chevronDown,
                 contentDescription = null,

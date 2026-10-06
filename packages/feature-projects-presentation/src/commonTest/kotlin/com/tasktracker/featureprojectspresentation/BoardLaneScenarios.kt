@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -155,6 +156,26 @@ object BoardLaneScenarios {
                 onRoot().fetchSemanticsNode().size.width - 2 * densityPixels(ttSpacing.xxl),
             "and it is content-width rather than filled: it does not span the screen's gutters",
         )
+    }
+
+    /**
+     * On the board the pill is the monogram and the chevron, not the project name.
+     *
+     * The header's spare width belongs to the sprint / Kanban title, so the switcher drops the
+     * name text and keeps the key prefix - the one fact about a project that is guaranteed
+     * unique. The name is not gone from the app, only from the pill: the dropdown still renders
+     * every project's full name. Asserted by the name node's *absence* as well as the monogram's
+     * presence, because "the monogram is shown" would be green with the name text also on the
+     * pill - the absent half is the whole of the change.
+     */
+    val theSwitcherShowsTheMonogramAndNotTheName: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(onOpenSwitcher = {})
+
+        // The pill is a clickable Row, and clickable merges its descendants' semantics, so the
+        // monogram and chevron tags only exist on the unmerged tree (same as the stack discs).
+        onNodeWithTag(ProjectSwitcherMonogramTag, useUnmergedTree = true).assertIsDisplayed()
+        onNodeWithTag(ProjectSwitcherChevronTag, useUnmergedTree = true).assertIsDisplayed()
+        onAllNodesWithText(ViewPreviewData.seededProject.name).assertCountEquals(0)
     }
 
     /**

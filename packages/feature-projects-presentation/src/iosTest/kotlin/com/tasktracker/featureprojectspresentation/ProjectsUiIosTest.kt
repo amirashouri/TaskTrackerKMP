@@ -67,6 +67,9 @@ class ProjectsUiIosTest {
     fun theSwitcherIsNoWiderThanItsContentAllows() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherIsNoWiderThanItsContentAllows)
 
     @Test
+    fun theSwitcherShowsTheMonogramAndNotTheName() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherShowsTheMonogramAndNotTheName)
+
+    @Test
     fun theAssigneeStackOverlapsAndCountsWhatItHides() = runComposeUiTest(block = BoardLaneScenarios.theAssigneeStackOverlapsAndCountsWhatItHides)
 
     @Test

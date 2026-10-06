@@ -167,6 +167,9 @@ fun ProjectBoardScreen(
                         onClick = openSwitcher,
                         projects = projects,
                         onSelectProject = onSelectProject,
+                        // 24.1: the header's spare width belongs to the sprint/Kanban title, so the
+                        // pill keeps just the monogram and chevron; the dropdown still lists names.
+                        showName = false,
                     )
                 }
                 if (assignees.isNotEmpty()) {

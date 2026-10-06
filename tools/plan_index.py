@@ -56,6 +56,7 @@ STILL_OPEN = {
     "phase-15--verification-and-documentation",
     "phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured",
     "phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict",
+    "phase-24--board-identity-and-the-backlogs-third-segment",
 }
 
 # State shown in a collapsed section's summary, keyed by slug. Purely cosmetic -- it is the one
@@ -87,6 +88,7 @@ STATE = {
     "phase-22--the-error-red-meets-its-bar-and-the-glass-hairline-is-measured": "2 findings open",
     "phase-23--sprints-a-time-boxed-goal-a-set-of-tasks-and-a-verdict":
         "23.5.5-23.5.7, 23.6 partial",
+    "phase-24--board-identity-and-the-backlogs-third-segment": "open",
 }
 
 # Anchors the index claims that no heading can produce, mapped to the one that can. Kept as data
