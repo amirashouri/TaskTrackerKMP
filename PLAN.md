@@ -5541,20 +5541,126 @@ Two mutations, both caught, both red on no other test:
 Restored, green on JVM, iOS simulator, and Android host. JVM module: 218 → **219**, 0 failures.
 
 ### 24.4 The backlog gains a Kanban segment
-- [ ] **24.4.1** `Projections.kt`: `BacklogSection.Kanban`; partition = `status.appearsOnBoard`
+
+**All four done.** `Projections.kt` grew `BacklogSection.Kanban` and the `kanban` partition —
+`WorkItemGrouping.boardColumns(items).flatMap { it.items }`, so the section reads the whole board
+as rows in board order, then rank, and can never drift from the board tab's own grouping — with
+`kanbanItemCount` / `kanbanIsEmpty` mirroring the existing two. `ProjectBacklogScreen` now shows a
+three-option picker (Backlog / Kanban / Archive), an exhaustive `when` renders
+`KanbanSectionList` and `EmptyKanbanSection`, and a Kanban row passes `onOpen` into
+`WorkItemBacklogRow` so its tap opens the task and its secondary verb stays File away. No
+`BacklogDestination` (`NavigationHost.kt:719-764`) change was needed: that destination already
+wires `onSelect` straight to the editor, and the row hands it `onSelect(item.id)`.
+
+The 24.4 blocker named in 24.1's baseline — `:shared-ui` could not compile because
+`ShellScenarios.kt` referenced the presentation module's `BacklogSectionScenarios` across a
+source-set boundary Gradle cannot see — was resolved the way 24.1 said 24.4 would: the six section
+scenarios moved into `:shared-ui`'s `commonTest` (new `BacklogSectionScenarios.kt`), where all
+three hosts can run them.
+
+- [x] **24.4.1** `Projections.kt`: `BacklogSection.Kanban`; partition = `status.appearsOnBoard`
       (board order, then rank); counts/emptiness mirror the existing two.
-- [ ] **24.4.2** `ProjectBacklogScreen.kt`: options, titles, tags and the render branch (:154-191)
-      — the exhaustive `when` makes the compiler find every site; a `KanbanSectionList` + empty
-      state, rows = tap-to-open + File away (`WorkItemBacklogRow`); add the open callback through
-      `BacklogDestination` (`NavigationHost.kt:719-764`).
-- [ ] **24.4.3** Strings: `backlog_section_kanban` = "Kanban", and `backlog_section_archived` = "Archive".
-- [ ] **24.4.4** Tests: partition assertions in `ProjectionsTest.kt:154-240`,
-      `BacklogSectionScenarios` (`ProjectBacklogScenarios.kt:266+`), three-host registration in
-      `ShellScenarios.kt:1654-1662`.
+- [x] **24.4.2** `ProjectBacklogScreen.kt`: options, titles, tags and the render branch — the
+      exhaustive `when` made the compiler find every site; `KanbanSectionList` + empty state,
+      rows = tap-to-open + File away (`WorkItemBacklogRow`'s new `onOpen`). `BacklogDestination`
+      needed no change (its `onSelect` already reaches the editor).
+- [x] **24.4.3** Strings: `backlog_section_kanban` = "Kanban", and `backlog_section_archived` = "Archive".
+- [x] **24.4.4** Tests: partition assertions already in `ProjectionsTest.kt:154-240`; the six
+      section scenarios moved into `:shared-ui`'s `commonTest` plus five new Kanban ones and the
+      backlog-row-tap regression guard (thirteen in `ShellScenarios.projectBacklogScenarios`), and
+      the three host files re-registered to the canonical thirteen-method mapping below.
+
+#### Test
+
+`BacklogSectionScenarios.kt` (shared-ui `commonTest`) holds the thirteen scenarios: the six
+moved ones (archived switch, switch-back, closed-list order, section persist across the switch,
+and the backlog's and archived's own empty states), five new Kanban ones (switch to the board
+rows, board-order-then-rank, tap-to-open, file-away, Kanban's own empty state), and
+`tappingABacklogRowOpensTheTask`, the regression guard for the row-tap contract described under
+Mutation. Fixtures are
+`shellWorkItem(number, status, rank)` on a fixed project (`keyPrefix = "AP"`, explicit ids via a
+common `padStart` — `"%012d".format` is JVM-only), `backlogItems(count)`, `closedItems()` and
+`boardItems()` (two Todo-lane items so rank earns its say). The board-order scenario reads each
+row's top edge off the tree and requires a strict rise *in the projection's expected order*, so a
+shuffled fixture (deliberate) never leaks its own order into the assertion.
+
+The three host files now register the canonical thirteen methods `[0..12]` by index, fixing a
+**pre-existing off-by-one**: the original list had seven entries while every host registered
+`[0..7]`, so host `[4]`..`[7]` had run the *previous* lambda under the *next* name since the
+scenarios were added — invisible while passing, and the reason the empty-state scenarios had
+never actually exercised their own bodies. The old method
+`theBacklogTabHasTwoSectionsAndTheArchivedSectionShowsClosedWork` merged into
+`switchingToTheArchivedSectionShowsClosedWorkAndHidesBacklogRows`; its lambda still runs under
+the new index 0.
+
+#### Mutation
+
+- **The moved tests caught a real production defect on their first green chase.** All three
+  empty-state assertions failed with "could not find any node that satisfies: (TestTag =
+  'backlog.emptyBacklog' / 'backlog.emptyKanban' / 'backlog.emptyArchived')" against the tree I
+  dumped, which showed the empty state carrying `backlog.rows`. Root cause: on this Compose
+  version a chained `Modifier.testTag(a).testTag(b)` keeps **a** — the callers tagged the shared
+  list container and each empty branch re-tagged it, so the empty tag never won. Fixed by moving
+  each list's tag onto the node that renders it and applying the empty tag to the empty state's
+  own modifier. This was the ritual's red-first: the assertions failed against a live defect and
+  went green only after the production fix.
+- **The board-order scenario caught its own test-side bug first.** Reading tops in the *shuffled
+  fixture order* failed "194.0 !< 80.0" even though the list was correct; iterating the
+  projection's `kanban` order fixed the assertion. Then a deliberate production mutation —
+  `items(projection.kanban.asReversed())` — went red with "536.0 !< 422.0"; restored, green.
+- **The last-row scroll scenario was a second `setContent` too far.** It ran
+  `everyTabScrollsBehindTheTabBar()` (itself a registered test) mid-body, whose `setUpShell`
+  called `setContent` a second time — wiping the shell out from under its Settings step on every
+  host, and throwing Android's `ComponentActivity` "has already set content". Removed the call;
+  the scenario is one `setContent`, green on all three hosts, and the per-tab region geometry is
+  still covered by the standalone scenario.
+- **The backlog-row tap was a real user-facing bug, and its regression guard is mutation-clean.**
+  A backlog row's body used to be `clickable { onOpen ?: onPutOnBoard }`, so tapping *anywhere*
+  on an untriaged row silently put the item on the board — it vanished from the list. The row
+  body no longer triages: `BacklogSectionList` passes `onOpen = { onSelect(item.id) }` so a
+  backlog row's tap opens the task (the same contract the Kanban rows carry), archived rows get
+  the inert `onOpen ?: {}` fallback, and "Put on board" is its own explicit button shown only
+  when `item.status == WorkItemStatus.Backlog`. The new `tappingABacklogRowOpensTheTask` asserts
+  both halves: the tap answers with the id *and* the put-on-board action is still displayed.
+  Two mutations, both red with the defect named: removing the `onOpen` wiring from
+  `BacklogSectionList` failed "expected the tapped backlog row to open the task ... but
+  was:<[]>" (the tap fell through to a no-op), and reverting the button rule to `if (onOpen ==
+  null)` hid the action — red on "putOnBoard ... could not find any node". Mutating the
+  `onOpen ?: onPutOnBoard` fallback alone is no longer a reachable defect — backlog rows always
+  pass `onOpen`, so the fallback is inert there, which is why the section wiring is the mutation
+  that must be checked.
+
+#### Baseline
+
+The deciding command (`jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports
+:androidApp:compileDebugKotlin`) now runs with `:shared-ui` compiling, so the whole-command
+baseline is measured here rather than deferred to 24.5. Counts from the JUnit XML, cross-checked
+against `@Test`.
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM | 1303 | **1331** | 5, unchanged set |
+| iOS simulator | 1275 | **1303** | 5, unchanged set |
+| Android host | red, ~17 documented | **787 tests, 31 failures** | viewport / Context / Build-mediated set, unchanged classes |
+
+The five per host are the same documented pre-existing set (`SeedingTest` ×3 in
+`:packages:feature-projects-data`, `aChosenThemeOutlivesTheProcess` and `theBoardReturnsToTheList`
+in `:shared-ui`). The Android host's 31 are all `testAndroidHostTest` layout/environment failures
+— design-system 14 rasterised-pixel gates, feature-settings-presentation 7, feature-projects-
+presentation 3, shared-ui 7 — every one in a class `AGENTS.md` already records as red for
+documented reasons; this change took shared-ui's count from 9 to 7 (two new-portable scenarios
+fixed) and no failure added.
+
+The first iOS read of these totals came off 1294 because only part of the iOS simulator matrix
+had re-executed at that moment (the same stale-XML trap the last-row fix hit). Re-measured clean
+with `--rerun-tasks`, iOS is **1303** with the same 5 failures; 1294 was the undercount, not a
+regression.
 
 ### 24.5 Baseline and full matrix
-- [ ] **24.5.1** Run
-      `./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin`.
-- [ ] **24.5.2** Update the test-count baseline in `AGENTS.md` and PLAN's own baseline tables in
-      the same change (JVM 1303 → ?, iOS 1275 → ?, same 5 pre-existing failures).
+
+**Folded into 24.4.** Once `:shared-ui` compiled, there was no reason to defer the deciding
+command, so 24.4's `#### Baseline` measured it: JVM 1303 → **1331**, iOS 1275 → **1303**, both
+with the same 5 pre-existing failures; Android host 787 / 31, all documented classes. `AGENTS.md`'s
+test-host table and the shared-ui counts above were updated in the same change as the test
+additions, per the "baseline in the same change" rule.
 </details>

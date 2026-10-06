@@ -40,25 +40,28 @@ import com.tasktracker.resources.backlog_archived_empty_body
 import com.tasktracker.resources.backlog_archived_empty_title
 import com.tasktracker.resources.backlog_empty_body
 import com.tasktracker.resources.backlog_empty_title
+import com.tasktracker.resources.backlog_kanban_empty_body
+import com.tasktracker.resources.backlog_kanban_empty_title
 import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
+import com.tasktracker.resources.backlog_section_kanban
 import com.tasktracker.resources.board_add_task
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The backlog tab: the work not yet on a board, and the work that was filed away from it.
+ * The backlog tab: the work not yet on a board, the board itself, and the work filed away.
  *
- * ## Why two sections
+ * ## Why three sections
  *
- * The backlog tab is read as two piles: what still needs doing, and what was done here.
- * That is two different questions, and the tab answers both without leaving it, so the screen
- * renders them as two sections the user can switch between rather than one list that folds the
- * past into the present.
+ * The backlog tab is read as three piles: what still needs doing, what is being worked on
+ * right now, and what was done here. That is three different questions, and the tab answers
+ * all three without leaving it, so the screen renders them as three sections the user can
+ * switch between rather than one list that folds the present into the past.
  *
  * ## Why the sections are a switch, not a split
  *
- * A split keeps both lists on screen simultaneously, and a backlog with anything filed away
+ * A split keeps the lists on screen simultaneously, and a backlog with anything filed away
  * is then exactly as tall as the longer of the two — which, on a project with a long archive,
  * is the archive, and a user scrolling the backlog then has to fight the archive's tail. A
  * switch keeps each list the height of its own content and is the cheaper screen to read.
@@ -72,10 +75,11 @@ import org.jetbrains.compose.resources.stringResource
  *
  * ## Why each section keeps its own empty state
  *
- * The backlog emptiness and the archive emptiness are not the same sentence. One means "nothing
- * still to do" and the other means "nothing filed away yet", and a user who files the last
- * backlogged task away has just done something worth acknowledging in the words. Two empty
- * states also make the section switch testable without imagining which list was in front.
+ * The backlog emptiness, the board emptiness and the archive emptiness are not the same
+ * sentence. One means "nothing still to do", another means "nothing on the board yet", and the
+ * third means "nothing filed away yet", and a user who files the last backlogged task away has
+ * just done something worth acknowledging in the words. Three empty states also make the
+ * section switch testable without imagining which list was in front.
  *
  * ## Why the busy item survives a section switch
  *
@@ -153,24 +157,30 @@ fun ProjectBacklogScreen(
             }
             var currentSection by remember { mutableStateOf(projection.currentSection) }
             TTGlassSegmentedPicker(
-                options = listOf(BacklogSection.Backlog, BacklogSection.Archived),
+                options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
                 selection = currentSection,
                 onSelect = { currentSection = it },
                 modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBacklogSectionsTag),
                 title = { option ->
                     when (option) {
                         BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
+                        BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
                         BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
                     }
                 },
                 testTag = { option ->
                     when (option) {
                         BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
+                        BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
                         BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
                     }
                 }
             )
             when (currentSection) {
+                // The section tags are applied inside each list, on the node that renders it.
+                // A chained `Modifier.testTag(a).testTag(b)` keeps the first value in this Compose
+                // version, so tagging the shared container here would leave the empty states
+                // carrying the list's tag and no way to query them separately.
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = projection,
                     busyItemID = busyItemID,
@@ -179,14 +189,23 @@ fun ProjectBacklogScreen(
                     onPutOnBoard = onPutOnBoard,
                     onFileAway = onFileAway,
                     tabBarInset = tabBarInset,
-                    modifier = Modifier.fillMaxSize().testTag(ProjectBacklogListTag),
+                    modifier = Modifier.fillMaxSize(),
+                )
+                BacklogSection.Kanban -> KanbanSectionList(
+                    projection = projection,
+                    busyItemID = busyItemID,
+                    isLoading = isLoading,
+                    onSelect = onSelect,
+                    onFileAway = onFileAway,
+                    tabBarInset = tabBarInset,
+                    modifier = Modifier.fillMaxSize(),
                 )
                 BacklogSection.Archived -> ArchivedSectionList(
                     projection = projection,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     onSelect = onSelect,
-                    modifier = Modifier.fillMaxSize().testTag(ProjectBacklogArchivedListTag),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -229,7 +248,8 @@ private fun ProjectBacklogScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Lig
 
 
 /**
- * The backlog section's list: the untriaged work, each row offering "Put on board" and "File away".
+ * The backlog section's list: the untriaged work, each row offering "Put on board" and "File away"
+ * and opening the task on its own tap — the same open the Kanban section's rows carry.
  *
  * The backlog section is the one the tab is named after, and it is the only section where the
  * backlog's two verbs — put on board and file away — both make sense. The archived section shows
@@ -252,7 +272,7 @@ private fun BacklogSectionList(
         )
     } else {
         LazyColumn(
-            modifier = modifier,
+            modifier = modifier.testTag(ProjectBacklogListTag),
             contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
@@ -262,6 +282,49 @@ private fun BacklogSectionList(
                     onPutOnBoard = { onPutOnBoard(item.id) },
                     onFileAway = { onFileAway(item.id) },
                     isBusy = busyItemID == item.id,
+                    onOpen = { onSelect(item.id) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The Kanban section's list: the board, read as rows, each row opening the task and offering
+ * "File away".
+ *
+ * Every item here is already on a board, so the row drops its put-on-board action and its tap
+ * becomes the open (`onSelect`) — the board's own verbs, on the board's own rows. A tiny
+ * duplication of `BacklogSectionList` on purpose: the two sections differ in exactly one
+ * handler and one empty state, and folding them together would buy a parameter nobody else uses.
+ */
+@Composable
+private fun KanbanSectionList(
+    projection: BacklogSectionedProjection,
+    busyItemID: WorkItemID?,
+    isLoading: Boolean,
+    onSelect: (WorkItemID) -> Unit,
+    onFileAway: (WorkItemID) -> Unit,
+    tabBarInset: Dp,
+    modifier: Modifier = Modifier,
+) {
+    if (!isLoading && projection.kanbanIsEmpty) {
+        EmptyKanbanSection(
+            modifier = modifier.testTag(ProjectBacklogEmptyKanbanTag),
+        )
+    } else {
+        LazyColumn(
+            modifier = modifier.testTag(ProjectBacklogKanbanListTag),
+            contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            items(projection.kanban, key = { it.id.stringValue }) { item ->
+                WorkItemBacklogRow(
+                    item = item,
+                    onPutOnBoard = {},
+                    onFileAway = { onFileAway(item.id) },
+                    isBusy = busyItemID == item.id,
+                    onOpen = { onSelect(item.id) },
                 )
             }
         }
@@ -289,7 +352,7 @@ private fun ArchivedSectionList(
         )
     } else {
         LazyColumn(
-            modifier = modifier,
+            modifier = modifier.testTag(ProjectBacklogArchivedListTag),
             contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
@@ -299,6 +362,7 @@ private fun ArchivedSectionList(
                     onPutOnBoard = { },
                     onFileAway = { },
                     isBusy = busyItemID == item.id,
+                    onOpen = { onSelect(item.id) },
                 )
             }
         }
@@ -322,12 +386,29 @@ private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
 }
 
 /**
- * The archived section's empty state: nothing has been filed away from this backlog yet.
+ * The Kanban section's empty state: the board has no on-board tasks yet.
  *
  * A different sentence from the backlog's empty state, because the two sections are different
- * questions — one is "nothing still to do" and the other is "nothing filed away yet" — and a
- * user who just filed the last backlogged task away has done something worth acknowledging in the
- * words.
+ * questions — one is "nothing still to do" and the other is "nothing on the board yet" — and a
+ * user who triaged the last backlogged task onto the board has just done something worth
+ * acknowledging in the words.
+ */
+@Composable
+private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
+    ProjectsEmptyState(
+        title = stringResource(Res.string.backlog_kanban_empty_title),
+        body = stringResource(Res.string.backlog_kanban_empty_body),
+        modifier = modifier,
+    )
+}
+
+/**
+ * The archived section's empty state: nothing has been filed away from this backlog yet.
+ *
+ * A different sentence from the backlog's and the Kanban section's empty states, because the
+ * sections are different questions — "nothing still to do", "nothing on the board yet" and
+ * "nothing filed away yet" — and a user who just filed the last backlogged task away has done
+ * something worth acknowledging in the words.
  */
 @Composable
 private fun EmptyArchivedSection(modifier: Modifier = Modifier) {
@@ -343,8 +424,10 @@ private fun Modifier.horizontalGutter(): Modifier = padding(horizontal = ttSpaci
 const val ProjectBacklogScreenTag = "backlog.screen"
 const val ProjectBacklogListTag = "backlog.rows"
 const val ProjectBacklogSectionsTag = "backlog.sections"
+const val ProjectBacklogKanbanListTag = "backlog.kanbanRows"
 const val ProjectBacklogArchivedListTag = "backlog.archivedRows"
 const val ProjectBacklogEmptyBacklogTag = "backlog.emptyBacklog"
+const val ProjectBacklogEmptyKanbanTag = "backlog.emptyKanban"
 const val ProjectBacklogEmptyArchivedTag = "backlog.emptyArchived"
 const val BacklogAddTaskTag = "backlog.addTask"
 

@@ -98,18 +98,22 @@ data class ArchiveProjection(
 }
 
 /**
- * The backlog as two sections: the untriaged work, and the work already filed away.
+ * The backlog tab as three sections: the untriaged work, the work on a board, and the work
+ * already filed away.
  */
 enum class BacklogSection {
     /** The tasks that have not been put on a board yet. */
     Backlog,
+
+    /** Tasks sitting on the board — the whole board, inside the backlog tab. */
+    Kanban,
 
     /** Tasks filed away into the archive — the `Closed`-only section of this tab. */
     Archived,
 }
 
 /**
- * Two partitions of the same project work, for the backlog tab's two sections.
+ * Three partitions of the same project work, for the backlog tab's three sections.
  */
 data class BacklogSectionedProjection(
     val project: Project?,
@@ -120,14 +124,25 @@ data class BacklogSectionedProjection(
         .filter { it.status == WorkItemStatus.Closed }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
+    /**
+     * The board, flattened back into a list: every on-board status in board order, then rank.
+     *
+     * Rather than re-encoding the board's ordering rule, this flattens [WorkItemGrouping.boardColumns]
+     * — the same grouping the board tab draws — so the two listings cannot drift apart. An item
+     * in the Todo column at rank 3 reads back after an InProgress item at any rank.
+     */
+    val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items).flatMap { it.items }
+
     val currentSection: BacklogSection = BacklogSection.Backlog
     val backlogItemCount: Int get() = backlog.size
+    val kanbanItemCount: Int get() = kanban.size
     val archivedItemCount: Int get() = archived.size
-    val totalItemCount: Int get() = backlogItemCount + archivedItemCount
+    val totalItemCount: Int get() = backlogItemCount + kanbanItemCount + archivedItemCount
     val backlogIsEmpty: Boolean get() = backlog.isEmpty()
+    val kanbanIsEmpty: Boolean get() = kanban.isEmpty()
     val archivedIsEmpty: Boolean get() = archived.isEmpty()
-    val bothAreEmpty: Boolean get() = backlogIsEmpty && archivedIsEmpty
-    val hasAnyContent: Boolean get() = !(backlogIsEmpty && archivedIsEmpty)
+    val allSectionsEmpty: Boolean get() = backlogIsEmpty && kanbanIsEmpty && archivedIsEmpty
+    val hasAnyContent: Boolean get() = !(backlogIsEmpty && kanbanIsEmpty && archivedIsEmpty)
 }
 
 /**

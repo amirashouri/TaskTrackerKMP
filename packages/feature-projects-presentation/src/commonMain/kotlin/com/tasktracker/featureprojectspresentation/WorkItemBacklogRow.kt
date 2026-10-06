@@ -26,13 +26,14 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.work_item_archive
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * An untriaged task, as a row.
+ * A task as a row — the backlog's or, with [onOpen] set, a board's.
  *
  * ## Why this is not [WorkItemCard]
  *
@@ -45,6 +46,20 @@ import org.jetbrains.compose.resources.stringResource
  * than behind a selection. Triage is two decisions, and a user holding a phone makes them
  * one after the other per item; making them require selecting, then acting, then
  * deselecting doubles the taps for the common case.
+ *
+ * ## Why the row doubles as the Kanban section's row
+ *
+ * The backlog tab's Kanban section shows the same full-width rows, but the verbs are
+ * different: a task is already on a board, so "put on board" is meaningless, and its open
+ * is the whole row's tap. [onOpen] makes the row open on tap in both sections — the screen
+ * passes it for the board's rows *and* the backlog's — and the put-on-board action shows
+ * for untriaged items only, `item.status == WorkItemStatus.Backlog`, so it cannot leak into
+ * the Kanban or archived sections.
+ *
+ * The row's *body* is never a triage target. "Put on board" is always the explicit button:
+ * a tap that silently filed the item out of the list would look like the task vanished, and
+ * [onPutOnBoard] would be wired to a gesture the user did not intend. The two rows share the
+ * glass card and the key/priority header because they are the same row read in two piles.
  */
 @Composable
 fun WorkItemBacklogRow(
@@ -53,13 +68,14 @@ fun WorkItemBacklogRow(
     onFileAway: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
+    onOpen: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ttRadius.row))
             .ttGlassCard()
-            .clickable(enabled = !isBusy, onClick = onPutOnBoard)
+            .clickable(enabled = !isBusy, onClick = onOpen ?: {})
             .padding(ttSpacing.xl)
             .testTag(WorkItemBacklogRowTag(item)),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
@@ -99,12 +115,14 @@ fun WorkItemBacklogRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
         ) {
-            BacklogAction(
-                label = stringResource(Res.string.backlog_put_on_board),
-                isBusy = isBusy,
-                onClick = onPutOnBoard,
-                testTag = BacklogPutOnBoardTag(item),
-            )
+            if (item.status == WorkItemStatus.Backlog) {
+                BacklogAction(
+                    label = stringResource(Res.string.backlog_put_on_board),
+                    isBusy = isBusy,
+                    onClick = onPutOnBoard,
+                    testTag = BacklogPutOnBoardTag(item),
+                )
+            }
             BacklogAction(
                 label = stringResource(Res.string.work_item_archive),
                 isBusy = isBusy,

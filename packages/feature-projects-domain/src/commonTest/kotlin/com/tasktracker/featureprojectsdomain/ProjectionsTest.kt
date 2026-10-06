@@ -150,7 +150,7 @@ class ProjectionsTest {
     // MARK: Sectioned backlog
 
     @Test
-    fun `the sectioned backlog splits backlog and closed into two disjoint partitions`() {
+    fun `the sectioned backlog splits backlog board and closed into three disjoint partitions`() {
         val projection = BacklogSectionedProjection(
             project = null,
             items = listOf(
@@ -164,19 +164,51 @@ class ProjectionsTest {
         )
 
         assertEquals(listOf("TT-1"), keys(projection.backlog))
+        assertEquals(listOf("TT-2", "TT-3", "TT-4", "TT-5"), keys(projection.kanban))
         assertEquals(listOf("TT-6"), keys(projection.archived))
         assertEquals(1, projection.backlogItemCount)
+        assertEquals(4, projection.kanbanItemCount)
         assertEquals(1, projection.archivedItemCount)
-        assertEquals(2, projection.totalItemCount)
+        assertEquals(6, projection.totalItemCount)
         assertFalse(projection.backlogIsEmpty)
+        assertFalse(projection.kanbanIsEmpty)
         assertFalse(projection.archivedIsEmpty)
-        assertFalse(projection.bothAreEmpty)
+        assertFalse(projection.allSectionsEmpty)
         assertTrue(projection.hasAnyContent)
+        assertTrue(projection.backlog.intersect(projection.kanban).isEmpty())
         assertTrue(projection.backlog.intersect(projection.archived).isEmpty())
+        assertTrue(projection.kanban.intersect(projection.archived).isEmpty())
     }
 
     @Test
-    fun `a backlog-only project has nothing in the archived section`() {
+    fun `the kanban partition reads back in board order then rank`() {
+        // The board column is the primary order and the rank the secondary, so a Todo card at
+        // rank 1 comes before an InProgress card at any rank, and same-column cards sort by rank.
+        // Written deliberately out of order to make a positional sort pass.
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.InProgress, rank = 2),
+                item("TT-2", WorkItemStatus.Todo, rank = 3),
+                item("TT-3", WorkItemStatus.Done, rank = 1),
+                item("TT-4", WorkItemStatus.Todo, rank = 1),
+                item("TT-5", WorkItemStatus.Backlog),
+                item("TT-6", WorkItemStatus.Closed, resolvedAt = origin),
+            ),
+        )
+
+        assertEquals(
+            listOf("TT-4", "TT-2", "TT-1", "TT-3"),
+            keys(projection.kanban),
+        )
+        // The untriaged and the archived partitions neither gain nor reorder on-board items:
+        // the three partitions are the same pile seen three ways, not three separate listings.
+        assertEquals(listOf("TT-5"), keys(projection.backlog))
+        assertEquals(listOf("TT-6"), keys(projection.archived))
+    }
+
+    @Test
+    fun `a backlog-only project has nothing on the board or in the archived section`() {
         val projection = BacklogSectionedProjection(
             project = null,
             items = listOf(
@@ -186,9 +218,11 @@ class ProjectionsTest {
         )
 
         assertEquals(2, projection.backlogItemCount)
+        assertEquals(0, projection.kanbanItemCount)
         assertEquals(0, projection.archivedItemCount)
+        assertTrue(projection.kanbanIsEmpty)
         assertTrue(projection.archivedIsEmpty)
-        assertFalse(projection.bothAreEmpty)
+        assertFalse(projection.allSectionsEmpty)
         assertEquals(BacklogSection.Backlog, projection.currentSection)
     }
 
@@ -200,8 +234,9 @@ class ProjectionsTest {
         )
 
         assertTrue(projection.backlogIsEmpty)
+        assertTrue(projection.kanbanIsEmpty)
         assertTrue(projection.archivedIsEmpty)
-        assertTrue(projection.bothAreEmpty)
+        assertTrue(projection.allSectionsEmpty)
         assertFalse(projection.hasAnyContent)
         assertEquals(BacklogSection.Backlog, projection.currentSection)
     }

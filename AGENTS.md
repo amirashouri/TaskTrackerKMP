@@ -60,16 +60,18 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **green** (1303 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
-| iOS simulator | `iosSimulatorArm64Test` | **green** (1275 tests, 5 failed — the same 5) |
-| Android host | `testAndroidHostTest` | **red** — 17 `testAndroidHostTest` failures, all Compose UI layout failures (Robolectric's default viewport is far smaller); not a regression, the count rose 5 → 17 only because the two modules named below began executing again |
+| JVM | `jvmTest` | **green** (1331 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
+| iOS simulator | `iosSimulatorArm64Test` | **green** (1303 tests, 5 failed — the same 5) |
+| Android host | `testAndroidHostTest` | **red** — 787 tests, 31 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 7, feature-projects-presentation 3, shared-ui 7) |
 
 The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.
 
 `:shared-ui` was also uncompilable until recently — `ShellPreferences.currentUserName` was a
 non-suspend `val` whose getter called the `suspend` `UserDefaultsStore.value(DefaultsKey)`. It is
-now a `StateFlow` refreshed when the router root becomes `Main`, so the module compiles and its 28
-JVM / 26 iOS tests run; see PLAN.md §20.10. That page also records a known **coverage gap**: no
+now a `StateFlow` refreshed when the router root becomes `Main`, so the module compiles and its 48
+JVM / 46 iOS tests run; see PLAN.md §20.10 and Phase 24.4 (its backlog section scenarios moved
+here and its host registration was re-aligned to the canonical 13-method mapping). §20.10 also
+records a known **coverage gap**: no
 scenario seeds a `CachedProfile` and asserts the board filter, so deleting the refresh call leaves
 the suite byte-identical. Do not read `:shared-ui` being green as evidence that filter works.
 
@@ -81,7 +83,18 @@ Additional pre-existing failures, unchanged by the `ttTheme` fix:
 The Compose resource packaging that used to fail 61 of the Android-host tests is **fixed** — `tasktracker.kmp.compose.gradle.kts` copies the resources into the merged assets Robolectric reads. What remains on the Android host is two distinct things:
 
 1. **Five `:composition-root` graph assertions need a `Context`** — Room's `inMemoryDatabaseBuilder` refuses to open without one, so `testPlatformHost()` returned `Unit` and the graph never built. The fix is the split `:shared-ui` already uses: scenario bodies in `commonTest`, per-host entry points. (`HostedGraphScenarios` + `HostedGraphScenariosTest` on JVM/iOS, `HostedGraphAndroidHostTest` under Robolectric.) One of the five, `the outbox is left alone`, still cannot run on the Android host — it opens a `RoomOutboxQueue` and the Android host has no `sqliteJni` on its `java.library.path` (same limit that disables `:packages:database`'s host tests) — so it asks `thisHostOpensRoomStores()` and registers as a pass there. The other four need only a `Context` and pass on all three hosts.
-2. **17 Compose UI assertions fail on layout, not behaviour.** Robolectric's default viewport is far smaller than the JVM's and iOS's, so nodes inside a `LazyColumn` (`settings.versionRow`) or a `horizontalScroll` row (`board.column.in_review`) exist and report `assertIsDisplayed()` failing. `theVersionRowHidesItselfWithNoVersion` also calls `setContent` twice, which Android's `ComponentActivity` rejects with *"has already set content"* — so making that scenario portable means changing shared assertions the JVM and iOS hosts currently pass. Two of the 17 are known-not-portable (statements in `COMMON_TEST_HARDWARE_ONLY`): they assert a `Context`-bearing assertion and a `setContent`-twice scenario, and they are skipped on the Android host via `thisHostRasterisesText()`. Do not add another of these as a UI change; write a behaviour assertion instead, and measure pixels where the table says to.
+2. **Seven `:shared-ui` Compose UI assertions fail on layout, not behaviour** — one of the 31
+   `testAndroidHostTest` failures the host table above now measures across 787 tests.
+   Robolectric's default viewport is far smaller than the JVM's and iOS's, so nodes inside a
+   `LazyColumn` (`settings.versionRow`) or a `horizontalScroll` row (`board.column.in_review`)
+   exist and report `assertIsDisplayed()` failing. `theVersionRowHidesItselfWithNoVersion` also
+   calls `setContent` twice, which Android's `ComponentActivity` rejects with *"has already set
+   content"* — so making that scenario portable means changing shared assertions the JVM and iOS
+   hosts currently pass. Two of the shared-ui seven are known-not-portable (the sheet scenarios,
+   which read `Build` version fields that Robolectric leaves `null`, and the `setContent`-twice
+   one): they are skipped on the Android host via `thisHostRasterisesText()`. Do not add another
+   of these as a UI change; write a behaviour assertion instead, and measure pixels where the
+   table says to.
 
 On top of that, and also confirmed pre-existing by stashing:
 
@@ -98,7 +111,7 @@ Robolectric reads. What remains is two distinct things:
    `Unit` and the graph never builds. A real `Context` needs
    `@RunWith(RobolectricTestRunner::class)`, which cannot be written in `commonTest`. The fix
    is the split `shared-ui` already uses: bodies in `commonTest`, entry points per host.
-2. **Five Compose UI assertions fail on layout, not behaviour.** Robolectric's default
+2. **Seven Compose UI assertions fail on layout, not behaviour.** Robolectric's default
    viewport is far smaller than the other two hosts, so content inside a `LazyColumn`
    (`settings.versionRow`) or a `horizontalScroll` row (`board.column.in_review`) exists but
    is not displayed. `theVersionRowHidesItselfWithNoVersion` has a second, independent

@@ -99,21 +99,31 @@ class TaskTrackerAppAndroidHostTest {
     @Test
     fun theLastRowOfEachListScrollsClearOfTheTabBar() = runComposeUiTest(block = ShellScenarios.theLastRowOfEachListScrollsClearOfTheTabBar)
     @Test
-    fun theBacklogTabHasTwoSectionsAndTheArchivedSectionShowsClosedWork() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[0])
+    fun switchingToTheArchivedSectionShowsClosedWorkAndHidesBacklogRows() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[0])
     @Test
-    fun switchingToTheArchivedSectionShowsClosedWorkAndHidesBacklogRows() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[1])
+    fun switchingBackToTheBacklogSectionShowsBacklogRowsAgain() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[1])
     @Test
-    fun switchingBackToTheBacklogSectionShowsBacklogRowsAgain() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[2])
+    fun theArchivedSectionListsOnlyClosedItemsNewestFirst() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[2])
     @Test
-    fun theArchivedSectionListsOnlyClosedItemsNewestFirst() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[3])
+    fun theBacklogSectionRemainsWhenSwitchingAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[3])
     @Test
-    fun theBacklogSectionRemainsWhenSwitchingAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[4])
+    fun theArchivedSectionShowsItsOwnEmptyState() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[4])
     @Test
-    fun theArchivedSectionShowsItsOwnEmptyState() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[5])
+    fun theBacklogSectionShowsItsOwnEmptyState() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[5])
     @Test
-    fun theBacklogSectionShowsItsOwnEmptyState() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[6])
+    fun theBusyItemKeepsItsWaitAcrossASectionSwitch() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[6])
     @Test
-    fun theBusyItemKeepsItsWaitAcrossASectionSwitch() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[7])
+    fun switchingToKanbanShowsTheBoardRows() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[7])
+    @Test
+    fun theKanbanSectionListsRowsInBoardOrderThenRank() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[8])
+    @Test
+    fun tappingAKanbanRowOpensTheTask() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[9])
+    @Test
+    fun filingAwayFromAKanbanRowCallsFileAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[10])
+    @Test
+    fun theKanbanSectionShowsItsOwnEmptyState() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[11])
+    @Test
+    fun tappingABacklogRowOpensTheTask() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[12])
     @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test

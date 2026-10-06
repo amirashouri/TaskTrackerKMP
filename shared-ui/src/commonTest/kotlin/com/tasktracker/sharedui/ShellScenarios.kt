@@ -51,7 +51,6 @@ import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogArchivedListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyBacklogTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyArchivedTag
-import com.tasktracker.featureprojectspresentation.BacklogSectionScenarios
 import com.tasktracker.featureprojectspresentation.SectionIndicatorTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
@@ -1483,20 +1482,11 @@ object ShellScenarios {
         waitForIdle()
         assertBottomMostRowClearsTheBar(AppTab.Backlog, WorkItemBacklogRowTagPrefix)
 
-        everyTabScrollsBehindTheTabBar()
-
-        // The backlog tab now has two sections — backlog and archived — each with its own empty
-        // state, and the archived section is the one where a filed-away backlog task lands. The
-        // seven section scenarios below are the only assertions that touch that split; the tab
-        // scroll scenario above still measures the backlog section's viewport, because that is
-        // the one the tab's scroll region is the backlog section's list. These run after the tab
-        // scroll scenario rather than as part of it, because a section switch is a different
-        // gesture than a scroll and the two assertions should be independently green.
-        projectBacklogScenarios.forEach { scenario ->
-            scenario()
-        }
-
-
+        // The per-tab region geometry is asserted by `everyTabScrollsBehindTheTabBar`, which is
+        // registered as its own test. Running it here would call `setUpShell` a second time —
+        // a second `setContent` that Android's `ComponentActivity` rejects with "has already set
+        // content" — so this scenario measures the per-list row clearance and leaves the region
+        // reach to the scenario that owns it.
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
         onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
@@ -1646,10 +1636,10 @@ object ShellScenarios {
         AppTab.Settings to SettingsScreenTag,
     )
 
-    // A second scroll region per tab is not registered here, because the backlog tab now has two
-    // sections and the archived one is reached by a section switch rather than by a tab. The
-    // archived section's reach is asserted in [BacklogSectionScenarios] directly, and the backlog
-    // section remains the one the tab's scroll region is measured on.
+    // A second scroll region per tab is not registered here, because the backlog tab now has
+    // three sections and the archived and Kanban ones are reached by a section switch rather
+    // than by a tab. Their reach is asserted in [BacklogSectionScenarios] directly, and the
+    // backlog section remains the one the tab's scroll region is measured on.
 
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
         BacklogSectionScenarios.switchingToArchivedShowsTheArchivedSection,
@@ -1659,6 +1649,12 @@ object ShellScenarios {
         BacklogSectionScenarios.theArchivedSectionShowsItsOwnEmptyState,
         BacklogSectionScenarios.theBacklogSectionShowsItsOwnEmptyState,
         BacklogSectionScenarios.theBusyItemKeepsItsWaitAcrossASectionSwitch,
+        BacklogSectionScenarios.switchingToKanbanShowsTheBoardRows,
+        BacklogSectionScenarios.theKanbanSectionListsRowsInBoardOrderThenRank,
+        BacklogSectionScenarios.tappingAKanbanRowOpensTheTask,
+        BacklogSectionScenarios.filingAwayFromAKanbanRowCallsFileAway,
+        BacklogSectionScenarios.theKanbanSectionShowsItsOwnEmptyState,
+        BacklogSectionScenarios.tappingABacklogRowOpensTheTask,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
