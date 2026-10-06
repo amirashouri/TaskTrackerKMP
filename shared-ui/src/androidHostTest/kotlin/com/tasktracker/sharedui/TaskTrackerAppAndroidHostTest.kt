@@ -58,6 +58,8 @@ class TaskTrackerAppAndroidHostTest {
     /** The board's File Away button reaches the store. The screen has drawn that button since Phase 12, and the board's model had no verb for it until this shell was wired — a gap no model test could see, because a model cannot be asked whether the button above it has a caller. This is the assertion that a live-looking control is not inert. */
     @Test
     fun filingACardAwayFromTheBoardReachesTheStore() = runComposeUiTest(block = ShellScenarios.filingACardAwayFromTheBoardReachesTheStore)
+    @Test
+    fun filingAwayInTheEditorClosesTheSheet() = runComposeUiTest(block = ShellScenarios.filingAwayInTheEditorClosesTheSheet)
 
     /** The toolbar's project name is the way back to the list. Asserted as a round trip rather than as a tap, because a control that navigates *somewhere* is not the same as one that navigates *here*: the board was pushed onto the Projects stack, so anything short of returning to the root leaves the user one tap from nowhere. */
     @Test

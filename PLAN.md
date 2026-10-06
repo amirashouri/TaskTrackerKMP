@@ -5639,9 +5639,9 @@ against `@Test`.
 
 | Host | Before | After | Failures |
 | --- | --- | --- | --- |
-| JVM | 1303 | **1331** | 5, unchanged set |
-| iOS simulator | 1275 | **1303** | 5, unchanged set |
-| Android host | red, ~17 documented | **787 tests, 31 failures** | viewport / Context / Build-mediated set, unchanged classes |
+| JVM | 1303 | **1332** | 5, unchanged set |
+| iOS simulator | 1275 | **1304** | 5, unchanged set |
+| Android host | red, ~17 documented | **788 tests, 31 failures** | viewport / Context / Build-mediated set, unchanged classes |
 
 The five per host are the same documented pre-existing set (`SeedingTest` ×3 in
 `:packages:feature-projects-data`, `aChosenThemeOutlivesTheProcess` and `theBoardReturnsToTheList`
@@ -5653,14 +5653,41 @@ fixed) and no failure added.
 
 The first iOS read of these totals came off 1294 because only part of the iOS simulator matrix
 had re-executed at that moment (the same stale-XML trap the last-row fix hit). Re-measured clean
-with `--rerun-tasks`, iOS is **1303** with the same 5 failures; 1294 was the undercount, not a
-regression.
+with `--rerun-tasks`, iOS read **1303** (before 24.6 added its one scenario, which is why the
+table's After column says 1304); 1294 was the undercount, not a regression.
 
 ### 24.5 Baseline and full matrix
 
 **Folded into 24.4.** Once `:shared-ui` compiled, there was no reason to defer the deciding
-command, so 24.4's `#### Baseline` measured it: JVM 1303 → **1331**, iOS 1275 → **1303**, both
-with the same 5 pre-existing failures; Android host 787 / 31, all documented classes. `AGENTS.md`'s
+command, so 24.4's `#### Baseline` measured it: JVM 1303 → **1332**, iOS 1275 → **1304**, both
+with the same 5 pre-existing failures; Android host 788 / 31, all documented classes. `AGENTS.md`'s
 test-host table and the shared-ui counts above were updated in the same change as the test
 additions, per the "baseline in the same change" rule.
+
+### 24.6 File Away in the editor closes the sheet
+
+**Defect.** `WorkItemEditorDestination`'s `onFileAway` ran `model.fileAway()` and never
+dismissed the sheet, while `onSave` and `onCancel` both did — so tapping File Away archived the
+item and left a modal standing over a board that no longer showed it, still offering edits.
+
+**Fix.** `shared-ui/src/commonMain/.../NavigationHost.kt:1111` now mirrors `onSave`'s close:
+on a successful `fileAway()` the destination sets `isSheetVisible = false` (or `onDismiss()` when
+expanded); on `false` it stays open, so an archive the store refused keeps its error banner
+readable.
+
+**Test.** `filingAwayInTheEditorClosesTheSheet` in `ShellScenarios` (registered on all three
+hosts) pushes the editor the way a user does — project row, then card (`WorkItemCardTag`) — and
+asserts both halves: the store saw the `Closed` write, and the `WorkItemEditorDestinationTag` is
+gone with the board back on screen.
+
+**Mutation.** Reverting the dismiss only went red with "expected file-away in the editor to close
+the sheet, not leave it standing over the board"; restored, green. A second mutation this test
+would not have caught had the button been off-screen: the sheet's action row is its last child,
+and Robolectric's short viewport sat it under the fold, where the click landed on nothing — the
+scenario `performScrollTo()`s the button first, and the Android host stays at its documented 7.
+
+**Baseline.** shared-ui is now 49 JVM / 47 iOS / 47 Android tests, and the whole-command `After`
+column in 24.4's table already reads the post-24.6 numbers (**1332 / 1304 / 788**) because the
+"baseline in the same change" rule updates that table too — the one-scenario-per-host growth from
+24.4 is this change's, not the backlog work's.
 </details>

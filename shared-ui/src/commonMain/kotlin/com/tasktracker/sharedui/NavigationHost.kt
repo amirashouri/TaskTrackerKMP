@@ -1108,7 +1108,20 @@ private fun WorkItemEditorDestination(
                 model.onDueDateChanged(if (on) dateProvider.now() else null)
             }
         },
-        onFileAway = { scope.launch { model.fileAway() } },
+        // File away is a close, like save: the task is gone from the board, so a sheet left
+        // standing would keep offering edits to a task the graph no longer shows. It dismisses
+        // only on success, so an archive the store refused keeps the error banner readable.
+        onFileAway = {
+            scope.launch {
+                if (model.fileAway()) {
+                    if (isSheetExpanded) {
+                        onDismiss()
+                    } else {
+                        isSheetVisible = false
+                    }
+                }
+            }
+        },
         // The route stays mounted through the sheet's exit transition, and a failed save
         // leaves the draft visible with its error banner.
         onSave = {

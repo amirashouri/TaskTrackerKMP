@@ -21,6 +21,7 @@ import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
@@ -59,6 +60,8 @@ import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
+import com.tasktracker.featureprojectspresentation.WorkItemCardTag
+import com.tasktracker.featureprojectspresentation.WorkItemFileAwayTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
@@ -511,6 +514,45 @@ object ShellScenarios {
             projects.writes.contains("moveWorkItem:Closed"),
             "expected the card to be closed in the store, saw ${projects.writes}",
         )
+    }
+
+    /**
+     * File Away in the editor closes the sheet it was tapped from.
+     *
+     * The board's file-away button lives on the board; the editor's lives in a modal the user
+     * just opened over the board. Archived is a terminal state, so the action has to be a close
+     * as much as a store write — a sheet left standing after the item left the board would keep
+     * offering edits to a task the board no longer shows. Assert the whole route: the file-away
+     * write reaches the store, and the editor destination is gone, leaving the board back on
+     * screen.
+     */
+    val filingAwayInTheEditorClosesTheSheet: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        val item = shellTestWorkItem(projectID = project.id, keyPrefix = project.keyPrefix)
+        projects.seed(project)
+        projects.seed(item)
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectRowTag(ProjectSummary(project, itemCount = 1))).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemCardTag(item)).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
+
+        onNodeWithTag(WorkItemFileAwayTag).performScrollTo().performClick()
+        waitForIdle()
+
+        assertTrue(
+            projects.writes.contains("moveWorkItem:Closed"),
+            "expected file-away in the editor to close the item in the store, saw ${projects.writes}",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
+            "expected file-away in the editor to close the sheet, not leave it standing over the board",
+        )
+        onNodeWithTag(ProjectBoardScreenTag).assertIsDisplayed()
     }
 
     /**
