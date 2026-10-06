@@ -712,6 +712,9 @@ private fun BoardDestination(
         onSelectProject = { router.openProject(it, AppTab.Board) },
         showOnlyMyTasks = model.showOnlyMyTasks,
         onToggleMyTasks = model::toggleShowOnlyMyTasks,
+        // 24.2: the Board tab was the one board host that dropped the sprint, so its header
+        // never named a running sprint. It must, for the title to say which sprint is active.
+        activeSprint = model.activeSprint,
     )
 }
 

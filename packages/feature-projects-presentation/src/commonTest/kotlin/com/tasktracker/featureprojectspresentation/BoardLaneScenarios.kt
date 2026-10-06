@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,11 +16,15 @@ import com.tasktracker.designsystem.OVERFLOW_TAG
 import com.tasktracker.designsystem.ttAvatarSize
 import com.tasktracker.designsystem.ttAvatarStackDefaults
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.BoardProjection
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.board_kanban
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.jetbrains.compose.resources.getString
 
 /**
  * How the board's lane row sits on the screen, as scenarios.
@@ -253,6 +258,34 @@ object BoardLaneScenarios {
         onAllNodesWithTag(ProjectBoardAssigneesTag).assertCountEquals(0)
     }
 
+    /**
+     * A board with no active sprint is named "Kanban".
+     *
+     * 24.2: the header's leftover width shows the board's identity, and when no sprint is
+     * running that identity is the word Kanban - the same word a task added from the board
+     * goes to. Asserted as text, because the whole point is the name, not a tag's presence.
+     */
+    val aBoardWithoutAnActiveSprintIsNamedKanban: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(onOpenSwitcher = {})
+
+        onNodeWithTag(ProjectBoardTitleTag).assertTextEquals(getString(Res.string.board_kanban))
+    }
+
+    /**
+     * A board with an active sprint is named after that sprint, and has no banner.
+     *
+     * The sprint name replaces the old full-width `Active Sprint:` banner, which said the same
+     * thing in a strip of its own and cost the lanes two lines of the screen. Asserted as the
+     * name *and* the banner string's absence, so neither "the title shows nothing" nor "the
+     * banner came back" can pass quietly.
+     */
+    val aBoardWithAnActiveSprintNamesItInTheHeader: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(onOpenSwitcher = {}, activeSprint = ViewPreviewData.openSprint)
+
+        onNodeWithTag(ProjectBoardTitleTag).assertTextEquals(ViewPreviewData.openSprint.name)
+        onAllNodesWithText("Active Sprint", substring = true).assertCountEquals(0)
+    }
+
     /** Every lane is still drawn, edge-to-edge layout notwithstanding. */
     val everyLaneIsStillDrawn: suspend ComposeUiTest.() -> Unit = {
         boardShowing()
@@ -272,6 +305,7 @@ object BoardLaneScenarios {
 private fun ComposeUiTest.boardShowing(
     projection: BoardProjection = ViewPreviewData.boardProjection(),
     onOpenSwitcher: (() -> Unit)? = null,
+    activeSprint: Sprint? = null,
 ) {
     setContent {
         Themed {
@@ -285,6 +319,7 @@ private fun ComposeUiTest.boardShowing(
                 onMove = { _, _ -> },
                 onDismissError = {},
                 onOpenSwitcher = onOpenSwitcher,
+                activeSprint = activeSprint,
             )
         }
     }

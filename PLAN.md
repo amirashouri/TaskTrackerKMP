@@ -5448,13 +5448,57 @@ it is why the whole-command baseline cannot be re-measured yet; the AGENTS.md gl
 (1303/1275) wait for 24.5 when `:shared-ui` compiles again.
 
 ### 24.2 Header title: sprint name, or "Kanban"
-- [ ] **24.2.1** `ProjectBoardScreen.kt` header row: add a headline in the free space (left weight
+
+**All three done.** The header's left group now fills (`weight(1f)` instead of `fill = false`) and
+a `ttText` in `ttTypography.titleSmall` takes the leftover width, ellipsising long sprint names:
+`activeSprint?.name` when a sprint is running, otherwise the new string `board_kanban` =
+"Kanban". The full-width **`Active Sprint:` banner is deleted** (with its `ttBannerTone` import and
+the `board.activeSprint` tag, which no test asserted), replacing two stripped text lines with the
+name in the line the compact switcher freed — that, not the banner, is what 24.1 made room for.
+
+- [x] **24.2.1** `ProjectBoardScreen.kt` header row: add a headline in the free space (left weight
       group, :159-177) reading `activeSprint?.name` when one exists, else a new string resource
       "Kanban"; remove the `Active Sprint:` banner (:194-201).
-- [ ] **24.2.2** Pass `activeSprint = model.activeSprint` into `NavigationHost.kt`'s
+- [x] **24.2.2** Pass `activeSprint = model.activeSprint` into `NavigationHost.kt`'s
       `BoardDestination` (:682-715) — the only board host that currently drops it.
-- [ ] **24.2.3** Structural tests for the title (present, pinned to sprint name / "Kanban") and
+- [x] **24.2.3** Structural tests for the title (present, pinned to sprint name / "Kanban") and
       the banner's absence; mutate by deleting the wiring.
+
+#### Test
+
+Two scenarios in `BoardLaneScenarios.kt`:
+
+- [`aBoardWithoutAnActiveSprintIsNamedKanban`] — `onNodeWithTag(ProjectBoardTitleTag)` equals
+  the `board_kanban` resource. The wire in `boardShowing` gained an `activeSprint` parameter.
+- [`aBoardWithAnActiveSprintNamesItInTheHeader`] — the same node equals `ViewPreviewData.openSprint.name`
+  ("Sprint 7"), and `onAllNodesWithText("Active Sprint", substring = true)` is empty, so the
+  banner cannot silently come back in disguise.
+
+Both registered in `ProjectsUiJvmTest`, `ProjectsUiIosTest`, `ProjectsUiAndroidHostTest`.
+
+#### Mutation
+
+Two mutations, both caught, both red on the sprint-name scenario:
+
+1. Dropping `activeSprint?.name` from the title made it fail with the node's real text named —
+   `Text = '[Kanban]'` on `board.title` where `['Sprint 7']` was expected.
+2. Rewriting the title as `"Active Sprint: ${name}"` failed the same assertion (and the
+   substring-absence check it precedes), the message naming `[Active Sprint: Sprint 7]`.
+
+Restored, both green on all three hosts.
+
+#### Baseline
+
+| Host | Before | After | Failures |
+| --- | --- | --- | --- |
+| JVM (`:packages:feature-projects-presentation`) | 216 | **218** | 0, unchanged |
+| iOS simulator (same module) | 216 | **218** | 0, unchanged |
+
++2 per host from the JUnit XML, cross-checked against `@Test` (`ProjectsUiJvmTest` 43 → 45,
+`ProjectsUiIosTest` 42 → 44, `ProjectsUiAndroidHostTest` 43 → 45). The iOS and Android counts are
+source-checked; the full host suites re-run at 24.5 behind the `:shared-ui` blocker described
+under 24.1. The `NavigationHost` `activeSprint` wire lands on the Board tab but is unassertable
+until `:shared-ui` compiles — same blocker; the wire is two lines.
 
 ### 24.3 A task added without an active sprint lands on the Kanban board
 - [ ] **24.3.1** Write the failing test first: board with `activeSprint == null` → add task in a

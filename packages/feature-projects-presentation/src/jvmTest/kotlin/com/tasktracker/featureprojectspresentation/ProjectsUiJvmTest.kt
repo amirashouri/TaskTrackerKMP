@@ -72,6 +72,12 @@ class ProjectsUiJvmTest {
     fun theSwitcherShowsTheMonogramAndNotTheName() = runComposeUiTest(block = BoardLaneScenarios.theSwitcherShowsTheMonogramAndNotTheName)
 
     @Test
+    fun aBoardWithoutAnActiveSprintIsNamedKanban() = runComposeUiTest(block = BoardLaneScenarios.aBoardWithoutAnActiveSprintIsNamedKanban)
+
+    @Test
+    fun aBoardWithAnActiveSprintNamesItInTheHeader() = runComposeUiTest(block = BoardLaneScenarios.aBoardWithAnActiveSprintNamesItInTheHeader)
+
+    @Test
     fun theAssigneeStackOverlapsAndCountsWhatItHides() = runComposeUiTest(block = BoardLaneScenarios.theAssigneeStackOverlapsAndCountsWhatItHides)
 
     @Test

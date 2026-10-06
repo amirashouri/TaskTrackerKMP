@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -28,7 +29,6 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
-import com.tasktracker.designsystem.ttBannerTone
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
@@ -36,12 +36,15 @@ import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_my_tasks
+import com.tasktracker.resources.board_kanban
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
@@ -157,7 +160,7 @@ fun ProjectBoardScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -178,6 +181,18 @@ fun ProjectBoardScreen(
                         modifier = Modifier.testTag(ProjectBoardAssigneesTag),
                     )
                 }
+                // 24.2: the leftover header width names the board. A running sprint is the board's
+                // identity while it runs, and "Kanban" is the identity when there is none - the
+                // same word a new task lands on. It fills and ellipsises rather than capping,
+                // because unlike the switcher this is the title the empty space exists for.
+                ttText(
+                    text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
+                    style = ttTypography.titleSmall,
+                    color = ttLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
+                )
             }
             ttGlassIconButton(
                 image = ttActionIcons.person,
@@ -192,14 +207,6 @@ fun ProjectBoardScreen(
                 message = message,
                 onDismiss = onDismissError,
                 modifier = Modifier.fillMaxWidth().horizontalGutter(),
-            )
-        }
-        activeSprint?.let { sprint ->
-            ttBanner(
-                message = "Active Sprint: ${sprint.name}",
-                tone = ttBannerTone.Accent,
-                onDismiss = {},
-                modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBoardActiveSprintTag),
             )
         }
         if (projection.project == null && !isLoading) {
@@ -460,7 +467,7 @@ const val ProjectBoardScreenTag = "board.screen"
 const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
 const val ProjectBoardMyTasksTag = "board.myTasks"
-const val ProjectBoardActiveSprintTag = "board.activeSprint"
+const val ProjectBoardTitleTag = "board.title"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 
