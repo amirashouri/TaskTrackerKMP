@@ -72,4 +72,19 @@ class SettingsViewJvmTest {
 
     @Test
     fun aTapOnTheTrackMovesItWithoutADrag() = runComposeUiTest(block = GlassIntensityScenarios.aTapOnTheTrackMovesItWithoutADrag)
+
+    /**
+     * [ThemeOptionScenarios] on the JVM.
+     *
+     * The ring scenario reads rendered pixels, so it runs only where a frame can be measured —
+     * see [com.tasktracker.designsystem.TextRasterSupport] for why the Android host skips it.
+     */
+
+    @Test
+    fun theSelectedSchemeOptionDrawsAnAccentRing() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+
+    @Test
+    fun theLongAccentCaptionWrapsInsteadOfClipping() =
+        runComposeUiTest(block = ThemeOptionScenarios.theLongAccentCaptionWrapsInsteadOfClipping)
 }

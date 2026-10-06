@@ -62,4 +62,18 @@ class SettingsViewIosTest {
 
     @Test
     fun aTapOnTheTrackMovesItWithoutADrag() = runComposeUiTest(block = GlassIntensityScenarios.aTapOnTheTrackMovesItWithoutADrag)
+
+    /**
+     * [ThemeOptionScenarios] on the iOS simulator.
+     *
+     * The ring scenario reads rendered pixels — this host is one of the two that can.
+     */
+
+    @Test
+    fun theSelectedSchemeOptionDrawsAnAccentRing() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+
+    @Test
+    fun theLongAccentCaptionWrapsInsteadOfClipping() =
+        runComposeUiTest(block = ThemeOptionScenarios.theLongAccentCaptionWrapsInsteadOfClipping)
 }

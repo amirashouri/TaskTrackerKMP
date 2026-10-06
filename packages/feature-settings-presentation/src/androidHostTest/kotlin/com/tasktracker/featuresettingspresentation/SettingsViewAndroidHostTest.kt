@@ -79,4 +79,20 @@ class SettingsViewAndroidHostTest {
 
     @Test
     fun aTapOnTheTrackMovesItWithoutADrag() = runComposeUiTest(block = GlassIntensityScenarios.aTapOnTheTrackMovesItWithoutADrag)
+
+    /**
+     * [ThemeOptionScenarios] on the Android host.
+     *
+     * The caption scenario runs here. The ring scenario measures rendered pixels and skips on
+     * this host (the skip records as a pass) because Robolectric's rasteriser disagrees with
+     * Skia — same reason as the design system's own pixel gates.
+     */
+
+    @Test
+    fun theSelectedSchemeOptionDrawsAnAccentRing() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionDrawsAnAccentRing)
+
+    @Test
+    fun theLongAccentCaptionWrapsInsteadOfClipping() =
+        runComposeUiTest(block = ThemeOptionScenarios.theLongAccentCaptionWrapsInsteadOfClipping)
 }

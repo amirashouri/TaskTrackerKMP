@@ -40,6 +40,7 @@ import com.tasktracker.designsystem.ttSlider
 import kotlin.math.roundToInt
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
@@ -49,6 +50,7 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
+import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -358,7 +360,13 @@ private fun AccentPalettePickerRow(
                         text = palette.title,
                         style = ttTypography.footnote,
                         color = if (isSelected) ttAccent() else ttLabelSecondary(),
-                        maxLines = 1,
+                        // Two lines, not one: the second palette ("Classic Light") was 13
+                        // characters on a six-column row — long enough to be clipped on a
+                        // phone. A caption that wraps to a second line stays whole instead of
+                        // ending in an ellipsis.
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
                     )
                 }
             }
@@ -624,8 +632,6 @@ private fun ThemePickerRow(
         }
 
         if (expanded) {
-            val isDarkTheme = ttIsDarkTheme()
-            val dropdownLabel = if (isDarkTheme) ttLabel() else Color.White
             Popup(
                 popupPositionProvider = SettingsDropdownPositionProvider,
                 onDismissRequest = { expanded = false },
@@ -641,39 +647,73 @@ private fun ThemePickerRow(
                         .padding(vertical = ttSpacing.xs),
                 ) {
                     ThemeScheme.all.forEach { scheme ->
-                        val isSelected = scheme == selected
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .selectable(
-                                    selected = isSelected,
-                                    role = Role.RadioButton,
-                                ) {
-                                    onSelect(scheme)
-                                    expanded = false
-                                }
-                                .testTag(ThemeOptionTag(scheme))
-                                .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ttText(
-                                text = scheme.title,
-                                style = ttTypography.body,
-                                color = if (isSelected && isDarkTheme) ttAccent() else dropdownLabel,
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            if (isSelected) {
-                                ttText(
-                                    text = "✓",
-                                    style = ttTypography.body,
-                                    color = if (isDarkTheme) ttAccent() else dropdownLabel,
-                                )
-                            }
-                        }
+                        ThemePickerOption(
+                            scheme = scheme,
+                            isSelected = scheme == selected,
+                            onClick = {
+                                onSelect(scheme)
+                                expanded = false
+                            },
+                        )
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * One theme scheme, as a selectable option row in the theme dropdown.
+ *
+ * The selected option is signalled twice: the old way (accent title + a check mark) and a
+ * ring. The ring is not decoration — in the light theme the title and check are rendered in
+ * `Color.White` on the glass, so the check mark's position was the only thing telling the
+ * selected row apart from its neighbours. The ring reuses the exact accent-circle vocabulary
+ * from [AccentPalettePickerRow] so the page has one kind of emphasis, not two.
+ *
+ * `internal`, not `private`, so the pixel test can compose one option in the main root
+ * instead of opening the `Popup` — a popup is a second composition root, and mapping its
+ * coordinates onto a captured frame is guesswork (`MonthArrowRenderTest` documents the same
+ * rule for `TTDayGrid`).
+ */
+@Composable
+internal fun ThemePickerOption(
+    scheme: ThemeScheme,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val isDarkTheme = ttIsDarkTheme()
+    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(ttRadius.control))
+            .border(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) ttAccent() else if (ttIsDarkTheme()) {
+                    Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA)
+                } else {
+                    Color.Black.copy(alpha = ttGlass.LIGHT_HAIRLINE_ALPHA)
+                },
+                shape = RoundedCornerShape(ttRadius.control),
+            )
+            .selectable(
+                selected = isSelected,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
+            .testTag(ThemeOptionTag(scheme))
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        ttText(
+            text = scheme.title,
+            style = ttTypography.body,
+            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
