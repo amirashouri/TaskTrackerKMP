@@ -11,10 +11,12 @@ dependencies {
     // settings feature's own vocabulary, so it names `NetworkMonitor` and `Connectivity`.
     commonMainImplementation(project(":packages:network"))
     commonMainImplementation(project(":packages:feature-settings-domain"))
+    commonMainImplementation(project(":packages:user-defaults"))
 
     // `:packages:core` carries coroutines as `implementation`, so the `Flow` types in the
     // port's signatures are not re-exported to this module's compile classpath.
     commonMainImplementation(libs.kotlinx.coroutines.core)
 
     commonTestImplementation(libs.kotlinx.coroutines.test)
+    commonTestImplementation(project(":packages:user-defaults"))
 }

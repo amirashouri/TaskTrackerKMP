@@ -47,6 +47,7 @@ import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
 import com.tasktracker.resources.board_add_task
+import com.tasktracker.resources.archive_reopen
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -97,6 +98,7 @@ fun ProjectBacklogScreen(
     onSelect: (WorkItemID) -> Unit,
     onPutOnBoard: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
+    onUnarchive: (WorkItemID) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSwitcher: (() -> Unit)? = null,
@@ -205,6 +207,7 @@ fun ProjectBacklogScreen(
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     onSelect = onSelect,
+                    onUnarchive = onUnarchive,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -223,6 +226,7 @@ private fun ProjectBacklogScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onSelect = {},
         onPutOnBoard = {},
         onFileAway = {},
+        onUnarchive = {},
         onDismissError = {},
     )
 }
@@ -241,6 +245,7 @@ private fun ProjectBacklogScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Lig
         onSelect = {},
         onPutOnBoard = {},
         onFileAway = {},
+        onUnarchive = {},
         onDismissError = {},
     )
 }
@@ -336,7 +341,8 @@ private fun KanbanSectionList(
  *
  * No put-on-board and no file-away, because every item here is already `Closed` — the backlog's
  * file-away verb refuses on `Closed`, and "put on board" from `Closed` would be re-opening a
- * task the user chose to file away. The section is a log of what was filed, not a place to file.
+ * task the user chose to file away. The section shows a Reopen button instead, which moves the
+ * item back to the backlog and clears its resolution date.
  */
 @Composable
 private fun ArchivedSectionList(
@@ -344,6 +350,7 @@ private fun ArchivedSectionList(
     busyItemID: WorkItemID?,
     isLoading: Boolean,
     onSelect: (WorkItemID) -> Unit,
+    onUnarchive: (WorkItemID) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!isLoading && projection.archivedIsEmpty) {
@@ -363,6 +370,7 @@ private fun ArchivedSectionList(
                     onFileAway = { },
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
+                    onUnarchive = { onUnarchive(item.id) },
                 )
             }
         }

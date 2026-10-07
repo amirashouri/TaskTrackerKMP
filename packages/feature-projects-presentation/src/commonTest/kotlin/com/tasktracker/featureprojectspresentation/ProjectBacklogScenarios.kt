@@ -186,6 +186,7 @@ private fun ComposeUiTest.backlogShowing(
                 onSelect = {},
                 onPutOnBoard = {},
                 onFileAway = {},
+                onUnarchive = {},
                 onDismissError = {},
                 onOpenSwitcher = {},
                 projects = ViewPreviewData.pickable(),

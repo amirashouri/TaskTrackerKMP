@@ -11,6 +11,8 @@ import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncStatus
 import com.tasktracker.sync.SyncTrigger
+import com.tasktracker.userdefaults.DefaultsKey
+import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -44,6 +46,7 @@ class LiveSettingsService(
     private val coordinator: SyncCoordinator,
     private val version: AppVersion,
     private val endSession: suspend () -> Unit,
+    private val defaults: UserDefaultsStore,
 ) : SettingsPort {
 
     // MARK: - Connectivity
@@ -97,12 +100,35 @@ class LiveSettingsService(
 
     private val userDetailsFlow = MutableStateFlow(UserDetails())
 
-    override suspend fun userDetails(): UserDetails = userDetailsFlow.value
+    override suspend fun userDetails(): UserDetails {
+        // Seed from persisted values on first read. After that the flow owns the state and
+        // the store is only written to, never read from again unless the flow is empty.
+        if (!userDetailsFlow.value.fullName.isNotBlank() &&
+            !userDetailsFlow.value.email.isNotBlank() &&
+            userDetailsFlow.value.avatarId == null &&
+            userDetailsFlow.value.position == null
+        ) {
+            defaults.value<UserDetails>(DefaultsKey.UserProfile)?.let { persisted ->
+                userDetailsFlow.value = persisted
+            }
+            // If no persisted profile yet, seed the email from the cached auth identity so
+            // the screen can always show something beside the avatar.
+            if (!userDetailsFlow.value.email.isNotBlank()) {
+                defaults.value<String>(DefaultsKey.CachedUserEmail)?.let { email ->
+                    userDetailsFlow.value = userDetailsFlow.value.copy(email = email)
+                }
+            }
+        }
+        return userDetailsFlow.value
+    }
 
     override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
 
     override suspend fun setUserDetails(details: UserDetails) {
         userDetailsFlow.value = details
+        // Persist so the choice survives a process restart — avatarId, fullName, position
+        // and email are all kept together so a picked portrait comes back on the next launch.
+        defaults.set(details, DefaultsKey.UserProfile)
     }
 
     // MARK: - Translation

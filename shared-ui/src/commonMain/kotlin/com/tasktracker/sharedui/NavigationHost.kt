@@ -749,6 +749,7 @@ private fun BacklogDestination(
         },
         onPutOnBoard = { itemID -> scope.launch { model.putOnBoard(itemID) } },
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
+        onUnarchive = { itemID -> scope.launch { model.unarchive(itemID) } },
         onDismissError = model::dismissError,
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,

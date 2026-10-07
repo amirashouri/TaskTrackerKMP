@@ -387,6 +387,7 @@ object BacklogSectionScenarios {
         onSelect: (WorkItemID) -> Unit = {},
         onPutOnBoard: (WorkItemID) -> Unit = {},
         onFileAway: (WorkItemID) -> Unit = {},
+        onUnarchive: (WorkItemID) -> Unit = {},
     ) {
         setContent {
             ttTheme(ThemeScheme.Dark) {
@@ -398,6 +399,7 @@ object BacklogSectionScenarios {
                     onSelect = onSelect,
                     onPutOnBoard = onPutOnBoard,
                     onFileAway = onFileAway,
+                    onUnarchive = onUnarchive,
                     onDismissError = {},
                 )
             }

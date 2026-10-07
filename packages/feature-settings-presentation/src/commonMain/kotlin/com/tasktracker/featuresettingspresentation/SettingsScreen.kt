@@ -70,6 +70,7 @@ import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttMonospacedDigits
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -676,7 +677,12 @@ private fun ThemePickerRow(
                 style = ttTypography.subheadline,
                 color = ttLabelSecondary(),
             )
-            ttText(text = "⌄", style = ttTypography.body, color = ttLabelSecondary())
+            ttIcon(
+                image = ttActionIcons.chevronDown,
+                contentDescription = null,
+                tint = ttLabelSecondary(),
+                modifier = Modifier.size(ttSpacing.sm * 1.5f),
+            )
         }
 
         if (expanded) {
@@ -885,10 +891,11 @@ fun ThemeOptionTag(scheme: ThemeScheme): String = "settings.theme.${scheme.wireV
  *
  * ## One control for the placeholder and the picture
  *
- * Until [UserDetails.avatarId] names one of the ten bundled portraits, the initials disc stands
- * in — and it is tappable, because a placeholder that cannot be tapped is a dead end: it would
- * leave the user no way to reach the picker that is the only way to set `avatarId`. Tapping
- * again closes the grid; picking a portrait routes `details.copy(avatarId = …)` through the same
+ * Until [UserDetails.avatarId] names one of the ten bundled portraits, a person-silhouette disc
+ * stands in — the silhouette reads as "no photo chosen" rather than as a bare initials circle,
+ * and it is tappable, because a placeholder that cannot be tapped is a dead end: it would leave
+ * the user no way to reach the picker that is the only way to set `avatarId`. Tapping again
+ * closes the grid; picking a portrait routes `details.copy(avatarId = …)` through the same
  * callback every other edit here uses, so persistence stays the model's job.
  */
 @Composable
@@ -924,17 +931,33 @@ private fun UserDetailsRow(
                         .clip(CircleShape),
                 )
             } else {
-                ttInitialsAvatar(
-                    initials = if (details.fullName.isNotBlank()) ttInitialsFor(details.fullName) else "U",
-                    size = UserDetailsAvatarSize,
-                )
+                // A person silhouette behind the initials, so the disc reads as a profile
+                // placeholder rather than a bare monogram circle. The silhouette is the same
+                // glyph the board's project switcher uses for its assignee pill.
+                Box(
+                    modifier = Modifier.size(UserDetailsAvatarSize),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ttIcon(
+                        image = ttActionIcons.person,
+                        contentDescription = null,
+                        tint = ttAccent(),
+                        modifier = Modifier.size(UserDetailsAvatarSize * 0.55f),
+                    )
+                    ttInitialsAvatar(
+                        initials = if (details.fullName.isNotBlank()) ttInitialsFor(details.fullName) else "U",
+                        size = UserDetailsAvatarSize,
+                    )
+                }
             }
         }
         ttText(
-            text = if (details.fullName.isNotBlank()) details.fullName else "—",
+            text = if (details.fullName.isNotBlank()) details.fullName else details.email,
             style = ttTypography.headline,
             color = ttLabel(),
             textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         if (avatarPickerOpen) {
             Column(
@@ -1053,7 +1076,12 @@ private fun UserPositionPickerRow(
                 style = ttTypography.subheadline,
                 color = ttLabelSecondary(),
             )
-            ttText(text = "⌄", style = ttTypography.body, color = ttLabelSecondary())
+            ttIcon(
+                image = ttActionIcons.chevronDown,
+                contentDescription = null,
+                tint = ttLabelSecondary(),
+                modifier = Modifier.size(ttSpacing.sm * 1.5f),
+            )
         }
 
         if (expanded) {

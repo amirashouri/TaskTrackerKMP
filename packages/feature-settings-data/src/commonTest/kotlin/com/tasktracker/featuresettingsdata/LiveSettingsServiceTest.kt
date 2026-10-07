@@ -5,6 +5,8 @@ import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.ConnectivityWatcher
 import com.tasktracker.network.NetworkMonitor
+import com.tasktracker.userdefaults.InMemoryPreferences
+import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -78,6 +80,7 @@ class LiveSettingsServiceTest {
         coordinator = unusedSyncCoordinator(),
         version = AppVersion(marketing = "1.0", build = "1"),
         endSession = {},
+        defaults = UserDefaultsStore(InMemoryPreferences()),
     )
 
     @Test
@@ -149,6 +152,7 @@ class LiveSettingsServiceTest {
             coordinator = unusedSyncCoordinator(),
             version = version,
             endSession = {},
+            defaults = UserDefaultsStore(InMemoryPreferences()),
         )
 
         assertEquals(version, service.appVersion())

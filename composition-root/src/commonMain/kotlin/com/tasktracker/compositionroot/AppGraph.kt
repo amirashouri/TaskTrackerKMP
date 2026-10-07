@@ -432,6 +432,7 @@ object AppGraph {
                 coordinator = resolver.resolve(SyncCoordinator::class),
                 version = resolver.resolve(AppVersion::class),
                 endSession = { resolver.resolve(SessionCoordinator::class).signOut() },
+                defaults = resolver.resolve(UserDefaultsStore::class),
             )
         }
     }

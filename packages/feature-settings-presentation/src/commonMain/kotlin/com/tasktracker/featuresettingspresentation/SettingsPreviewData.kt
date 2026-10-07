@@ -101,7 +101,7 @@ class PreviewSettingsPort(
 
     override suspend fun endSession() = Unit
 
-        override fun appVersion(): AppVersion = version
+    override fun appVersion(): AppVersion = version
 
     override suspend fun userDetails(): UserDetails = UserDetails()
 

@@ -106,6 +106,7 @@ class AuthRepository(
     override suspend fun signOut() {
         vault.clear()
         defaults.remove(DefaultsKey.CachedProfile)
+        defaults.remove(DefaultsKey.CachedUserEmail)
         bus.send(SessionState.SignedOut)
     }
 
@@ -130,5 +131,8 @@ class AuthRepository(
 
     private suspend fun cache(identity: UserIdentity) {
         defaults.set(identity, DefaultsKey.CachedProfile)
+        // Also persist the email alone so the settings service can seed [UserDetails.email]
+        // without needing to know about [UserIdentity] or the auth module at all.
+        defaults.set(identity.email, DefaultsKey.CachedUserEmail)
     }
 }

@@ -154,6 +154,7 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:database",
         ":packages:network",
         ":packages:sync",
+        ":packages:user-defaults",
         ":packages:feature-settings-domain",
     ),
     ":packages:feature-settings-presentation" to setOf(

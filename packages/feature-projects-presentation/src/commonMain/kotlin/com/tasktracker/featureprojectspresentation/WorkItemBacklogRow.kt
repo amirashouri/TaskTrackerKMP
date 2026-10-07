@@ -30,6 +30,7 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.work_item_archive
+import com.tasktracker.resources.archive_reopen
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -60,6 +61,13 @@ import org.jetbrains.compose.resources.stringResource
  * a tap that silently filed the item out of the list would look like the task vanished, and
  * [onPutOnBoard] would be wired to a gesture the user did not intend. The two rows share the
  * glass card and the key/priority header because they are the same row read in two piles.
+ *
+ * ## Archived items get Reopen instead of File away
+ *
+ * An archived item has no put-on-board and no file-away — it is already closed. The only
+ * action that makes sense is to reopen it back into the backlog, which [onUnarchive] provides
+ * when the caller is the archived section. The row stays the same shape; only the action row
+ * swaps its second button for Reopen.
  */
 @Composable
 fun WorkItemBacklogRow(
@@ -69,6 +77,7 @@ fun WorkItemBacklogRow(
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
     onOpen: (() -> Unit)? = null,
+    onUnarchive: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -123,12 +132,21 @@ fun WorkItemBacklogRow(
                     testTag = BacklogPutOnBoardTag(item),
                 )
             }
-            BacklogAction(
-                label = stringResource(Res.string.work_item_archive),
-                isBusy = isBusy,
-                onClick = onFileAway,
-                testTag = BacklogFileAwayTag(item),
-            )
+            if (item.status == WorkItemStatus.Closed && onUnarchive != null) {
+                BacklogAction(
+                    label = stringResource(Res.string.archive_reopen),
+                    isBusy = isBusy,
+                    onClick = onUnarchive,
+                    testTag = BacklogUnarchiveTag(item),
+                )
+            } else if (item.status != WorkItemStatus.Closed) {
+                BacklogAction(
+                    label = stringResource(Res.string.work_item_archive),
+                    isBusy = isBusy,
+                    onClick = onFileAway,
+                    testTag = BacklogFileAwayTag(item),
+                )
+            }
         }
     }
 }
@@ -198,5 +216,7 @@ fun WorkItemBacklogRowTag(item: WorkItem): String = "$WorkItemBacklogRowTagPrefi
 fun BacklogPutOnBoardTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.putOnBoard"
 
 fun BacklogFileAwayTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.fileAway"
+
+fun BacklogUnarchiveTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.unarchive"
 
 private const val BACKLOG_TITLE_MAX_LINES = 2

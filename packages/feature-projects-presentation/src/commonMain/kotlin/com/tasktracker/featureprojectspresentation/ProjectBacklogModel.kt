@@ -102,6 +102,16 @@ class ProjectBacklogModel(
         archiveWorkItem(id = itemID)
     }
 
+    /**
+     * Reopens a filed-away task: moves it from [WorkItemStatus.Closed] back to
+     * [WorkItemStatus.Backlog], clearing its resolution date so it does not stay archived
+     * forever. Uses [MoveWorkItem] rather than [ArchiveWorkItem] because reopening is the
+     * inverse of filing away and must clear [WorkItem.resolvedAt].
+     */
+    suspend fun unarchive(itemID: WorkItemID): Boolean = acting(itemID) {
+        moveWorkItem(id = itemID, to = WorkItemStatus.Backlog)
+    }
+
     private suspend fun acting(itemID: WorkItemID, block: suspend () -> Unit): Boolean {
         busyItemID = itemID
         return try {

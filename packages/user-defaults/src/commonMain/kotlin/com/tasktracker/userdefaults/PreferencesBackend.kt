@@ -59,4 +59,18 @@ enum class DefaultsKey(val wireValue: String) {
      * unencrypted plist would defeat the split.
      */
     CachedProfile("auth.cachedProfile"),
+
+    /**
+     * The user's editable profile details: name, position, avatar choice, and email.
+     * Persisted separately from the cached auth profile so a settings change survives
+     * sign-out and sign-back-in with a different account.
+     */
+    UserProfile("settings.userProfile"),
+
+    /**
+     * The signed-in user's email, cached here so the settings screen can show it when
+     * there is no display name. Written by the auth repository on sign-in; read by the
+     * settings service when it seeds [UserDetails].
+     */
+    CachedUserEmail("auth.cachedUserEmail"),
 }
