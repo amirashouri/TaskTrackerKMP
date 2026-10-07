@@ -22,7 +22,11 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
- * The sprint list: what a row says, and what the list knows about creating one.
+ * The sprint list: what a row says.
+ *
+ * The list no longer answers "may I create one" — with overlapping windows as the rule, a
+ * second sprint is always allowed and only its window can be refused. That question now
+ * lives on [SprintEditorModel], which is where the blocker is named.
  *
  * ## The zone is pinned, so a date assertion is about the conversion
  *
@@ -59,8 +63,6 @@ class SprintListModelTest {
 
         assertTrue(model.rows.isEmpty())
         assertEquals(true, model.isEmpty)
-        // No open sprint, so the create affordance belongs on the screen.
-        assertFalse(model.hasOpenSprint)
     }
 
     @Test
@@ -225,31 +227,22 @@ class SprintListModelTest {
     }
 
     @Test
-    fun `an open sprint means the list knows a new one cannot be created`() = runTest {
+    fun `an unfinished sprint is still a row the list shows`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
         repository.seed(testSprint(project.id, isFinished = false))
-
-        val model = listModel(repository, project.id)
-        model.observe(eagerScope())
-        advanceUntilIdle()
-
-        assertTrue(model.hasOpenSprint)
-    }
-
-    @Test
-    fun `a finished sprint does not block creating the next one`() = runTest {
-        val repository = FakeProjectRepository()
-        val project = testProject()
-        repository.seed(project)
         repository.seed(testSprint(project.id, isFinished = true))
 
         val model = listModel(repository, project.id)
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertFalse(model.hasOpenSprint)
+        // Both are rows: the rule is about a *window* now, so an open sprint neither hides
+        // itself nor stops another one being created — see `SprintListModel`'s KDoc.
+        assertEquals(2, model.rows.size)
+        assertTrue(model.rows.any { !it.sprint.isFinished })
+        assertTrue(model.rows.any { it.sprint.isFinished })
     }
 
     @Test

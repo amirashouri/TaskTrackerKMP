@@ -75,10 +75,11 @@ interface ProjectRepositoryPort {
     suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange>
 
     /**
-     * A project's sprints, open ones first and then by start date.
+     * A project's sprints, unfinished ones first and then by start date.
      *
-     * The ordering is part of the read contract, not a display concern: the open sprint is
-     * the one being worked on and it has to lead every list that shows them.
+     * The ordering is part of the read contract, not a display concern: an unfinished sprint
+     * is one that can be worked in, and the live ones have to lead every list that shows
+     * them. Several may be unfinished at once; the ordering does not assume one.
      */
     suspend fun sprints(projectID: ProjectID): List<Sprint>
 
@@ -143,17 +144,19 @@ interface ProjectRepositoryPort {
     // MARK: Sprints
 
     /**
-     * Creates a sprint, and refuses if the project already has an open one.
+     * Creates a sprint, and refuses if its window overlaps an **unfinished** sibling's.
      *
-     * **The one-open-sprint rule is enforced here rather than in a use case**, and the
-     * reason is that this is the only place that can see the project's other sprints. A
-     * check in a use case is bypassed by anyone holding this port, and a check outside the
-     * write is a race — two devices creating a sprint offline both pass it and both store
-     * theirs. Inside the transaction the count and the insert cannot interleave.
+     * **The overlap rule is enforced here rather than in a use case**, and the reason is
+     * that this is the only place that can see the project's other sprints. A check in a use
+     * case is bypassed by anyone holding this port, and a check outside the write is a race
+     * — two devices creating a sprint offline both read the same siblings and both store
+     * theirs. Inside the transaction the read and the insert cannot interleave. The rule is
+     * [com.tasktracker.domain.sprintBlockingOverlap]: two unfinished windows may not share
+     * an instant, and a finished sprint is history rather than a timetable.
      *
      * Throws [com.tasktracker.core.AppError.Validation] rather than returning `null`: the
      * caller asked for something the store refuses to hold, and a nullable return would
-     * make "created" and "refused" the same shape.
+     * make "created" and "refused" the same shape. The message names the blocking sprint.
      */
     suspend fun createSprint(
         projectID: ProjectID,

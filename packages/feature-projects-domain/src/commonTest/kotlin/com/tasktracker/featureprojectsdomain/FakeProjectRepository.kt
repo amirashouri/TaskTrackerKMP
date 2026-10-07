@@ -15,6 +15,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.sprintBlockingOverlap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -167,8 +168,12 @@ class FakeProjectRepository : ProjectRepositoryPort {
     ): Sprint {
         throwIfFailing()
         return lock.withLock {
-            storedSprints.firstOrNull { it.projectID == projectID && !it.isFinished }?.let {
-                throw AppError.Validation("'${it.name}' is still open.")
+            sprintBlockingOverlap(
+                startDate,
+                endDate,
+                storedSprints.filter { it.projectID == projectID },
+            )?.let {
+                throw AppError.Validation("'${it.name}' overlaps this window.")
             }
             val sprint = Sprint(
                 id = randomSprintID(),
@@ -231,9 +236,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
         return lock.withLock {
             val sprint = storedSprints.firstOrNull { it.id == id }
                 ?: throw AppError.Validation("No such sprint.")
-            storedSprints.firstOrNull { it.projectID == sprint.projectID && !it.isFinished }
-                ?.takeIf { it.id != sprint.id }
-                ?.let { throw AppError.Validation("'${it.name}' is open, so '${sprint.name}' cannot be reopened.") }
+            sprintBlockingOverlap(
+                sprint.startDate,
+                sprint.endDate,
+                storedSprints.filter { it.projectID == sprint.projectID && it.id != sprint.id },
+            )?.let { throw AppError.Validation("'${it.name}' overlaps, so '${sprint.name}' cannot be reopened.") }
             sprint.isFinished = false
             sprint.updatedAt = now
             sprint.reconcileFinishedAt(now)

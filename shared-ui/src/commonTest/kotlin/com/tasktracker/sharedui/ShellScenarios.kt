@@ -88,7 +88,6 @@ import com.tasktracker.featureprojectspresentation.SprintSummaryBackTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
-import com.tasktracker.featuresettingspresentation.SettingsForceOfflineTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
 import com.tasktracker.featuresettingspresentation.SettingsSignOutTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
@@ -1793,8 +1792,10 @@ object ShellScenarios {
 
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
-        onNodeWithTag(SettingsForceOfflineTag).performClick()
-        waitForIdle()
+        // The Settings screen no longer renders a force-offline toggle (it was replaced by the
+        // user-status picker), so the device-level intent is written straight to the raw key —
+        // the key under test, rather than the control that used to write it.
+        store.set(true.toString(), ShellPreferences.FORCE_OFFLINE_KEY)
         session.signOut()
         waitForIdle()
 

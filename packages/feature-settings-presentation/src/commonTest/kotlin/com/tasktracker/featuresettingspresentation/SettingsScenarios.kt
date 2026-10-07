@@ -23,6 +23,7 @@ import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
+import com.tasktracker.featuresettingsdomain.UserStatus
 import org.jetbrains.compose.resources.getString
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_activity_idle
@@ -87,7 +88,9 @@ object SettingsScenarios {
 
         onNodeWithText(getString(Res.string.settings_connectivity_offline)).assertIsDisplayed()
         onNodeWithText(getString(Res.string.settings_activity_waiting)).assertIsDisplayed()
-        onNodeWithText(getString(Res.string.settings_sync_waiting)).assertIsDisplayed()
+        // Scrolled: the User details header plus the status rows above pushed the sync section
+        // past the fold, and `assertIsDisplayed` is about pixels — a row below the fold has none.
+        onNodeWithText(getString(Res.string.settings_sync_waiting)).performScrollTo().assertIsDisplayed()
         // The number, not just the label: "Waiting to sync" with nothing beside it would be a
         // row that promises an answer it does not give.
         onNodeWithText("7").assertIsDisplayed()
@@ -128,12 +131,10 @@ object SettingsScenarios {
                 SettingsScreen(
                     connectivity = ConnectivitySummary.Offline,
                     activity = SyncActivity(phase = SyncActivity.Phase.WaitingForConnection),
-                    isForceOffline = false,
                     themeScheme = ThemeScheme.System,
                     version = SettingsPreviewData.version,
                     commandOutcome = if (tapped) SyncOutcome.Offline else null,
                     onThemeChange = {},
-                    onForceOfflineChange = {},
                     onSyncNow = { tapped = true },
                     onSignOut = {},
                 )
@@ -141,7 +142,7 @@ object SettingsScenarios {
         }
 
         // Live, even though a cycle could not start: the tap is what produces the answer.
-        onNodeWithTag(SettingsSyncNowTag).assertIsDisplayed()
+        onNodeWithTag(SettingsSyncNowTag).performScrollTo().assertIsDisplayed()
         onNodeWithTag(SettingsSyncNowTag).assertIsEnabled()
         onNodeWithTag(SettingsOutcomeTag).assertDoesNotExist()
 
@@ -171,20 +172,20 @@ object SettingsScenarios {
     val theControlsDispatchTheirCommands: suspend ComposeUiTest.() -> Unit = {
         var syncs = 0
         var signsOut = 0
-        var forced: Boolean? = null
+        var chosen: UserDetails? = null
         setContent {
             Themed {
                 SettingsScreen(
                     connectivity = ConnectivitySummary.Online,
                     activity = SyncActivity(phase = SyncActivity.Phase.UpToDate),
-                    isForceOffline = false,
                     themeScheme = ThemeScheme.System,
                     version = SettingsPreviewData.version,
                     commandOutcome = null,
                     onThemeChange = {},
-                    onForceOfflineChange = { forced = it },
                     onSyncNow = { syncs++ },
                     onSignOut = { signsOut++ },
+                    userDetails = UserDetails(),
+                    onUserDetailsChange = { chosen = it },
                 )
             }
         }
@@ -196,15 +197,21 @@ object SettingsScenarios {
         // three rows past the fold on a short viewport.
         onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSyncNowTag))
         onNodeWithTag(SettingsSyncNowTag).performClick()
-        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsForceOfflineTag))
-        onNodeWithTag(SettingsForceOfflineTag).performClick()
         onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
         onNodeWithTag(SettingsSignOutTag).performClick()
         waitForIdle()
 
         assertEquals(1, syncs)
-        assertEquals(true, forced)
         assertEquals(1, signsOut)
+
+        // The status picker sits in the User details section and opens its dropdown, where
+        // choosing a state routes the whole UserDetails back through `onUserDetailsChange`.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsUserStatusRowTag))
+        onNodeWithTag(SettingsUserStatusRowTag).performClick()
+        waitForIdle()
+        onNodeWithText("Away").performClick()
+        waitForIdle()
+        assertEquals(UserDetails(status = UserStatus.Away), chosen)
     }
 
     /**
@@ -242,12 +249,10 @@ object SettingsScenarios {
                 SettingsScreen(
                     connectivity = ConnectivitySummary.Online,
                     activity = SyncActivity(),
-                    isForceOffline = false,
                     themeScheme = ThemeScheme.System,
                     version = SettingsPreviewData.version,
                     commandOutcome = null,
                     onThemeChange = {},
-                    onForceOfflineChange = {},
                     onSyncNow = {},
                     onSignOut = {},
                     userDetails = UserDetails(fullName = "Sam", avatarId = null),
@@ -304,12 +309,10 @@ private fun ComposeUiTest.screenShowing(
             SettingsScreen(
                 connectivity = connectivity,
                 activity = activity,
-                isForceOffline = false,
                 themeScheme = ThemeScheme.System,
                 version = version,
                 commandOutcome = commandOutcome,
                 onThemeChange = {},
-                onForceOfflineChange = {},
                 onSyncNow = {},
                 onSignOut = {},
             )

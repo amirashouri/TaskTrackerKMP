@@ -874,11 +874,14 @@ class RoomProjectRepositoryTest {
  * 1. **Every write is asserted on the outbox as well as the return value**, for the reason
  *    [RoomProjectRepositoryTest] gives. A sprint saved locally and never pushed is the same
  *    failure it is.
- * 2. **The one-open rule is a refusal, not a coalescing policy.** Creating a second sprint
- *    while one is open throws rather than quietly closing the first, because "silently
- *    finished my sprint" is not a thing anybody asked for.
- * 3. **Reopening is refused when another sprint has opened since**, which is the only place
- *    that can see both and therefore the only place the rule can hold.
+ * 2. **The overlap rule is a refusal, not a coalescing policy.** Creating a sprint whose
+ *    window shares an instant with an unfinished one throws rather than quietly closing the
+ *    other, because "silently finished my sprint" is not a thing anybody asked for. A
+ *    finished sprint never blocks: its window is history, not a timetable.
+ * 3. **Reopening and editing are refused on the same terms**, and are the only places that
+ *    can see the sibling windows, which is therefore the only place the rule can hold.
+ *    Reopening a finished sprint can put its window back next to a live one; editing can
+ *    move one sprint's window onto another's. Each excludes the sprint's own row.
  */
 class RoomSprintRepositoryTest {
 
@@ -933,7 +936,8 @@ class RoomSprintRepositoryTest {
     }
 
     @Test
-    fun aSecondOpenSprintIsRefusedRatherThanSilentlyReplacingTheFirst() = runTest {
+    fun aSprintWhoseWindowOverlapsAnOpenOneIsRefusedAndTheBlockerIsNamed() = runTest {
+        // `aProjectWithASprint` opens a sprint over [Moments.start, Moments.day].
         val (harness, projectID) = aProjectWithASprint()
 
         val failure = assertFailsWith<AppError.Validation> {
@@ -941,8 +945,11 @@ class RoomSprintRepositoryTest {
                 projectID = projectID,
                 name = "Sprint 2",
                 goalStoryPoints = 13,
+                // Starts *on* the first sprint's last day. `isActiveOn` is inclusive of both
+                // ends, so the two are both active at that instant — this is the boundary
+                // the rule refuses, not the staggered case below it.
                 startDate = Moments.day,
-                endDate = Moments.muchLater,
+                endDate = Moments.day + 10.days,
                 owner = null,
                 now = Moments.later,
             )
@@ -955,7 +962,30 @@ class RoomSprintRepositoryTest {
     }
 
     @Test
-    fun anotherOpenSprintIsAllowedOnceTheFirstIsFinished() = runTest {
+    fun aSecondOpenSprintIsAllowedWhenItsWindowStartsTheDayAfterTheFirstEnds() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val first = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+
+        // The day after the first ends. Both stay open: the rule is about the window, not
+        // about how many sprints are live, so a project that plans ahead can hold two.
+        val second = harness.repository.createSprint(
+            project.id, "Sprint 2", 13, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
+        )
+
+        assertEquals(false, second.isFinished)
+        assertEquals(false, assertNotNull(harness.repository.sprint(first.id)).isFinished)
+        // Unfinished first, then by start date — the read contract the Sprints tab depends on.
+        assertEquals(
+            listOf(first.id, second.id),
+            harness.repository.sprints(project.id).map { it.id },
+        )
+    }
+
+    @Test
+    fun aFinishedSprintDoesNotBlockAWindowSetOverItsDates() = runTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
@@ -963,16 +993,15 @@ class RoomSprintRepositoryTest {
         )
         harness.repository.finishSprint(first.id, Moments.later)
 
+        // Exactly the finished sprint's dates. Allowed: a finished window is history, not a
+        // timetable, and refusing here would make the calendar unfillable once enough
+        // sprints have run.
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.day, Moments.muchLater, null, Moments.later,
+            project.id, "Sprint 2", 13, Moments.start, Moments.day, null, Moments.later,
         )
 
         assertEquals(false, second.isFinished)
-        // Open first, then by start date — the read contract the Sprints tab depends on.
-        assertEquals(
-            listOf(second.id, first.id),
-            harness.repository.sprints(project.id).map { it.id },
-        )
+        assertEquals(2, harness.repository.sprints(project.id).size)
     }
 
     @Test
@@ -997,20 +1026,26 @@ class RoomSprintRepositoryTest {
     }
 
     @Test
-    fun reopeningClearsTheDateAndIsRefusedWhileAnotherSprintIsOpen() = runTest {
+    fun reopeningIsRefusedWhenItWouldOverlapAnOpenSprint() = runTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
             project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
         )
         harness.repository.finishSprint(first.id, Moments.later)
+        // Legal against the finished first: the second starts the day the first ends, which
+        // still *shares* that day's first instant with it — but the first is history, so it
+        // is not consulted.
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.day, Moments.muchLater, null, Moments.later,
+            project.id, "Sprint 2", 13, Moments.day, Moments.day + 10.days, null, Moments.later,
         )
 
-        // Refused: reopening would produce two open sprints, the exact state createSprint
-        // exists to prevent.
-        assertFailsWith<AppError.Validation> { harness.repository.reopenSprint(first.id, Moments.later) }
+        // Refused: reopening would put the first's window back on the calendar sharing the
+        // second's start instant — the exact state createSprint exists to prevent.
+        assertFailsWith<AppError.Validation> {
+            harness.repository.reopenSprint(first.id, Moments.later)
+        }
+        assertTrue(assertNotNull(harness.repository.sprint(first.id)).isFinished)
 
         harness.repository.finishSprint(second.id, Moments.later)
         val reopened = harness.repository.reopenSprint(first.id, Moments.muchLater)
@@ -1161,6 +1196,55 @@ class RoomSprintRepositoryTest {
         // A backwards window is survivable if it arrived from a server; an *edit* that
         // silently produces one is how a user ends up with a sprint that is never active.
         assertEquals(sprint.endDate, assertNotNull(harness.repository.sprint(sprint.id)).endDate)
+    }
+
+    @Test
+    fun editingASprintIntoAnOpenSiblingsWindowIsRefused() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val first = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+        )
+        val second = harness.repository.createSprint(
+            project.id, "Sprint 2", 13, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
+        )
+
+        val failure = assertFailsWith<AppError.Validation> {
+            harness.repository.updateSprint(
+                id = second.id,
+                name = null,
+                goalStoryPoints = null,
+                // Moved onto the first's window — the edit the form's gate cannot see on
+                // another device, and the reason the store re-checks.
+                startDate = Moments.start,
+                endDate = null,
+                owner = Patch.Unmentioned,
+                now = Moments.muchLater,
+            )
+        }
+        assertTrue(failure.message.orEmpty().contains("Sprint 1"))
+        // The refusal left the row where it was rather than half-applying the move.
+        assertEquals(Moments.day + 1.days, assertNotNull(harness.repository.sprint(second.id)).startDate)
+    }
+
+    @Test
+    fun editingASprintWithoutMovingItsWindowDoesNotFindItsOwnOverlap() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val sprint = harness.repository.sprints(projectID).single()
+
+        // The window is unchanged and it overlaps *itself*; the guard excludes the sprint's
+        // own row, so a rename is not refused for colliding with the thing being renamed.
+        val renamed = harness.repository.updateSprint(
+            id = sprint.id,
+            name = "Sprint 1 (revised)",
+            goalStoryPoints = null,
+            startDate = null,
+            endDate = null,
+            owner = Patch.Unmentioned,
+            now = Moments.later,
+        )
+
+        assertEquals("Sprint 1 (revised)", renamed.name)
     }
 
     @Test

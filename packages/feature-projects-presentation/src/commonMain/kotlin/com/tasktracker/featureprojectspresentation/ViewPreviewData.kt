@@ -417,10 +417,14 @@ private class PreviewRepository(
         owner: String?,
         now: Instant,
     ): Sprint {
-        // The one-open rule holds here too: a preview that could show two open sprints
-        // would hide the very thing the Sprints tab is built to make visible.
-        storedSprints.firstOrNull { it.projectID == projectID && !it.isFinished }
-            ?.let { throw com.tasktracker.core.AppError.Validation("'${it.name}' is still open.") }
+        // The overlap rule holds here too, and for the same reason the store keeps it: a
+        // preview that could put two unfinished sprints on the same day would show a state
+        // the app cannot produce, hiding the very thing the Sprints tab exists to reveal.
+        com.tasktracker.domain.sprintBlockingOverlap(
+            startDate,
+            endDate,
+            storedSprints.filter { it.projectID == projectID },
+        )?.let { throw com.tasktracker.core.AppError.Validation("'${it.name}' overlaps this window.") }
         val sprint = Sprint(
             id = randomSprintID(),
             projectID = projectID,

@@ -31,6 +31,7 @@ import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.sprintBlockingOverlap
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
@@ -304,16 +305,19 @@ class RoomProjectRepository(
     // MARK: Sprint writes
 
     /**
-     * Creates a sprint, refusing when the project already has an open one.
+     * Creates a sprint, refusing when its window overlaps an **unfinished** one.
      *
-     * The check is `openCount(...) != 0` rather than reading the open sprint and comparing
-     * ids, because it is the *count* that has to be zero and the query that answers it is
-     * the same one the board reads. It is inside the transaction on purpose: two devices
-     * creating a sprint offline both pass any check made outside it, and this store is
-     * local-first against a server that also merges.
+     * The rule is [sprintBlockingOverlap]'s, not a rewrite of it: read every sprint the
+     * project already has, ask which unfinished one shares an instant with the proposed
+     * window, and refuse on the answer. A finished sprint is skipped by that helper, so
+     * running a new sprint over history is allowed — only a live sprint is a schedule.
      *
-     * Refused with [AppError.Validation] rather than `null`, and the message names the open
-     * sprint so the caller can offer "finish that one first" rather than a dead end.
+     * The check is inside the transaction on purpose: two devices creating a sprint offline
+     * both pass any check made outside it, and this store is local-first against a server
+     * that also merges.
+     *
+     * Refused with [AppError.Validation] rather than `null`, and the message names the
+     * blocking sprint so the caller can offer "finish that one first" rather than a dead end.
      */
     override suspend fun createSprint(
         projectID: ProjectID,
@@ -332,10 +336,14 @@ class RoomProjectRepository(
             // message than the id-only one `readProject` produces.
             readProject(projectID)
 
-            val open = database.sprintDao().openByProject(projectID.stringValue)
-            if (open != null) {
+            val blocker = sprintBlockingOverlap(
+                startDate,
+                endDate,
+                database.sprintDao().byProject(projectID.stringValue).mapNotNull { it.domainValue },
+            )
+            if (blocker != null) {
                 throw AppError.Validation(
-                    "'${open.name}' is still open. Finish it before starting another.",
+                    "'${blocker.name}' overlaps this window. Finish it before starting another.",
                 )
             }
 
@@ -397,6 +405,21 @@ class RoomProjectRepository(
                 )
             }
 
+            // The sprint's own row is excluded: an edit that does not move the window must
+            // not find itself and refuse. A finished sprint is excluded by the helper.
+            val blocker = sprintBlockingOverlap(
+                sprint.startDate,
+                sprint.endDate,
+                database.sprintDao().byProject(sprint.projectID.stringValue)
+                    .mapNotNull { it.domainValue }
+                    .filter { it.id != sprint.id },
+            )
+            if (blocker != null) {
+                throw AppError.Validation(
+                    "'${blocker.name}' overlaps this window. Finish it before saving this sprint.",
+                )
+            }
+
             database.sprintDao().update(sprint.toRecord())
             enqueueSprint(sprint, stamp, now)
             sprint
@@ -434,22 +457,29 @@ class RoomProjectRepository(
     }
 
     /**
-     * Reopens a sprint and clears its date.
+     * Reopens a sprint and clears its finished date.
      *
-     * Refused once **another** sprint has been opened in the meantime, because reopening
-     * would then produce two open sprints — the exact state `createSprint` exists to
-     * prevent. This is the one place that can see both, so the rule lives here rather than
-     * being assumed.
+     * Refused when reopening would put this sprint's window back on the calendar next to an
+     * **unfinished** sibling that shares an instant of it — the exact state `createSprint`
+     * exists to prevent. The sprint's own row is excluded, because a finished sprint is not
+     * a blocker for itself; a *finished* sibling is no blocker either, so the helper is what
+     * decides and this store does not re-derive the finished-half of the rule.
      */
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint {
         val stamp = currentUserStamp()
 
         val reopened = inTransaction(database) {
             val sprint = readSprint(id)
-            val open = database.sprintDao().openByProject(sprint.projectID.stringValue)
-            if (open != null && open.id != sprint.id.stringValue) {
+            val blocker = sprintBlockingOverlap(
+                sprint.startDate,
+                sprint.endDate,
+                database.sprintDao().byProject(sprint.projectID.stringValue)
+                    .mapNotNull { it.domainValue }
+                    .filter { it.id != sprint.id },
+            )
+            if (blocker != null) {
                 throw AppError.Validation(
-                    "'${open.name}' is open, so '${sprint.name}' cannot be reopened.",
+                    "'${blocker.name}' overlaps, so '${sprint.name}' cannot be reopened.",
                 )
             }
             sprint.isFinished = false

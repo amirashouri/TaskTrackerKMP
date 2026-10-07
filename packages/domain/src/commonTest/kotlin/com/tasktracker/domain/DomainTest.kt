@@ -616,6 +616,63 @@ class SprintTest {
         // have to handle — so it gets exactly one representation.
         assertNull(sprint(owner = null).owner)
     }
+
+    @Test
+    fun twoWindowsThatMeetAtAnEndOverlap() {
+        // The first ends on the 16th and the second starts on it. `isActiveOn` is inclusive
+        // on both, so both are active at 00:00 on the 16th — the case the rule exists to
+        // refuse, and the one a half-open-interval reading would wave through.
+        val first = sprint(startDate = start, endDate = start + 14.days)
+        val second = sprint(startDate = start + 14.days, endDate = start + 28.days)
+        assertTrue(first.overlaps(second))
+        assertTrue(second.overlaps(first), "the relation is symmetric")
+    }
+
+    @Test
+    fun aDayStaggeredWindowDoesNotOverlap() {
+        // 2–15 against 16–30: the second starts the day after the first ends. This is one
+        // day shorter than the meeting case above, and it is the case the rule permits.
+        val first = sprint(startDate = start, endDate = start + 13.days)
+        val second = sprint(startDate = start + 14.days, endDate = start + 28.days)
+        assertFalse(first.overlaps(second))
+    }
+
+    @Test
+    fun aWindowInsideAnotherOverlapsIt() {
+        val outer = sprint(startDate = start, endDate = start + 30.days)
+        val inner = sprint(startDate = start + 5.days, endDate = start + 10.days)
+        assertTrue(outer.overlaps(inner))
+        assertTrue(inner.overlaps(outer))
+    }
+
+    @Test
+    fun theFreeWindowCheckAndTheMemberAgree() {
+        // windowsOverlap is what the editor calls with a draft's raw instants; overlaps is
+        // what a stored pair uses. They must not drift apart.
+        val other = sprint(startDate = start + 7.days, endDate = start + 21.days)
+        assertEquals(other.overlaps(sprint()), windowsOverlap(start, end, other))
+        assertTrue(windowsOverlap(start, end, other))
+    }
+
+    @Test
+    fun theBlockerIsTheUnfinishedSprintThatOverlaps() {
+        val finished = sprint(name = "Done", isFinished = true, finishedAt = now)
+        val live = sprint(name = "Live")
+        assertEquals(live, sprintBlockingOverlap(start, end, listOf(finished, live)))
+    }
+
+    @Test
+    fun aFinishedSprintIsNeverABlocker() {
+        val finished = sprint(name = "Done", isFinished = true, finishedAt = now)
+        assertNull(sprintBlockingOverlap(start, end, listOf(finished)))
+    }
+
+    @Test
+    fun aWindowClearOfEverySprintHasNoBlocker() {
+        val live = sprint()
+        // Starts the day after the live sprint ends — the staggered case the rule allows.
+        assertNull(sprintBlockingOverlap(end + 1.days, end + 14.days, listOf(live)))
+    }
 }
 
 class WorkItemEstimationTest {

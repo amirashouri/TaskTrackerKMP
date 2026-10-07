@@ -38,9 +38,11 @@ class SprintEditorModelTest {
         repository: com.tasktracker.featureprojectsdomain.ProjectRepositoryPort,
         projectID: com.tasktracker.core.ProjectID,
         existing: com.tasktracker.domain.Sprint? = null,
+        projectSprints: List<com.tasktracker.domain.Sprint> = emptyList(),
     ) = SprintEditorModel(
         projectID = projectID,
         existing = existing,
+        projectSprints = projectSprints,
         repository = repository,
         dateProvider = TestDateProvider(),
         timeZone = zone,
@@ -244,6 +246,98 @@ class SprintEditorModelTest {
     }
 
     @Test
+    fun `a window over an unfinished sibling is blocked and named`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        // The default fixture window is 2–16 March, exactly the draft's below.
+        val sibling = testSprint(project.id, name = "Sprint 3")
+        val model = editorModel(repository, project.id, projectSprints = listOf(sibling))
+        model.onNameChanged("Sprint 4")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
+
+        assertEquals(
+            "Sprint 3",
+            model.blockedBySprintName,
+            "the sibling's name, so the message can say which sprint to finish",
+        )
+        assertFalse(model.canSave, "a blocked window is not saveable")
+    }
+
+    @Test
+    fun `a finished sibling never blocks`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val finished = testSprint(project.id, name = "Sprint 2", isFinished = true)
+        val model = editorModel(repository, project.id, projectSprints = listOf(finished))
+        model.onNameChanged("Sprint 4")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
+
+        assertNull(model.blockedBySprintName, "history is not a timetable")
+        assertTrue(model.canSave)
+    }
+
+    @Test
+    fun `the sprint being edited is not its own blocker`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val existing = testSprint(project.id, name = "Sprint 1")
+        val model = editorModel(
+            repository,
+            project.id,
+            existing = existing,
+            projectSprints = listOf(existing),
+        )
+
+        // The draft starts on the existing window, so an overlap that counted the sprint
+        // against itself would block every edit that did not move the dates.
+        model.onNameChanged("Sprint 1")
+        assertNull(model.blockedBySprintName)
+
+        model.onGoalChanged("12")
+        assertTrue(model.canSave, "renaming one's own sprint is not a conflict")
+    }
+
+    @Test
+    fun `moving the window clear of a sibling unblocks the save`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sibling = testSprint(project.id, name = "Sprint 3")
+        val model = editorModel(repository, project.id, projectSprints = listOf(sibling))
+        model.onNameChanged("Sprint 4")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
+        assertEquals("Sprint 3", model.blockedBySprintName)
+
+        // 17 March, not 16: the 16th is the sibling's *end*, and `isActiveOn` is inclusive,
+        // so a sprint starting on it would share that day's first instant. The next whole
+        // day is the first window that does not overlap.
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 17))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 30))
+
+        assertNull(model.blockedBySprintName)
+        assertTrue(model.canSave)
+    }
+
+    @Test
+    fun `a backwards window is not also reported as an overlap`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sibling = testSprint(project.id, name = "Sprint 3")
+        val model = editorModel(repository, project.id, projectSprints = listOf(sibling))
+        model.onNameChanged("Sprint 4")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 16))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 2))
+
+        // One complaint per draft: `endIsBeforeStart` covers this shape, and reporting both
+        // would put two errors under one field.
+        assertTrue(model.endIsBeforeStart!!)
+        assertNull(model.blockedBySprintName)
+        assertFalse(model.canSave)
+    }
+
+    @Test
     fun `a refused save reports the failure instead of throwing`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
@@ -252,12 +346,13 @@ class SprintEditorModelTest {
         model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
         model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
 
-        // The store's own one-open-sprint refusal, which `canSave` cannot see and only a
-        // race or another device produces. It arrives as the banner, not a crash.
-        repository.failure = AppError.Validation("'Sprint 3' is still open.")
+        // The store's own overlap refusal, which `canSave` cannot see and only a race or
+        // another device produces — the sibling set this editor was handed is a snapshot.
+        // It arrives as the banner, not a crash.
+        repository.failure = AppError.Validation("'Sprint 3' overlaps this window.")
 
         assertFalse(model.save())
-        assertEquals("'Sprint 3' is still open.", model.errorMessage)
+        assertEquals("'Sprint 3' overlaps this window.", model.errorMessage)
         assertTrue(repository.sprints(project.id).isEmpty())
     }
 

@@ -33,8 +33,8 @@ import kotlin.time.Instant
  *   window that ends before it starts is a relation between two fields, and neither
  *   field's own rule can see it.
  * - **In the store**: anything that depends on state the caller does not hold — chiefly
- *   the one-open-sprint rule, which only the transaction can see. See
- *   `ProjectRepositoryPort.createSprint`.
+ *   the overlap rule, which needs the project's other sprints and only the transaction can
+ *   see them together with the insert. See `ProjectRepositoryPort.createSprint`.
  *
  * A check that appears in both layers is not duplication, because the two layers are
  * asked different questions: this one is "is this edit well-formed", and the store's is
@@ -167,8 +167,8 @@ class FinishSprint(
 /**
  * Reopens a sprint.
  *
- * Also thin, and the one-open rule behind it is likewise the store's: this caller cannot
- * see whether another sprint has been opened in the meantime.
+ * Also thin, and the overlap rule behind it is likewise the store's: this caller cannot
+ * see whether an unfinished sibling's window now conflicts with the one being reopened.
  */
 class ReopenSprint(
     private val repository: ProjectRepositoryPort,

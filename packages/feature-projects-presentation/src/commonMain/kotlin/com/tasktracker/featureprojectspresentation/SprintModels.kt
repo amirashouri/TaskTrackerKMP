@@ -140,10 +140,11 @@ internal fun sprintInstant(date: LocalDate, timeZone: TimeZone): Instant =
  *
  * ## The ordering is the store's, not ours
  *
- * [ProjectRepositoryPort.sprints] documents its order — open first, then by start date —
- * and this model does not re-sort. The open sprint is the one being worked on and it has
- * to lead every list that shows sprints, and a second sort here would be a second rule to
- * keep in step with the first, at which point one of them is a day out of date.
+ * [ProjectRepositoryPort.sprints] documents its order — unfinished first, then by start
+ * date — and this model does not re-sort. The unfinished sprints are the ones being worked
+ * on and they have to lead every list that shows sprints, and a second sort here would be
+ * a second rule to keep in step with the first, at which point one of them is a day out of
+ * date.
  */
 class SprintListModel(
     /** The project whose sprints these are. */
@@ -165,17 +166,6 @@ class SprintListModel(
      * start.
      */
     val isEmpty: Boolean? get() = if (isLoading) null else rows.isEmpty()
-
-    /**
-     * Whether the project has a sprint that is still open.
-     *
-     * The one-open rule is the store's to enforce, but a caller needs to know *before*
-     * pressing a button, so the create affordance can be absent rather than failing with
-     * a message after the sheet has already been filled in. This is the same shape as
-     * [ProjectRow.removalOutcome]: a question the list can answer from data it already
-     * holds, so the dialog cannot disagree with the action that follows it.
-     */
-    val hasOpenSprint: Boolean get() = rows.any { !it.sprint.isFinished }
 
     override fun isRelevant(change: ProjectChange): Boolean =
         change.projectID == null || change.projectID == projectID

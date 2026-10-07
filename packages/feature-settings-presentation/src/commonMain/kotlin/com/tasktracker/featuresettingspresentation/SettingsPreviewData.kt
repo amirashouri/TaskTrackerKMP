@@ -162,12 +162,10 @@ private fun SettingsPreview(
         SettingsScreen(
             connectivity = connectivity,
             activity = activity,
-            isForceOffline = connectivity == ConnectivitySummary.Offline,
             themeScheme = ThemeScheme.System,
             version = version,
             commandOutcome = null,
             onThemeChange = {},
-            onForceOfflineChange = {},
             onSyncNow = {},
             onSignOut = {},
         )

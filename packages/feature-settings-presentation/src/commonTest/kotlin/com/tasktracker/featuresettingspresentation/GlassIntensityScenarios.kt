@@ -210,12 +210,10 @@ private fun ComposeUiTest.sliderShowing(
             SettingsScreen(
                 connectivity = ConnectivitySummary.Online,
                 activity = SyncActivity(),
-                isForceOffline = false,
                 themeScheme = ThemeScheme.System,
                 version = SettingsPreviewData.version,
                 commandOutcome = null,
                 onThemeChange = {},
-                onForceOfflineChange = {},
                 onSyncNow = {},
                 onSignOut = {},
                 glassIntensity = intensity,

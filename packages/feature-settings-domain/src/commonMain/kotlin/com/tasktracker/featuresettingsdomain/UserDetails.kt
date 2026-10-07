@@ -21,6 +21,31 @@ enum class UserPosition(val wireValue: String, val displayName: String) {
 }
 
 /**
+ * The user's presence state, as shown in Settings.
+ */
+
+@Serializable
+enum class UserStatus(val displayName: String) {
+    /** Reading, available for work. */
+    Active("Active"),
+    /** Not here right now. */
+    Away("Away"),
+    /** Temporarily unavailable, will return soon. */
+    BeRightBack("Be Right Back"),
+    /** Unable to take on work right now. */
+    Busy("Busy");
+
+    companion object {
+        /** Every case, in display order. */
+        val all: List<UserStatus> = listOf(Active, Away, BeRightBack, Busy)
+
+        /** Parses a stored name, falling back to [Active] for `null` or unknown values. */
+        fun fromWireValue(value: String?): UserStatus =
+            all.firstOrNull { it.name == value } ?: Active
+    }
+}
+
+/**
  * Basic user details shown in Settings.
  *
  * ## Email is carried here, not fetched from the session
@@ -37,4 +62,14 @@ data class UserDetails(
     val position: UserPosition? = null,
     val avatarId: Int? = null,
     val email: String = "",
+    /**
+     * The user's current presence state. `null` means "no explicit choice" and falls back to
+     * [UserStatus.Active] at runtime.
+     */
+    val status: UserStatus? = null,
+    /**
+     * Free text explaining the current status — why the user is away, for example
+     * "On vacation" or "Sick".
+     */
+    val statusText: String = "",
 )

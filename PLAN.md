@@ -6090,3 +6090,66 @@ targeted suites re-run green.
 set; verify tasks and `:androidApp:compileDebugKotlin` green; Android host **1089 / 30**
 (1085 + 4 in the same environment-failure set). Four `@Test` methods were added, so AGENTS.md's
 host table was updated (1355→1359, 1327→1331, 1085→1089).
+
+### 25.5 The one-open-sprint rule became an overlap rule
+
+**Change (requested).** A project could hold at most one open sprint, and the Sprints tab's
+create button was *absent* while one was open. The request was to drop the cap: the plus
+button must always be there, so a new sprint can be created even while another is running.
+The only restriction left is scheduling — a new (or edited, or reopened) sprint's window may
+not overlap an unfinished sprint's.
+
+**The rule.** `Sprint.overlaps`, `windowsOverlap` and `sprintBlockingOverlap` in
+`com.tasktracker.domain` (`Entities.kt`). Two **unfinished** sprints may not share any
+instant of their windows, inclusive on both ends to match `isActiveOn`: a sprint ending on
+the 16th and one starting on the 16th *do* conflict — both are active at 00:00 on the 16th —
+while 2–15 against 16–30 is legal, exactly one day shorter. A **finished** sprint is skipped
+by `sprintBlockingOverlap`: its window is history, not a timetable, and refusing a new sprint
+over a completed one would make the calendar unfillable. The finished-half of the rule lives
+in the helper rather than in the callers, so no store re-derives it.
+
+**Where it lives.** `RoomProjectRepository` refuses in-transaction in three writes —
+`createSprint` (this was the `openByProject` guard), `updateSprint` (after the
+backwards-window check, excluding the sprint's own row), and `reopenSprint` (this was the
+open-sprint guard). The message names the blocking sprint. Pulls bypass the port and write
+through `LocalDataSyncSink`'s DAO, so a server-arranged overlap is stored rather than
+refused — correct, because the server is the authority on what it sent and the client must
+not strand a pull behind a local scheduling rule. `SprintDao.openByProject` and
+`openCount` were the one-open rule's queries and are deleted; `byProject` keeps its
+unfinished-first ordering. `SampleData` seeds no sprints, so nothing there changed.
+
+**UI.** `SprintListScreen`'s `canCreate` parameter and `SprintListModel.hasOpenSprint` are
+deleted — the button is unconditional. `SprintEditorModel` gains a `projectSprints` snapshot
+(the caller's read when the editor opened) and exposes `blockedBySprintName`, folded into
+`canSave`; `SprintEditorSheet` renders it under the End field beside the existing
+`endIsBeforeStart` note, tagged `sprints.editor.overlapError`, from the new string
+`sprint_editor_overlap_field`. `SprintsDestination` reads `repository.sprints(projectID)`
+via `produceState` while the editor is visible and passes it in. The form reports a blocker
+only for a well-formed window: a backwards window is `endIsBeforeStart`'s complaint and
+`blockedBySprintName` is `null` for it, so one draft never gets two errors.
+
+**Tests.** 14 new methods. Seven in `DomainTest.SprintTest` (meeting ends overlap, the
+staggered non-overlap, containment, the free-function/member agreement, the blocker is the
+unfinished overlap, a finished sprint is never a blocker, a clear window has none). The Room
+suite's two one-open tests became five: a refusal that names the blocker, a
+non-overlapping-open allowed, a finished sprint not blocking, a reopen refused on overlap,
+and an edit refused onto an overlap — plus a self-exclusion test for the update guard.
+`SprintEditorModelTest` gained five (blocked and named, finished never blocks, not its own
+blocker, moving clear unblocks, a backwards window reports no overlap). `SprintListModelTest`'s
+two `hasOpenSprint` tests were replaced by one asserting both halves are still rows.
+
+**Mutation (five, all caught).** (1) `windowsOverlap` returning `false`: domain 4 red,
+presentation 2 red, data red. (2) the create guard's blocker forced to `null`: the
+create-refusal test red. (3) dropping `blockedBySprintName == null` from `canSave`: red with
+"a blocked window is not saveable". (4) the reopen guard disabled: the reopen test red. (5)
+the update guard disabled: the edit-onto-an-overlap test red. Each restored and the target
+suites re-run green.
+
+**Baseline.** Measured from the JUnit XML in a pristine `HEAD` worktree carrying only this
+change (the main checkout holds unrelated, incomplete `feature-settings-presentation` work
+that does not compile — see the note below): deciding command `--continue` — JVM **1373**
+(1359 + 14), iOS **1345** (1331 + 14), both with the unchanged 5-failure set (`SeedingTest`
+×3, `aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList`); `verifyArchitectureGraph`,
+`verifyModuleImports` and `:androidApp:compileDebugKotlin` green; Android host **1100 / 30**
+(1089 + 11; the same 30 environment failures). 14 `@Test` methods were added, so AGENTS.md's
+host table was updated (1359→1373, 1331→1345, 1089→1100).

@@ -201,12 +201,17 @@ data class Project(
  * the trade this field is making deliberately. The sprint's *name* is where a sentence
  * belongs.
  *
- * ## At most one sprint is open at a time
+ * ## Two open sprints may not share one instant of their windows
  *
- * Enforced in the domain rather than here, because a second open sprint is a business-rule
- * violation and not a malformed value — the sprint itself is perfectly well-formed. Two
- * concurrent open sprints make "what is in progress in this project" ambiguous on the board
- * and double the question at the end of each one.
+ * The rule the stores enforce on create, edit and reopen is no **overlap** between two
+ * sprints that are not finished — not a cap of one open sprint. The question the rule
+ * answers is scheduling: two sprints running concurrently make "what is in progress in
+ * this project" ambiguous on the board and double the question at the end of each one.
+ * [Sprint.overlaps] is that comparison, and [finishedAt]/[isFinished] are what keep a
+ * finished sprint from blocking anything: it is history, not a timetable.
+ *
+ * Enforced in the stores rather than in this entity, because refusing depends on sibling
+ * state the sprint cannot see.
  *
  * Mutable for the fields the editor writes, with [id] and [createdAt] `val` for the same
  * reason [Project]'s are: an entity that can change its own identity is a row the sync
@@ -273,7 +278,45 @@ data class Sprint(
      * tests can only be run on a particular day.
      */
     fun isActiveOn(now: Instant): Boolean = now >= startDate && now <= endDate
+
+    /**
+     * Whether this sprint's window shares any instant with [other]'s — end-meets-start and
+     * start-meets-end are overlaps too.
+     *
+     * Both endpoints are bodies of the window because [isActiveOn] is inclusive on both.
+     * A sprint ending on the 16th and one starting on the 16th therefore *do* conflict:
+     * at 00:00 on the 16th both are active, and "what is in progress" would be ambiguous
+     * for the whole day. The staggered next-day case everyone thinks of first — 2–15 against
+     * 16–30 — is exactly one day shorter than that, and it is the case the `<=` on the
+     * opposite end is there to permit.
+     */
+    fun overlaps(other: Sprint): Boolean = windowsOverlap(startDate, endDate, other)
 }
+
+/**
+ * Whether a window given as raw instants shares any instant with [other]'s.
+ *
+ * A free function rather than a second member on [Sprint] because the common caller is an
+ * editor whose dates are not a [Sprint] yet — a draft has a start and an end but no id, no
+ * goal, no finished-at, and building a throwaway instance to call a method would make the
+ * entity's constructor do work no constructor should. The comparison is the same one
+ * [Sprint.overlaps] makes; this is just its window-only form.
+ */
+fun windowsOverlap(start: Instant, end: Instant, other: Sprint): Boolean =
+    start <= other.endDate && other.startDate <= end
+
+/**
+ * The whole scheduling rule in one place: among [others], the sprint — if any — whose window
+ * conflicts with the proposed window of a new or edited sprint.
+ *
+ * A finished sprint never blocks. Its window is history, not a timetable, and refusing a new
+ * sprint because it lines up with a completed one would make the list unfillable once enough
+ * sprints have run. The finished-half of the rule lives here rather than in the callers so
+ * no store can re-derive it wrongly — every caller gets "refuse on this, name that sprint"
+ * and none of them gets to remember which sprints count.
+ */
+fun sprintBlockingOverlap(start: Instant, end: Instant, others: List<Sprint>): Sprint? =
+    others.firstOrNull { !it.isFinished && windowsOverlap(start, end, it) }
 
 /** One unit of work. */
 @Serializable

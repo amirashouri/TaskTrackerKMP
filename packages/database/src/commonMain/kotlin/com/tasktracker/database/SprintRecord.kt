@@ -79,11 +79,13 @@ data class SprintRecord(
 interface SprintDao {
 
     /**
-     * A project's sprints, open first and then by start date.
+     * A project's sprints, unfinished first and then by start date.
      *
-     * The order is part of the read contract rather than a display concern: the open sprint
-     * is the one the user is working in, and it has to be first in every list that shows
-     * them — the tab, the board's switcher, and the summary's back link.
+     * The order is part of the read contract rather than a display concern: an unfinished
+     * sprint is one the user can be working in, and the live ones have to lead every list
+     * that shows them — the tab, the board's switcher, and the summary's back link — before
+     * the finished history below. Several may be unfinished at once; the ordering does not
+     * assume one.
      *
      * `isFinished ASC` rather than a `CASE`, so the intent is the column itself and a
      * future status cannot fall out of the ordering by being forgotten here.
@@ -93,20 +95,6 @@ interface SprintDao {
 
     @Query("SELECT * FROM sprints WHERE id = :id LIMIT 1")
     suspend fun byID(id: String): SprintRecord?
-
-    /**
-     * The project's open sprint, or `null`.
-     *
-     * `LIMIT 1` rather than trusting there to be one, and the ordering is the same as
-     * [byProject] so that if the "at most one open sprint" rule is ever violated the answer
-     * is at least deterministic. The rule itself is enforced in the domain; this query
-     * exists because the board needs the open sprint on every frame.
-     */
-    @Query("SELECT * FROM sprints WHERE projectID = :projectID AND isFinished = 0 ORDER BY startDate ASC LIMIT 1")
-    suspend fun openByProject(projectID: String): SprintRecord?
-
-    @Query("SELECT COUNT(*) FROM sprints WHERE projectID = :projectID AND isFinished = 0")
-    suspend fun openCount(projectID: String): Int
 
     @Query("SELECT * FROM sprints")
     suspend fun all(): List<SprintRecord>

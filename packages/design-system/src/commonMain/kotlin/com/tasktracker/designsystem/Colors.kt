@@ -111,6 +111,18 @@ expect fun ttBodyLabel(): Color
  */
 val ttOnAccent: Color = Color.White
 
+/** Green, the reading state. */
+val ttStatusActive: Color = Color(0xFF43A047)
+
+/** Orange, the interrupted state. */
+val ttStatusBeRightBack: Color = Color(0xFFFFA726)
+
+/** Red, the unavailable state. */
+val ttStatusBusy: Color = Color(0xFFD32F2F)
+
+/** Grey, the distant state. */
+val ttStatusAway: Color = Color(0xFF9E9E9E)
+
 /**
  * The stroke width that goes with [ttSeparator] — and with any other outline drawn between a
  * control and the surface behind it.

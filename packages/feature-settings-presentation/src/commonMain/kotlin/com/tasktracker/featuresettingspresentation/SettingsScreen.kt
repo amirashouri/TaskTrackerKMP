@@ -72,6 +72,19 @@ import com.tasktracker.designsystem.ttMonospacedDigits
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
+import com.tasktracker.designsystem.ttStatusActive
+import com.tasktracker.designsystem.ttStatusAway
+import com.tasktracker.designsystem.ttStatusBeRightBack
+import com.tasktracker.designsystem.ttStatusBusy
+import com.tasktracker.featuresettingsdomain.UserStatus
+import com.tasktracker.resources.settings_user_status
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -159,12 +172,10 @@ import org.jetbrains.compose.resources.DrawableResource
 fun SettingsScreen(
     connectivity: ConnectivitySummary,
     activity: SyncActivity,
-    isForceOffline: Boolean,
     themeScheme: ThemeScheme,
     version: AppVersion,
     commandOutcome: SyncOutcome?,
     onThemeChange: (ThemeScheme) -> Unit,
-    onForceOfflineChange: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -223,6 +234,22 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.testTag(SettingsPositionRowTag),
                 )
+                SettingsDivider()
+                UserStatusPickerRow(
+                    selected = userDetails.status,
+                    onSelect = { status ->
+                        onUserDetailsChange(userDetails.copy(status = status))
+                    },
+                    modifier = Modifier.testTag(SettingsUserStatusRowTag),
+                )
+                SettingsDivider()
+                StatusTextEditor(
+                    value = userDetails.statusText,
+                    onValueChange = { statusText ->
+                        onUserDetailsChange(userDetails.copy(statusText = statusText))
+                    },
+                    modifier = Modifier.testTag(SettingsStatusTextRowTag),
+                )
             }
         }
         item {
@@ -252,11 +279,6 @@ fun SettingsScreen(
                     icon = ttSettingsIcons.connectivity,
                 )
                 SettingsDivider()
-                SettingsToggleRow(
-                    label = stringResource(Res.string.settings_force_offline),
-                    isOn = isForceOffline,
-                    onToggle = onForceOfflineChange,
-                )
             }
         }
         item {
@@ -866,6 +888,8 @@ const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
 const val SettingsUserDetailsTag = "settings.userDetails"
+const val SettingsUserStatusRowTag = "settings.userStatus"
+const val SettingsStatusTextRowTag = "settings.statusText"
 const val SettingsPositionRowTag = "settings.positionRow"
 const val SettingsAvatarTag = "settings.avatar"
 const val AvatarPickerTag = "settings.avatarPicker"
@@ -1116,6 +1140,168 @@ private fun UserPositionPickerRow(
 }
 
 /** The theme dropdown's own width, shared so the two popups on this page are the same size. */
+@Composable
+private fun UserStatusPickerRow(
+    selected: UserStatus?,
+    onSelect: (UserStatus) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button) { expanded = !expanded },
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SettingsIconWell(icon = ttActionIcons.person, tint = ttAccent())
+            ttText(
+                text = stringResource(Res.string.settings_user_status),
+                style = ttTypography.body,
+                color = ttLabel(),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            val selectedColor = when (selected) {
+                UserStatus.Active -> ttStatusActive
+                UserStatus.Away -> ttStatusAway
+                UserStatus.BeRightBack -> ttStatusBeRightBack
+                UserStatus.Busy -> ttStatusBusy
+                else -> ttStatusActive
+            }
+            ttText(
+                text = selected?.displayName ?: "Active",
+                style = ttTypography.subheadline,
+                color = selectedColor,
+            )
+            ttIcon(
+                image = ttActionIcons.chevronDown,
+                contentDescription = null,
+                tint = ttLabelSecondary(),
+                modifier = Modifier.size(ttSpacing.sm * 1.5f),
+            )
+        }
+
+        if (expanded) {
+            Popup(
+                popupPositionProvider = SettingsDropdownPositionProvider,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(ThemeDropdownWidth)
+                        .ttGlassSurface(
+                            shape = RoundedCornerShape(ttRadius.control),
+                            fillAlpha = 0.81f,
+                        )
+                        .padding(vertical = ttSpacing.xs),
+                ) {
+                    UserStatus.all.forEach { status ->
+                        UserStatusOption(
+                            status = status,
+                            isSelected = status == selected,
+                            onClick = {
+                                onSelect(status)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserStatusOption(
+    status: UserStatus,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val statusColor = when (status) {
+        UserStatus.Active -> ttStatusActive
+        UserStatus.Away -> ttStatusAway
+        UserStatus.BeRightBack -> ttStatusBeRightBack
+        UserStatus.Busy -> ttStatusBusy
+    }
+    val isDarkTheme = ttIsDarkTheme()
+    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .dropdownOptionSurface(isSelected = isSelected)
+            .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .clip(CircleShape)
+                .background(statusColor),
+        )
+        ttText(
+            text = status.displayName,
+            style = ttTypography.body,
+            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun StatusTextEditor(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // No label: the hint inside the field ("why are you away?") already says what this is,
+    // and a label beside it just squeezed the field into half the row.
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .padding(vertical = ttSpacing.sm)
+            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row)),
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            textStyle = ttTypography.body.copy(color = ttLabel()),
+            cursorBrush = SolidColor(ttAccent()),
+            singleLine = true,
+            maxLines = 1,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onAny = {}),
+            decorationBox = { inner ->
+                // Box, not bare siblings: without it the hint and the typed text share no
+                // layout boundary and draw over each other once the field is non-empty.
+                Box(
+                    modifier = Modifier.padding(
+                        horizontal = ttSpacing.sm,
+                        vertical = ttSpacing.xs,
+                    ),
+                ) {
+                    if (value.isEmpty()) {
+                        ttText(
+                            text = "E.g. on vacation, sick — why are you away?",
+                            style = ttTypography.body,
+                            color = ttLabelSecondary(),
+                        )
+                    }
+                    inner()
+                }
+            },
+        )
+    }
+}
+
 private val ThemeDropdownWidth = 216.dp
 
 @Composable

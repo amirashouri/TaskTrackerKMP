@@ -780,11 +780,14 @@ private fun ArchiveDestination(
  * [WorkItemEditorDestination] documents for the task form, and the same `produceState` shape
  * that avoids it.
  *
- * ## The list's own "can I create one" answer gates the button, not the store
+ * ## The create button is unconditional; the editor names a blocker instead
  *
- * `hasOpenSprint` comes from the same read the rows came from, so the create affordance is
- * absent exactly when the store would refuse. The store's refusal is still there for the
- * race, and it arrives as the usual banner.
+ * The rule is overlapping windows, not a single open sprint, so "there is already one" is
+ * no longer a reason to withhold the button — a project that plans ahead has two open
+ * sprints and that is legal. The form is where a conflict is caught: it is handed the
+ * project's sprints read at open time, and `blockedBySprintName` names the unfinished
+ * sibling whose window the draft would collide with, under the field that has to change.
+ * The store's refusal is still there for the race, and it arrives as the usual banner.
  */
 @Composable
 private fun SprintsDestination(
@@ -829,7 +832,6 @@ private fun SprintsDestination(
         rows = model.rows,
         isLoading = model.isLoading,
         isEmpty = model.isEmpty,
-        canCreate = !model.hasOpenSprint,
         errorMessage = model.errorMessage,
         project = currentProject,
         onOpen = { sprintID ->
@@ -860,10 +862,33 @@ private fun SprintsDestination(
             null
         }
     }
-    val editor = remember(projectID, editorSprintID, environment, existingSprint) {
+    // The project's sprints as they stood when the editor opened, so the form can name a
+    // blocker before the write is attempted. Read on every open rather than held across
+    // them: a sibling created by another device while the list was on screen is exactly the
+    // case the form exists to catch, and a cached read would miss it.
+    val siblingSprints by produceState<List<Sprint>>(
+        emptyList(),
+        isEditorVisible,
+        projectID,
+        environment,
+    ) {
+        value = if (isEditorVisible) {
+            runCatching { environment.repository.sprints(projectID) }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+    }
+    val editor = remember(
+        projectID,
+        editorSprintID,
+        environment,
+        existingSprint,
+        siblingSprints,
+    ) {
         SprintEditorModel(
             projectID = projectID,
             existing = existingSprint,
+            projectSprints = siblingSprints,
             repository = environment.repository,
             dateProvider = environment.dateProvider,
         )
@@ -880,6 +905,7 @@ private fun SprintsDestination(
             isCreating = editor.isCreating,
             canSave = editor.canSave,
             endIsBeforeStart = editor.endIsBeforeStart,
+            blockedBySprintName = editor.blockedBySprintName,
             onNameChanged = editor::onNameChanged,
             onGoalChanged = editor::onGoalChanged,
             onStartDateChanged = editor::onStartDateChanged,
@@ -1179,18 +1205,12 @@ private fun SettingsDestination(
         onDispose { model.stopObserving() }
     }
 
-    // The remembered intent is applied to the model *without* dispatching it, which is the
-    // entire reason `restoreForceOffline` exists: the monitor is already overridden, and this
-    // only stops a rebuilt model from rendering the switch off while the app is offline.
-    val forceOffline by preferences.forceOffline.collectAsState()
     val accentPalette by preferences.accentPalette.collectAsState()
     val glassIntensity by preferences.glassIntensity.collectAsState()
-    LaunchedEffect(model, forceOffline) { model.restoreForceOffline(forceOffline) }
 
     SettingsScreen(
         connectivity = model.connectivity,
         activity = model.activity,
-        isForceOffline = model.isForceOffline,
         themeScheme = themeScheme,
         accentPalette = accentPalette,
         version = model.version,
@@ -1205,15 +1225,6 @@ private fun SettingsDestination(
         onGlassIntensityPreview = { intensity -> preferences.previewGlassIntensity(intensity) },
         onGlassIntensityCommit = { intensity ->
             scope.launch { preferences.commitGlassIntensity(intensity) }
-        },
-        // Both halves, and neither alone: the model drives the switch, and the remembered
-        // intent is what the next rebuilt model reads. Recording only one of them is how a
-        // switch ends up disagreeing with the thing it controls.
-        onForceOfflineChange = { forced ->
-            scope.launch {
-                preferences.setForceOffline(forced)
-                model.applyForceOffline(forced)
-            }
         },
         onSyncNow = { scope.launch { model.requestSync() } },
         // `signOut` goes through the port rather than to an auth API: the screen is not allowed

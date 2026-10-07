@@ -60,9 +60,9 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **green** (1359 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
-| iOS simulator | `iosSimulatorArm64Test` | **green** (1331 tests, 5 failed — the same 5) |
-| Android host | `testAndroidHostTest` | **red** — 1089 tests, 30 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 6, feature-projects-presentation 3, shared-ui 7) |
+| JVM | `jvmTest` | **green** (1373 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
+| iOS simulator | `iosSimulatorArm64Test` | **green** (1345 tests, 5 failed — the same 5) |
+| Android host | `testAndroidHostTest` | **red** — 1100 tests, 30 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 6, feature-projects-presentation 3, shared-ui 7) |
 
 The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.
 
@@ -247,3 +247,33 @@ a proposed test adversarially, specifically for whether it can fail.
   parameter (it goes in the style), `TextStyle` has no `overflow` property, and
   `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it
   renders nothing at all, silently, even with a `ColorFilter` tint.
+
+## Splitting a presentation screen into files
+
+A presentation file grows by addition — a row, a badge, a footer — and each addition makes
+the whole harder to hold in your head and a piece in it harder to reuse. So the unit of a
+presentation file is **one public composable**, and the file is named after it.
+
+- **A new public composable gets its own file, never an append to someone else's.**
+  `ProjectRow.kt`, `WorkItemCard.kt`, `BoardColumn.kt`. A public `@Composable` is
+  something other screens read and tests reach for, so it has a name and a path of its own.
+- **Its private helpers, tag constants, `@Preview`s and file-local `const val`s move with
+  it.** They are that component's contract: a tag left in another file is a tag the next
+  rename misses, and a preview stored elsewhere stops showing what its name says. See
+  `ProjectRow.kt` and `WorkItemCard.kt` — the tags sit at the bottom of the file that draws
+  the nodes.
+- **Split when a file passes ~400 lines or carries more than one top-level `@Composable`.**
+  That is a prompt to look, not a lint error: below it a screen and its one helper read
+  better together. `ProjectRow.kt` (223), `WorkItemCard.kt` (326) and `BoardColumn.kt` (298)
+  are the shape to aim at; `WorkItemEditor.kt` (754) and `ProjectBoardScreen.kt` (492) are
+  still past it. The worked example is the 1158-line `SprintScreens.kt`, split into
+  `SprintListScreen.kt`, `SprintListRowView.kt`, `SprintProgressBar.kt`,
+  `SprintEditorSheet.kt`, `SprintDetailScreen.kt`, `SprintTotal.kt` and
+  `SprintSummaryScreen.kt`: the five screens, plus the two composables (`SprintProgressBar`,
+  `SprintTotal`) that two screens each drew and so could not stay private in either.
+- **Reuse comes from the boundary, not from copy-paste.** Two screens that want the same row
+  import one file instead of each drawing it, which is what makes the shared piece visible
+  and changeable in one place.
+
+This is a *presentation* rule: it says where a `@Composable` lives, and does not change how
+models, use cases or domain code are organised.

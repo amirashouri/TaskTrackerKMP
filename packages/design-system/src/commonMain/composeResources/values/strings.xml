@@ -314,6 +314,10 @@
     <string name="sprint_owner_only">Only %1$s can finish this sprint</string>
     <string name="sprint_end_before_start">A sprint cannot end before it starts.</string>
     <string name="sprint_end_before_start_field">The end date is before the start date.</string>
+    <!-- The blocker is named as a parameter rather than saying "another sprint", because
+         the useful answer to "what is in the way" is that sprint's own name; see the
+         overlap note in SprintEditorSheet. -->
+    <string name="sprint_editor_overlap_field">It overlaps &#39;%1$s&#39;.</string>
     <string name="sprint_finish">Finish Sprint</string>
     <string name="sprint_reopen">Reopen Sprint</string>
     <string name="sprint_items_title">In this sprint</string>
@@ -397,6 +401,7 @@
     <string name="settings_glass_reduced">Reduce Transparency</string>
     <string name="settings_connection_section">Connection</string>
     <string name="settings_status_label">Status</string>
+    <string name="settings_user_status">User status</string>
     <string name="settings_force_offline">Force Offline</string>
     <string name="settings_connectivity_online">Online</string>
     <string name="settings_connectivity_offline">Offline</string>

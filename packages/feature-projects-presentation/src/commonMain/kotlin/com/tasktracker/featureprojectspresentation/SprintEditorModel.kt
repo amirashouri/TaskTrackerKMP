@@ -11,6 +11,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.domain.sprintBlockingOverlap
 import com.tasktracker.domain.sprintSummary
 import com.tasktracker.featureprojectsdomain.AddWorkItemsToSprint
 import com.tasktracker.featureprojectsdomain.CreateSprint
@@ -52,12 +53,20 @@ import kotlinx.datetime.TimeZone
  * original's value, so an empty field always means the user cleared it. That is the whole
  * of the reasoning, and it is why [originalOwner] is kept rather than discarded.
  *
- * ## Save is blocked on the window, not on the store
+ * ## Save is blocked on the draft, not on the store
  *
- * [canSave] refuses `end < start` before a write is attempted, because a refused edit that
- * reaches the store has already opened a transaction. The store still makes the same check
- * — it is the authority, and only it can see a concurrent edit — but the user is not made
- * to fill in a sheet, press a button, and read a banner for a mistake the form could see.
+ * [canSave] refuses two things before a write is attempted: a window that ends before it
+ * starts, and a window that overlaps an unfinished sibling. Both are refusals the store
+ * would also make — it is the authority, and only it can see a concurrent edit — but the
+ * user is not made to fill in a sheet, press a button, and read a banner for a mistake the
+ * form could see.
+ *
+ * The sibling set is **injected** rather than read here: [projectSprints] is the caller's
+ * read of the project's sprints, taken when the editor opened. That is the same shape as
+ * every other snapshot in this class and for the same reason — a form that re-read its
+ * siblings on every keystroke would answer about the store's current state, and the answer
+ * would change under the draft between the sheet and the banner. The store is still what
+ * refuses a race; this only keeps the first refusal local.
  */
 class SprintEditorModel(
     /** The project a new sprint is created in. */
@@ -68,6 +77,15 @@ class SprintEditorModel(
      * Read once, for the initial field values and the change snapshot; never read again.
      */
     private val existing: Sprint?,
+    /**
+     * The project's sprints as they stood when the editor opened, excluding nothing.
+     *
+     * Used only to find a blocker for the draft's window; the sprint being edited is
+     * excluded by id inside [blockedBySprintName], so a caller passes the whole list —
+     * [ProjectRepositoryPort.sprints] already excludes nothing, and filtering here instead
+     * of at the call site keeps every caller from having to remember to.
+     */
+    private val projectSprints: List<Sprint> = emptyList(),
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
@@ -154,10 +172,34 @@ class SprintEditorModel(
             return end < start
         }
 
+    /**
+     * The name of the unfinished sprint the draft's window would overlap, or `null`.
+     *
+     * `null` when either date is unset or the window is backwards — a half-chosen window
+     * and a wrong-way-round one are already accounted for by other fields, and reporting an
+     * overlap for them would be a second complaint about the same draft.
+     *
+     * The comparison is [sprintBlockingOverlap]'s, the same function the store refuses on,
+     * so the form and the banner name the same sprint. A finished sibling is skipped by that
+     * helper; the sprint being edited is excluded here because a sprint does not overlap
+     * itself, and an edit that leaves its own window alone must not be refused.
+     */
+    val blockedBySprintName: String?
+        get() {
+            val start = startDate ?: return null
+            val end = endDate ?: return null
+            if (end < start) return null
+            return sprintBlockingOverlap(
+                sprintInstant(start, timeZone),
+                sprintInstant(end, timeZone),
+                projectSprints.filter { it.id != existing?.id },
+            )?.name
+        }
+
     /** Whether save is available. */
     val canSave: Boolean
         get() = name.isNotBlank() && startDate != null && endDate != null &&
-            endIsBeforeStart != true && hasChanges
+            endIsBeforeStart != true && blockedBySprintName == null && hasChanges
 
     /** Sets the name. */
     fun onNameChanged(value: String) {
