@@ -53,8 +53,8 @@ import org.jetbrains.compose.resources.stringResource
  * row makes the addition one deliberate act over a selection the user can review first.
  *
  * The empty state is the picker saying the filter did its job rather than that something
- * is broken: [SprintDetailModel] only offers tasks with no sprint and not closed, so a
- * finished backlog has nothing to add.
+ * is broken: [SprintDetailModel] only offers tasks with no sprint and not finished
+ * (neither Done nor Closed), so a finished backlog has nothing to add.
  *
  * The frame comes from [TTBottomSheetScaffold], the same scaffold the project and task
  * editors take — there is no second spelling of "a modal sheet" in this package to drift.
@@ -167,8 +167,12 @@ private fun SprintItemPickerContent(
 }
 
 /**
- * One pickable task: key and title, with the selection carried by weight, a checkmark, and
- * the `Selected` semantics — not by colour alone.
+ * One pickable task: key, title, status, and the selection carried by weight, a checkmark,
+ * and the `Selected` semantics — not by colour alone.
+ *
+ * The status is shown because it is what the task will land with: every finished and
+ * closed task is filtered out of the offer, but Backlog and the on-board statuses remain
+ * distinguishable, so a tick is an informed one.
  */
 @Composable
 private fun SprintPickerRow(
@@ -206,6 +210,14 @@ private fun SprintPickerRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        ttText(
+            // The row names what it is adding: a committed task lands in the sprint with
+            // whichever status is shown here, so a user ticking a row should be able to
+            // see that status before committing to it.
+            text = statusLabel(item.status),
+            style = ttTypography.caption,
+            color = ttLabelSecondary(),
+        )
         if (isSelected) {
             ttText(
                 text = "✓",

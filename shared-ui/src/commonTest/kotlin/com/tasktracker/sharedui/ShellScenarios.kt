@@ -19,6 +19,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
@@ -1092,17 +1093,17 @@ object ShellScenarios {
      * subject; the sheet is just where the tap has to land.
      *
      * The picker's *filter* is asserted here end to end as well: the task in this sprint,
-     * the task in another planned sprint and the closed task are all in the store and none
-     * is offered. That rule is otherwise only a KDoc claim on
-     * [com.tasktracker.featureprojectspresentation.SprintDetailModel.pickableItems] — and
-     * the other-sprint half is the deliberate deviation from "not this sprint", where
+     * the task in another planned sprint, the closed task and a finished free-agent task
+     * are all in the store and none is offered. That rule is otherwise only a KDoc claim
+     * on [com.tasktracker.featureprojectspresentation.SprintDetailModel.pickableItems] —
+     * and the other-sprint half is the deliberate deviation from "not this sprint", where
      * lifting a task through this sheet would take it from under a window that has already
      * frozen its membership.
      */
     /** Deep enough that the picker's list overflows the sheet on every test host. */
     private const val PICKER_OVERFLOW_POOL = 25
 
-    /** First fixture number of the overflow filler; 1–4 are the scenario's named items. */
+    /** First fixture number of the overflow filler; 1–6 are the scenario's named items. */
     private const val PICKER_OVERFLOW_FIRST_NUMBER = 10
 
     val addingASelectedTaskToASprintFromTheShell: suspend ComposeUiTest.() -> Unit = {
@@ -1121,10 +1122,14 @@ object ShellScenarios {
         val inThisSprint = shellTestWorkItem(projectID = project.id, number = 2, title = "Already committed", sprintID = sprint.id)
         val elsewhere = shellTestWorkItem(projectID = project.id, number = 3, title = "Committed elsewhere", sprintID = otherSprint.id)
         val closed = shellTestWorkItem(projectID = project.id, number = 4, title = "Shipped already", status = WorkItemStatus.Closed)
+        val finished = shellTestWorkItem(projectID = project.id, number = 5, title = "Delivered already", status = WorkItemStatus.Done)
+        val unstarted = shellTestWorkItem(projectID = project.id, number = 6, title = "Untriaged", status = WorkItemStatus.Backlog)
         projects.seed(pickable)
         projects.seed(inThisSprint)
         projects.seed(elsewhere)
         projects.seed(closed)
+        projects.seed(finished)
+        projects.seed(unstarted)
         // A pool deep enough to overflow the sheet on any host. A four-row picker fits every
         // viewport by construction, so it can never say where the confirm row lands — which is
         // the defect a real backlog exposes: the list is unweighted, so it may claim the sheet's
@@ -1163,9 +1168,26 @@ object ShellScenarios {
         onNodeWithTag(SprintPickerSheetTag).assertIsDisplayed()
 
         onNodeWithTag(SprintPickerRowTag(pickable)).assertIsDisplayed()
+        onNodeWithTag(SprintPickerRowTag(unstarted)).assertIsDisplayed()
         onNodeWithTag(SprintPickerRowTag(inThisSprint)).assertDoesNotExist()
         onNodeWithTag(SprintPickerRowTag(elsewhere)).assertDoesNotExist()
         onNodeWithTag(SprintPickerRowTag(closed)).assertDoesNotExist()
+        onNodeWithTag(SprintPickerRowTag(finished)).assertDoesNotExist()
+
+        // Every offered row names the status its task will land with — the picker hides
+        // finished tasks, but a tick is only informed if the row says whether the commit
+        // is of a To Do or of an untriaged backlog task (which the sprint commit sweeps
+        // onto the board as To Do). Read against the unmerged tree: the row's key, title
+        // and status merge into one semantics node, so the status is only findable as its
+        // own text before merge.
+        onNode(
+            hasTestTag(SprintPickerRowTag(pickable)) and hasAnyDescendant(hasText("To Do")),
+            useUnmergedTree = true,
+        ).assertExists()
+        onNode(
+            hasTestTag(SprintPickerRowTag(unstarted)) and hasAnyDescendant(hasText("Backlog")),
+            useUnmergedTree = true,
+        ).assertExists()
 
         // The confirm row has to render *with size, on the glass* — assertExists passes
         // for a node squeezed to 0x0 (and a click on it lands at the root origin, on the
@@ -1178,7 +1200,7 @@ object ShellScenarios {
         assertTrue(
             addBounds.bottom > addBounds.top && addBounds.bottom <= sheetBounds.bottom,
             "expected the picker's Add button to render with size inside the sheet with " +
-                "${filler.size + 1} candidates in the list, not collapse to nothing or " +
+                "${filler.size + 2} candidates in the list, not collapse to nothing or " +
                 "fall out of the glass: button=$addBounds sheet=$sheetBounds",
         )
 

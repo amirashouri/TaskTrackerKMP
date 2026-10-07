@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -357,6 +358,96 @@ class SprintUseCasesTest {
         assertEquals(2, moved.size)
         assertEquals(sprint.id, repository.workItem(items[0].id)!!.sprintID)
         assertEquals(sprint.id, repository.workItem(items[1].id)!!.sprintID)
+    }
+
+    @Test
+    fun `adding a finished task is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val done = repository.seedWorkItem(
+            projectID = project.id,
+            title = "Shipped",
+            status = WorkItemStatus.Done,
+        )
+
+        val failure = assertFailsWith<AppError.Validation> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(done.id),
+                sprintID = sprint.id,
+            )
+        }
+
+        assertEquals(
+            "'${done.key}' is already finished, so it cannot be added to a sprint.",
+            failure.message,
+        )
+        // The task is untouched: no sprint membership was written and its status was not
+        // moved — committing finished work into a future window is refused, not corrected.
+        assertNull(repository.workItem(done.id)!!.sprintID)
+        assertEquals(WorkItemStatus.Done, repository.workItem(done.id)!!.status)
+    }
+
+    @Test
+    fun `a finished task in a batch refuses the whole batch`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val open = repository.seedWorkItem(projectID = project.id, title = "Open")
+        val done = repository.seedWorkItem(projectID = project.id, title = "Shipped", status = WorkItemStatus.Done)
+
+        assertFailsWith<AppError.Validation> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(open.id, done.id),
+                sprintID = sprint.id,
+            )
+        }
+
+        // Committing work into a sprint is one act: a batch that contains one finished task
+        // moves nothing, so the sheet's refusal never leaves a half-committed selection.
+        assertNull(repository.workItem(open.id)!!.sprintID)
+        assertNull(repository.workItem(done.id)!!.sprintID)
+    }
+
+    @Test
+    fun `adding a backlog task moves it onto the board as todo`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val item = repository.seedWorkItem(
+            projectID = project.id,
+            title = "Unstarted",
+            status = WorkItemStatus.Backlog,
+        )
+
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = sprint.id,
+        )
+
+        val stored = repository.workItem(item.id)!!
+        assertEquals(sprint.id, stored.sprintID)
+        // A committed task has a column, and Backlog is not one: it lands in the first
+        // lane, where the sprint's board can actually show it.
+        assertEquals(WorkItemStatus.Todo, stored.status)
+    }
+
+    @Test
+    fun `adding an in-progress task keeps it in progress`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val item = repository.seedWorkItem(
+            projectID = project.id,
+            title = "Under way",
+            status = WorkItemStatus.InProgress,
+        )
+
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = sprint.id,
+        )
+
+        val stored = repository.workItem(item.id)!!
+        assertEquals(sprint.id, stored.sprintID)
+        // Already on the board, already committed to work: its lane is its own.
+        assertEquals(WorkItemStatus.InProgress, stored.status)
     }
 
     @Test

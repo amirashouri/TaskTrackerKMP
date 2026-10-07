@@ -9,6 +9,7 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
+import com.tasktracker.domain.WorkItemStatus
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
@@ -217,6 +218,21 @@ class DeleteSprint(
  * An empty list short-circuits before the sprint is even read: there is nothing to write,
  * and a refusal for an instruction that asks for nothing would be a banner about a tap the
  * user did not meaningfully make.
+ *
+ * Two more rules live here, both because a write that changes the board is this use case's
+ * job rather than the sheet's:
+ *
+ * - **A finished task cannot be committed.** A sprint commits work it is going to do, and a
+ *   `Done` or `Closed` item is finished work - delivered, or filed away. Committing either
+ *   to a *future* window is a contradiction the refusal names out loud. The sheet also
+ *   hides this class of task, but a hidden row is UI state, not a guarantee: see the
+ *   membership lock above for why the rule is stated once here too.
+ * - **A backlog task lands on the board.** Bringing a task that was sitting untriaged in
+ *   the backlog into a sprint *is* the sweep that commits it, and a committed task has a
+ *   column - `Backlog` is not one, so a committed Backlog task would be present in the
+ *   sprint and invisible on its board. It is moved to `Todo`, the first lane. On-board
+ *   statuses (Todo, In Progress, In Review) keep themselves; they were already committed
+ *   to work.
  */
 class AddWorkItemsToSprint(
     private val repository: ProjectRepositoryPort,
@@ -232,10 +248,29 @@ class AddWorkItemsToSprint(
         val sprint = repository.sprint(sprintID)
             ?: throw AppError.Storage("That sprint no longer exists.")
         requireMembershipEditable(sprint, dateProvider.now())
+        val now = dateProvider.now()
+        // Read every item before writing any of them: committing work into a sprint is one
+        // act, so a batch that contains one finished task refuses the whole batch. Partial
+        // writes would leave the sheet's banner right and the store wrong.
+        val commits = workItemIDs.map { id ->
+            val item = repository.workItem(id)
+                ?: throw AppError.Validation("That work item no longer exists.")
+            if (item.status == WorkItemStatus.Done || item.status == WorkItemStatus.Closed) {
+                throw AppError.Validation(
+                    "'${item.key}' is already finished, so it cannot be added to a sprint.",
+                )
+            }
+            item
+        }
+        // `commits` holds the statuses as read above, so the sweep is over the read snapshot
+        // even after a move mutates a stored row (the fake's live objects) below it.
+        commits.filter { it.status == WorkItemStatus.Backlog }.forEach { item ->
+            repository.moveWorkItem(id = item.id, to = WorkItemStatus.Todo, rank = null, now = now)
+        }
         return repository.setWorkItemSprint(
             workItemIDs = workItemIDs,
             sprintID = Patch.Of(sprintID),
-            now = dateProvider.now(),
+            now = now,
         )
     }
 }

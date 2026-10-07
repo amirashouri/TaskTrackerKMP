@@ -396,7 +396,7 @@ class SprintDetailModel(
         private set
 
     /**
-     * The tasks the picker offers: in this project, in no sprint, not archived.
+     * The tasks the picker offers: in this project, in no sprint, not finished.
      *
      * **No sprint at all** rather than "not this sprint": an item belonging to *another*
      * sprint could be lifted through this sheet, and [AddWorkItemsToSprint] only checks
@@ -405,6 +405,12 @@ class SprintDetailModel(
      * that is locked from the other side. An item in some other *planned* sprint is
      * likewise not offered; it travels by being removed there first, which is two explicit
      * steps instead of one silent one.
+     *
+     * **Not finished** — `Closed` (archived) *and* `Done* (delivered): a sprint commits
+     * work it is going to do, and a finished task cannot be committed. [AddWorkItemsToSprint]
+     * refuses one if it is ever offered anyway, which is how the same rule survives a
+     * caller that does not mirror this filter — see the use case's KDoc for why a hidden
+     * row is not a guarantee.
      *
      * Re-read on every [reload], so a task that left the backlog while this sheet was open
      * disappears from it rather than being addable from a stale list.
@@ -449,7 +455,11 @@ class SprintDetailModel(
             isActive = sprint.isActiveOn(dateProvider.now()),
         )
         pickableItems = repository.workItems(sprint.projectID)
-            .filter { it.sprintID == null && it.status != WorkItemStatus.Closed }
+            .filter {
+                it.sprintID == null &&
+                    it.status != WorkItemStatus.Closed &&
+                    it.status != WorkItemStatus.Done
+            }
         // A ticked task that has gone — added somewhere else, archived, deleted — is
         // dropped rather than left to be sent: confirming against ids the store no longer
         // offers would either fail mid-write or, worse, succeed on a row the sheet is no

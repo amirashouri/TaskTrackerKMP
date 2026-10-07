@@ -6031,3 +6031,62 @@ verify tasks and `:androidApp:compileDebugKotlin` green; Android host **1085 / 3
 extended scenario runs on the Android host without the rasterisation skip, since it asserts
 read-counts, not pixels). No test methods added or removed, so AGENTS.md's table needed no
 edit.
+
+### 25.4 Tasks added to a sprint kept a finished status
+
+**Defect (reported from the running app).** A task added to a sprint through the Sprints
+tab's "Add tasks" picker landed in `Done` — "a new task added to a sprint should be in
+Todo". The device store corroborated it: `APO-1` sat in Sprint *1* committed with `statusRaw
+= 'done'`. Two halves; both were verified in code before the fix:
+
+1. **The commit never writes a status.** `AddWorkItemsToSprint` forwarded to
+   `repository.setWorkItemSprint`, whose only job is splicing `sprintID` into the rows
+   (`RoomProjectRepository:475` and the domain fake leave `status` untouched). A task that
+   was already `Done` stayed `Done`; a new task created from a `Done` backlog row was an
+   artifact of the second half.
+2. **The picker offered finished tasks without saying so.** `SprintDetailModel.pickableItems`
+   only excluded `Closed` (archived), and its rows rendered key + title only — no status. The
+   task the user chose was genuinely already `Done` in the store; the picker simply had no
+   way to show that, and the sprint commit then *preserved* it into the sprint window.
+
+The board's own "+" was never this defect: it creates with `initialStatus = column.status`
+already, which is why a To Do column produces a To Do task. The picker was the only path that
+could commit foreign statuses.
+
+**Fix — domain first, UI second, mirroring the membership lock's two layers.**
+
+- `AddWorkItemsToSprint` now reads every candidate *before* writing any of them. A missing
+  item refuses the whole batch ("That work item no longer exists."). A `Done` or `Closed`
+  task refuses the batch with a message naming the task ("'APO-1' is already finished, so it
+  cannot be added to a sprint.") — partial writes leave the banner right and the store wrong,
+  so the batch is all-or-nothing. Then any `Backlog` task is moved to `Todo` (rank preserved)
+  *before* the sprint membership is written: committing a task is the sweep that puts it on
+  the board, and `Backlog` is not a column a committed task may visibly sit in. Already
+  on-board statuses (`Todo`, `InProgress`, `InReview`) keep themselves.
+- The sheet mirrors both rules where a user can see them: `pickableItems` excludes `Done`
+  alongside `Closed` (KDoc restates the use case's refusal), and every picker row now names
+  `statusLabel(item.status)` so a tick is informed — a Backlog task's row says so and lands
+  as `Todo`.
+
+**Test.** Four new domain methods in `SprintUseCasesTest`: a `Done` task is refused and
+nothing wrote (no membership, no status move); a batch containing one `Done` task moves
+nothing; a `Backlog` task lands in the sprint as `Todo`; an `InProgress` task keeps its
+status. The presentation model test was extended in place — the offer filter now seeds a
+`Backlog` free-agent (offered, so the Backlog→Todo promise is readable) and a `Done`
+free-agent (hidden). The shell scenario gained a `Done` free-agent (hidden end-to-end) and a
+`Backlog` free-agent whose row must display "Backlog", plus the `pickable` (Todo) row must
+display "To Do" — read against the *unmerged* tree, because the row's key, title and status
+merge into one semantics node.
+
+**Mutation (five, all caught).** Removing the finished-task refusal — the two refusal tests
+go red. Removing the Backlog→Todo sweep — the Backlog test goes red. Dropping `Done` from the
+offer filter — the model test goes red. Deleting the row's status text — both shell text
+assertions go red. Hard-coding the label to `"To Do"` — the Backlog row assertion goes red,
+proving the disclosure is the real label and not a constant. Each mutation restored and the
+targeted suites re-run green.
+
+**Baseline.** Measured from the JUnit XML after the fix: deciding command `--continue` — JVM
+**1359** (1355 + 4 domain methods), iOS **1331** (1327 + 4), both with the unchanged 5-failure
+set; verify tasks and `:androidApp:compileDebugKotlin` green; Android host **1089 / 30**
+(1085 + 4 in the same environment-failure set). Four `@Test` methods were added, so AGENTS.md's
+host table was updated (1355→1359, 1327→1331, 1085→1089).

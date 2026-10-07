@@ -443,13 +443,13 @@ class SprintDetailModelTest {
     }
 
     @Test
-    fun `the picker offers only tasks that belong to no sprint and are not archived`() = runTest {
+    fun `the picker offers only unfinished tasks that belong to no sprint`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
         val sprint = testSprint(project.id)
         repository.seed(sprint)
-        // Free agent — the only one of the four that may be offered.
+        // Free agent, on the board — the first of the two that may be offered.
         repository.seed(testWorkItem(projectID = project.id, key = "AP-1"))
         // In this sprint already: re-offering it would be a no-op dressed as a choice.
         repository.seed(testWorkItem(projectID = project.id, key = "AP-2", sprintID = sprint.id))
@@ -461,13 +461,20 @@ class SprintDetailModelTest {
         repository.seed(
             testWorkItem(projectID = project.id, key = "AP-4", sprintID = testSprint(project.id).id),
         )
+        // Free agent still in the backlog. AddWorkItemsToSprint lands it on the board as
+        // To Do when confirmed, so offering it is not an error — but it must be offered
+        // with its status, so the tick is an informed one.
+        repository.seed(testWorkItem(projectID = project.id, key = "AP-5", status = WorkItemStatus.Backlog))
+        // Done is finished work, not future work: a sprint commits what it is going to
+        // do, and a delivered task cannot be committed to a new window.
+        repository.seed(testWorkItem(projectID = project.id, key = "AP-6", status = WorkItemStatus.Done))
 
         val model = detailModel(repository, sprint.id)
         model.observe(eagerScope())
         advanceUntilIdle()
 
         model.openPicker()
-        assertEquals(listOf("AP-1"), model.pickableItems.map { it.key.toString() })
+        assertEquals(listOf("AP-1", "AP-5"), model.pickableItems.map { it.key.toString() })
     }
 
     @Test
