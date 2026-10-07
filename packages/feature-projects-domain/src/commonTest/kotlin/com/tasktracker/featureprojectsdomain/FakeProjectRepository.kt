@@ -248,8 +248,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
     ): List<WorkItem> {
         throwIfFailing()
+        // Mirrors `RoomProjectRepository`: `Unmentioned` is a caller that does not care, so
+        // it changes nothing and returns empty — it is *not* "send them back". Collapsing
+        // it to `null` here would clear the field the real store leaves alone, and a
+        // domain test asserting `Patch.Of(null)` would then pass against a behaviour no
+        // store has. See `sendingItemsBackToTheBacklogIsDistinctFromNotMentioningTheirSprint`.
+        if (workItemIDs.isEmpty() || sprintID is Patch.Unmentioned) return emptyList()
         return lock.withLock {
-            val target = (sprintID as? Patch.Of)?.value
+            val target = (sprintID as Patch.Of).value
             val moved = workItemIDs.map { wanted ->
                 storedItems.firstOrNull { it.id == wanted }
                     ?: throw AppError.Validation("No such work item.")

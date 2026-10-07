@@ -9,11 +9,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -25,6 +29,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
@@ -41,9 +46,12 @@ import com.tasktracker.featureauthpresentation.PrimaryButtonTag
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.core.SprintID
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
+import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
 import com.tasktracker.featureprojectspresentation.NewProjectSheetTag
@@ -60,16 +68,23 @@ import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
+import com.tasktracker.featureprojectspresentation.WorkItemCancelTag
 import com.tasktracker.featureprojectspresentation.WorkItemCardTag
 import com.tasktracker.featureprojectspresentation.WorkItemFileAwayTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
+import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
+import com.tasktracker.featureprojectspresentation.SprintDetailReopenTag
 import com.tasktracker.featureprojectspresentation.SprintListScreenTag
+import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
+import com.tasktracker.featureprojectspresentation.SprintPickerRowTag
+import com.tasktracker.featureprojectspresentation.SprintPickerSheetTag
 import com.tasktracker.featureprojectspresentation.SprintRowTag
 import com.tasktracker.featureprojectspresentation.SprintDetailSummaryTag
 import com.tasktracker.featureprojectspresentation.SprintSummaryBackTag
+import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.SettingsForceOfflineTag
@@ -91,6 +106,7 @@ import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * The app shell's behaviour, as an object of scenarios with no test framework in them.
@@ -1061,6 +1077,359 @@ object ShellScenarios {
             listOf(AppRoute.SprintList(project.id), AppRoute.SprintDetail(project.id, sprint.id)),
             router.path(AppTab.Sprints),
         )
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * The sprint detail's "+" opens the picker, and a ticked task joins the sprint.
+     *
+     * ## Why this is a shell scenario
+     *
+     * The model tests the gate, the toggle and the write; the domain tests the lock's
+     * refusal. What neither can see is whether the button on the screen has a caller — the
+     * detail could render a perfect "+" with `onClick = {}` and both suites would stay
+     * green, which is the defect this file exists for. The destination's wiring is the
+     * subject; the sheet is just where the tap has to land.
+     *
+     * The picker's *filter* is asserted here end to end as well: the task in this sprint,
+     * the task in another planned sprint and the closed task are all in the store and none
+     * is offered. That rule is otherwise only a KDoc claim on
+     * [com.tasktracker.featureprojectspresentation.SprintDetailModel.pickableItems] — and
+     * the other-sprint half is the deliberate deviation from "not this sprint", where
+     * lifting a task through this sheet would take it from under a window that has already
+     * frozen its membership.
+     */
+    /** Deep enough that the picker's list overflows the sheet on every test host. */
+    private const val PICKER_OVERFLOW_POOL = 25
+
+    /** First fixture number of the overflow filler; 1–4 are the scenario's named items. */
+    private const val PICKER_OVERFLOW_FIRST_NUMBER = 10
+
+    val addingASelectedTaskToASprintFromTheShell: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+        val otherSprint = shellTestSprint(
+            projectID = project.id,
+            name = "Sprint 8",
+            id = SprintID("44444444-4444-4444-4444-444444444444"),
+        )
+        projects.seedSprint(otherSprint)
+        val pickable = shellTestWorkItem(projectID = project.id, number = 1, title = "Write the migration")
+        val inThisSprint = shellTestWorkItem(projectID = project.id, number = 2, title = "Already committed", sprintID = sprint.id)
+        val elsewhere = shellTestWorkItem(projectID = project.id, number = 3, title = "Committed elsewhere", sprintID = otherSprint.id)
+        val closed = shellTestWorkItem(projectID = project.id, number = 4, title = "Shipped already", status = WorkItemStatus.Closed)
+        projects.seed(pickable)
+        projects.seed(inThisSprint)
+        projects.seed(elsewhere)
+        projects.seed(closed)
+        // A pool deep enough to overflow the sheet on any host. A four-row picker fits every
+        // viewport by construction, so it can never say where the confirm row lands — which is
+        // the defect a real backlog exposes: the list is unweighted, so it may claim the sheet's
+        // whole height and push Cancel/Add below the bottom edge, where nothing can commit the
+        // selection. Twenty-five rows overflow a ~700dp sheet budget several times over.
+        val filler = List(PICKER_OVERFLOW_POOL) { index ->
+            shellTestWorkItem(
+                projectID = project.id,
+                number = index + PICKER_OVERFLOW_FIRST_NUMBER,
+                title = "Backfill task ${index + 1}",
+            )
+        }
+        filler.forEach { projects.seed(it) }
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        openSprintDetailRow(sprint)
+
+        // The default fixture's window runs ahead of the shell's fixed clock (October
+        // 2025), so this sprint is planned and `canEditItems` is true: the plus must be
+        // enabled as well as present, since a present-but-dead button is half this
+        // scenario's subject.
+        onNodeWithTag(SprintDetailAddTag).assertIsDisplayed()
+        onNodeWithTag(SprintDetailAddTag).assertIsEnabled()
+
+        onNodeWithTag(SprintDetailAddTag).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintPickerSheetTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintPickerRowTag(pickable)).assertIsDisplayed()
+        onNodeWithTag(SprintPickerRowTag(inThisSprint)).assertDoesNotExist()
+        onNodeWithTag(SprintPickerRowTag(elsewhere)).assertDoesNotExist()
+        onNodeWithTag(SprintPickerRowTag(closed)).assertDoesNotExist()
+
+        // The confirm row has to render *with size, on the glass* — assertExists passes
+        // for a node squeezed to 0x0 (and a click on it lands at the root origin, on the
+        // scrim, dismissing the sheet without writing anything), and a row placed past
+        // the sheet's bottom edge is the same dead end for the user: the selection can
+        // never be committed. Checked before the first tap: the disabled Add must be
+        // visible too, since "no button" and "greyed button" both read as "I cannot add".
+        val addBounds = onNodeWithTag(SprintPickerAddTag).getBoundsInRoot()
+        val sheetBounds = onNodeWithTag(SprintPickerSheetTag).getBoundsInRoot()
+        assertTrue(
+            addBounds.bottom > addBounds.top && addBounds.bottom <= sheetBounds.bottom,
+            "expected the picker's Add button to render with size inside the sheet with " +
+                "${filler.size + 1} candidates in the list, not collapse to nothing or " +
+                "fall out of the glass: button=$addBounds sheet=$sheetBounds",
+        )
+
+        // Dimmed until something is ticked, then live: an Add that accepted an empty
+        // selection would write nothing and close as though it had.
+        onNodeWithTag(SprintPickerAddTag).assertIsNotEnabled()
+        onNodeWithTag(SprintPickerRowTag(pickable)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintPickerRowTag(pickable)).assertIsSelected()
+        onNodeWithTag(SprintPickerAddTag).assertIsEnabled()
+
+        onNodeWithTag(SprintPickerAddTag).performClick()
+        waitForIdle()
+
+        assertTrue(
+            onAllNodes(hasTestTag(SprintPickerSheetTag)).fetchSemanticsNodes().isEmpty(),
+            "expected a successful add to close the picker, not leave it standing over the sprint",
+        )
+        onNodeWithTag(WorkItemBacklogRowTag(pickable)).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(BacklogRemoveFromSprintTag(pickable)).performScrollTo().assertIsDisplayed()
+        assertTrue(
+            "setWorkItemSprint" in projects.writes,
+            "expected the add to reach the store, saw ${projects.writes}",
+        )
+    }
+
+    /**
+     * Remove-from-sprint takes the task off the detail list and reaches the store.
+     *
+     * The counterpart to [addingASelectedTaskToASprintFromTheShell], and the one that
+     * proves the *row's* verb has a caller: the button renders from
+     * [com.tasktracker.featureprojectspresentation.WorkItemBacklogRow]'s sprint mode in
+     * either case, and a destination that never passed `onRemoveTask` would leave it
+     * drawing a verb that dismisses itself. Two independent signals, because row-absence
+     * alone could pass for the wrong reason (a row scrolled out of a `LazyColumn` is
+     * absent too): the store's `writes` and the empty list the reload leaves behind.
+     */
+    val removingATaskFromASprintFromTheShell: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+        val committed = shellTestWorkItem(projectID = project.id, number = 1, title = "Committed task", sprintID = sprint.id)
+        projects.seed(committed)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        openSprintDetailRow(sprint)
+
+        onNodeWithTag(WorkItemBacklogRowTag(committed)).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(BacklogRemoveFromSprintTag(committed)).performScrollTo().assertIsDisplayed()
+
+        onNodeWithTag(BacklogRemoveFromSprintTag(committed)).performClick()
+        waitForIdle()
+
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemBacklogRowTag(committed))).fetchSemanticsNodes().isEmpty(),
+            "expected the removed task to leave the sprint's list, not stand there after the write",
+        )
+        assertTrue(
+            "setWorkItemSprint" in projects.writes,
+            "expected remove-from-sprint to reach the store, saw ${projects.writes}",
+        )
+    }
+
+    /**
+     * An active or finished sprint shows its tasks frozen: no add, no remove.
+     *
+     * ## Why both states in one scenario
+     *
+     * They are one gate in the code — [com.tasktracker.featureprojectspresentation.SprintDetail.canEditItems]
+     * is `!isFinished && !isActive` — and asserting only the active half would let a
+     * reordering that locks one and forgets the other through. The finished sprint is
+     * reached by deep link rather than by navigating back, because the detail screen has no
+     * back control of its own: system back is [systemBackPopsTheSprintDetail]'s territory,
+     * and re-driving the list would assert navigation again instead of the lock.
+     *
+     * "Disabled, not absent" is what is asserted, matching the screen's own contract: the
+     * plus is dimmed and dead while the explanation (the window) sits on the page, and the
+     * rows render without their verbs rather than not at all.
+     */
+    val aLockedSprintOffersNoTaskEdits: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        // The shell's clock is `TestDateProvider()` — October 2025 — so a window around
+        // that instant is an *active* sprint, while the fixture's default March-2026
+        // window is a planned one. Nothing here depends on the day the suite runs.
+        val active = shellTestSprint(
+            projectID = project.id,
+            name = "Sprint under way",
+            startDate = Instant.parse("2025-09-01T00:00:00Z"),
+            endDate = Instant.parse("2025-11-30T00:00:00Z"),
+        )
+        projects.seedSprint(active)
+        val finished = shellTestSprint(
+            projectID = project.id,
+            name = "Sprint done",
+            id = SprintID("44444444-4444-4444-4444-444444444444"),
+            isFinished = true,
+        )
+        projects.seedSprint(finished)
+        val frozen = shellTestWorkItem(projectID = project.id, number = 1, title = "Frozen task", sprintID = active.id)
+        val done = shellTestWorkItem(projectID = project.id, number = 2, title = "Finished task", sprintID = finished.id)
+        projects.seed(frozen)
+        projects.seed(done)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        openSprintDetailRow(active)
+
+        onNodeWithTag(SprintDetailAddTag).assertIsDisplayed()
+        onNodeWithTag(SprintDetailAddTag).assertIsNotEnabled()
+        onNodeWithTag(WorkItemBacklogRowTag(frozen)).performScrollTo().assertIsDisplayed()
+        // Asserted *after* the row is scrolled into view, so the verb's absence is the
+        // row rendering without it rather than the row itself not being composed.
+        onNodeWithTag(BacklogRemoveFromSprintTag(frozen)).assertDoesNotExist()
+
+        assertTrue(
+            router.open("tasktracker://sprint/${project.id.stringValue}/${finished.id.stringValue}"),
+            "the link to the finished sprint should be accepted",
+        )
+        waitForIdle()
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+        // Reopen only draws for a finished sprint, so this also proves the link replaced
+        // the detail rather than leaving the active one under a matching tag.
+        onNodeWithTag(SprintDetailReopenTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintDetailAddTag).assertIsNotEnabled()
+        onNodeWithTag(WorkItemBacklogRowTag(done)).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(BacklogRemoveFromSprintTag(done)).assertDoesNotExist()
+    }
+
+    /**
+     * Tapping a task on the sprint detail pushes its editor — the row's tap has a caller.
+     *
+     * The row body is a *navigation* target, distinct from the remove verb beside it: the
+     * backlog and board rows push this same route, and a sprint row wired to nothing looks
+     * exactly like one wired right until a tap goes nowhere. The route is asserted, not
+     * only the editor's presence, because the editor is hosted by the shell and would
+     * answer a push from any tab — the path says *this* row did it, from *here*.
+     */
+    val tappingASprintTaskRowOpensTheEditor: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+        val committed = shellTestWorkItem(projectID = project.id, number = 1, title = "Committed task", sprintID = sprint.id)
+        projects.seed(committed)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        openSprintDetailRow(sprint)
+
+        onNodeWithTag(WorkItemBacklogRowTag(committed)).performScrollTo()
+        // The count of detail-screen reads earned before the tap: opening and closing the
+        // editor must not grow it. A fresh `SprintDetailModel` re-reads `sprintWorkItems`
+        // when it observes, so a move here means the destination was torn down and rebuilt
+        // — the reload flash the user sees behind the sheet.
+        val readsBeforeOpen = projects.sprintWorkItemReads.size
+        // The node's own OnClick action, not a tap at its centre: this asserts the *wiring*
+        // — that the row carries a handler that pushes the editor — and where the centre
+        // lands is geometry. On the Android host's smaller viewport the centre falls where
+        // a touch does not reach the card, and a coordinate click then fails for a layout
+        // reason while the wiring is fine. `performSemanticsAction` throws if the action is
+        // absent, so a row wired to nothing still fails this line (mutation-checked).
+        onNodeWithTag(WorkItemBacklogRowTag(committed))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+
+        assertEquals(
+            listOf(
+                AppRoute.SprintList(project.id),
+                AppRoute.SprintDetail(project.id, sprint.id),
+                AppRoute.WorkItemEditor(projectID = project.id, workItemID = committed.id),
+            ),
+            router.path(AppTab.Sprints),
+            "expected the row's tap to push the editor onto the sprint's own stack",
+        )
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
+
+        // The path above proves the row pushed from *here*; this is what the shell drew
+        // behind the sheet. The route-pushing wiring was already correct when the editor
+        // opened over the *board* from a sprint: the background `when` in `PushedRoute`
+        // lumped SprintDetail into its Board default, so the sheet sat on a board the user
+        // had never opened and the pop then "returned" to a sprint they never saw leave.
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(ProjectBoardScreenTag)).fetchSemanticsNodes().isEmpty(),
+            "expected the sprint detail, not the board, behind the editor opened from a " +
+                "sprint task row",
+        )
+
+        // Cancel has to land back on that same sprint detail — closing the sheet the user
+        // opened over it, not on the board the background used to fall back to.
+        onNodeWithTag(WorkItemCancelTag).performScrollTo().performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
+            "expected Cancel to close the editor rather than leave the sheet standing over " +
+                "the sprint",
+        )
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+        onNodeWithTag(WorkItemBacklogRowTag(committed)).performScrollTo().assertIsDisplayed()
+        assertEquals(
+            readsBeforeOpen,
+            projects.sprintWorkItemReads.size,
+            "expected the sprint detail to survive opening and closing the editor, but it " +
+                "re-read its work items (${projects.sprintWorkItemReads.drop(readsBeforeOpen)})",
+        )
+    }
+
+    /**
+     * The Sprints tab open and this sprint's row tapped — the detail screen in hand.
+     *
+     * The three steps every detail scenario starts with, spelled once: the tab click, the
+     * list assertion (the row is tapped *there*, so a detail assertion that ran against a
+     * still-visible list would be reading the wrong screen), and the row tap itself.
+     */
+    private suspend fun ComposeUiTest.openSprintDetailRow(sprint: Sprint) {
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
         onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
     }
 

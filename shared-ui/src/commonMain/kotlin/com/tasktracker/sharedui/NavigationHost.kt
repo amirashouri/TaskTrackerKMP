@@ -82,6 +82,7 @@ import com.tasktracker.featureprojectspresentation.SprintDetailModel
 import com.tasktracker.featureprojectspresentation.SprintDetailScreen
 import com.tasktracker.featureprojectspresentation.SprintEditorModel
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
+import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
 import com.tasktracker.featureprojectspresentation.SprintListScreen
 import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
@@ -198,9 +199,20 @@ fun NavigationHost(
             Box(modifier = Modifier.fillMaxSize()) {
                 val path = navigation.pathFor(tab)
                 val pushed = path.lastOrNull()
-                val previousRoute = path.dropLast(1).lastOrNull()
-                val editorOverProjectRoot = pushed is AppRoute.WorkItemEditor &&
-                    previousRoute == null && (tab == AppTab.Board || tab == AppTab.Backlog)
+
+                // A pushed editor is an *overlay*, not a destination of its own right: the
+                // layer below renders the exact path it was pushed onto, which keeps the
+                // screen that opened it in the composition slot it held before the push.
+                // Rendering the editor inside its own PushedRoute branch used to dispose and
+                // rebuild the destination underneath — the sprint detail's model was torn
+                // down and replayed its repository load, so the list behind the sheet
+                // flashed on open and flashed again on close. The Board/Backlog root kept
+                // under an editor (`backgroundPath` empty below) is the same rule at depth
+                // zero, applied here to every tab: a deep-linked editor now sits over that
+                // tab's real root instead of a fabricated Board.
+                val editorOverlay = pushed is AppRoute.WorkItemEditor
+                val backgroundPath = if (editorOverlay) path.dropLast(1) else path
+                val backgroundPushed = backgroundPath.lastOrNull()
 
                 // System back mirrors the chevron every pushed screen carries: pop
                 // exactly one route, never leave the tab. The gate is `path.size > 1`,
@@ -222,11 +234,19 @@ fun NavigationHost(
                     },
                 )
 
-                // Keep the root in this same composition slot while a task editor is shown over
-                // a project tab. Routing into a separate PushedRoute branch used to dispose and
-                // rebuild BacklogDestination, replaying its repository load and flashing the list.
-                if (pushed == null || editorOverProjectRoot) {
+                if (backgroundPushed == null) {
                     TabRoot(
+                        tab = tab,
+                        router = router,
+                        environment = environment,
+                        settings = settings,
+                        preferences = preferences,
+                        themeScheme = themeScheme,
+                        scope = scope,
+                    )
+                } else {
+                    PushedRoute(
+                        route = backgroundPushed,
                         tab = tab,
                         router = router,
                         environment = environment,
@@ -237,7 +257,7 @@ fun NavigationHost(
                     )
                 }
 
-                if (editorOverProjectRoot) {
+                if (editorOverlay) {
                     val editorRoute = pushed
                     WorkItemEditorDestination(
                         projectID = editorRoute.projectID,
@@ -253,18 +273,6 @@ fun NavigationHost(
                                 router.setPath(currentPath.dropLast(1), tab)
                             }
                         },
-                    )
-                } else if (pushed != null) {
-                    PushedRoute(
-                        route = pushed,
-                        tab = tab,
-                        previousRoute = previousRoute,
-                        router = router,
-                        environment = environment,
-                        settings = settings,
-                        preferences = preferences,
-                        themeScheme = themeScheme,
-                        scope = scope,
                     )
                 }
             }
@@ -367,7 +375,6 @@ private fun TabRoot(
 private fun PushedRoute(
     route: AppRoute,
     tab: AppTab,
-    previousRoute: AppRoute?,
     router: Router,
     environment: ProjectEnvironment,
     settings: SettingsPort?,
@@ -418,62 +425,18 @@ private fun PushedRoute(
             preferences = preferences,
         )
 
-        is AppRoute.WorkItemEditor -> Box(modifier = Modifier.fillMaxSize()) {
-            val backgroundRoute = previousRoute ?: when (tab) {
-                AppTab.Board -> AppRoute.Board(route.projectID)
-                AppTab.Backlog -> AppRoute.Backlog(route.projectID)
-                else -> AppRoute.Board(route.projectID)
-            }
-            when (backgroundRoute) {
-                is AppRoute.Board -> BoardDestination(
-                    projectID = backgroundRoute.projectID,
-                    router = router,
-                    environment = environment,
-                    scope = scope,
-                    preferences = preferences,
-                )
-
-                is AppRoute.Backlog -> BacklogDestination(
-                    projectID = backgroundRoute.projectID,
-                    router = router,
-                    environment = environment,
-                    scope = scope,
-                )
-
-                is AppRoute.Archive -> ArchiveDestination(
-                    projectID = backgroundRoute.projectID,
-                    router = router,
-                    repository = environment.repository,
-                    dateProvider = environment.dateProvider,
-                    scope = scope,
-                )
-
-                is AppRoute.WorkItemEditor,
-                is AppRoute.SprintList,
-                is AppRoute.SprintDetail,
-                AppRoute.Settings,
-                -> BoardDestination(
-                    projectID = route.projectID,
-                    router = router,
-                    environment = environment,
-                    scope = scope,
-                    preferences = preferences,
-                )
-            }
-            WorkItemEditorDestination(
-                projectID = route.projectID,
-                workItemID = route.workItemID,
-                initialStatus = route.initialStatus,
-                initialSprintID = route.initialSprintID,
-                repository = environment.repository,
-                dateProvider = environment.dateProvider,
-                scope = scope,
-                onDismiss = {
-                    val path = router.path(tab)
-                    if (path.lastOrNull() == route) router.setPath(path.dropLast(1), tab)
-                },
-            )
-        }
+        // The outer host lifts every editor on top of the path that produced it, so this
+        // branch is unreachable through anything the app builds: an editor could only sit
+        // here as the background of a *second*, stacked editor, which nothing pushes. The
+        // sealed `when` still demands a rule, and a bare Board keeps it from imaging a
+        // second sheet for a case that has none.
+        is AppRoute.WorkItemEditor -> BoardDestination(
+            projectID = route.projectID,
+            router = router,
+            environment = environment,
+            scope = scope,
+            preferences = preferences,
+        )
 
         // The Settings tab root *is* the settings screen, so pushing `AppRoute.Settings` onto
         // the Settings stack renders the same screen again. That is kept on purpose: a deep
@@ -1004,12 +967,39 @@ private fun SprintDetailDestination(
 
     SprintDetailScreen(
         detail = detail,
-        isBusy = model.isFinishing,
+        isBusy = model.isBusy,
         errorMessage = model.errorMessage,
         onFinish = { scope.launch { model.finish() } },
         onReopen = { scope.launch { model.reopen() } },
         onViewSummary = { isSummaryOpen = true },
         onDismissError = model::dismissError,
+        // The gate on the "+" is the screen's (`editable && !isBusy`); [SprintDetailModel.openPicker]
+        // re-checks it, because a disabled button is only a courtesy and the write it guards
+        // is the one that has to hold.
+        onAddTasks = model::openPicker,
+        onOpenTask = { itemID ->
+            router.push(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
+        },
+        onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
+    )
+
+    // Composed unconditionally and hidden with `visible`, the way the project picker and the
+    // editors are hosted: gating on `if (model.isPickerOpen)` would unmount the sheet the
+    // instant it closed and take its exit transition with it.
+    SprintItemPickerSheet(
+        items = model.pickableItems,
+        selectedIDs = model.selectedPickables,
+        // Toggling during the write would edit a selection the model is already sending;
+        // the sheet closes on success and the gate keeps the two from racing.
+        onToggle = { if (!model.isBusy) model.togglePickable(it) },
+        onConfirm = { scope.launch { model.addSelected() } },
+        isBusy = model.isBusy,
+        visible = model.isPickerOpen,
+        // A scrim tap mid-write would drop a selection that is being saved; the scrim is
+        // ignored until the write lands, then the sheet closes normally.
+        onDismissRequest = { if (!model.isBusy) model.closePicker() },
+        onDismissed = model::closePicker,
+        modifier = Modifier.fillMaxSize(),
     )
 }
 

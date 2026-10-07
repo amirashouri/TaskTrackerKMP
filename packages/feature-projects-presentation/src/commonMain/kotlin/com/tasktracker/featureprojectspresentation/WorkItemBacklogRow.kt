@@ -29,6 +29,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_put_on_board
+import com.tasktracker.resources.sprint_remove_from_sprint
 import com.tasktracker.resources.work_item_archive
 import com.tasktracker.resources.archive_reopen
 import org.jetbrains.compose.resources.stringResource
@@ -68,6 +69,16 @@ import org.jetbrains.compose.resources.stringResource
  * action that makes sense is to reopen it back into the backlog, which [onUnarchive] provides
  * when the caller is the archived section. The row stays the same shape; only the action row
  * swaps its second button for Reopen.
+ *
+ * ## In a sprint the verb is Remove, and it is the only one
+ *
+ * [onRemoveFromSprint] switches the action row into the sprint detail's mode: one button
+ * that sends the task back to the backlog, and none of the backlog's verbs. They would be
+ * meaningless there — "put on board" is triage for an unassigned task, and this one is
+ * committed — and "file away" (archive) is a backlog/board decision the sprint's own list
+ * has no business making. The caller passes `null` for every callback it does not want,
+ * and a locked sprint (active or finished) passes [onRemoveFromSprint] as `null` too, so
+ * the row renders read-only rather than offering a press that would be refused.
  */
 @Composable
 fun WorkItemBacklogRow(
@@ -78,13 +89,16 @@ fun WorkItemBacklogRow(
     isBusy: Boolean = false,
     onOpen: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
+    onRemoveFromSprint: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(ttRadius.row))
             .ttGlassCard()
-            .clickable(enabled = !isBusy, onClick = onOpen ?: {})
+            // Disabled, not inert: a locked sprint's row has no `onOpen`, and a press that
+            // ripples and does nothing reads as a broken app rather than a locked one.
+            .clickable(enabled = onOpen != null && !isBusy, onClick = onOpen ?: {})
             .padding(ttSpacing.xl)
             .testTag(WorkItemBacklogRowTag(item)),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
@@ -124,28 +138,40 @@ fun WorkItemBacklogRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
         ) {
-            if (item.status == WorkItemStatus.Backlog) {
+            if (onRemoveFromSprint != null) {
+                // Sprint mode replaces the whole action row rather than joining it: see
+                // the class KDoc. `null` is the switch, so the backlog's own branches below
+                // are unreachable while a sprint caller holds the row.
                 BacklogAction(
-                    label = stringResource(Res.string.backlog_put_on_board),
+                    label = stringResource(Res.string.sprint_remove_from_sprint),
                     isBusy = isBusy,
-                    onClick = onPutOnBoard,
-                    testTag = BacklogPutOnBoardTag(item),
+                    onClick = onRemoveFromSprint,
+                    testTag = BacklogRemoveFromSprintTag(item),
                 )
-            }
-            if (item.status == WorkItemStatus.Closed && onUnarchive != null) {
-                BacklogAction(
-                    label = stringResource(Res.string.archive_reopen),
-                    isBusy = isBusy,
-                    onClick = onUnarchive,
-                    testTag = BacklogUnarchiveTag(item),
-                )
-            } else if (item.status != WorkItemStatus.Closed) {
-                BacklogAction(
-                    label = stringResource(Res.string.work_item_archive),
-                    isBusy = isBusy,
-                    onClick = onFileAway,
-                    testTag = BacklogFileAwayTag(item),
-                )
+            } else {
+                if (item.status == WorkItemStatus.Backlog) {
+                    BacklogAction(
+                        label = stringResource(Res.string.backlog_put_on_board),
+                        isBusy = isBusy,
+                        onClick = onPutOnBoard,
+                        testTag = BacklogPutOnBoardTag(item),
+                    )
+                }
+                if (item.status == WorkItemStatus.Closed && onUnarchive != null) {
+                    BacklogAction(
+                        label = stringResource(Res.string.archive_reopen),
+                        isBusy = isBusy,
+                        onClick = onUnarchive,
+                        testTag = BacklogUnarchiveTag(item),
+                    )
+                } else if (item.status != WorkItemStatus.Closed) {
+                    BacklogAction(
+                        label = stringResource(Res.string.work_item_archive),
+                        isBusy = isBusy,
+                        onClick = onFileAway,
+                        testTag = BacklogFileAwayTag(item),
+                    )
+                }
             }
         }
     }
@@ -218,5 +244,8 @@ fun BacklogPutOnBoardTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item
 fun BacklogFileAwayTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.fileAway"
 
 fun BacklogUnarchiveTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.unarchive"
+
+/** The sprint detail's one verb, for the same reason the others are named. */
+fun BacklogRemoveFromSprintTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.removeFromSprint"
 
 private const val BACKLOG_TITLE_MAX_LINES = 2

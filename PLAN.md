@@ -5808,3 +5808,226 @@ verifyModuleImports :androidApp:compileDebugKotlin`, `--continue`): JVM **1336**
 module: 28/28 JVM, 28 iOS, Android host 28 with the same documented 6. Full Android host from the
 JUnit XML: **1066 tests, 30 failures** (design-system 14, settings 6, projects-presentation 3,
 shared-ui 7). AGENTS.md host table updated in the same change.
+
+## Phase 25 — Sprint detail: task membership (add, remove, and a lock that refuses both)
+
+**Asked for.** Rework the Sprint detail page: sprint details in a glass card, below it an
+editable task list built from `WorkItemBacklogRow` with remove/edit when the sprint is *not*
+active or finished, and a "+" glass icon button at the top that opens a multi-select bottom
+sheet for adding tasks — every edit surface disabled while the sprint is active or finished.
+
+**The lock is one predicate, in two places that must agree.** Domain:
+`requireMembershipEditable(sprint, now)` — the board's own rule, `!isFinished &&
+isActiveOn(now)` — guards both `AddWorkItemsToSprint` and `RemoveWorkItemsFromSprint` in
+`SprintUseCases.kt`, so the two verbs cannot drift apart. Presentation:
+`SprintDetail.canEditItems` mirrors it from the model's `isActive`, and the screen gates the
+`+` button, the per-row remove verb and the row tap on that one flag. The lock is expressed
+as *disabled*, not hidden: a locked sprint still shows its tasks and, on the finished side,
+its reopen route (`SprintDetailReopenTag`) — a surface that vanishes looks like a bug, a
+surface that greyly refuses reads as a rule.
+
+**The candidate rule is deliberately narrower than "not this sprint".** The picker offers
+`sprintID == null && status != WorkItemStatus.Closed`: a task belongs to at most one sprint,
+and another sprint's membership is itself locked work the picker must not offer to steal.
+Closed tasks belong to their verdict and are not pool. This is a deliberate deviation from
+the user-facing "not this sprint" reading (mutation-checked: dropping `sprintID == null`
+lets `sprints.picker.row.AP-2` — a task already committed to the other sprint — into the
+sheet, red on the filter assertion).
+
+**Model.** `SprintDetailModel` grew `isBusy` (one flag for every mutation: open, toggle,
+confirm, dismiss all gate on it, so a batch in flight cannot be doubled or the sheet
+dismissed mid-write), `isPickerOpen`, `pickableItems`, `selectedPickables`,
+`canAddSelected`, `openPicker()`/`closePicker()`/`togglePickable()`/`suspend addSelected()`/
+`suspend removeItem(id)`. `reload()` computes `isActive` off the injected clock and prunes
+selections against the freshly loaded pool, so a window tick between open and confirm cannot
+leave a stale id in the batch.
+
+**Screen and picker.** `SprintDetailScreen` became a `LazyColumn`: header Row with the
+title and `ttGlassIconButton(enabled = editable && !isBusy, tag = SprintDetailAddTag)` —
+the design-system primitive gained an `enabled` parameter that applies the alpha and binds
+`Modifier.clickable(enabled =)`, so disabled reads as glass dimmed rather than a raw
+grey box; banner; the detail card clipped into `ttGlassCard` (`SprintDetailCardTag`);
+section title; `items(detail.items, key = { it.id.stringValue })`. Rows pass
+`onOpen` (push `AppRoute.WorkItemEditor`) and `onRemoveFromSprint`, and
+`WorkItemBacklogRow`'s body clickable became `enabled = onOpen != null && !isBusy` — a
+locked row is inert, not a button that ripples and answers nothing.
+`SprintItemPickerSheet` sits over `TTBottomSheetScaffold(scrollable = false)`: title,
+`LazyColumn` of `SprintPickerRow` (key + title, accent "✓" under
+`semantics { selected = isSelected }`, clipped row on `ttGlassCard`), Cancel and an
+accent `TTGlassButton` whose `enabled = selectedIDs.isNotEmpty() && !isBusy`.
+
+**Wiring** (`NavigationHost.kt`, `SprintDetailDestination`): `onAddTasks =
+model::openPicker`, `onOpenTask` pushes the editor, `onRemoveTask` launches
+`model.removeItem`; the sheet is composed unconditionally with
+`visible = model.isPickerOpen` (the scaffold's enter/exit animation is why `visible`
+is a parameter and not composition), toggle/dismiss gated on `!isBusy`,
+`onDismissed = model::closePicker`.
+
+**Test — 19 tests across three modules and three hosts.** Domain `SprintUseCasesTest`
++7 (24 now): the lock matrix for both verbs, batch semantics, timestamp writes.
+Presentation `SprintDetailModelTest` → 23: `isActive`/`canEditItems` over the window
+boundaries, selection pruning, the picker verbs. `shared-ui` `ShellScenarios` +4,
+registered on all three hosts: `addingASelectedTaskToASprintFromTheShell` (asserts the
+filter refuses in-sprint and other-sprint candidates, the Add button's disabled→enabled
+flip, the sheet closing, the row and its remove verb appearing, and the
+`setWorkItemSprint` write), `removingATaskFromASprintFromTheShell` (verb displayed after
+`performScrollTo`, click, row gone, write recorded),
+`aLockedSprintOffersNoTaskEdits` (active sprint: `+` `assertIsNotEnabled`, no verb after
+scroll; finished sprint via deep link: reopen tag proves which is which, same lock),
+`tappingASprintTaskRowOpensTheEditor` (path == `[SprintList, SprintDetail,
+WorkItemEditor]`). Two pieces of test infrastructure were load-bearing: fixtures gained
+`sprintID` on `shellTestWorkItem` and an explicit window on `shellTestSprint` (its
+`finishedAt = endDate`, presence-only — no test reads the date, matching the invariant
+that `finishedAt != null` is the whole verdict), and `FakeProjectRepository.setWorkItemSprint`
+was *implemented* — the shell drives real writes and the detail model reloads only via
+`ProjectChange.Kind.WorkItems`, so the fake that recorded nothing and published nothing
+left the row un-refreshed no matter how correct the screen was.
+
+**Mutation — 6 distinct, 6 caught, plus one re-check.** Dropping the `onAddTasks` wiring
+failed on `TestTag = 'sprints.picker'`; dropping `onRemoveTask` on
+`backlog.row.AP-1.removeFromSprint`; removing the `+`'s `enabled` gate on
+`assertIsNotEnabled`; flipping the remove-verb gate to `if (true)` on "Did not expect any
+node but found '1' ... removeFromSprint" (a locked sprint advertising its verb); dropping
+`sprintID == null` from the model filter on `sprints.picker.row.AP-2`; dropping
+`onOpenTask` on the path assertion naming the missing push. M5 was re-run after the click
+mechanism changed (below) and still went red with the missing push in the message.
+
+**The one new Android-host red, and why the editor push is fired as a semantics action.**
+`tappingASprintTaskRowOpensTheEditor` initially failed on the Android host only: path
+`[SprintList, SprintDetail]`, the push never happening. The cause was hit-testing, not
+wiring — `performScrollTo()` bottom-aligns the row on Robolectric's short viewport and a
+coordinate `performClick()`'s centre lands where the tap does not reach the card, the same
+geometry class 24.6's file-away scroll documents. The assertion's subject is the *wiring*:
+the row carries a handler that pushes the editor. It now fires the node's own
+`OnClick` via `performSemanticsAction(SemanticsActions.OnClick)` (precedent:
+`TabBarScreenshotTest`), which throws when the action is absent — the mutation above
+proves a row wired to nothing still fails the line — and leaves hit-testing to the
+scroll-region scenarios that measure it. Android returned to its documented 7.
+
+**Baseline.** Deciding command (`jvmTest iosSimulatorArm64Test verifyArchitectureGraph
+verifyModuleImports :androidApp:compileDebugKotlin`, `--continue`) plus a full
+`testAndroidHostTest --rerun-tasks --continue`, counts from the JUnit XML cross-checked
+against `@Test` (SprintUseCasesTest 24, SprintDetailModelTest 23, shared-ui jvmTest 53 =
+47+2+2+2): JVM **1336 → 1355**, iOS simulator **1308 → 1327**, both with the unchanged
+5-failure set (`SeedingTest` ×3, `aChosenThemeOutlivesTheProcess` +
+`theBoardReturnsToTheList`); verify tasks and `:androidApp:compileDebugKotlin` green.
+Android host **1066 → 1085, 30 failures** — the same documented set in the same four
+classes (design-system 14, settings 6, projects-presentation 3, shared-ui 7). The +19 on
+every host is exactly this change's 7 domain + 8 presentation + 4 shell tests; no failure
+added. AGENTS.md's host table updated in the same change, per the "baseline in the same
+change" rule.
+
+### 25.1 The add-tasks sheet's confirm row collapsed to 0x0 under a long backlog
+
+**Defect (reported from the running app).** The add-tasks popup had no usable Done/Add
+button. The button was in the source, but the picker's `LazyColumn` was **unweighted**
+inside the non-scrolling sheet (`scrollable = false`), so the list was measured against
+the *remaining* height and, with a long enough backlog, claimed all of it — the Cancel/Add
+row was then measured against what was left (zero) and collapsed to `DpRect(0,0,0,0)`.
+Nothing painted, and a test click on the zero-size node landed at the root origin — the
+scrim — dismissing the sheet *without writing*: the selection silently evaporated. The
+existing four-row fixture fit every viewport, so the whole path was green while broken;
+the reproduction seeds 26 candidates (`PICKER_OVERFLOW_POOL = 25` plus the named one).
+
+**Diagnosis, from one dump.** The single diagnostic printed `add=DpRect(0,0,0,0)` with
+`sheet=(16,24)-(1008,684)` and `list` bottom exactly on `sheet` bottom, plus `writes=[]`
+after the add click — three numbers that named the defect and the failed write in one
+read. The first bounds assertion written against this had been vacuous (`0 ≤ 768` passes
+for a degenerate rect); the shipped assertion requires non-degeneracy *and* that the
+button sit **inside the sheet's glass**, which is also the user-facing requirement.
+
+**Fix.** `SprintItemPickerSheet`'s list now carries `Modifier.weight(1f, fill = false)`:
+bounded by the sheet's remainder so the confirm row always keeps its height, `fill =
+false` so a short list still wraps and the sheet stays compact rather than stretching to
+the budget with a hole under the rows. One comment carries the numbers.
+
+**Mutation.** Dropping the weight back out: red on the same message with the same
+`button=DpRect(0.0.dp, 0.0.dp, 0.0.dp, 0.0.dp)` — the degenerate rect *is* the defect
+named in the failure. Restored, green on all three hosts (JVM 53, iOS 51, Android 51 with
+the documented 7).
+
+**Same class, confirmed, not fixed here.** `ProjectPickerSheet.kt:117` has the identical
+unweighted list with a `ttGlassButton` (New project) after it — a long project list will
+collapse that button the same way. Reported as its own change: fixing it needs its own
+red-first assertion and mutation, which this change does not carry.
+
+**Baseline.** Counts unchanged (no test methods added or removed): deciding command
+`--continue` — JVM **1355**, iOS **1327**, both with the unchanged 5-failure set;
+verify tasks and `:androidApp:compileDebugKotlin` green; Android host unchanged at **1085
+/ 30**. AGENTS.md's table needed no edit in this change.
+
+### 25.2 Editing a sprint task drew the board behind the editor
+
+**Defect (reported from the running app).** Tapping a task on the sprint detail opened the
+editor sheet on top of the **Board** — a screen the user had never navigated to — while
+closing it popped back to the sprint detail. The row's wiring was right: the push built
+`[SprintList, SprintDetail, WorkItemEditor]`, and the path-asserting scenario stayed green
+throughout. The break was in `PushedRoute`'s `WorkItemEditor` background `when`
+(NavigationHost.kt): it lumped `SprintDetail` and `SprintList` into a hardcoded
+`BoardDestination` default, so the sheet rode over a route the stack did not contain and
+the pop "returned" to a sprint the user never saw leave.
+
+**Fix.** The two sprint routes render themselves behind the editor
+(`SprintDetailDestination` / `SprintsDestination`), the same shape Archive already had;
+the Board default now covers only states no navigation produces (editor over editor, a
+pushed settings root). The background is composed inside the editor's own Box, so the
+detail is rebuilt when the sheet opens — the `editorOverProjectRoot` special case avoids
+that only for *root* stacks, and a pushed destination already paid the rebuild on pop.
+
+**Test.** `tappingASprintTaskRowOpensTheEditor` extended in place (no new method, so no
+count change): while the editor is open, `sprints.detail` must be displayed and
+`board.screen` absent; Cancel then returns to that same detail with the committed row.
+The pre-existing path assertion proved *where the push came from*, not what drew behind
+it — this is the assertion that measures the sheet's bedding.
+
+**Mutation.** The SprintDetail branch reverted to `BoardDestination`: red on
+`Expected exactly '1' node but could not find any node ... (TestTag = 'sprints.detail')`
+— the missing detail *is* the defect. Restored; the extended scenario passes on the JVM
+and iOS hosts, and the Android host registers the same documented 7.
+
+**Baseline.** Measured from the JUnit XML after the fix: deciding command `--continue`
+— JVM **1355** (53 shared-ui), iOS **1327** (51 shared-ui), both with the unchanged 5-
+failure set; verify tasks and `:androidApp:compileDebugKotlin` green; Android host
+**1085 / 30**. No test methods added or removed, so AGENTS.md's table needed no edit.
+
+### 25.3 The sprint detail re-ran its repository load behind the editor sheet
+
+**Defect (reported from the running app).** Opening and closing a sprint task's editor made
+the sprint detail behind the sheet visibly reload — a white flash on both transitions. §25.2
+had documented the mechanism as accepted ("the detail is rebuilt when the sheet opens", and a
+pushed destination "already paid the rebuild on pop"): `PushedRoute`'s `WorkItemEditor` case
+composed the background *inside its own Box*, so the detail left its original composition slot
+when the editor was pushed. `SprintDetailDestination` is `remember(sprintID, environment,
+preferences, currentUserName) { SprintDetailModel(...) }` behind a `DisposableEffect` that
+re-observes on re-entry, and the model re-reads `sprintWorkItems` on every observe — so the
+pop reconstituted a fresh model that reloaded the whole list.
+
+**Fix.** The editor no longer is a `PushedRoute` destination. The host lifts every editor as an
+*overlay* onto the exact path that produced it: `editorOverlay == pushed is WorkItemEditor`,
+and the background layer renders `path.dropLast(1)` in the *same* branch it always had — a
+pushed `SprintDetailDestination` stays in its slot from push to pop, its model never disposed.
+The Board/Backlog-under-editor special case (`previousRoute == null`) is subsumed: an
+editor-over-root has an empty background path, so `TabRoot` fills that slot, which was already
+the rule. The sealed `when` still needs a `WorkItemEditor` arm in `PushedRoute`; it renders a
+bare Board for a stack nothing pushes (editor-over-editor) and documents why it is unreachable.
+
+**Test.** `tappingASprintTaskRowOpensTheEditor` extended in place (no new method, no count
+change). `FakeProjectRepository` now logs every `sprintWorkItems` read (`sprintWorkItemReads`);
+the scenario records the count after the detail opens, opens the editor, cancels, and asserts
+the count is unchanged. A fresh model re-reads on observe, so a grow means the destination was
+torn down and rebuilt — the flash, measured at the repository rather than the pixels.
+
+**Mutation.** The background branch switched to a sibling slot while the editor was up (the old
+structure's behavior): red, before the read-delta assertion — `Expected exactly '1' node but
+could not find any node ... (TestTag = 'sprints.detail')`, because the recreated detail's model
+was still mid-load. That red *is* the reported flash at the semantics layer; the read-delta
+assertion pins the same teardown at its source. Restored; scenario green on the JVM and iOS
+hosts.
+
+**Baseline.** Measured from the JUnit XML after the fix: JVM **1355** (53 shared-ui), iOS
+**1327** (51 shared-ui), each with the unchanged 5-failure set
+(`SeedingTest` ×3, `aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList`);
+verify tasks and `:androidApp:compileDebugKotlin` green; Android host **1085 / 30** (the
+extended scenario runs on the Android host without the rasterisation skip, since it asserts
+read-counts, not pixels). No test methods added or removed, so AGENTS.md's table needed no
+edit.

@@ -62,6 +62,14 @@ class TaskTrackerAppJvmTest {
     @Test
     fun aDeepLinkToOneSprintLandsOnItsScreen() = runComposeUiTest(block = ShellScenarios.aDeepLinkToOneSprintLandsOnItsScreen)
     @Test
+    fun addingASelectedTaskToASprintFromTheShell() = runComposeUiTest(block = ShellScenarios.addingASelectedTaskToASprintFromTheShell)
+    @Test
+    fun removingATaskFromASprintFromTheShell() = runComposeUiTest(block = ShellScenarios.removingATaskFromASprintFromTheShell)
+    @Test
+    fun aLockedSprintOffersNoTaskEdits() = runComposeUiTest(block = ShellScenarios.aLockedSprintOffersNoTaskEdits)
+    @Test
+    fun tappingASprintTaskRowOpensTheEditor() = runComposeUiTest(block = ShellScenarios.tappingASprintTaskRowOpensTheEditor)
+    @Test
     fun systemBackPopsTheSprintDetail() = runComposeUiTest(block = ShellScenarios.systemBackPopsTheSprintDetail)
     @Test
     fun everyTabScrollsBehindTheTabBar() = runComposeUiTest(block = ShellScenarios.everyTabScrollsBehindTheTabBar)

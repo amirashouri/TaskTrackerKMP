@@ -26,6 +26,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTStoryPoints
@@ -57,6 +58,7 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.sprint_achieved
+import com.tasktracker.resources.sprint_add_task
 import com.tasktracker.resources.sprint_committed
 import com.tasktracker.resources.sprint_editor_edit_title
 import com.tasktracker.resources.sprint_editor_new_title
@@ -473,6 +475,25 @@ fun SprintEditorSheet(
  * The note names the owner, which is what makes an unavailable button legible: "only X can
  * finish this sprint" tells the reader what to do next, and "anybody can" tells them the
  * sprint has not been claimed.
+ *
+ * ## The details are a card, and the tasks are not
+ *
+ * The window, the two totals, the bar, the owner and the actions are one fact — *this*
+ * sprint — and [ttGlassCard] is how this app groups one fact visually. The tasks below are
+ * a separate list of separate things, so they keep the same card-per-row treatment they
+ * have everywhere else rather than being folded into the sprint's own card, where a long
+ * title would push the totals off the top of it.
+ *
+ * ## The add button is disabled, not absent — and the rows go inert with it
+ *
+ * [SprintDetail.canEditItems] is false for an active or finished sprint, and the header's
+ * plus is dimmed and dead rather than hidden, unlike [SprintListScreen]'s create button.
+ * The list hides its button because nothing on that screen explains a disabled control;
+ * here the explanation is on the page — the window says the sprint is under way, and every
+ * row below renders without its actions — so the dimmed button and the inert rows are one
+ * legible state: *this sprint is frozen*. Both halves are gated from the same value, which
+ * is why [onOpenTask] and [onRemoveTask] are dropped at this seam rather than left for the
+ * destination to remember: a caller cannot offer an edit the rows do not have.
  */
 @Composable
 fun SprintDetailScreen(
@@ -483,113 +504,162 @@ fun SprintDetailScreen(
     onReopen: () -> Unit,
     onViewSummary: () -> Unit,
     onDismissError: () -> Unit,
+    onAddTasks: () -> Unit = {},
+    onOpenTask: ((WorkItemID) -> Unit)? = null,
+    onRemoveTask: ((WorkItemID) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    // One reading of the gate for the whole screen: the button, the rows' taps and the
+    // rows' remove verb all answer to it, so a state change cannot be applied to two of
+    // the three.
+    val editable = detail.canEditItems
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
             .testTag(SprintDetailScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
-        ttText(
-            text = detail.sprint.name,
-            style = ttTypography.largeTitle,
-            color = ttLabel(),
-        )
-        errorMessage?.let { message ->
-            ttBanner(message = message, onDismiss = onDismissError)
-        }
-        ttText(
-            text = ttDateRange(detail.startDate, detail.endDate),
-            style = ttTypography.callout,
-            color = ttLabelSecondary(),
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        ) {
-            SprintTotal(
-                label = stringResource(Res.string.sprint_committed),
-                points = detail.summary.committedStoryPoints,
-                modifier = Modifier.weight(1f),
-            )
-            SprintTotal(
-                label = stringResource(Res.string.sprint_achieved),
-                points = detail.summary.achievedStoryPoints,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        SprintProgressBar(fraction = sprintProgressFraction(detail))
-        ttText(
-            // The owner, or the fact that there is none. `sprint_owner_none` is a claim
-            // about what may be done with this sprint ("anyone can finish"), not merely a
-            // dash for a missing value — see `Sprint.owner`'s KDoc on why `null` is not a
-            // lock.
-            text = detail.sprint.owner ?: stringResource(Res.string.sprint_owner_none),
-            style = ttTypography.footnote,
-            color = ttBodyLabel(),
-            modifier = Modifier.testTag(SprintDetailOwnerTag),
-        )
-        if (!detail.sprint.isFinished && detail.hasOwner && !detail.isViewerTheOwner) {
-            ttText(
-                text = stringResource(
-                    Res.string.sprint_owner_only,
-                    detail.sprint.owner.orEmpty(),
-                ),
-                style = ttTypography.footnote,
-                color = ttBodyLabel(),
-                modifier = Modifier.testTag(SprintDetailOwnerNoteTag),
-            )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-        ) {
-            if (detail.canFinish) {
-                ttGlassButton(
-                    label = stringResource(Res.string.sprint_finish),
-                    onClick = onFinish,
-                    enabled = !isBusy,
-                    modifier = Modifier.testTag(SprintDetailFinishTag),
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            ) {
+                ttText(
+                    text = detail.sprint.name,
+                    style = ttTypography.largeTitle,
+                    color = ttLabel(),
+                    modifier = Modifier.weight(1f),
+                )
+                ttGlassIconButton(
+                    image = ttActionIcons.add,
+                    contentDescription = stringResource(Res.string.sprint_add_task),
+                    onClick = onAddTasks,
+                    enabled = editable && !isBusy,
+                    modifier = Modifier.testTag(SprintDetailAddTag),
                 )
             }
-            if (detail.sprint.isFinished) {
-                ttGlassButton(
-                    label = stringResource(Res.string.sprint_reopen),
-                    onClick = onReopen,
-                    enabled = !isBusy,
-                    modifier = Modifier.testTag(SprintDetailReopenTag),
+        }
+        errorMessage?.let { message ->
+            item { ttBanner(message = message, onDismiss = onDismissError) }
+        }
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(ttRadius.row))
+                    .ttGlassCard()
+                    .padding(ttSpacing.xl)
+                    .testTag(SprintDetailCardTag),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+            ) {
+                ttText(
+                    text = ttDateRange(detail.startDate, detail.endDate),
+                    style = ttTypography.callout,
+                    color = ttLabelSecondary(),
                 )
-                if (detail.hasSummaryToShow) {
-                    ttGlassButton(
-                        label = stringResource(Res.string.sprint_view_summary),
-                        onClick = onViewSummary,
-                        modifier = Modifier.testTag(SprintDetailSummaryTag),
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    SprintTotal(
+                        label = stringResource(Res.string.sprint_committed),
+                        points = detail.summary.committedStoryPoints,
+                        modifier = Modifier.weight(1f),
                     )
+                    SprintTotal(
+                        label = stringResource(Res.string.sprint_achieved),
+                        points = detail.summary.achievedStoryPoints,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                SprintProgressBar(fraction = sprintProgressFraction(detail))
+                ttText(
+                    // The owner, or the fact that there is none. `sprint_owner_none` is a claim
+                    // about what may be done with this sprint ("anyone can finish"), not merely a
+                    // dash for a missing value — see `Sprint.owner`'s KDoc on why `null` is not a
+                    // lock.
+                    text = detail.sprint.owner ?: stringResource(Res.string.sprint_owner_none),
+                    style = ttTypography.footnote,
+                    color = ttBodyLabel(),
+                    modifier = Modifier.testTag(SprintDetailOwnerTag),
+                )
+                if (!detail.sprint.isFinished && detail.hasOwner && !detail.isViewerTheOwner) {
+                    ttText(
+                        text = stringResource(
+                            Res.string.sprint_owner_only,
+                            detail.sprint.owner.orEmpty(),
+                        ),
+                        style = ttTypography.footnote,
+                        color = ttBodyLabel(),
+                        modifier = Modifier.testTag(SprintDetailOwnerNoteTag),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                ) {
+                    if (detail.canFinish) {
+                        ttGlassButton(
+                            label = stringResource(Res.string.sprint_finish),
+                            onClick = onFinish,
+                            enabled = !isBusy,
+                            modifier = Modifier.testTag(SprintDetailFinishTag),
+                        )
+                    }
+                    if (detail.sprint.isFinished) {
+                        ttGlassButton(
+                            label = stringResource(Res.string.sprint_reopen),
+                            onClick = onReopen,
+                            enabled = !isBusy,
+                            modifier = Modifier.testTag(SprintDetailReopenTag),
+                        )
+                        if (detail.hasSummaryToShow) {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_view_summary),
+                                onClick = onViewSummary,
+                                modifier = Modifier.testTag(SprintDetailSummaryTag),
+                            )
+                        }
+                    }
                 }
             }
         }
-        ttText(
-            text = stringResource(Res.string.sprint_items_title),
-            style = ttTypography.titleSmall,
-            color = ttLabel(),
-        )
-        if (detail.items.isEmpty()) {
+        item {
             ttText(
-                text = stringResource(Res.string.sprint_items_empty),
-                style = ttTypography.footnote,
-                // `ttBodyLabel`, for the reason `ProjectsEmptyState` gives: this is the only
-                // thing on the screen when the sprint is empty, and it carries its meaning.
-                color = ttBodyLabel(),
-                modifier = Modifier.testTag(SprintDetailItemsEmptyTag),
+                text = stringResource(Res.string.sprint_items_title),
+                style = ttTypography.titleSmall,
+                color = ttLabel(),
             )
+        }
+        if (detail.items.isEmpty()) {
+            item {
+                ttText(
+                    text = stringResource(Res.string.sprint_items_empty),
+                    style = ttTypography.footnote,
+                    // `ttBodyLabel`, for the reason `ProjectsEmptyState` gives: this is the only
+                    // thing on the screen when the sprint is empty, and it carries its meaning.
+                    color = ttBodyLabel(),
+                    modifier = Modifier.testTag(SprintDetailItemsEmptyTag),
+                )
+            }
         } else {
-            detail.items.forEach { item ->
-                SprintItemRow(
-                    key = item.key.toString(),
-                    title = item.title,
-                    storyPoints = item.storyPoints,
+            items(items = detail.items, key = { it.id.stringValue }) { item ->
+                WorkItemBacklogRow(
+                    item = item,
+                    // The backlog's verbs are not offered in a sprint — see
+                    // `WorkItemBacklogRow`'s KDoc on sprint mode — so the callbacks are
+                    // present-but-inert and the remove verb carries the row.
+                    onPutOnBoard = {},
+                    onFileAway = {},
+                    isBusy = isBusy,
+                    onOpen = if (editable) onOpenTask?.let { open -> { open(item.id) } } else null,
+                    onRemoveFromSprint = if (editable) {
+                        onRemoveTask?.let { remove -> { remove(item.id) } }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -865,6 +935,8 @@ const val SprintProgressBarTag = "sprints.row.progress"
 
 /** A sprint's own screen. */
 const val SprintDetailScreenTag = "sprints.detail"
+const val SprintDetailCardTag = "sprints.detail.card"
+const val SprintDetailAddTag = "sprints.detail.add"
 const val SprintDetailOwnerTag = "sprints.detail.owner"
 const val SprintDetailOwnerNoteTag = "sprints.detail.ownerNote"
 const val SprintDetailFinishTag = "sprints.detail.finish"
@@ -1010,6 +1082,9 @@ private fun SprintDetailScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
             items = items,
             summary = sprintSummary(sprint, items),
             isViewerTheOwner = true,
+            // A preview has no clock to ask, and the static window is shown as one still
+            // to come — so the sheet's affordances render in their editable state.
+            isActive = false,
         ),
         isBusy = false,
         errorMessage = null,
@@ -1017,6 +1092,10 @@ private fun SprintDetailScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onReopen = {},
         onViewSummary = {},
         onDismissError = {},
+        // Present rather than defaulted away, so the preview shows the sprint-mode rows
+        // (remove verb, tappable body) the real destination wires up.
+        onOpenTask = {},
+        onRemoveTask = {},
     )
 }
 
@@ -1033,6 +1112,7 @@ private fun SprintDetailScreenOtherOwnerPreview() = ProjectsPreview(ThemeScheme.
             summary = sprintSummary(sprint, emptyList()),
             // The state that hides Finish and shows the note naming the owner instead.
             isViewerTheOwner = false,
+            isActive = false,
         ),
         isBusy = false,
         errorMessage = null,

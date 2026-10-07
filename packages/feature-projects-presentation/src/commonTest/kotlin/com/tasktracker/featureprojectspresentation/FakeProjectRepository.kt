@@ -237,9 +237,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,
         now: Instant,
-    ): List<WorkItem> = sprintWrite({ storedItems.first { it.id in workItemIDs }.projectID }) {
+    ): List<WorkItem> = sprintWrite({ storedItems.firstOrNull { it.id in workItemIDs }?.projectID }) {
         failIfSet()
-        val target = (sprintID as? Patch.Of)?.value
+        // Mirrors `RoomProjectRepository`: `Unmentioned` is a caller that does not care, so
+        // it writes nothing. Collapsing it to `null` would clear the field the real store
+        // leaves alone, and a test asserting "sent back" against `Patch.Unmentioned` would
+        // then pass against a behaviour no store has.
+        if (workItemIDs.isEmpty() || sprintID is Patch.Unmentioned) return@sprintWrite emptyList()
+        val target = (sprintID as Patch.Of).value
         storedItems.filter { it.id in workItemIDs }.forEach {
             it.sprintID = target
             it.updatedAt = now

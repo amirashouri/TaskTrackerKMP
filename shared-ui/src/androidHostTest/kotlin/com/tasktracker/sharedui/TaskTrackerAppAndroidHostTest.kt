@@ -92,6 +92,14 @@ class TaskTrackerAppAndroidHostTest {
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)
     @Test
     fun aDeepLinkToOneSprintLandsOnItsScreen() = runComposeUiTest(block = ShellScenarios.aDeepLinkToOneSprintLandsOnItsScreen)
+    @Test
+    fun addingASelectedTaskToASprintFromTheShell() = runComposeUiTest(block = ShellScenarios.addingASelectedTaskToASprintFromTheShell)
+    @Test
+    fun removingATaskFromASprintFromTheShell() = runComposeUiTest(block = ShellScenarios.removingATaskFromASprintFromTheShell)
+    @Test
+    fun aLockedSprintOffersNoTaskEdits() = runComposeUiTest(block = ShellScenarios.aLockedSprintOffersNoTaskEdits)
+    @Test
+    fun tappingASprintTaskRowOpensTheEditor() = runComposeUiTest(block = ShellScenarios.tappingASprintTaskRowOpensTheEditor)
 
     /** System back pops the sprint detail route and stops at the tab root. The defect was Android's: the system back button closed the whole app from the sprint detail, because nothing in the signed-in tree consumed the back event. This host presses through the real `activity.onBackPressed()` chain — the dispatcher the androidx `BackHandler` registers with — so the press here is the device's path, not a simulation of it (see `SystemBackSupport`). */
     @Test

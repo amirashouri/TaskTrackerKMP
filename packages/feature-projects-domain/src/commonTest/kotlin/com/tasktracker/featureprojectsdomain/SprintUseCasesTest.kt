@@ -328,4 +328,168 @@ class SprintUseCasesTest {
         }
         assertEquals("'Sprint 3' is still open.", failure.message)
     }
+
+    // MARK: Sprint membership
+    //
+    // The window these tests use matters more than it looks: `now` is October 2025 and
+    // `march2..march16` is 2026, so `sprintIn` produces a *planned* sprint — the one state
+    // in which membership may be edited. Every refusal test therefore has to move the
+    // window or the clock deliberately, and a fixture that "just happened to be active"
+    // would make the green runs depend on the day they ran on.
+
+    private suspend fun itemsIn(repository: FakeProjectRepository, project: Project) =
+        listOf(
+            repository.seedWorkItem(projectID = project.id, title = "One"),
+            repository.seedWorkItem(projectID = project.id, title = "Two"),
+        )
+
+    @Test
+    fun `adding tasks to a planned sprint moves them in`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val items = itemsIn(repository, project)
+
+        val moved = AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = items.map { it.id },
+            sprintID = sprint.id,
+        )
+
+        assertEquals(2, moved.size)
+        assertEquals(sprint.id, repository.workItem(items[0].id)!!.sprintID)
+        assertEquals(sprint.id, repository.workItem(items[1].id)!!.sprintID)
+    }
+
+    @Test
+    fun `removing a task sends it back to the backlog`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val item = itemsIn(repository, project).first()
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = sprint.id,
+        )
+
+        val removed = RemoveWorkItemsFromSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = sprint.id,
+        )
+
+        assertEquals(1, removed.size)
+        // `Patch.Of(null)` and not `Unmentioned` — the assertion that distinguishes them is
+        // that the field actually cleared, which an unmentioned patch would leave alone.
+        assertNull(repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `an empty selection writes nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val item = itemsIn(repository, project).first()
+        val changesBefore = repository.publishedChanges().size
+
+        // No sprint read either: a refusal for an instruction that asks for nothing would
+        // be a banner about a tap the user did not meaningfully make, so the random id is
+        // there to prove the sprint is never looked up.
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = emptyList(),
+            sprintID = com.tasktracker.core.randomSprintID(),
+        )
+        RemoveWorkItemsFromSprint(repository, TestDateProvider(now))(
+            workItemIDs = emptyList(),
+            sprintID = com.tasktracker.core.randomSprintID(),
+        )
+
+        assertNull(repository.workItem(item.id)!!.sprintID)
+        // No write reached the store: `setWorkItemSprint` publishes both kinds of change,
+        // so an unchanged count is the observable half of "wrote nothing".
+        assertEquals(changesBefore, repository.publishedChanges().size)
+    }
+
+    @Test
+    fun `adding to an active sprint is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val active = create(repository)(
+            projectID = project.id,
+            name = "Under way",
+            startDate = Instant.fromEpochSeconds(now.epochSeconds - 86_400),
+            endDate = Instant.fromEpochSeconds(now.epochSeconds + 86_400),
+        )
+        val item = repository.seedWorkItem(projectID = project.id)
+
+        val failure = assertFailsWith<AppError.Validation> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(item.id),
+                sprintID = active.id,
+            )
+        }
+
+        // The message is what the detail screen's banner shows, so it is asserted rather
+        // than left to whatever the string happened to say.
+        assertEquals("'Under way' is in progress, so its tasks cannot be changed.", failure.message)
+        assertNull(repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `removing from an active sprint is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val active = create(repository)(
+            projectID = project.id,
+            name = "Under way",
+            startDate = Instant.fromEpochSeconds(now.epochSeconds - 86_400),
+            endDate = Instant.fromEpochSeconds(now.epochSeconds + 86_400),
+        )
+        val item = repository.seedWorkItem(projectID = project.id, title = "Committed")
+        // Put it in through the store directly: the use case that would do it is exactly
+        // the one this test proves refuses, so going through it would make the fixture
+        // depend on the behaviour under test.
+        repository.setWorkItemSprint(listOf(item.id), Patch.Of(active.id), now)
+
+        assertFailsWith<AppError.Validation> {
+            RemoveWorkItemsFromSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(item.id),
+                sprintID = active.id,
+            )
+        }
+        assertEquals(active.id, repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `adding to a finished sprint is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository)
+        val item = repository.seedWorkItem(projectID = project.id)
+        FinishSprint(repository, TestDateProvider(now))(sprint.id)
+
+        val failure = assertFailsWith<AppError.Validation> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(item.id),
+                sprintID = sprint.id,
+            )
+        }
+
+        // "Finished" is reported in preference to "in progress": a finished sprint can
+        // still have today inside its window, and finished is the more specific complaint.
+        assertEquals("'Sprint 1' is finished, so its tasks cannot be changed.", failure.message)
+        assertNull(repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `adding to a sprint that no longer exists is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, _) = sprintIn(repository)
+        val item = repository.seedWorkItem(projectID = project.id)
+
+        // `Storage`, not a silent no-op — the same reason `UpdateSprint` gives: reporting
+        // success for a write that never happened is the combination a user reports as a
+        // bug with no reproduction.
+        assertFailsWith<AppError.Storage> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(item.id),
+                sprintID = com.tasktracker.core.randomSprintID(),
+            )
+        }
+        assertNull(repository.workItem(item.id)!!.sprintID)
+    }
 }

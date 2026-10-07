@@ -939,7 +939,16 @@ fun ttGlassAddButton(
     }
 }
 
-/** A compact circular glass action with an accessible label and a design-system glyph. */
+/**
+ * A compact circular glass action with an accessible label and a design-system glyph.
+ *
+ * [enabled] dims the control with [ttGlass.DISABLED_ALPHA] and makes it inert, the same
+ * pair [ttGlassButton] applies: a disabled control is supposed to look less available, and
+ * a button that looks inert while still firing is worse than one that looks live and
+ * briefly does nothing. It lives here rather than at the call site because "disabled" is a
+ * behaviour of the whole control — the alpha and the dead click travel together, and a
+ * caller that dimmed without gating (or gated without dimming) would be half of the state.
+ */
 @Composable
 fun ttGlassIconButton(
     image: ImageVector,
@@ -947,12 +956,14 @@ fun ttGlassIconButton(
     onClick: () -> Unit,
     tint: Color = ttLabel(),
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Box(
         modifier = modifier
             .size(ttSpacing.iconButtonSize)
+            .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
             .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {

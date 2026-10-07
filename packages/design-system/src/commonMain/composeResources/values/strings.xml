@@ -321,6 +321,11 @@
     <string name="sprint_committed">Committed</string>
     <string name="sprint_achieved">Achieved</string>
     <string name="sprint_view_summary">View Summary</string>
+    <string name="sprint_add_task">Add tasks to this sprint</string>
+    <string name="sprint_remove_from_sprint">Remove from sprint</string>
+    <string name="sprint_picker_title">Add tasks</string>
+    <string name="sprint_picker_empty">There are no tasks available to add to this sprint.</string>
+    <string name="sprint_picker_add">Add</string>
 
     <!--
       The summary of a finished sprint. Two sections rather than one list with a badge,

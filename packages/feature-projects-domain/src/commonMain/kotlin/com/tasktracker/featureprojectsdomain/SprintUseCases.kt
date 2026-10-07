@@ -4,8 +4,10 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
@@ -191,6 +193,101 @@ class DeleteSprint(
     @Throws(AppError::class, CancellationException::class)
     suspend operator fun invoke(id: SprintID) =
         repository.deleteSprint(id = id, now = dateProvider.now())
+}
+
+/**
+ * Puts work items into a sprint.
+ *
+ * ## The membership lock is here, not only on the button
+ *
+ * A sprint's membership may be edited **only while the sprint is neither active nor
+ * finished** — a planned sprint is still being assembled, and an active or finished one is
+ * a commitment whose committed set is what the summary will report. The detail screen
+ * hides the affordance for exactly the same rule (see `SprintDetail.canEditItems`), but a
+ * hidden button is a UI state, not a guarantee: the port is reachable from any model, and
+ * `setWorkItemSprint` itself makes no check. So the rule is stated once here, where a
+ * refusal arrives as the banner sentence the user can read, rather than as a row that
+ * silently did not move.
+ *
+ * "Active" is [Sprint.isActiveOn] — today inside the window, inclusive — plus
+ * [Sprint.isFinished], which [Sprint.isActiveOn] deliberately does not consider. The two
+ * are checked in that order because a finished sprint can still have today inside its
+ * window, and "finished" is the more specific of the two complaints.
+ *
+ * An empty list short-circuits before the sprint is even read: there is nothing to write,
+ * and a refusal for an instruction that asks for nothing would be a banner about a tap the
+ * user did not meaningfully make.
+ */
+class AddWorkItemsToSprint(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        workItemIDs: List<WorkItemID>,
+        sprintID: SprintID,
+    ): List<WorkItem> {
+        if (workItemIDs.isEmpty()) return emptyList()
+        val sprint = repository.sprint(sprintID)
+            ?: throw AppError.Storage("That sprint no longer exists.")
+        requireMembershipEditable(sprint, dateProvider.now())
+        return repository.setWorkItemSprint(
+            workItemIDs = workItemIDs,
+            sprintID = Patch.Of(sprintID),
+            now = dateProvider.now(),
+        )
+    }
+}
+
+/**
+ * Sends work items from a sprint back to the backlog.
+ *
+ * The same lock as [AddWorkItemsToSprint], for the same reason read the other way: a task
+ * pulled out of an active sprint changes its committed set mid-flight, which is the number
+ * the progress bar and the eventual summary are built from. Both directions are one rule —
+ * membership is frozen once the sprint starts — and [requireMembershipEditable] is where
+ * that rule is written down.
+ */
+class RemoveWorkItemsFromSprint(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        workItemIDs: List<WorkItemID>,
+        sprintID: SprintID,
+    ): List<WorkItem> {
+        if (workItemIDs.isEmpty()) return emptyList()
+        val sprint = repository.sprint(sprintID)
+            ?: throw AppError.Storage("That sprint no longer exists.")
+        requireMembershipEditable(sprint, dateProvider.now())
+        return repository.setWorkItemSprint(
+            workItemIDs = workItemIDs,
+            // `Of(null)` rather than `Unmentioned`: sending a task back to the backlog is an
+            // instruction, and "do not care about membership" is a different one. See
+            // `Patch`.
+            sprintID = Patch.Of(null),
+            now = dateProvider.now(),
+        )
+    }
+}
+
+/**
+ * The membership lock, named once so both directions cannot drift apart.
+ *
+ * [AppError.Validation], so the sentence reaches the user through the banner every model
+ * already renders — `AppError.message` is the user-facing text and a use case that reworded
+ * it would create a second owner for it.
+ */
+private fun requireMembershipEditable(sprint: Sprint, now: Instant) {
+    if (sprint.isFinished) {
+        throw AppError.Validation("'${sprint.name}' is finished, so its tasks cannot be changed.")
+    }
+    if (sprint.isActiveOn(now)) {
+        throw AppError.Validation("'${sprint.name}' is in progress, so its tasks cannot be changed.")
+    }
 }
 
 /**

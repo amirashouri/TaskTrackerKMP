@@ -67,9 +67,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
     // `unused(...)` would mean the tab cannot be rendered by any shell test at all — and a
     // destination nothing can reach is a destination nothing checks.
     //
-    // Only the three reads, and only because the shell's *editor* is the one place a write
-    // would be needed; `SprintsDestination` hosts `SprintEditorSheet` but nothing in this
-    // file drives a form, so the writes stay `unused` and still fail loudly.
+    // Membership is *written* for real too, since the sprint detail gained its add/remove
+    // tasks: `setWorkItemSprint` is the write behind both verbs, and a fake that threw there
+    // would make every shell scenario about task membership fail for the wrong reason. The
+    // other sprint writes (`createSprint`, `finishSprint`, …) stay `unused` because no shell
+    // scenario drives those forms yet, and still fail loudly when one tries.
     private val storedSprints = mutableListOf<Sprint>()
 
     /** Seeds a sprint directly, the way [seed] does for a project. */
@@ -79,6 +81,16 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     /** Every write the shell's code path made, so a test can assert a verb reached the store. */
     val writes = mutableListOf<String>()
+
+    /**
+     * Every `sprintWorkItems` read the shell's code path made, so a scenario can assert the
+     * sprint detail was *not* reloaded. The read is the reload's observable signature: the
+     * detail model re-reads it on every `observe`, so a count that does not move across an
+     * editor open/close proves the destination was never torn down. `shared-ui`'s scenarios
+     * assert this deliberately, because a rebuild-flicker is a composition defect, not a
+     * pixel one.
+     */
+    val sprintWorkItemReads = mutableListOf<SprintID>()
 
     // MARK: Reads
 
@@ -175,6 +187,37 @@ class FakeProjectRepository : ProjectRepositoryPort {
         existing.copy()
     }
 
+    /**
+     * The sprint detail's membership write: add tasks to a sprint, or send them back.
+     *
+     * Mirrors `RoomProjectRepository` and the presentation module's fake: an empty list or
+     * an unmentioned patch is a caller that changes nothing, so there is no write and no
+     * change to announce — collapsing `Unmentioned` to `null` would clear membership that
+     * every real store leaves alone, and a test asserting "sent back" against it would pass
+     * against a behaviour no store has. The publish is load-bearing for the UI: the detail
+     * model does not re-read after a write, it reloads when the change bus tells it to, so a
+     * fake that skipped it would leave the screen stale while `writes` still recorded success.
+     */
+    override suspend fun setWorkItemSprint(
+        workItemIDs: List<WorkItemID>,
+        sprintID: Patch<SprintID?>,
+        now: Instant,
+    ): List<WorkItem> {
+        if (workItemIDs.isEmpty() || sprintID is Patch.Unmentioned) return emptyList()
+        val target = (sprintID as Patch.Of).value
+        return writing(
+            kind = ProjectChange.Kind.WorkItems,
+            projectID = { storedItems.firstOrNull { it.id in workItemIDs }?.projectID },
+        ) {
+            storedItems.filter { it.id in workItemIDs }.forEach {
+                it.sprintID = target
+                it.updatedAt = now
+            }
+            writes += "setWorkItemSprint"
+            storedItems.filter { it.id in workItemIDs }.map { it.copy() }
+        }
+    }
+
     // MARK: Not reachable from the shell
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
@@ -193,6 +236,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     }
 
     override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = locked {
+        sprintWorkItemReads += id
         storedItems.filter { it.sprintID == id }.sortedBy { it.rank }.map { it.copy() }
     }
 
@@ -219,12 +263,6 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun finishSprint(id: SprintID, now: Instant): Sprint = unused("finishSprint")
 
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint = unused("reopenSprint")
-
-    override suspend fun setWorkItemSprint(
-        workItemIDs: List<WorkItemID>,
-        sprintID: Patch<SprintID?>,
-        now: Instant,
-    ): List<WorkItem> = unused("setWorkItemSprint")
 
     override suspend fun deleteSprint(id: SprintID, now: Instant): Unit = unused("deleteSprint")
 
@@ -360,6 +398,7 @@ fun shellTestWorkItem(
     number: Int = 1,
     title: String = "A task",
     status: WorkItemStatus = WorkItemStatus.Todo,
+    sprintID: SprintID? = null,
 ): WorkItem = WorkItem(
     projectID = projectID,
     key = ProjectRules.workItemKey(keyPrefix, number),
@@ -370,6 +409,7 @@ fun shellTestWorkItem(
     assignee = null,
     dueDate = null,
     rank = 0,
+    sprintID = sprintID,
     createdAt = Instant.fromEpochSeconds(1_760_000_000),
     updatedAt = Instant.fromEpochSeconds(1_760_000_000),
     resolvedAt = null,
@@ -382,6 +422,12 @@ fun shellTestWorkItem(
  * module's `testSprint`, so a date assertion written against one reads the same against the
  * other. The goal is non-zero because the list row's progress is `null` without one, and a
  * fixture that could only exercise the no-goal case would leave the common path untested.
+ *
+ * [startDate] and [endDate] are parameters because the shell's clock is the fixed
+ * `TestDateProvider()` (October 2025), so "planned", "active" and "finished" are window
+ * decisions: the default window is *ahead* of that clock and therefore editable, and a
+ * scenario wanting the locked state passes a window the clock falls inside. [isFinished]
+ * locks it regardless of the window, as the real store's flag does.
  */
 fun shellTestSprint(
     projectID: ProjectID,
@@ -390,19 +436,21 @@ fun shellTestSprint(
     owner: String? = "Amir",
     isFinished: Boolean = false,
     id: SprintID = SprintID("33333333-3333-3333-3333-333333333333"),
+    startDate: Instant = Instant.parse("2026-03-02T00:00:00Z"),
+    endDate: Instant = Instant.parse("2026-03-16T00:00:00Z"),
 ): Sprint = Sprint(
     id = id,
     projectID = projectID,
     name = name,
     goalStoryPoints = goalStoryPoints,
-    startDate = Instant.parse("2026-03-02T00:00:00Z"),
-    endDate = Instant.parse("2026-03-16T00:00:00Z"),
+    startDate = startDate,
+    endDate = endDate,
     owner = owner,
     isFinished = isFinished,
-    // Kept in step with `isFinished`, because `Sprint.reconcileFinishedAt`'s invariant is
-    // that the two agree and a fixture that broke it would be asserting on a state the
-    // store cannot hold.
-    finishedAt = if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
+    // Presence, not the instant: `Sprint.reconcileFinishedAt`'s invariant is that the two
+    // agree — non-null exactly when finished — and no shell assertion reads the date, so
+    // deriving it from the window keeps the invariant under a custom window for free.
+    finishedAt = if (isFinished) endDate else null,
     createdAt = Instant.fromEpochSeconds(1_760_000_000),
     updatedAt = Instant.fromEpochSeconds(1_760_000_000),
 )

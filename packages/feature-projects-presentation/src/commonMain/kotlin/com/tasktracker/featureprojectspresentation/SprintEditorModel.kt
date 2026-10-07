@@ -6,15 +6,19 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintSummary
+import com.tasktracker.featureprojectsdomain.AddWorkItemsToSprint
 import com.tasktracker.featureprojectsdomain.CreateSprint
 import com.tasktracker.featureprojectsdomain.FinishSprint
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.RemoveWorkItemsFromSprint
 import com.tasktracker.featureprojectsdomain.ReopenSprint
 import com.tasktracker.featureprojectsdomain.UpdateSprint
 import kotlinx.datetime.LocalDate
@@ -277,7 +281,31 @@ data class SprintDetail(
     val summary: SprintSummary,
     /** Whether the person using the app is this sprint's owner. See [canFinish]. */
     val isViewerTheOwner: Boolean,
+    /**
+     * Whether the sprint's window contains today, stamped at the read that built this value.
+     *
+     * A field rather than a property asking the clock again, for the same reason this
+     * whole value is a snapshot: [SprintDetailModel.reload] reads the store and the clock
+     * once per change, and a screen whose "is it active" answer moved between the totals
+     * rendering and the button's `enabled` would be gating on a fact this value did not
+     * have.
+     */
+    val isActive: Boolean,
 ) {
+
+    /**
+     * Whether the viewer may change this sprint's task membership.
+     *
+     * Neither active nor finished — a planned sprint is still being assembled, and once
+     * the window opens the committed set is what the progress bar and, at the end, the
+     * summary report. [AddWorkItemsToSprint] and [RemoveWorkItemsFromSprint] restate this
+     * rule as a refusal, because hiding a button is a UI state and not a guarantee; see
+     * their KDoc. "Active" is [Sprint.isActiveOn], the same rule [com.tasktracker.
+     * featureprojectspresentation.ProjectBoardModel] uses to pick the board's sprint, so
+     * the two screens never disagree about which sprints are under way.
+     */
+    val canEditItems: Boolean
+        get() = !sprint.isFinished && !isActive
 
     /**
      * Whether the viewer may finish this sprint.
@@ -292,7 +320,7 @@ data class SprintDetail(
      * worked out by the screen from an owner string it happens to be holding.
      */
     val canFinish: Boolean
-        get() = !sprint.isFinished && (!hasOwner || isViewerTheOwner)
+        get() = !sprint.isFinished && !isActive && (!hasOwner || isViewerTheOwner)
 
     /** Whether the sprint has an owner at all. */
     val hasOwner: Boolean get() = sprint.owner != null
@@ -341,14 +369,56 @@ class SprintDetailModel(
 
     private val finishSprint = FinishSprint(repository, dateProvider)
     private val reopenSprint = ReopenSprint(repository, dateProvider)
+    private val addWorkItemsToSprint = AddWorkItemsToSprint(repository, dateProvider)
+    private val removeWorkItemsFromSprint = RemoveWorkItemsFromSprint(repository, dateProvider)
 
     /** The detail, or `null` before the first read and if the sprint has been deleted. */
     var detail: SprintDetail? by mutableStateOf(null)
         private set
 
-    /** Whether the sprint has been closed, or a Finish is in flight. A screen shows the wait. */
-    var isFinishing: Boolean by mutableStateOf(false)
+    /**
+     * Whether a write is in flight — Finish, Reopen, an add, or a remove. A screen shows
+     * the wait, and disables the other buttons: they conflict, and a second press racing
+     * the first is a double write rather than an impatient user.
+     */
+    var isBusy: Boolean by mutableStateOf(false)
         private set
+
+    /**
+     * Whether the add-tasks sheet is open.
+     *
+     * Here rather than in the destination, for the same reason `isSummaryOpen`'s sibling
+     * states sit with their models: opening is gated on [SprintDetail.canEditItems], and a
+     * gate the screen enforced by keeping its own boolean would be one the next caller of
+     * this model could forget.
+     */
+    var isPickerOpen: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * The tasks the picker offers: in this project, in no sprint, not archived.
+     *
+     * **No sprint at all** rather than "not this sprint": an item belonging to *another*
+     * sprint could be lifted through this sheet, and [AddWorkItemsToSprint] only checks
+     * the sprint being written *to* — so offering an active sprint's task here would move
+     * it out from under a window that has already frozen its membership, through a door
+     * that is locked from the other side. An item in some other *planned* sprint is
+     * likewise not offered; it travels by being removed there first, which is two explicit
+     * steps instead of one silent one.
+     *
+     * Re-read on every [reload], so a task that left the backlog while this sheet was open
+     * disappears from it rather than being addable from a stale list.
+     */
+    var pickableItems: List<WorkItem> by mutableStateOf(emptyList())
+        private set
+
+    /** The ids ticked in [pickableItems]. Cleared when the sheet opens, closes, or adds. */
+    var selectedPickables: Set<WorkItemID> by mutableStateOf(emptySet())
+        private set
+
+    /** Whether at least one ticked task would actually be written. */
+    val canAddSelected: Boolean
+        get() = selectedPickables.isNotEmpty()
 
     /**
      * Whether any change matters here.
@@ -364,6 +434,8 @@ class SprintDetailModel(
     override suspend fun reload() {
         val sprint = repository.sprint(sprintID) ?: run {
             detail = null
+            pickableItems = emptyList()
+            selectedPickables = emptySet()
             return
         }
         val items = repository.sprintWorkItems(sprintID)
@@ -374,7 +446,71 @@ class SprintDetailModel(
             items = items,
             summary = sprintSummary(sprint, items),
             isViewerTheOwner = sprint.owner != null && sprint.owner == currentUserName,
+            isActive = sprint.isActiveOn(dateProvider.now()),
         )
+        pickableItems = repository.workItems(sprint.projectID)
+            .filter { it.sprintID == null && it.status != WorkItemStatus.Closed }
+        // A ticked task that has gone — added somewhere else, archived, deleted — is
+        // dropped rather than left to be sent: confirming against ids the store no longer
+        // offers would either fail mid-write or, worse, succeed on a row the sheet is no
+        // longer showing.
+        selectedPickables = selectedPickables
+            .filter { id -> pickableItems.any { it.id == id } }
+            .toSet()
+    }
+
+    // MARK: Membership
+    //
+    // Every method here is gated on [SprintDetail.canEditItems] *and* refuses inside the
+    // use case. The two are not the same check repeated: this one keeps a sheet from
+    // opening for a sprint whose state changed a moment ago, and the use case's refusal is
+    // what answers the race where it changed after the sheet opened.
+
+    /** Opens the add-tasks sheet, if this sprint may still accept tasks. */
+    fun openPicker() {
+        if (detail?.canEditItems != true) return
+        selectedPickables = emptySet()
+        isPickerOpen = true
+    }
+
+    /** Closes the sheet and forgets the selection. */
+    fun closePicker() {
+        isPickerOpen = false
+        selectedPickables = emptySet()
+    }
+
+    /** Ticks or unticks one candidate. */
+    fun togglePickable(id: WorkItemID) {
+        selectedPickables = if (id in selectedPickables) {
+            selectedPickables - id
+        } else {
+            selectedPickables + id
+        }
+    }
+
+    /**
+     * Moves every ticked task into this sprint, and closes the sheet on success.
+     *
+     * Returns whether it happened, so a caller can keep the sheet open on a refusal — the
+     * refusal itself arrives as [errorMessage], the same banner as every other write.
+     */
+    suspend fun addSelected(): Boolean {
+        if (selectedPickables.isEmpty()) return false
+        val moved = acting {
+            addWorkItemsToSprint(workItemIDs = selectedPickables.toList(), sprintID = sprintID)
+        }
+        if (moved) closePicker()
+        return moved
+    }
+
+    /**
+     * Sends one task back to the backlog, and reports whether it went.
+     *
+     * Returns `false` rather than throwing so the row can stay put on a refusal; the
+     * banner carries the reason.
+     */
+    suspend fun removeItem(id: WorkItemID): Boolean = acting {
+        removeWorkItemsFromSprint(workItemIDs = listOf(id), sprintID = sprintID)
     }
 
     /**
@@ -390,11 +526,11 @@ class SprintDetailModel(
     suspend fun reopen(): Boolean = acting { reopenSprint(sprintID) }
 
     private suspend fun acting(block: suspend () -> Unit): Boolean {
-        isFinishing = true
+        isBusy = true
         return try {
             reporting { block() } != null
         } finally {
-            isFinishing = false
+            isBusy = false
         }
     }
 }

@@ -15,6 +15,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * One sprint's screen: what it says about progress, and who may close it.
@@ -281,7 +282,7 @@ class SprintDetailModelTest {
 
         assertFalse(model.finish())
         assertEquals("'Sprint 7' has already been finished.", model.errorMessage)
-        assertFalse(model.isFinishing, "the wait is cleared even on failure")
+        assertFalse(model.isBusy, "the wait is cleared even on failure")
     }
 
     @Test
@@ -370,5 +371,211 @@ class SprintDetailModelTest {
         val summary = model.detail!!.summary
         assertEquals(4, summary.achievedStoryPoints)
         assertNull(summary.didHitGoal, "no goal means no verdict, not a miss")
+    }
+
+    // MARK: Membership
+    //
+    // `TestDateProvider()` ticks at 1_760_000_000 (October 2025) and the fixture sprint's
+    // window is March 2026, so the default sprint here is *planned* — the one state in
+    // which membership may be edited. Every locking test moves the window deliberately,
+    // and a fixture that happened to be active would make its own green depend on the day
+    // it ran.
+
+    /** The fixture sprint's window, shifted to straddle [now] so the sprint is active. */
+    private fun activeWindow(): Pair<Instant, Instant> =
+        Instant.fromEpochSeconds(1_760_000_000 - 86_400) to Instant.fromEpochSeconds(1_760_000_000 + 86_400)
+
+    @Test
+    fun `a planned sprint accepts task edits`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        val detail = model.detail!!
+        assertFalse(detail.isActive)
+        assertTrue(detail.canEditItems)
+    }
+
+    @Test
+    fun `an active sprint locks its task membership`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val (start, end) = activeWindow()
+        val sprint = testSprint(project.id, startDate = start, endDate = end)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        val detail = model.detail!!
+        assertTrue(detail.isActive)
+        assertFalse(detail.canEditItems)
+        // The sheet does not even open, rather than opening and refusing to confirm: a
+        // gate the screen enforced by remembering to disable a button would be one this
+        // model could forget for its next caller.
+        model.openPicker()
+        assertFalse(model.isPickerOpen)
+    }
+
+    @Test
+    fun `a finished sprint locks its task membership`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isFinished = true)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertFalse(model.detail!!.canEditItems)
+        model.openPicker()
+        assertFalse(model.isPickerOpen)
+    }
+
+    @Test
+    fun `the picker offers only tasks that belong to no sprint and are not archived`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+        // Free agent — the only one of the four that may be offered.
+        repository.seed(testWorkItem(projectID = project.id, key = "AP-1"))
+        // In this sprint already: re-offering it would be a no-op dressed as a choice.
+        repository.seed(testWorkItem(projectID = project.id, key = "AP-2", sprintID = sprint.id))
+        // Archived: closed work is not committed to a new window.
+        repository.seed(testWorkItem(projectID = project.id, key = "AP-3", status = WorkItemStatus.Closed))
+        // Another sprint's task. Offering it would move it out of a window whose own
+        // membership lock is checked only against *that* sprint — a door locked from the
+        // other side.
+        repository.seed(
+            testWorkItem(projectID = project.id, key = "AP-4", sprintID = testSprint(project.id).id),
+        )
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.openPicker()
+        assertEquals(listOf("AP-1"), model.pickableItems.map { it.key.toString() })
+    }
+
+    @Test
+    fun `ticking a task and confirming moves it in and closes the sheet`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+        val item = testWorkItem(projectID = project.id, key = "AP-1")
+        repository.seed(item)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.openPicker()
+        assertFalse(model.canAddSelected, "nothing ticked means nothing to write")
+        model.togglePickable(item.id)
+        assertTrue(model.canAddSelected)
+
+        assertTrue(model.addSelected())
+        assertEquals(sprint.id, repository.workItem(item.id)!!.sprintID)
+        assertFalse(model.isPickerOpen, "a confirmed add closes the sheet")
+        assertTrue(model.selectedPickables.isEmpty())
+        assertFalse(model.isBusy, "the wait is cleared on success too")
+        // The write went through the port's one membership call, so a future refactor that
+        // spelled it as a plain `updateWorkItem` would not pass unnoticed.
+        assertTrue("setWorkItemSprint" in repository.writes)
+
+        // The change event reloaded: the added task is now a sprint item and no longer a
+        // candidate, which is the same fact read from both sides.
+        advanceUntilIdle()
+        assertEquals(listOf(item.id), model.detail!!.items.map { it.id })
+        assertTrue(model.pickableItems.isEmpty())
+    }
+
+    @Test
+    fun `unticking the last task makes the sheet unable to confirm`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+        val item = testWorkItem(projectID = project.id, key = "AP-1")
+        repository.seed(item)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.openPicker()
+        model.togglePickable(item.id)
+        model.togglePickable(item.id)
+        assertFalse(model.canAddSelected)
+        assertFalse(model.addSelected(), "an empty selection writes nothing")
+        assertTrue(model.isPickerOpen, "nothing was refused, so the sheet stays up")
+        assertNull(repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `removing a task sends it back to the backlog`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+        val item = testWorkItem(projectID = project.id, key = "AP-1", sprintID = sprint.id)
+        repository.seed(item)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        assertEquals(1, model.detail!!.items.size)
+
+        assertTrue(model.removeItem(item.id))
+
+        assertNull(repository.workItem(item.id)!!.sprintID)
+        // And the screen sees it: the change event reloaded, so the row is gone from the
+        // sprint's own list rather than linger until something else pokes the model.
+        advanceUntilIdle()
+        assertTrue(model.detail!!.items.isEmpty())
+        assertFalse(model.isBusy, "the wait is cleared even on success")
+    }
+
+    @Test
+    fun `a refused membership write reports the banner and keeps the sheet open`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id)
+        repository.seed(sprint)
+        val item = testWorkItem(projectID = project.id, key = "AP-1")
+        repository.seed(item)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        model.openPicker()
+        model.togglePickable(item.id)
+        repository.failure = AppError.Validation("'Sprint 1' is in progress, so its tasks cannot be changed.")
+
+        assertFalse(model.addSelected())
+        // Verbatim: `errorMessage` is `AppError.message`, never a model's own wording.
+        assertEquals("'Sprint 1' is in progress, so its tasks cannot be changed.", model.errorMessage)
+        assertTrue(model.isPickerOpen, "a refusal keeps the sheet up so the choice survives")
+        assertTrue(model.canAddSelected, "and keeps the ticks")
+        assertFalse(model.isBusy, "the wait is cleared even on failure")
+        assertNull(repository.workItem(item.id)!!.sprintID)
     }
 }
