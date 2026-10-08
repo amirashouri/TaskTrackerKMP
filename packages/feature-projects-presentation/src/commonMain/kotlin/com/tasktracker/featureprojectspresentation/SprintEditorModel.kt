@@ -5,16 +5,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import kotlin.time.Instant
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintSummary
+import com.tasktracker.domain.SprintStatus
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintBlockingOverlap
 import com.tasktracker.domain.sprintSummary
 import com.tasktracker.featureprojectsdomain.AddWorkItemsToSprint
+import com.tasktracker.featureprojectsdomain.ArchiveSprint
 import com.tasktracker.featureprojectsdomain.CreateSprint
+import com.tasktracker.featureprojectsdomain.DeleteSprint
 import com.tasktracker.featureprojectsdomain.FinishSprint
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -408,6 +412,13 @@ data class SprintDetail(
      * have.
      */
     val isActive: Boolean,
+    /**
+     * The sprint's lifecycle status, derived from the same instant that produced [isActive].
+     * Carried on the value rather than recomputed, for the same reason every other field is:
+     * a screen whose status answer moved between the card rendering and the button's
+     * `enabled` would be gating on a fact this value did not have.
+     */
+    val status: SprintStatus,
 ) {
 
     /**
@@ -485,7 +496,9 @@ class SprintDetailModel(
 ) : ObservingProjectModel(repository) {
 
     private val finishSprint = FinishSprint(repository, dateProvider)
+    private val archiveSprint = ArchiveSprint(repository, dateProvider)
     private val reopenSprint = ReopenSprint(repository, dateProvider)
+    private val deleteSprint = DeleteSprint(repository, dateProvider)
     private val addWorkItemsToSprint = AddWorkItemsToSprint(repository, dateProvider)
     private val removeWorkItemsFromSprint = RemoveWorkItemsFromSprint(repository, dateProvider)
 
@@ -562,14 +575,23 @@ class SprintDetailModel(
             return
         }
         val items = repository.sprintWorkItems(sprintID)
+        val now = dateProvider.now()
+        // Auto-finish: if the sprint's end date has passed and it has not been finished,
+        // mark it as finished so the status reflects the automatic completion.
+        val effectiveSprint = if (!sprint.isFinished && now > sprint.endDate) {
+            finishSprint(sprintID)
+        } else {
+            sprint
+        }
         detail = SprintDetail(
-            sprint = sprint,
-            startDate = sprintLocalDate(sprint.startDate, timeZone),
-            endDate = sprintLocalDate(sprint.endDate, timeZone),
+            sprint = effectiveSprint,
+            startDate = sprintLocalDate(effectiveSprint.startDate, timeZone),
+            endDate = sprintLocalDate(effectiveSprint.endDate, timeZone),
             items = items,
-            summary = sprintSummary(sprint, items),
-            isViewerTheOwner = sprint.owner != null && sprint.owner == currentUserName,
-            isActive = sprint.isActiveOn(dateProvider.now()),
+            summary = sprintSummary(effectiveSprint, items),
+            isViewerTheOwner = effectiveSprint.owner != null && effectiveSprint.owner == currentUserName,
+            isActive = effectiveSprint.isActiveOn(now),
+            status = effectiveSprint.statusAt(now),
         )
         pickableItems = repository.workItems(sprint.projectID)
             .filter {
@@ -648,6 +670,23 @@ class SprintDetailModel(
      * not a crash.
      */
     suspend fun finish(): Boolean = acting { finishSprint(sprintID) }
+
+    /**
+     * Archives a finished sprint, and reports whether it did.
+     *
+     * Returns `false` rather than throwing, so a caller can stay on the screen on failure.
+     * An unowned or already-archived sprint is a no-op — the store refuses a sprint that is
+     * not finished, and silently accepts one that is already archived.
+     */
+    suspend fun archive(): Boolean = acting { archiveSprint(sprintID) }
+
+    /**
+     * Removes this sprint (deletes it and returns its tasks to the backlog), and reports
+     * whether it did.
+     *
+     * Returns `false` rather than throwing, so a caller can stay on the screen on failure.
+     */
+    suspend fun removeSprint(): Boolean = acting { deleteSprint(sprintID) }
 
     /** Reopens the sprint, and reports whether it did. See [finish]. */
     suspend fun reopen(): Boolean = acting { reopenSprint(sprintID) }

@@ -482,6 +482,22 @@ private class PreviewRepository(
             broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
         }.copy()
 
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint =
+        storedSprints.first { it.id == id }.also {
+            it.isArchived = true
+            it.updatedAt = now
+        }.also {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+        }.copy()
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint =
+        storedSprints.first { it.id == id }.also {
+            it.isArchived = false
+            it.updatedAt = now
+        }.also {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+        }.copy()
+
     override suspend fun setWorkItemSprint(
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,

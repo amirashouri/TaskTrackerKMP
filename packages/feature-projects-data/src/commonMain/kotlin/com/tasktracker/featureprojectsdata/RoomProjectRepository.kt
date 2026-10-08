@@ -497,6 +497,39 @@ class RoomProjectRepository(
         return reopened
     }
 
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint {
+        val stamp = currentUserStamp()
+
+        val archived = inTransaction(database) {
+            val sprint = readSprint(id)
+            if (!sprint.isFinished) {
+                throw AppError.Validation("'${sprint.name}' is not finished yet.")
+            }
+            sprint.isArchived = true
+            sprint.updatedAt = now
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(archived.projectID)
+        return archived
+    }
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint {
+        val stamp = currentUserStamp()
+
+        val restored = inTransaction(database) {
+            val sprint = readSprint(id)
+            sprint.isArchived = false
+            sprint.updatedAt = now
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(restored.projectID)
+        return restored
+    }
+
     /**
      * Moves items into a sprint, or back to the backlog.
      *

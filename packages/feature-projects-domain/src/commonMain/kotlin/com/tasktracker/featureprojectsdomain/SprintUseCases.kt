@@ -191,6 +191,27 @@ class ReopenSprint(
 }
 
 /**
+ * Archives a finished sprint, filing it away from the default list.
+ *
+ * A sprint can be archived only once it is finished — the flow is scheduled → in-progress →
+ * finished → archived — and archiving does not reopen it, so a second archive is a no-op
+ * rather than an error. The store is the authority on both rules: it refuses a non-finished
+ * sprint and clears the flag on an already-archived one.
+ *
+ * Thin on purpose: the precondition and the outbox row both belong to the store, which is the
+ * only place that can see them. See [ProjectRepositoryPort.archiveSprint].
+ */
+class ArchiveSprint(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: SprintID): Sprint =
+        repository.archiveSprint(id = id, now = dateProvider.now())
+}
+
+/**
  * Deletes a sprint, returning its tasks to the backlog.
  *
  * Separate from [CreateSprint] on purpose — see `ProjectRepositoryPort.deleteSprint` for

@@ -84,6 +84,10 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
 
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint = boom()
 
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint = boom()
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint = boom()
+
     override suspend fun setWorkItemSprint(
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,

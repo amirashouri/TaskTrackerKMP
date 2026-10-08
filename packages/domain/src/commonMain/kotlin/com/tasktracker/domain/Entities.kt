@@ -269,6 +269,18 @@ data class Sprint(
      * that reopening has to *clear* the date.
      */
     var finishedAt: Instant? = null,
+    /**
+     * Whether the sprint has been archived — removed from the active list and kept as history.
+     *
+     * A sprint is archived **after** it is finished: the flow is scheduled → in-progress →
+     * finished → archived. An archived sprint is finished history that the user has filed away
+     * from the default view, like a closed work item in the backlog's archive.
+     *
+     * `isFinished` is still true while archived — archiving does not reopen a sprint — so the
+     * two flags answer different questions: `isFinished` is "has this sprint's window closed"
+     * and `isArchived` is "has the user put it away".
+     */
+    var isArchived: Boolean = false,
     val createdAt: Instant,
     var updatedAt: Instant,
 ) {
@@ -293,6 +305,25 @@ data class Sprint(
     fun reconcileFinishedAt(now: Instant) {
         finishedAt = if (isFinished) (finishedAt ?: now) else null
     }
+
+    /**
+     * The sprint's current status, derived from its flags and window.
+     *
+     * The four states the detail screen's action button answers to: scheduled, in-progress,
+     * finished, archived. The ordering is the lifecycle — a sprint goes through them in
+     * order, and a new status cannot fall through onto an earlier one by default.
+     *
+     * [now] is a parameter rather than a clock read, for the reason every write in this
+     * project takes its instant from its caller: a rule that reads the wall clock is a rule
+     * whose tests can only be run on a particular day.
+     */
+    fun statusAt(now: Instant): SprintStatus
+        = when {
+            isArchived -> SprintStatus.Archived
+            isFinished || now > endDate -> SprintStatus.Finished
+            now >= startDate -> SprintStatus.InProgress
+            else -> SprintStatus.Scheduled
+        }
 
     /**
      * Whether [now] falls inside the sprint's window, inclusive of both ends.
@@ -341,6 +372,52 @@ fun windowsOverlap(start: Instant, end: Instant, other: Sprint): Boolean =
  */
 fun sprintBlockingOverlap(start: Instant, end: Instant, others: List<Sprint>): Sprint? =
     others.firstOrNull { !it.isFinished && windowsOverlap(start, end, it) }
+
+/**
+ * A sprint's lifecycle status, as read by the detail screen's action button.
+ *
+ * The four states the button answers to — scheduled, in-progress, finished, archived — in
+ * the order the sprint moves through them. A sprint does not skip: it is scheduled until its
+ * window opens, in-progress while it is open, finished when its window closes (by hand or by
+ * date), and archived when the user files it away from the default view.
+ *
+ * No user-facing text here, for the same reason as [WorkItemStatus]: the enum is the wire
+ * contract and the presentation maps it with an exhaustive `when`. Adding a status makes every
+ * place that renders one fail to compile rather than falling through to a blank label.
+ *
+ * Not a stored field — the status is [Sprint.statusAt] derived from [isFinished], [isArchived]
+ * and the window — so there is nothing to migrate and nothing to keep in step with the flags.
+ */
+@Serializable
+enum class SprintStatus {
+    @SerialName("scheduled")
+    Scheduled,
+
+    @SerialName("in_progress")
+    InProgress,
+
+    @SerialName("finished")
+    Finished,
+
+    @SerialName("archived")
+    Archived,
+    ;
+
+    /** The stable machine key for storage and the wire. */
+    val wireValue: String
+        get() = when (this) {
+            Scheduled -> "scheduled"
+            InProgress -> "in_progress"
+            Finished -> "finished"
+            Archived -> "archived"
+        }
+
+    companion object {
+        /** Parses a [wireValue], or returns `null`. */
+        fun fromWireValue(raw: String): SprintStatus? =
+            entries.firstOrNull { it.wireValue == raw }
+    }
+}
 
 /** One unit of work. */
 @Serializable

@@ -261,7 +261,8 @@ class SprintDetailModelTest {
 
         // The store dates it rather than taking the date from the caller, so the model
         // cannot write "finished" without one.
-        assertTrue(repository.sprints(project.id).single().isFinished)
+        val saved = repository.sprints(project.id).single()
+        assertTrue(saved.isFinished)
         advanceUntilIdle()
         assertFalse(model.detail!!.canFinish)
     }

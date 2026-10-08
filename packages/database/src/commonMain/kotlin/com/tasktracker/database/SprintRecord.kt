@@ -63,6 +63,15 @@ data class SprintRecord(
     val owner: String? = null,
     val isFinished: Boolean,
     val finishedAt: Instant?,
+    /**
+     * Whether the sprint has been archived — removed from the active list and kept as history.
+     *
+     * Mirrors [Sprint.isArchived]. A sprint is archived after it is finished, so the two flags
+     * answer different questions: `isFinished` is "has the window closed" and `isArchived` is
+     * "has the user put it away".
+     */
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val isArchived: Boolean = false,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

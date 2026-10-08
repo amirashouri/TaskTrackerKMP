@@ -253,6 +253,31 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            if (!sprint.isFinished) throw AppError.Validation("'${sprint.name}' is not finished yet.")
+            sprint.isArchived = true
+            sprint.updatedAt = now
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            sprint.isArchived = false
+            sprint.updatedAt = now
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
     override suspend fun setWorkItemSprint(
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,

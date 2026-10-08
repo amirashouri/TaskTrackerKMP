@@ -332,7 +332,19 @@
          overlap note in SprintEditorSheet. -->
     <string name="sprint_editor_overlap_field">It overlaps &#39;%1$s&#39;.</string>
     <string name="sprint_finish">Finish Sprint</string>
+    <string name="sprint_finish_confirm">Finish this sprint?</string>
+    <string name="sprint_finish_confirm_body">%1$s will be marked as finished and its summary will be locked.</string>
     <string name="sprint_reopen">Reopen Sprint</string>
+    <string name="sprint_archive">Archive Sprint</string>
+    <string name="sprint_archive_confirm">Archive this sprint?</string>
+    <string name="sprint_archive_confirm_body">%1$s is finished. Archiving it removes it from the active list but keeps its history.</string>
+    <string name="sprint_remove">Remove Sprint</string>
+    <string name="sprint_remove_confirm">Remove this sprint?</string>
+    <string name="sprint_remove_confirm_body">%1$s will be deleted. Its tasks will be returned to the backlog.</string>
+    <string name="sprint_status_scheduled">Scheduled</string>
+    <string name="sprint_status_in_progress">In Progress</string>
+    <string name="sprint_status_finished">Finished</string>
+    <string name="sprint_status_archived">Archived</string>
     <string name="sprint_items_title">In this sprint</string>
     <string name="sprint_items_empty">No tasks have been put into this sprint yet.</string>
     <string name="sprint_committed">Committed</string>

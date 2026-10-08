@@ -8,7 +8,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.SprintStatus
 import com.tasktracker.designsystem.ThemeScheme
+import kotlin.time.Instant
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.sprintSummary
@@ -30,6 +32,9 @@ object SprintDetailScenarios {
     private fun aDetail(goal: String?): SprintDetail {
         val sprint = testSprint(projectID = randomProjectID(), goal = goal)
         val items = emptyList<WorkItem>()
+        // The fixture sprint is March 2026; the test clock is October 2025, so the sprint
+        // is scheduled. Status follows from the same instant the model would read.
+        val now = Instant.fromEpochSeconds(1_760_000_000)
         return SprintDetail(
             sprint = sprint,
             startDate = sprintLocalDate(sprint.startDate, TimeZone.UTC),
@@ -37,7 +42,8 @@ object SprintDetailScenarios {
             items = items,
             summary = sprintSummary(sprint, items),
             isViewerTheOwner = true,
-            isActive = false,
+            isActive = sprint.isActiveOn(now),
+            status = sprint.statusAt(now),
         )
     }
 
@@ -52,6 +58,8 @@ object SprintDetailScenarios {
                     onReopen = {},
                     onViewSummary = {},
                     onDismissError = {},
+                    onRemove = {},
+                    onArchive = {},
                     onEdit = onEdit,
                 )
             }

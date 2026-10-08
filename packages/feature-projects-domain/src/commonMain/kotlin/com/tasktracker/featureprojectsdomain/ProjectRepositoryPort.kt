@@ -206,6 +206,27 @@ interface ProjectRepositoryPort {
     suspend fun reopenSprint(id: SprintID, now: Instant): Sprint
 
     /**
+     * Archives a finished sprint, filing it away from the default list.
+     *
+     * A sprint can be archived only once it is finished — the flow is scheduled →
+     * in-progress → finished → archived. An already-archived sprint is a no-op rather than
+     * an error, because the user's intent ("file this away") is already satisfied.
+     *
+     * The outbox row is the whole point: a server needs to know the sprint was archived, and
+     * the local flag alone is not enough once a second device is in the picture.
+     */
+    suspend fun archiveSprint(id: SprintID, now: Instant): Sprint
+
+    /**
+     * Restores an archived sprint back to the active list.
+     *
+     * The inverse of [archiveSprint], offered so a user who archived by mistake can recover
+     * without having to recreate the sprint. An unarchived sprint keeps its `isFinished` —
+     * unarchiving does not reopen it.
+     */
+    suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint
+
+    /**
      * Moves work items into a sprint, or back to the backlog.
      *
      * [Patch] rather than a nullable argument for the same reason as every other patch: a

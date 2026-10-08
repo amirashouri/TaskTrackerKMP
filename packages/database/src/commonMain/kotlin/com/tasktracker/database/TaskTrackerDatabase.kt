@@ -84,7 +84,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         StatusChangeRecord::class,
         SprintRecord::class,
     ],
-    version = 5,
+    version = 6,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -109,6 +109,12 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         // what it actually had. `SprintMigrationTest` opens a v4 store and lets Room run
         // this migration itself.
         AutoMigration(from = 4, to = 5),
+        // 5 → 6: `sprints.isArchived`, the flag that gates the detail screen's action button.
+        //
+        // Additive and cannot lose data: every existing sprint was not archived, which is what
+        // `0` is. A NOT NULL DEFAULT 0 column is what lets Room run this as an auto-migration
+        // rather than a rebuild — the same shape as 3 → 4 and 4 → 5.
+        AutoMigration(from = 5, to = 6),
     ],
     exportSchema = true,
 )

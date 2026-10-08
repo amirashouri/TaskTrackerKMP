@@ -10,16 +10,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.SprintStatus
+import kotlin.time.Instant
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBodyLabel
+import com.tasktracker.designsystem.ttError
+import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttDateRange
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
@@ -31,16 +41,25 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.sprintSummary
+import kotlin.time.Duration.Companion.days
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
 import com.tasktracker.resources.sprint_add_task
+import com.tasktracker.resources.sprint_archive
+import com.tasktracker.resources.sprint_archive_confirm
+import com.tasktracker.resources.sprint_archive_confirm_body
 import com.tasktracker.resources.sprint_committed
 import com.tasktracker.resources.sprint_edit
 import com.tasktracker.resources.sprint_finish
+import com.tasktracker.resources.sprint_finish_confirm
+import com.tasktracker.resources.sprint_finish_confirm_body
 import com.tasktracker.resources.sprint_items_empty
 import com.tasktracker.resources.sprint_items_title
 import com.tasktracker.resources.sprint_owner_none
 import com.tasktracker.resources.sprint_owner_only
+import com.tasktracker.resources.sprint_remove
+import com.tasktracker.resources.sprint_remove_confirm
+import com.tasktracker.resources.sprint_remove_confirm_body
 import com.tasktracker.resources.sprint_reopen
 import com.tasktracker.resources.sprint_view_summary
 import org.jetbrains.compose.resources.stringResource
@@ -54,16 +73,17 @@ import org.jetbrains.compose.resources.stringResource
  * numbers. A screen that re-summed them would be a second place for the arithmetic to
  * live, and the two would disagree the first time the done/incomplete split changed.
  *
- * ## The Finish button's condition is the model's, not the screen's
+ * ## The action button's condition is the model's, not the screen's
  *
- * [SprintDetail.canFinish] carries both halves of the rule — not already finished, and
- * either unowned or owned by the viewer. The screen renders what it is told, and the note
- * beside the button says *why* it is unavailable rather than leaving a greyed-out control
- * to be guessed at.
+ * [SprintDetail.status] is the sprint's lifecycle status — scheduled, in-progress,
+ * finished, archived — derived from [Sprint.statusAt] on the read that built this value.
+ * The screen renders the button that matches: remove for a planned sprint, finish for one
+ * under way, archive for one that has closed, and nothing for one already filed away.
  *
- * The note names the owner, which is what makes an unavailable button legible: "only X can
- * finish this sprint" tells the reader what to do next, and "anybody can" tells them the
- * sprint has not been claimed.
+ * Each action is gated behind a confirmation, because the three destructive outcomes —
+ * removing a planned sprint, finishing one in progress, archiving a finished one — are
+ * not reversible short of reopening or recreating, and a tap that does the wrong one of
+ * those is the shape of a report that comes back as "I did not mean to".
  *
  * ## The details are a card, and the tasks are not
  *
@@ -95,6 +115,8 @@ fun SprintDetailScreen(
     onReopen: () -> Unit,
     onViewSummary: () -> Unit,
     onDismissError: () -> Unit,
+    onRemove: () -> Unit,
+    onArchive: () -> Unit,
     onAddTasks: () -> Unit = {},
     /**
      * Opens the editor over this sprint. On the card rather than in the header, because
@@ -116,6 +138,34 @@ fun SprintDetailScreen(
     // rows' remove verb all answer to it, so a state change cannot be applied to two of
     // the three.
     val editable = detail.canEditItems
+
+    // The action the user has asked to confirm, or `null` when no dialog is showing.
+    // Stored as a `SprintStatus` so the dialog can word itself for the right outcome
+    // without the screen knowing the details of each one.
+    var pendingAction by remember { mutableStateOf<SprintStatus?>(null) }
+
+    // The confirmation dialog, drawn inline so it is part of the same semantics tree
+    // and a UI test finds it with a tag like anything else.
+    pendingAction?.let { action ->
+        SprintActionConfirmation(
+            sprintName = detail.sprint.name,
+            action = action,
+            onConfirm = {
+                when (action) {
+                    SprintStatus.Scheduled -> onRemove()
+                    SprintStatus.InProgress -> onFinish()
+                    SprintStatus.Finished -> onArchive()
+                    SprintStatus.Archived -> {}
+                }
+                pendingAction = null
+            },
+            onDismiss = {
+                pendingAction = null
+                onDismissError()
+            },
+        )
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -229,27 +279,41 @@ fun SprintDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                 ) {
-                    if (detail.canFinish) {
-                        ttGlassButton(
-                            label = stringResource(Res.string.sprint_finish),
-                            onClick = onFinish,
-                            enabled = !isBusy,
-                            modifier = Modifier.testTag(SprintDetailFinishTag),
-                        )
-                    }
-                    if (detail.sprint.isFinished) {
-                        ttGlassButton(
-                            label = stringResource(Res.string.sprint_reopen),
-                            onClick = onReopen,
-                            enabled = !isBusy,
-                            modifier = Modifier.testTag(SprintDetailReopenTag),
-                        )
-                        if (detail.hasSummaryToShow) {
+                    when (detail.status) {
+                        SprintStatus.Scheduled -> {
                             ttGlassButton(
-                                label = stringResource(Res.string.sprint_view_summary),
-                                onClick = onViewSummary,
-                                modifier = Modifier.testTag(SprintDetailSummaryTag),
+                                label = stringResource(Res.string.sprint_remove),
+                                onClick = { pendingAction = SprintStatus.Scheduled },
+                                enabled = !isBusy,
+                                modifier = Modifier.testTag(SprintDetailRemoveTag),
                             )
+                        }
+                        SprintStatus.InProgress -> {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_finish),
+                                onClick = { pendingAction = SprintStatus.InProgress },
+                                enabled = !isBusy,
+                                modifier = Modifier.testTag(SprintDetailFinishTag),
+                            )
+                        }
+                        SprintStatus.Finished -> {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_archive),
+                                onClick = { pendingAction = SprintStatus.Finished },
+                                enabled = !isBusy,
+                                modifier = Modifier.testTag(SprintDetailArchiveTag),
+                            )
+                            if (detail.hasSummaryToShow) {
+                                ttGlassButton(
+                                    label = stringResource(Res.string.sprint_view_summary),
+                                    onClick = onViewSummary,
+                                    modifier = Modifier.testTag(SprintDetailSummaryTag),
+                                )
+                            }
+                        }
+                        SprintStatus.Archived -> {
+                            // No action: an archived sprint is filed away. The reopen button
+                            // is the reader's way back, on the summary screen.
                         }
                     }
                 }
@@ -296,6 +360,80 @@ fun SprintDetailScreen(
 }
 
 /**
+ * The confirmation dialog for the sprint's destructive actions.
+ *
+ * Drawn inline rather than through `Dialog`, for the same reason `RemoveProjectConfirmation`
+ * is: Compose Multiplatform's `Dialog` does not render under `runComposeUiTest` on every
+ * target, and a confirmation a test cannot see is a confirmation that cannot be asserted.
+ *
+ * The dialog words itself from the action, so the screen does not need to know which
+ * sentence goes with which button — adding a fourth action is a new `when` branch here
+ * and a new string, not a new parameter through the screen.
+ */
+@Composable
+private fun SprintActionConfirmation(
+    sprintName: String,
+    action: SprintStatus,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(ttRadius.surface)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .ttGlassSurface(shape = shape)
+            .padding(ttSpacing.formStack)
+            .testTag(SprintActionConfirmationTag),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+    ) {
+        ttText(
+            text = when (action) {
+                SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm, sprintName)
+                SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm, sprintName)
+                SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm, sprintName)
+                SprintStatus.Archived -> sprintName
+            },
+            style = ttTypography.titleSmall,
+            color = ttLabel(),
+        )
+        ttText(
+            text = when (action) {
+                SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm_body, sprintName)
+                SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm_body, sprintName)
+                SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm_body, sprintName)
+                SprintStatus.Archived -> sprintName
+            },
+            style = ttTypography.callout,
+            color = ttLabelSecondary(),
+            textAlign = TextAlign.Start,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+        ) {
+            ttGlassButton(
+                label = "Cancel",
+                onClick = onDismiss,
+                modifier = Modifier.testTag(SprintActionCancelTag),
+            )
+            ttGlassButton(
+                label = when (action) {
+                    SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove)
+                    SprintStatus.InProgress -> stringResource(Res.string.sprint_finish)
+                    SprintStatus.Finished -> stringResource(Res.string.sprint_archive)
+                    SprintStatus.Archived -> sprintName
+                },
+                onClick = onConfirm,
+                modifier = Modifier.testTag(SprintActionConfirmTag),
+                style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+            )
+        }
+    }
+}
+
+/**
  * The detail screen's progress, on the same rule as a list row's.
  *
  * `null` when the sprint set no goal — an open sprint with no target has no progress to
@@ -320,6 +458,11 @@ const val SprintDetailFinishTag = "sprints.detail.finish"
 const val SprintDetailReopenTag = "sprints.detail.reopen"
 const val SprintDetailSummaryTag = "sprints.detail.summary"
 const val SprintDetailItemsEmptyTag = "sprints.detail.itemsEmpty"
+const val SprintDetailRemoveTag = "sprints.detail.remove"
+const val SprintDetailArchiveTag = "sprints.detail.archive"
+const val SprintActionConfirmationTag = "sprints.detail.actionConfirmation"
+const val SprintActionConfirmTag = "sprints.detail.actionConfirm"
+const val SprintActionCancelTag = "sprints.detail.actionCancel"
 
 // ---------------------------------------------------------------------------------------------
 // Previews
@@ -344,6 +487,7 @@ private fun SprintDetailScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
             // A preview has no clock to ask, and the static window is shown as one still
             // to come — so the sheet's affordances render in their editable state.
             isActive = false,
+            status = SprintStatus.Scheduled,
         ),
         isBusy = false,
         errorMessage = null,
@@ -351,6 +495,8 @@ private fun SprintDetailScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onReopen = {},
         onViewSummary = {},
         onDismissError = {},
+        onRemove = {},
+        onArchive = {},
         // Present rather than defaulted away, so the preview shows the sprint-mode rows
         // (remove verb, tappable body) the real destination wires up.
         onOpenTask = {},
@@ -372,6 +518,7 @@ private fun SprintDetailScreenOtherOwnerPreview() = ProjectsPreview(ThemeScheme.
             // The state that hides Finish and shows the note naming the owner instead.
             isViewerTheOwner = false,
             isActive = false,
+            status = SprintStatus.InProgress,
         ),
         isBusy = false,
         errorMessage = null,
@@ -379,5 +526,33 @@ private fun SprintDetailScreenOtherOwnerPreview() = ProjectsPreview(ThemeScheme.
         onReopen = {},
         onViewSummary = {},
         onDismissError = {},
+        onRemove = {},
+        onArchive = {},
+    )
+}
+
+@Preview(name = "Sprint detail, finished", showBackground = true, widthDp = 380, heightDp = 720)
+@Composable
+private fun SprintDetailScreenFinishedPreview() = ProjectsPreview(ThemeScheme.Dark) {
+    val sprint = ViewPreviewData.finishedSprint
+    SprintDetailScreen(
+        detail = SprintDetail(
+            sprint = sprint,
+            startDate = sprintLocalDate(sprint.startDate, ViewPreviewData.previewZone),
+            endDate = sprintLocalDate(sprint.endDate, ViewPreviewData.previewZone),
+            items = emptyList(),
+            summary = sprintSummary(sprint, emptyList()),
+            isViewerTheOwner = true,
+            isActive = false,
+            status = SprintStatus.Finished,
+        ),
+        isBusy = false,
+        errorMessage = null,
+        onFinish = {},
+        onReopen = {},
+        onViewSummary = {},
+        onDismissError = {},
+        onRemove = {},
+        onArchive = {},
     )
 }

@@ -226,6 +226,26 @@ class FakeProjectRepository : ProjectRepositoryPort {
             existing.copy()
         }
 
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint = sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            if (!existing.isFinished) throw AppError.Validation("'${existing.name}' is not finished yet.")
+            existing.isArchived = true
+            existing.updatedAt = now
+            writes += "archiveSprint"
+            existing.copy()
+        }
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint = sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            if (!existing.isArchived) throw AppError.Validation("'${existing.name}' is not archived.")
+            existing.isArchived = false
+            existing.updatedAt = now
+            writes += "unarchiveSprint"
+            existing.copy()
+        }
+
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint =
         sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
             failIfSet()
@@ -659,6 +679,7 @@ fun testSprint(
     endDate: Instant = Instant.parse("2026-03-16T00:00:00Z"),
     owner: String? = "Amir",
     isFinished: Boolean = false,
+    isArchived: Boolean = false,
     finishedAt: Instant? = null,
     id: SprintID = randomSprintID(),
 ): Sprint = Sprint(
@@ -669,12 +690,12 @@ fun testSprint(
     goal = goal,
     startDate = startDate,
     endDate = endDate,
-    owner = owner,
-    isFinished = isFinished,
-    // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
-    // own invariant would make every test using it assert against a state the store cannot
-    // hold — which is a green test and a useless one.
-    finishedAt = finishedAt ?: if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
+    owner = owner,        isFinished = isFinished,
+            isArchived = isArchived,
+            // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
+            // own invariant would make every test using it assert against a state the store cannot
+            // hold — which is a green test and a useless one.
+            finishedAt = finishedAt ?: if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
     createdAt = FIXED,
     updatedAt = FIXED,
 )
