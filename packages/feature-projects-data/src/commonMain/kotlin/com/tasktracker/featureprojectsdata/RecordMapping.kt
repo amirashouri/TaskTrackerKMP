@@ -303,6 +303,7 @@ internal fun Sprint.toRecord(): SprintRecord {
         projectID = reconciled.projectID.stringValue,
         name = reconciled.name,
         goalStoryPoints = reconciled.goalStoryPoints,
+        goal = reconciled.goal,
         startDate = reconciled.startDate,
         endDate = reconciled.endDate,
         owner = reconciled.owner,
@@ -333,6 +334,7 @@ internal fun SprintRecord.apply(value: Sprint): SprintRecord {
     return copy(
         name = reconciled.name,
         goalStoryPoints = reconciled.goalStoryPoints,
+        goal = reconciled.goal,
         startDate = reconciled.startDate,
         endDate = reconciled.endDate,
         owner = reconciled.owner,
@@ -362,6 +364,7 @@ internal val SprintRecord.domainValue: Sprint?
             projectID = projectID,
             name = name,
             goalStoryPoints = goalStoryPoints,
+            goal = goal,
             startDate = startDate,
             endDate = endDate,
             owner = owner,

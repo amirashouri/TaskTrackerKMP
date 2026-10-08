@@ -162,6 +162,7 @@ interface ProjectRepositoryPort {
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int,
+        goal: String? = null,
         startDate: Instant,
         endDate: Instant,
         owner: String?,
@@ -172,8 +173,8 @@ interface ProjectRepositoryPort {
      * Applies a partial edit to a sprint.
      *
      * `name`, `goalStoryPoints`, `startDate` and `endDate` are plain optionals — `null`
-     * leaves the field alone. [owner] is a [Patch], because a sprint *can* be handed to
-     * nobody and "not mentioned" is a different instruction from "set it to nothing"; see
+     * leaves the field alone. [owner] and `goal` are [Patch]es, because both *can* be
+     * emptied and "not mentioned" is a different instruction from "set it to nothing"; see
      * [Patch].
      *
      * `isFinished` is deliberately absent: finishing is [finishSprint] and reopening is
@@ -185,6 +186,7 @@ interface ProjectRepositoryPort {
         id: SprintID,
         name: String?,
         goalStoryPoints: Int?,
+        goal: Patch<String?> = Patch.Unmentioned,
         startDate: Instant?,
         endDate: Instant?,
         owner: Patch<String?>,

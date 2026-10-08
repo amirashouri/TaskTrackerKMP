@@ -43,14 +43,20 @@ data class SprintRecord(
     val projectID: String,
     val name: String,
     /**
-     * The target, in story points.
+     * The cap, in story points — the maximum that may be committed inside the sprint.
      *
      * A `NOT NULL DEFAULT 0` rather than a nullable column, because "no goal" and "a goal
      * of zero" are the same thing here — a sprint nobody set a target for has missed none —
      * and two columns for one state would be a second question to keep consistent. The
-     * domain's `Sprint.goalStoryPoints` carries the same floor.
+     * domain's `Sprint.goalStoryPoints` carries the same floor. The prose goal is the
+     * separate nullable [goal] column; see `Sprint`'s KDoc on why there are two.
      */
     val goalStoryPoints: Int = 0,
+    /**
+     * The goal in prose, nullable — "no goal" and "cleared" are one state, and nullable is
+     * also what makes the 4 → 5 auto-migration additive rather than a rebuild.
+     */
+    val goal: String? = null,
     val startDate: Instant,
     val endDate: Instant,
     /** Free text and nullable, exactly as `WorkItemRecord.assignee` is. See the entity. */

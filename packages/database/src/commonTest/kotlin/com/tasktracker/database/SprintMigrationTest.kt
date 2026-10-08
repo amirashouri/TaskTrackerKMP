@@ -12,7 +12,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.time.Instant
 
 /**
- * A store written by version 3, opened by version 4.
+ * A store written by an older version, opened by the current one — 3 → 4 → 5.
  *
  * ## Why this is written by hand rather than with Room's helper
  *
@@ -22,11 +22,11 @@ import kotlin.time.Instant
  * matters most — the one that catches a destructive migration — behind a platform this
  * project cannot run Room tests on.
  *
- * Instead the version-3 file is built here, by executing [VersionThreeSchema] through the same
- * bundled SQLite driver the store itself uses, and then opened through
- * [TaskTrackerDatabase.open] so that Room runs **its own generated** `AutoMigration(3, 4)`.
- * Nothing about the migration is stubbed: if the generated statements are wrong, this
- * fails.
+ * Instead the older file is built here, by executing [VersionThreeSchema] or
+ * [VersionFourSchema] through the same bundled SQLite driver the store itself uses, and
+ * then opened through [TaskTrackerDatabase.open] so that Room runs **its own generated**
+ * `AutoMigration` chain — 3 → 4 → 5 for a v3 file, 4 → 5 for a v4 one. Nothing about the
+ * migration is stubbed: if the generated statements are wrong, this fails.
  *
  * ## What the failure mode actually is
  *
@@ -34,13 +34,17 @@ import kotlin.time.Instant
  * returns an empty board — the rows went with the tables. So there is nothing here that
  * asserts "the migration ran"; every assertion is about a **row that was there before**.
  *
- * ## The literal cannot be allowed to drift
+ * The v3 store cannot cover the sprint table at all — it did not exist until 4 — so the
+ * 4 → 5 case is its own test with its own store: a sprint written *without* a `goal`
+ * column has to come back as a row whose `goal` is `null`, not as no row.
  *
- * [VersionThreeSchema] is a hand-written copy of `schemas/…/3.json`, and a hand-written copy is a
- * liability: somebody adds a column in a future version and this keeps claiming the old
- * shape, so the test passes against a version 3 that never existed. That is caught by
- * `SprintSchemaDriftTest` on the JVM, which executes this same literal and compares its
- * `PRAGMA table_info` against the committed JSON.
+ * ## The literals cannot be allowed to drift
+ *
+ * [VersionThreeSchema] and [VersionFourSchema] are hand-written copies of `schemas/…/3.json`
+ * and `4.json`, and a hand-written copy is a liability: somebody adds a column in a future
+ * version and the copy keeps claiming the old shape, so the test passes against a version
+ * that never existed. That is caught by `SprintSchemaDriftTest` on the JVM, which executes
+ * each literal and compares its `PRAGMA table_info` against the committed JSON.
  */
 class SprintMigrationTest {
 
@@ -102,6 +106,41 @@ class SprintMigrationTest {
             // call, but the distinction that matters is that it did not arrive already
             // holding something: the previous build could not have written a sprint.
             assertEquals(0, database.sprintDao().count())
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun aSprintWrittenByVersionFourSurvivesAndGainsTheGoalColumnAsNull() = runTest {
+        // The case the v3 store cannot reach: `sprints` did not exist until version 4, so a
+        // 3 → 4 → 5 chain migrates zero sprint rows. This one writes a sprint against the
+        // real v4 shape — no `goal` column at all — and opens it at version 5, so the
+        // assertion is about a row that was actually there before the column arrived.
+        writeAVersionFourStore()
+
+        val database = TaskTrackerDatabase.open(
+            DatabaseConfiguration(name = path, inMemory = false),
+        )
+        try {
+            assertEquals(1, database.sprintDao().count())
+            val sprint = assertNotNull(database.sprintDao().byID(SPRINT_ID))
+            // By content, not only by count: a migration that kept one row and lost the
+            // fields would pass a count and produce a sprint nobody wrote.
+            assertEquals("Sprint 1", sprint.name)
+            assertEquals(21, sprint.goalStoryPoints)
+            assertEquals("amir", sprint.owner)
+            assertEquals(false, sprint.isFinished)
+
+            // The whole point of the new column being nullable: a sprint that was written
+            // before anyone could write a goal sentence migrates as a row with none. A NOT
+            // NULL column with no default would have forced Room to rebuild the table.
+            assertNull(sprint.goal)
+
+            // And the rest of the store came through with it — a migration that only got
+            // the sprints table right would still be a broken store.
+            assertEquals(1, database.projectDao().count())
+            assertEquals("Apollo", assertNotNull(database.projectDao().byID(PROJECT_ID)).name)
         } finally {
             database.close()
         }
@@ -257,6 +296,57 @@ class SprintMigrationTest {
             // The version, and it is the only thing Room reads to decide whether to migrate.
             // Everything else about this file is the schema the committed 3.json describes.
             connection.execSQL("PRAGMA user_version = 3")
+        } finally {
+            connection.close()
+        }
+    }
+
+    // --- building the version 4 store ------------------------------------------------------------
+
+    /**
+     * Same shape as [writeAVersionThreeStore], but against the real v4 schema: the
+     * `sprints` table exists and the work items carry estimates, with **no `goal`
+     * column anywhere** — that is the state every real store was in before version 5.
+     *
+     * The sprint row is inserted through raw SQL rather than through `SprintRecord`,
+     * because `SprintRecord` now has a `goal` column and the whole point here is to write
+     * against a table that does not have one.
+     */
+    private fun writeAVersionFourStore() {
+        deleteStoreFile(path)
+        createParentDirectory(path)
+
+        val connection = BundledSQLiteDriver().open(path)
+        try {
+            VersionFourSchema.create(connection)
+            connection.execSQL(
+                """
+                INSERT INTO projects
+                    (id, keyPrefix, name, details, memberIDs, isArchived, nextItemNumber,
+                     createdAt, updatedAt)
+                VALUES ('$PROJECT_ID', 'TT', 'Apollo', '', '', 0, 7, $CREATED, $CREATED)
+                """.trimIndent(),
+            )
+            connection.execSQL(
+                """
+                INSERT INTO work_items
+                    (id, projectID, key, title, details, statusRaw, priorityRaw, assignee,
+                     dueDate, rank, createdAt, updatedAt, resolvedAt, storyPoints, sprintID)
+                VALUES ('$ITEM_ID', '$PROJECT_ID', 'TT-1', 'Write the migration', '',
+                        'in_progress', 2, NULL, NULL, 3, $CREATED, $CREATED, NULL, 5, '$SPRINT_ID')
+                """.trimIndent(),
+            )
+            connection.execSQL(
+                """
+                INSERT INTO sprints
+                    (id, projectID, name, goalStoryPoints, startDate, endDate, owner,
+                     isFinished, finishedAt, createdAt, updatedAt)
+                VALUES ('$SPRINT_ID', '$PROJECT_ID', 'Sprint 1', 21, $CREATED, $LATER,
+                        'amir', 0, NULL, $CREATED, $CREATED)
+                """.trimIndent(),
+            )
+            // VersionFourSchema.create stamps 4 itself, through the same statement the
+            // committed 4.json was generated from.
         } finally {
             connection.close()
         }

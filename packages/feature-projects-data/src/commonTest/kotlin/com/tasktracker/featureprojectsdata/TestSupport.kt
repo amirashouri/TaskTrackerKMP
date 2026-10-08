@@ -231,6 +231,10 @@ internal fun aSprint(
     projectID: ProjectID = parseProjectID("11111111-1111-4111-8111-111111111111")!!,
     name: String = "Sprint 1",
     goalStoryPoints: Int = 21,
+    // Non-default for the reason `aWorkItem`'s two are: the completeness test has to *name*
+    // it, and a default of null would let an `expected` record omit it and match a mapping
+    // that dropped it. A value here is what makes forgetting it a visible difference.
+    goal: String? = "Ship the migration",
     startDate: Instant = Moments.start,
     endDate: Instant = Moments.day,
     owner: String? = "Ada",
@@ -243,6 +247,7 @@ internal fun aSprint(
     projectID = projectID,
     name = name,
     goalStoryPoints = goalStoryPoints,
+    goal = goal,
     startDate = startDate,
     endDate = endDate,
     owner = owner,

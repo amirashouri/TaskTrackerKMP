@@ -35,6 +35,7 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
 import com.tasktracker.resources.sprint_add_task
 import com.tasktracker.resources.sprint_committed
+import com.tasktracker.resources.sprint_edit
 import com.tasktracker.resources.sprint_finish
 import com.tasktracker.resources.sprint_items_empty
 import com.tasktracker.resources.sprint_items_title
@@ -66,8 +67,10 @@ import org.jetbrains.compose.resources.stringResource
  *
  * ## The details are a card, and the tasks are not
  *
- * The window, the two totals, the bar, the owner and the actions are one fact — *this*
- * sprint — and [ttGlassCard] is how this app groups one fact visually. The tasks below are
+ * The window, the two totals, the bar, the goal's sentence, the owner and the actions are
+ * one fact — *this* sprint — and [ttGlassCard] is how this app groups one fact visually.
+ * The edit affordance sits inside the card beside the window for the same reason: what it
+ * opens edits is the card. The tasks below are
  * a separate list of separate things, so they keep the same card-per-row treatment they
  * have everywhere else rather than being folded into the sprint's own card, where a long
  * title would push the totals off the top of it.
@@ -93,6 +96,18 @@ fun SprintDetailScreen(
     onViewSummary: () -> Unit,
     onDismissError: () -> Unit,
     onAddTasks: () -> Unit = {},
+    /**
+     * Opens the editor over this sprint. On the card rather than in the header, because
+     * the card is what the edit changes: it holds the window, the totals from the goal, and
+     * now the goal's own sentence — the header holds the name, which is one field of the
+     * five and was not worth a second affordance for.
+     *
+     * Offered in every state, including finished: name, prose goal and owner stay editable
+     * always (the window and the cap freeze with the start, and that lock lives in the
+     * form — see [SprintEditorModel.windowLocked]). Gated only on [isBusy], for the same
+     * reason the finish button is: a write in flight and a second sheet opening are a race.
+     */
+    onEdit: () -> Unit = {},
     onOpenTask: ((WorkItemID) -> Unit)? = null,
     onRemoveTask: ((WorkItemID) -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -142,11 +157,37 @@ fun SprintDetailScreen(
                     .testTag(SprintDetailCardTag),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
             ) {
-                ttText(
-                    text = ttDateRange(detail.startDate, detail.endDate),
-                    style = ttTypography.callout,
-                    color = ttLabelSecondary(),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ttText(
+                        text = ttDateRange(detail.startDate, detail.endDate),
+                        style = ttTypography.callout,
+                        color = ttLabelSecondary(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    ttGlassIconButton(
+                        image = ttActionIcons.edit,
+                        contentDescription = stringResource(Res.string.sprint_edit),
+                        onClick = onEdit,
+                        enabled = !isBusy,
+                        modifier = Modifier.testTag(SprintDetailEditTag),
+                    )
+                }
+                // The goal in prose, absent rather than a placeholder when there is none:
+                // a dash where a sentence would be reads as a missing value, and a sprint
+                // with no goal sentence has not failed to have one — it never had one to
+                // show. The number the bar below measures against is the cap, not this.
+                detail.sprint.goal?.let { goal ->
+                    ttText(
+                        text = goal,
+                        style = ttTypography.callout,
+                        color = ttLabel(),
+                        modifier = Modifier.testTag(SprintDetailGoalTag),
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
@@ -271,6 +312,8 @@ private fun sprintProgressFraction(detail: SprintDetail): Float? =
 const val SprintDetailScreenTag = "sprints.detail"
 const val SprintDetailCardTag = "sprints.detail.card"
 const val SprintDetailAddTag = "sprints.detail.add"
+const val SprintDetailEditTag = "sprints.detail.edit"
+const val SprintDetailGoalTag = "sprints.detail.goal"
 const val SprintDetailOwnerTag = "sprints.detail.owner"
 const val SprintDetailOwnerNoteTag = "sprints.detail.ownerNote"
 const val SprintDetailFinishTag = "sprints.detail.finish"

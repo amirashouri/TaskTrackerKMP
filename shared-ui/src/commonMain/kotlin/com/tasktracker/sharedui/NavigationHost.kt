@@ -899,6 +899,7 @@ private fun SprintsDestination(
         SprintEditorSheet(
             name = editor.name,
             goalStoryPoints = editor.goalStoryPoints,
+            goal = editor.goal,
             startDate = editor.startDate,
             endDate = editor.endDate,
             owner = editor.owner,
@@ -906,7 +907,9 @@ private fun SprintsDestination(
             canSave = editor.canSave,
             endIsBeforeStart = editor.endIsBeforeStart,
             blockedBySprintName = editor.blockedBySprintName,
+            windowLocked = editor.windowLocked,
             onNameChanged = editor::onNameChanged,
+            onGoalStoryPointsChanged = editor::onGoalStoryPointsChanged,
             onGoalChanged = editor::onGoalChanged,
             onStartDateChanged = editor::onStartDateChanged,
             onEndDateChanged = editor::onEndDateChanged,
@@ -982,6 +985,11 @@ private fun SprintDetailDestination(
         return
     }
 
+    // The editor over this sprint, opened by the card's edit button. Declared before the
+    // screen because the screen's [SprintDetailScreen.onEdit] is what sets it.
+    var isEditorVisible by remember(sprintID) { mutableStateOf(false) }
+    var isEditorBusy by remember(sprintID) { mutableStateOf(false) }
+
     if (isSummaryOpen) {
         SprintSummaryScreen(
             summary = detail.summary,
@@ -1003,11 +1011,79 @@ private fun SprintDetailDestination(
         // re-checks it, because a disabled button is only a courtesy and the write it guards
         // is the one that has to hold.
         onAddTasks = model::openPicker,
+        onEdit = { isEditorVisible = true },
         onOpenTask = { itemID ->
             router.push(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
         },
         onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
     )
+
+    // The editor over this sprint, opened by the card's edit button. Unlike
+    // [SprintsDestination], no read is needed before the model can be built: the subject is
+    // already in hand — `detail.sprint` *is* [SprintDetailModel]'s own store read — so
+    // building the editor on open hands it the sprint rather than a `null` that would turn
+    // the edit into a create.
+    //
+    // Keyed on visibility and the sibling answer, not on `detail.sprint`: a reload while
+    // the sheet is open (a sync write landing, say) rebuilds the model under the user's
+    // fingers and drops the draft, which is exactly the mid-edit state
+    // [SprintEditorModel] exists to keep out. The snapshot is taken when the button is
+    // pressed, which is when the user asked to edit *this* sprint.
+    val siblingSprints by produceState<List<Sprint>>(
+        emptyList(),
+        isEditorVisible,
+        projectID,
+        environment,
+    ) {
+        value = if (isEditorVisible) {
+            runCatching { environment.repository.sprints(projectID) }.getOrDefault(emptyList())
+        } else {
+            emptyList()
+        }
+    }
+    val editor = remember(isEditorVisible, siblingSprints, projectID, environment) {
+        SprintEditorModel(
+            projectID = projectID,
+            existing = detail.sprint,
+            projectSprints = siblingSprints,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+        )
+    }
+    if (isEditorVisible) {
+        SprintEditorSheet(
+            name = editor.name,
+            goalStoryPoints = editor.goalStoryPoints,
+            goal = editor.goal,
+            startDate = editor.startDate,
+            endDate = editor.endDate,
+            owner = editor.owner,
+            isCreating = editor.isCreating,
+            canSave = editor.canSave,
+            endIsBeforeStart = editor.endIsBeforeStart,
+            blockedBySprintName = editor.blockedBySprintName,
+            windowLocked = editor.windowLocked,
+            onNameChanged = editor::onNameChanged,
+            onGoalStoryPointsChanged = editor::onGoalStoryPointsChanged,
+            onGoalChanged = editor::onGoalChanged,
+            onStartDateChanged = editor::onStartDateChanged,
+            onEndDateChanged = editor::onEndDateChanged,
+            onOwnerChanged = editor::onOwnerChanged,
+            onSave = {
+                scope.launch {
+                    isEditorBusy = true
+                    val saved = editor.save()
+                    isEditorBusy = false
+                    if (saved) isEditorVisible = false
+                }
+            },
+            onCancel = { isEditorVisible = false },
+            isBusy = isEditorBusy,
+            visible = true,
+            onDismissRequest = { isEditorVisible = false },
+            onDismissed = {},
+        )
+    }
 
     // Composed unconditionally and hidden with `visible`, the way the project picker and the
     // editors are hosted: gating on `if (model.isPickerOpen)` would unmount the sheet the

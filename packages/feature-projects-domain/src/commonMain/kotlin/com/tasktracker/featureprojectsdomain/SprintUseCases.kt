@@ -63,6 +63,7 @@ class CreateSprint(
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int = 0,
+        goal: String? = null,
         startDate: Instant,
         endDate: Instant,
         owner: String? = null,
@@ -81,6 +82,9 @@ class CreateSprint(
             // `updateSprint`: a negative goal is normalised in place so every later reader
             // sees one number rather than a sprint holding a goal no screen can render.
             goalStoryPoints = maxOf(0, goalStoryPoints),
+            // Blank folded to `null` here rather than trusted to the store, so a create
+            // with a whitespace-only goal queues the same payload a create with none does.
+            goal = goal?.trim()?.takeIf { it.isNotEmpty() },
             startDate = startDate,
             endDate = endDate,
             owner = owner,
@@ -119,6 +123,7 @@ class UpdateSprint(
         id: SprintID,
         name: String? = null,
         goalStoryPoints: Int? = null,
+        goal: Patch<String?> = Patch.Unmentioned,
         startDate: Instant? = null,
         endDate: Instant? = null,
         owner: Patch<String?> = Patch.Unmentioned,
@@ -135,6 +140,11 @@ class UpdateSprint(
             id = id,
             name = name,
             goalStoryPoints = goalStoryPoints,
+            goal = if (goal is Patch.Of) {
+                Patch.Of(goal.value?.trim()?.takeIf { it.isNotEmpty() })
+            } else {
+                Patch.Unmentioned
+            },
             startDate = startDate,
             endDate = endDate,
             owner = if (owner is Patch.Of) {
@@ -233,6 +243,18 @@ class DeleteSprint(
  *   sprint and invisible on its board. It is moved to `Todo`, the first lane. On-board
  *   statuses (Todo, In Progress, In Review) keep themselves; they were already committed
  *   to work.
+ *
+ * And one more, added with the split of the goal into a number and a sentence:
+ *
+ * - **The batch may not push the sprint past its story-point cap.** `goalStoryPoints` is
+ *   the ceiling of what may be committed inside the window, so the refusal here is what
+ *   makes it a cap rather than a target a progress bar politely exceeds. Only when the cap
+ *   is set: `0` is "no goal", the same state `SprintGoal.didHitGoal` reads as `null`, and
+ *   refusing against a ceiling of zero would refuse everything. The count is the sprint's
+ *   current items plus this batch — an already-overfull sprint (its cap was lowered while
+ *   planned) refuses every addition until items are removed, which is the direction the
+ *   rule exists to force. Checked after the batch is read and **before** the backlog sweep,
+ *   so a refusal leaves every status exactly as it was.
  */
 class AddWorkItemsToSprint(
     private val repository: ProjectRepositoryPort,
@@ -261,6 +283,20 @@ class AddWorkItemsToSprint(
                 )
             }
             item
+        }
+        // The cap, over the sprint's current items plus this batch. `commits` may name
+        // items already in the sprint, so only the ones actually moving are counted here —
+        // double-counting them would refuse a batch that changes nothing.
+        val cap = sprint.goalStoryPoints
+        if (cap > 0) {
+            val incoming = commits.filter { it.sprintID != sprintID }.sumOf { it.storyPoints ?: 0 }
+            val held = repository.sprintWorkItems(sprintID).sumOf { it.storyPoints ?: 0 }
+            val total = held + incoming
+            if (total > cap) {
+                throw AppError.Validation(
+                    "Adding these would put $total pts in '${sprint.name}', over its $cap pt cap.",
+                )
+            }
         }
         // `commits` holds the statuses as read above, so the sweep is over the read snapshot
         // even after a move mutates a stored row (the fake's live objects) below it.

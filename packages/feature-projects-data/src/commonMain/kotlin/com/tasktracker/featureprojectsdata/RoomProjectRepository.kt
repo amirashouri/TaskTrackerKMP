@@ -323,6 +323,7 @@ class RoomProjectRepository(
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int,
+        goal: String?,
         startDate: Instant,
         endDate: Instant,
         owner: String?,
@@ -352,6 +353,7 @@ class RoomProjectRepository(
                 projectID = projectID,
                 name = normalisedName,
                 goalStoryPoints = goalStoryPoints,
+                goal = goal,
                 startDate = startDate,
                 endDate = endDate,
                 owner = WorkItemRules.normaliseAssignee(owner),
@@ -380,6 +382,7 @@ class RoomProjectRepository(
         id: SprintID,
         name: String?,
         goalStoryPoints: Int?,
+        goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
         owner: Patch<String?>,
@@ -394,6 +397,7 @@ class RoomProjectRepository(
             // Floored rather than refused, matching `Sprint`'s own `init`: a negative goal
             // from a sync is normalised in place so every later reader sees one number.
             goalStoryPoints?.let { sprint.goalStoryPoints = maxOf(0, it) }
+            if (goal is Patch.Of) sprint.goal = goal.value
             startDate?.let { sprint.startDate = it }
             endDate?.let { sprint.endDate = it }
             if (owner is Patch.Of) sprint.owner = WorkItemRules.normaliseAssignee(owner.value)

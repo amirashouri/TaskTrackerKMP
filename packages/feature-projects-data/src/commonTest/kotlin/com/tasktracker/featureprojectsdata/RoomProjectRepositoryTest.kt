@@ -966,13 +966,13 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
 
         // The day after the first ends. Both stay open: the rule is about the window, not
         // about how many sprints are live, so a project that plans ahead can hold two.
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
+            project.id, "Sprint 2", 13, null, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
         )
 
         assertEquals(false, second.isFinished)
@@ -989,7 +989,7 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         harness.repository.finishSprint(first.id, Moments.later)
 
@@ -997,7 +997,7 @@ class RoomSprintRepositoryTest {
         // timetable, and refusing here would make the calendar unfillable once enough
         // sprints have run.
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.start, Moments.day, null, Moments.later,
+            project.id, "Sprint 2", 13, null, Moments.start, Moments.day, null, Moments.later,
         )
 
         assertEquals(false, second.isFinished)
@@ -1030,14 +1030,14 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         harness.repository.finishSprint(first.id, Moments.later)
         // Legal against the finished first: the second starts the day the first ends, which
         // still *shares* that day's first instant with it — but the first is history, so it
         // is not consulted.
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.day, Moments.day + 10.days, null, Moments.later,
+            project.id, "Sprint 2", 13, null, Moments.day, Moments.day + 10.days, null, Moments.later,
         )
 
         // Refused: reopening would put the first's window back on the calendar sharing the
@@ -1059,7 +1059,7 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val sprint = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val first = harness.repository.createWorkItem(
             project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
@@ -1093,7 +1093,7 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val sprint = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val item = harness.repository.createWorkItem(
             project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
@@ -1125,7 +1125,7 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val sprint = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val item = harness.repository.createWorkItem(
             project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
@@ -1163,7 +1163,7 @@ class RoomSprintRepositoryTest {
         collecting(harness.bus.changes(), seen)
 
         harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
 
         // Both kinds, every time: a subscriber hearing only the sprints half keeps showing
@@ -1203,10 +1203,10 @@ class RoomSprintRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createSprint(
-            project.id, "Sprint 1", 21, Moments.start, Moments.day, null, Moments.start,
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val second = harness.repository.createSprint(
-            project.id, "Sprint 2", 13, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
+            project.id, "Sprint 2", 13, null, Moments.day + 1.days, Moments.day + 10.days, null, Moments.later,
         )
 
         val failure = assertFailsWith<AppError.Validation> {

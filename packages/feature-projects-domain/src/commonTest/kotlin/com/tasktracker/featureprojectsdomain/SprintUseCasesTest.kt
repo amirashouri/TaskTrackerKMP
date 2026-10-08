@@ -361,6 +361,90 @@ class SprintUseCasesTest {
     }
 
     @Test
+    fun `a batch that would cross the cap is refused and moves nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository, goalStoryPoints = 10)
+        val first = repository.seedWorkItem(projectID = project.id, title = "One", storyPoints = 8)
+        val second = repository.seedWorkItem(projectID = project.id, title = "Two", storyPoints = 8)
+
+        val failure = assertFailsWith<AppError.Validation> {
+            AddWorkItemsToSprint(repository, TestDateProvider(now))(
+                workItemIDs = listOf(first.id, second.id),
+                sprintID = sprint.id,
+            )
+        }
+
+        // Both numbers and the sprint's name, because the banner is all the user gets:
+        // what the total came to, what it was allowed to be, and which sprint the limit
+        // belongs to. And nothing may move — a refusal that half-committed the batch would
+        // leave the store saying 8 of a 10 that was already refused as 16.
+        assertEquals(
+            "Adding these would put 16 pts in 'Sprint 1', over its 10 pt cap.",
+            failure.message,
+        )
+        assertNull(repository.workItem(first.id)!!.sprintID)
+        assertNull(repository.workItem(second.id)!!.sprintID)
+    }
+
+    @Test
+    fun `a batch landing exactly on the cap is taken`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository, goalStoryPoints = 10)
+        val first = repository.seedWorkItem(projectID = project.id, title = "One", storyPoints = 4)
+        val second = repository.seedWorkItem(projectID = project.id, title = "Two", storyPoints = 6)
+
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(first.id, second.id),
+            sprintID = sprint.id,
+        )
+
+        // The cap is `total > cap`, not `>=`: a sprint planned at 10 and filled to exactly
+        // 10 is the plan working, and refusing it would mean the cap could only ever be
+        // under-filled.
+        assertEquals(sprint.id, repository.workItem(first.id)!!.sprintID)
+        assertEquals(sprint.id, repository.workItem(second.id)!!.sprintID)
+    }
+
+    @Test
+    fun `a zero cap counts nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository, goalStoryPoints = 0)
+        val first = repository.seedWorkItem(projectID = project.id, title = "One", storyPoints = 30)
+        val second = repository.seedWorkItem(projectID = project.id, title = "Two", storyPoints = 40)
+
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(first.id, second.id),
+            sprintID = sprint.id,
+        )
+
+        // `0` is nobody setting a capacity, not a capacity of none: the store floors a
+        // blank goal to 0, so treating 0 as a real cap would lock every sprint whose
+        // creator left the field empty.
+        assertEquals(sprint.id, repository.workItem(first.id)!!.sprintID)
+        assertEquals(sprint.id, repository.workItem(second.id)!!.sprintID)
+    }
+
+    @Test
+    fun `an item already in the sprint is not counted twice`() = runTest {
+        val repository = FakeProjectRepository()
+        val (project, sprint) = sprintIn(repository, goalStoryPoints = 10)
+        val held = repository.seedWorkItem(projectID = project.id, title = "Held", storyPoints = 8)
+        val incoming = repository.seedWorkItem(projectID = project.id, title = "New", storyPoints = 2)
+        repository.setWorkItemSprint(listOf(held.id), Patch.Of(sprint.id), now)
+
+        // Held 8 + new 2 = 10, the cap exactly. Counting `held` twice — once as an item in
+        // the batch and once in the sprint's current sum — would compute 18 and refuse a
+        // batch that adds 2 to 8 under a cap of 10.
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(held.id, incoming.id),
+            sprintID = sprint.id,
+        )
+
+        assertEquals(sprint.id, repository.workItem(incoming.id)!!.sprintID)
+        assertEquals(sprint.id, repository.workItem(held.id)!!.sprintID)
+    }
+
+    @Test
     fun `adding a finished task is refused`() = runTest {
         val repository = FakeProjectRepository()
         val (project, sprint) = sprintIn(repository)

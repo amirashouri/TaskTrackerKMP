@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -670,6 +671,18 @@ fun TTDateField(
     value: LocalDate?,
     onValueChange: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Whether the field may be opened at all.
+     *
+     * A disabled field shows its value and refuses the picker: dimmed with
+     * [ttGlass.DISABLED_ALPHA] over the whole control, exactly as [ttGlassIconButton] dims,
+     * and inert — `clickable(enabled = false)` also takes the `Disabled` semantics, so a test
+     * reads `assertIsNotEnabled()` on the same node a tap would land on. Present rather than
+     * hidden, for the same reason a disabled toolbar button is: the lock is legible from the
+     * page around it, and a field that vanished would leave the form's shape lying about
+     * what is in it.
+     */
+    enabled: Boolean = true,
     today: LocalDate? = null,
     firstDayOfWeek: DayOfWeek = DayOfWeek.MONDAY,
     /** Opened by default, so a preview and a test do not have to tap first. */
@@ -734,7 +747,10 @@ fun TTDateField(
                 modifier = Modifier
                     .clip(RoundedCornerShape(ttRadius.control))
                     .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
-                    .clickable { expanded = !expanded }
+                    // The dim before the tap, so a disabled field is visibly dead as well
+                    // as actually dead — the same pairing [ttGlassIconButton] uses.
+                    .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
+                    .clickable(enabled = enabled) { expanded = !expanded }
                     .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
                     .testTag(TTDateFieldTag),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
@@ -760,7 +776,7 @@ fun TTDateField(
                 )
             }
 
-            if (expanded) {
+            if (expanded && enabled) {
                 // One dismissal, three ways: the outside tap and the back gesture arrive here,
                 // and the popup's own Done button calls the same thing. Done deliberately does
                 // *not* touch `value` — choosing a day already closes the popup, so a Done that

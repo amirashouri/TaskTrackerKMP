@@ -28,6 +28,15 @@ import kotlin.time.Instant
  * So most of these read `FakeProjectRepository.writes` — which records which port method
  * was reached — rather than only the resulting state, and one reads the *arguments*, which
  * is the only way to see a field dropped on the way to the port.
+ *
+ * ## The lock tests assert what refused, and then what still went out
+ *
+ * `windowLocked` is one boolean, and a test that only read it would pass on a model that
+ * *reported* the lock and ignored it. So the locked scenarios call every frozen setter,
+ * assert the draft did not move, then save and assert the stored sprint did not move
+ * either — while the fields that are supposed to stay editable are changed and asserted as
+ * written. Both halves in one test, because a model that froze everything (including the
+ * description) would pass the first half alone.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SprintEditorModelTest {
@@ -39,6 +48,13 @@ class SprintEditorModelTest {
         projectID: com.tasktracker.core.ProjectID,
         existing: com.tasktracker.domain.Sprint? = null,
         projectSprints: List<com.tasktracker.domain.Sprint> = emptyList(),
+        /**
+         * The day the started-window lock answers from, and a fixed one on purpose: the
+         * fixtures run from 2 March, so anything before that leaves every existing
+         * scenario — which edits windows and caps — unlocked, exactly as it was before the
+         * lock existed. The lock's own scenarios pass a day inside or after the window.
+         */
+        today: LocalDate = LocalDate(2026, Month.JANUARY, 5),
     ) = SprintEditorModel(
         projectID = projectID,
         existing = existing,
@@ -46,6 +62,7 @@ class SprintEditorModelTest {
         repository = repository,
         dateProvider = TestDateProvider(),
         timeZone = zone,
+        today = today,
     )
 
     @Test
@@ -122,7 +139,7 @@ class SprintEditorModelTest {
         model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
         model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
 
-        model.onGoalChanged("  ")
+        model.onGoalStoryPointsChanged("  ")
         assertNull(model.goalStoryPoints)
 
         assertTrue(model.save())
@@ -139,7 +156,7 @@ class SprintEditorModelTest {
         val model = editorModel(repository, project.id)
 
         // `0` means somebody said zero, which is a real answer. Blank means nobody said.
-        model.onGoalChanged("0")
+        model.onGoalStoryPointsChanged("0")
         assertEquals(0, model.goalStoryPoints)    }
 
     @Test
@@ -148,11 +165,11 @@ class SprintEditorModelTest {
         val project = testProject()
         val model = editorModel(repository, project.id)
 
-        model.onGoalChanged("-3")
+        model.onGoalStoryPointsChanged("-3")
         assertNull(model.goalStoryPoints, "negative")
-        model.onGoalChanged("1x")
+        model.onGoalStoryPointsChanged("1x")
         assertNull(model.goalStoryPoints, "not a number")
-        model.onGoalChanged("12")
+        model.onGoalStoryPointsChanged("12")
         assertEquals(12, model.goalStoryPoints)
     }
 
@@ -162,7 +179,7 @@ class SprintEditorModelTest {
         val project = testProject()
         val model = editorModel(repository, project.id)
         model.onNameChanged("  Sprint 7  ")
-        model.onGoalChanged("12")
+        model.onGoalStoryPointsChanged("12")
         model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
         model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
         model.onOwnerChanged("  Grace  ")
@@ -295,7 +312,7 @@ class SprintEditorModelTest {
         model.onNameChanged("Sprint 1")
         assertNull(model.blockedBySprintName)
 
-        model.onGoalChanged("12")
+        model.onGoalStoryPointsChanged("12")
         assertTrue(model.canSave, "renaming one's own sprint is not a conflict")
     }
 
@@ -374,4 +391,152 @@ class SprintEditorModelTest {
                     model.errorMessage,
             )
         }
+
+    // MARK: The goal in prose
+
+    @Test
+    fun `creating stores the prose goal trimmed`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val model = editorModel(repository, project.id)
+        model.onNameChanged("Sprint 1")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
+        model.onGoalChanged("  Ship the migration  ")
+
+        assertTrue(model.save())
+
+        // Trimmed like the name: the use case normalises on the way in, and a sentence
+        // stored with the draft's whitespace would show in the detail card exactly as typed.
+        assertEquals("Ship the migration", repository.sprints(project.id).single().goal)
+    }
+
+    @Test
+    fun `clearing the prose goal stores no goal`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sprint = testSprint(project.id, goal = "Ship the migration")
+        repository.seed(sprint)
+
+        val model = editorModel(repository, project.id, existing = sprint)
+        assertTrue(model.hasChanges.not())
+
+        model.onGoalChanged("   ")
+        // An emptied field is the user clearing it, not leaving it — the same resolution
+        // the owner field makes, for the same reason: the draft started as the original's
+        // value, so a blank here can only mean it was emptied.
+        assertTrue(model.hasChanges)
+        assertTrue(model.save())
+
+        assertNull(repository.sprints(project.id).single().goal)
+    }
+
+    @Test
+    fun `an untouched prose goal is left alone rather than written over`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sprint = testSprint(project.id, goal = "Set at creation")
+        repository.seed(sprint)
+
+        val model = editorModel(repository, project.id, existing = sprint)
+        // Another device rewrites the sentence after this editor opened. The draft
+        // snapshotted the original, so from here the field looks untouched — and a save
+        // that sent `Patch.Of(null)` instead of `Patch.Unmentioned` would erase that write
+        // as a side effect of renaming.
+        sprint.goal = "Set from another device"
+
+        model.onNameChanged("Sprint 1 (revised)")
+        assertTrue(model.save())
+
+        val stored = repository.sprints(project.id).single()
+        assertEquals("Sprint 1 (revised)", stored.name)
+        assertEquals("Set from another device", stored.goal)
+    }
+
+    // MARK: The started-window lock
+
+    @Test
+    fun `a started sprint freezes the cap and the window but not what it is about`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sprint = testSprint(project.id, goal = "Ship the migration")
+        repository.seed(sprint)
+
+        // Today is inside the 2–16 March window: the sprint has started.
+        val model = editorModel(
+            repository,
+            project.id,
+            existing = sprint,
+            today = LocalDate(2026, Month.MARCH, 5),
+        )
+        assertTrue(model.windowLocked)
+
+        model.onGoalStoryPointsChanged("99")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 9))
+        model.onEndDateChanged(LocalDate(2026, Month.MARCH, 10))
+        assertEquals(10, model.goalStoryPoints, "the cap is what the window committed to")
+        assertEquals(LocalDate(2026, Month.MARCH, 2), model.startDate)
+        assertEquals(LocalDate(2026, Month.MARCH, 16), model.endDate)
+
+        // The parts that describe rather than commit still take the edit...
+        model.onNameChanged("Sprint 1 (revised)")
+        model.onGoalChanged("Ship the migration, quietly")
+        model.onOwnerChanged("Grace")
+        assertTrue(model.hasChanges, "a locked window is not an uneditable sprint")
+        assertTrue(model.save())
+
+        val stored = repository.sprints(project.id).single()
+        assertEquals("Sprint 1 (revised)", stored.name)
+        assertEquals("Ship the migration, quietly", stored.goal)
+        assertEquals("Grace", stored.owner)
+        // ...and nothing frozen moved in the write either: the setters refusing is the
+        // model's half of the guarantee, and this is that the save is the other half.
+        assertEquals(10, stored.goalStoryPoints)
+        assertEquals(sprint.startDate, stored.startDate)
+        assertEquals(sprint.endDate, stored.endDate)
+    }
+
+    @Test
+    fun `the lock lands on the start day itself`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val sprint = testSprint(project.id)
+
+        val dayBefore = editorModel(
+            repository,
+            project.id,
+            existing = sprint,
+            today = LocalDate(2026, Month.MARCH, 1),
+        )
+        assertFalse(dayBefore.windowLocked, "the day before is still planning")
+
+        val startDay = editorModel(
+            repository,
+            project.id,
+            existing = sprint,
+            today = LocalDate(2026, Month.MARCH, 2),
+        )
+        assertTrue(startDay.windowLocked, "the first day of the window is the window")
+    }
+
+    @Test
+    fun `creating is never locked whatever the day`() {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+
+        val model = editorModel(
+            repository,
+            project.id,
+            today = LocalDate(2026, Month.DECEMBER, 31),
+        )
+        assertFalse(
+            model.windowLocked,
+            "a sprint nobody has written yet has no window to have started",
+        )
+
+        model.onGoalStoryPointsChanged("99")
+        model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
+        assertEquals(99, model.goalStoryPoints)
+        assertEquals(LocalDate(2026, Month.MARCH, 2), model.startDate)
+    }
 }

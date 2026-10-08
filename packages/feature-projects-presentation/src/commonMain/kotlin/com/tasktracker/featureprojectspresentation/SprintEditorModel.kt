@@ -24,6 +24,7 @@ import com.tasktracker.featureprojectsdomain.ReopenSprint
 import com.tasktracker.featureprojectsdomain.UpdateSprint
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlin.time.Clock
 
 /**
  * The sprint editor, for both creating and editing.
@@ -52,6 +53,14 @@ import kotlinx.datetime.TimeZone
  * draft that did not touch the owner at all cannot happen, because the draft starts as the
  * original's value, so an empty field always means the user cleared it. That is the whole
  * of the reasoning, and it is why [originalOwner] is kept rather than discarded.
+ *
+ * ## The goal is two fields, and they lock differently
+ *
+ * [goalStoryPoints] is the number — the cap [AddWorkItemsToSprint] refuses over — and
+ * [goal] is the sentence saying what the sprint is for. Both arrive from one field in the
+ * original design, and splitting them is why there are two setters with two behaviours:
+ * the number is part of the window's commitment and freezes with it, while the sentence
+ * stays editable forever, finished sprints included.
  *
  * ## Save is blocked on the draft, not on the store
  *
@@ -89,6 +98,17 @@ class SprintEditorModel(
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    /**
+     * The day the started-window lock is measured against.
+     *
+     * A second seam on one fact, and the reason it exists is that [DateProvider.now]
+     * suspends by design while this answer is needed in the constructor: a model cannot
+     * suspend to build itself. Both default to the same wall clock in production, and a
+     * test injects this next to the clock it gives [dateProvider] so the two can never
+     * disagree inside a suite either — a lock that answered from one date and a save that
+     * wrote from another is the defect shape this parameter exists to prevent.
+     */
+    today: LocalDate = sprintLocalDate(Clock.System.now(), timeZone),
 ) : ProjectModel() {
 
     private val createSprint = CreateSprint(repository, dateProvider)
@@ -96,6 +116,7 @@ class SprintEditorModel(
 
     private val originalName: String? = existing?.name
     private val originalGoalStoryPoints: Int? = existing?.goalStoryPoints
+    private val originalGoal: String? = existing?.goal
     private val originalOwner: String? = existing?.owner
     private val originalStartDate: LocalDate? = existing?.let {
         sprintLocalDate(it.startDate, timeZone)
@@ -110,6 +131,10 @@ class SprintEditorModel(
 
     /** The goal in points, or `null` for none. */
     var goalStoryPoints: Int? by mutableStateOf(existing?.goalStoryPoints)
+        private set
+
+    /** The goal in prose, raw as typed. Blank and absent are one state; see [onGoalChanged]. */
+    var goal: String by mutableStateOf(existing?.goal.orEmpty())
         private set
 
     /** The first day of the sprint, or `null` when not chosen yet. */
@@ -132,6 +157,28 @@ class SprintEditorModel(
     val isCreating: Boolean get() = existing == null
 
     /**
+     * Whether the window and the point cap are frozen: the sprint has already started.
+     *
+     * From the **original** start date rather than the draft's, deliberately. The lock is a
+     * fact about the sprint the user opened, and deriving it from the draft would let a form
+     * that opened editable move its own start into yesterday and lock itself under the
+     * user's finger mid-edit. A save that pulls the window into the present therefore lands
+     * as one write that starts the sprint, and the next open of the editor is locked.
+     *
+     * Never true while creating: a sprint nobody has written yet has no window to have
+     * started. Name, prose goal and owner are outside this entirely and stay editable in
+     * every state — they describe the sprint rather than commit it to a time or a number.
+     *
+     * The setters below refuse on this, and the sheet disables the same fields: the refusal
+     * is the guarantee, and the disabled control is what keeps the user from typing into a
+     * field whose answer would be dropped. Hiding the fields instead would leave the form's
+     * shape lying about what is in it.
+     */
+    val windowLocked: Boolean = existing?.let { sprint ->
+        sprintLocalDate(sprint.startDate, timeZone) <= today
+    } ?: false
+
+    /**
      * Whether the draft differs from what it started as.
      *
      * Trims the text fields before comparing, for the reason [ProjectEditorModel] gives: the
@@ -148,6 +195,7 @@ class SprintEditorModel(
         get() = isCreating || (
             name.trim() != originalName ||
                 goalStoryPoints != originalGoalStoryPoints ||
+                goal.trim() != originalGoal.orEmpty() ||
                 startDate != originalStartDate ||
                 endDate != originalEndDate ||
                 owner.trim() != originalOwner.orEmpty()
@@ -207,7 +255,8 @@ class SprintEditorModel(
     }
 
     /**
-     * Sets the goal, treating blank as "no goal".
+     * Sets the goal in points, treating blank as "no goal". Refused once the sprint has
+     * started — see [windowLocked].
      *
      * Blank is `null` rather than `0` because they are different answers: `0` is somebody
      * saying a sprint is worth nothing, and `null` is nobody having said. See
@@ -218,7 +267,8 @@ class SprintEditorModel(
      * was given, so the user sees what they typed and the model simply has nothing to
      * save yet.
      */
-    fun onGoalChanged(value: String) {
+    fun onGoalStoryPointsChanged(value: String) {
+        if (windowLocked) return
         val trimmed = value.trim()
         goalStoryPoints = when {
             trimmed.isEmpty() -> null
@@ -226,13 +276,29 @@ class SprintEditorModel(
         }
     }
 
-    /** Sets the first day. */
+    /**
+     * Sets the goal in prose — the free-text half of the goal, the other being
+     * [goalStoryPoints]. Never locked: a sentence about what the sprint is for describes a
+     * sprint in any state, including one already under way or finished.
+     *
+     * Held raw as typed and trimmed on the way out ([hasChanges] and [save] both compare
+     * trimmed), for the reason [name] is held raw. Empty is a real value here rather than
+     * an absence to preserve — clearing a goal is telling the store there is no goal
+     * sentence, and `Patch.Unmentioned` is reserved for a draft that never touched it.
+     */
+    fun onGoalChanged(value: String) {
+        goal = value
+    }
+
+    /** Sets the first day. Refused once the sprint has started — see [windowLocked]. */
     fun onStartDateChanged(value: LocalDate) {
+        if (windowLocked) return
         startDate = value
     }
 
-    /** Sets the last day. */
+    /** Sets the last day. Refused once the sprint has started — see [windowLocked]. */
     fun onEndDateChanged(value: LocalDate) {
+        if (windowLocked) return
         endDate = value
     }
 
@@ -266,6 +332,7 @@ class SprintEditorModel(
                     projectID = projectID,
                     name = name,
                     goalStoryPoints = goalStoryPoints ?: 0,
+                    goal = goal,
                     startDate = sprintInstant(start, timeZone),
                     endDate = sprintInstant(end, timeZone),
                     owner = owner.trim().takeIf { it.isNotEmpty() },
@@ -275,6 +342,14 @@ class SprintEditorModel(
                     id = requireNotNull(savedSprintID),
                     name = name.trim().takeIf { it != originalName },
                     goalStoryPoints = goalStoryPoints?.takeIf { it != originalGoalStoryPoints },
+                    // The prose goal is a `Patch` for the reason [owner] is one: a draft
+                    // that never touched it must say "leave it alone" rather than write an
+                    // empty sentence over a goal another device set in the meantime.
+                    goal = if (goal.trim() == originalGoal.orEmpty()) {
+                        Patch.Unmentioned
+                    } else {
+                        Patch.Of(goal.trim().takeIf { it.isNotEmpty() })
+                    },
                     startDate = start.takeIf { it != originalStartDate }
                         ?.let { sprintInstant(it, timeZone) },
                     endDate = end.takeIf { it != originalEndDate }

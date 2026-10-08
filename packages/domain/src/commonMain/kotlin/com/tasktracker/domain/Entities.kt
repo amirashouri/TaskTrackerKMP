@@ -191,15 +191,19 @@ data class Project(
 }
 
 /**
- * A time-boxed iteration of work: a goal, a window, an owner, and the tasks pulled into it.
+ * A time-boxed iteration of work: two goals, a window, an owner, and the tasks pulled into it.
  *
- * ## The goal is a number, not a sentence
+ * ## The goal is two fields, and they answer different questions
  *
- * `goalStoryPoints` is the target the sprint is measured against, and "did it hit the goal"
- * is [SprintGoal.didHitGoal] on the number achieved. A free-text goal would read better in
- * a header and would answer none of the questions the summary exists to answer, which is
- * the trade this field is making deliberately. The sprint's *name* is where a sentence
- * belongs.
+ * `goalStoryPoints` is the number the sprint is measured against — the story points that may
+ * be committed inside it — and "did it hit the goal" is [SprintGoal.didHitGoal] on the number
+ * achieved. `goal` is the sentence: what the sprint is *for*, in prose, readable in a header.
+ * An earlier revision deliberately kept only the number, on the reasoning that a sentence
+ * would answer none of the questions the summary exists to answer; separating them keeps
+ * that arithmetic intact and gives the prose a home that does not compete with it. The
+ * capacity number is also the cap the sprint write path refuses to exceed — which is why it,
+ * unlike `goal`, is only editable before the sprint starts: a window already open has a
+ * committed set that changing the ceiling would silently invalidate.
  *
  * ## Two open sprints may not share one instant of their windows
  *
@@ -223,8 +227,24 @@ data class Sprint(
     val projectID: ProjectID,
     /** The sprint's name. [ProjectRules.normaliseName] applies the same rules as a project. */
     var name: String,
-    /** The target, in story points. Never negative; see [SprintGoal]. */
+    /**
+     * The story points that may be committed inside the sprint — its capacity, and the
+     * number the summary measures it against. Never negative; see [SprintGoal].
+     *
+     * A cap, not only a target: the sprint write path refuses a move that would push the
+     * committed total past it. Hence the edit rule — a number the window has already started
+     * spending cannot be changed under it.
+     */
     var goalStoryPoints: Int = 0,
+    /**
+     * The goal in prose: what the sprint is *for*, or `null`/blank for none.
+     *
+     * Separate from [goalStoryPoints] for the reason the class KDoc gives: one answers the
+     * summary's arithmetic and the other answers a reader. Blank and padded values are
+     * folded to `null` in [Sprint]'s `init`, so "cleared" and "never had one" are one
+     * stored state.
+     */
+    var goal: String? = null,
     /** The first day of the sprint. */
     var startDate: Instant,
     /** The last day, inclusive. Never before [startDate]. */
@@ -257,6 +277,10 @@ data class Sprint(
         // a value that arrived from a server is normalised in place so every later reader
         // sees the same number, rather than the sprint holding a goal no screen can render.
         if (goalStoryPoints < 0) goalStoryPoints = 0
+        // The same in-place rule for the prose goal: blank and absent are one state, so a
+        // padded or empty value a sync carried arrives as the `null` every reader treats as
+        // "no goal".
+        goal = goal?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     /**

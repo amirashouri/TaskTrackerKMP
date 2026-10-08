@@ -161,6 +161,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int,
+        goal: String?,
         startDate: Instant,
         endDate: Instant,
         owner: String?,
@@ -180,6 +181,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 projectID = projectID,
                 name = ProjectRules.normaliseName(name),
                 goalStoryPoints = goalStoryPoints,
+                goal = goal,
                 startDate = startDate,
                 endDate = endDate,
                 owner = owner,
@@ -197,6 +199,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         id: SprintID,
         name: String?,
         goalStoryPoints: Int?,
+        goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
         owner: Patch<String?>,
@@ -208,6 +211,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 ?: throw AppError.Validation("No such sprint.")
             if (name != null) sprint.name = name
             if (goalStoryPoints != null) sprint.goalStoryPoints = goalStoryPoints
+            if (goal is Patch.Of) sprint.goal = goal.value
             if (startDate != null) sprint.startDate = startDate
             if (endDate != null) sprint.endDate = endDate
             if (owner is Patch.Of) sprint.owner = owner.value
@@ -574,6 +578,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         projectID: ProjectID,
         title: String = "Task",
         status: WorkItemStatus = WorkItemStatus.Todo,
+        storyPoints: Int? = null,
     ): WorkItem = lock.withLock {
         itemCounter += 1
         val epoch = Instant.fromEpochSeconds(0)
@@ -582,6 +587,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             key = WorkItemKey("FAKE-$itemCounter"),
             title = title,
             status = status,
+            storyPoints = storyPoints,
             rank = itemCounter,
             createdAt = epoch,
             updatedAt = epoch,

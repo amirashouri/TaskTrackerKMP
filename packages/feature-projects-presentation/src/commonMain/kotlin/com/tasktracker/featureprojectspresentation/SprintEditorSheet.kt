@@ -18,6 +18,7 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -25,12 +26,15 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.sprint_editor_edit_title
+import com.tasktracker.resources.sprint_editor_locked_note
 import com.tasktracker.resources.sprint_editor_new_title
 import com.tasktracker.resources.sprint_editor_overlap_field
 import com.tasktracker.resources.sprint_end_before_start_field
 import com.tasktracker.resources.sprint_end_label
 import com.tasktracker.resources.sprint_goal_label
 import com.tasktracker.resources.sprint_goal_placeholder
+import com.tasktracker.resources.sprint_goal_text_label
+import com.tasktracker.resources.sprint_goal_text_placeholder
 import com.tasktracker.resources.sprint_name_label
 import com.tasktracker.resources.sprint_owner_label
 import com.tasktracker.resources.sprint_start_label
@@ -47,6 +51,16 @@ import org.jetbrains.compose.resources.stringResource
  * composable with a mode flag, the way [NewProjectSheet] is. The title and the confirm
  * label follow the mode, for the same reason [ProjectEditorScreen] does it that way: a
  * user who cannot tell which form is open will save an edit expecting a new sprint.
+ *
+ * ## Two goal fields, and one of them freezes
+ *
+ * The number ([SprintEditorModel.goalStoryPoints], the cap) and the sentence
+ * ([SprintEditorModel.goal]) are separate inputs because they are separate facts, and they
+ * diverge when the sprint starts: `windowLocked` disables the number and both dates, dims
+ * them with the same alpha every disabled glass control uses, and posts the note under the
+ * title saying why. Name, sentence and owner stay live — they describe the sprint rather
+ * than commit it. The sheet is handed that one flag rather than each field deciding for
+ * itself, so the disabled set cannot drift from [SprintEditorModel.windowLocked].
  *
  * ## The dates are two `TTDateField`s and both errors are under them
  *
@@ -65,6 +79,7 @@ import org.jetbrains.compose.resources.stringResource
 fun SprintEditorSheet(
     name: String,
     goalStoryPoints: Int?,
+    goal: String,
     startDate: LocalDate?,
     endDate: LocalDate?,
     owner: String,
@@ -73,6 +88,7 @@ fun SprintEditorSheet(
     endIsBeforeStart: Boolean?,
     blockedBySprintName: String?,
     onNameChanged: (String) -> Unit,
+    onGoalStoryPointsChanged: (String) -> Unit,
     onGoalChanged: (String) -> Unit,
     onStartDateChanged: (LocalDate) -> Unit,
     onEndDateChanged: (LocalDate) -> Unit,
@@ -81,6 +97,12 @@ fun SprintEditorSheet(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
+    /**
+     * Whether the window and the point cap are frozen. The two fields answer to it, the
+     * note under the title names it, and the prose goal and the text fields deliberately
+     * do not — see [SprintEditorModel.windowLocked].
+     */
+    windowLocked: Boolean = false,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
@@ -107,6 +129,17 @@ fun SprintEditorSheet(
                 style = ttTypography.title,
                 color = ttLabel(),
             )
+            // Beside the title rather than under any one field, because it is a statement
+            // about the form as a whole: it says which half of the form has stopped
+            // accepting input, not that one of its fields is wrong.
+            if (windowLocked) {
+                ttText(
+                    text = stringResource(Res.string.sprint_editor_locked_note),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier.testTag(SprintEditorLockedNoteTag),
+                )
+            }
             ProjectsTextField(
                 title = stringResource(Res.string.sprint_name_label),
                 value = name,
@@ -117,9 +150,18 @@ fun SprintEditorSheet(
             ProjectsTextField(
                 title = stringResource(Res.string.sprint_goal_label),
                 value = goalStoryPoints?.toString().orEmpty(),
-                onValueChange = onGoalChanged,
+                onValueChange = onGoalStoryPointsChanged,
                 placeholder = stringResource(Res.string.sprint_goal_placeholder),
+                enabled = !windowLocked,
                 keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Next,
+                modifier = Modifier.testTag(SprintEditorGoalPointsTag),
+            )
+            ProjectsTextField(
+                title = stringResource(Res.string.sprint_goal_text_label),
+                value = goal,
+                onValueChange = onGoalChanged,
+                placeholder = stringResource(Res.string.sprint_goal_text_placeholder),
                 imeAction = ImeAction.Next,
                 modifier = Modifier.testTag(SprintEditorGoalTag),
             )
@@ -127,6 +169,7 @@ fun SprintEditorSheet(
                 label = stringResource(Res.string.sprint_start_label),
                 value = startDate,
                 onValueChange = onStartDateChanged,
+                enabled = !windowLocked,
                 today = today,
                 modifier = Modifier.testTag(SprintEditorStartDateTag),
             )
@@ -135,6 +178,7 @@ fun SprintEditorSheet(
                     label = stringResource(Res.string.sprint_end_label),
                     value = endDate,
                     onValueChange = onEndDateChanged,
+                    enabled = !windowLocked,
                     today = today,
                     modifier = Modifier.testTag(SprintEditorEndDateTag),
                 )
@@ -192,7 +236,10 @@ fun SprintEditorSheet(
 /** The editor sheet. */
 const val SprintEditorSheetTag = "sprints.editor"
 const val SprintEditorNameTag = "sprints.editor.name"
+/** The goal in prose. The number has [SprintEditorGoalPointsTag]; see `Sprint`'s two goals. */
 const val SprintEditorGoalTag = "sprints.editor.goal"
+const val SprintEditorGoalPointsTag = "sprints.editor.goalPoints"
+const val SprintEditorLockedNoteTag = "sprints.editor.lockedNote"
 const val SprintEditorStartDateTag = "sprints.editor.start"
 const val SprintEditorEndDateTag = "sprints.editor.end"
 const val SprintEditorWindowErrorTag = "sprints.editor.windowError"
@@ -214,6 +261,7 @@ private fun SprintEditorSheetPreview() = ProjectsPreview(ThemeScheme.Light) {
     SprintEditorSheet(
         name = "Sprint 8",
         goalStoryPoints = 13,
+        goal = "Ship the migration to the new store",
         startDate = LocalDate(2026, 3, 30),
         endDate = LocalDate(2026, 4, 10),
         owner = "Amir",
@@ -222,6 +270,7 @@ private fun SprintEditorSheetPreview() = ProjectsPreview(ThemeScheme.Light) {
         endIsBeforeStart = false,
         blockedBySprintName = null,
         onNameChanged = {},
+        onGoalStoryPointsChanged = {},
         onGoalChanged = {},
         onStartDateChanged = {},
         onEndDateChanged = {},
@@ -238,6 +287,7 @@ private fun SprintEditorSheetInvalidPreview() = ProjectsPreview(ThemeScheme.Dark
     SprintEditorSheet(
         name = "Sprint 8",
         goalStoryPoints = 13,
+        goal = "",
         startDate = LocalDate(2026, 4, 10),
         endDate = LocalDate(2026, 4, 3),
         owner = "",
@@ -247,6 +297,7 @@ private fun SprintEditorSheetInvalidPreview() = ProjectsPreview(ThemeScheme.Dark
         endIsBeforeStart = true,
         blockedBySprintName = null,
         onNameChanged = {},
+        onGoalStoryPointsChanged = {},
         onGoalChanged = {},
         onStartDateChanged = {},
         onEndDateChanged = {},

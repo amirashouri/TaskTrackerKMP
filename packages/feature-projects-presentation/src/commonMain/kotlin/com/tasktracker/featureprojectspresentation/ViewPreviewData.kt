@@ -412,6 +412,7 @@ private class PreviewRepository(
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int,
+        goal: String?,
         startDate: Instant,
         endDate: Instant,
         owner: String?,
@@ -430,6 +431,7 @@ private class PreviewRepository(
             projectID = projectID,
             name = ProjectRules.normaliseName(name),
             goalStoryPoints = goalStoryPoints,
+            goal = goal,
             startDate = startDate,
             endDate = endDate,
             owner = owner,
@@ -445,6 +447,7 @@ private class PreviewRepository(
         id: SprintID,
         name: String?,
         goalStoryPoints: Int?,
+        goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
         owner: Patch<String?>,
@@ -452,6 +455,7 @@ private class PreviewRepository(
     ): Sprint = storedSprints.first { it.id == id }.also {
         if (name != null) it.name = name
         if (goalStoryPoints != null) it.goalStoryPoints = goalStoryPoints
+        if (goal is Patch.Of) it.goal = goal.value
         if (startDate != null) it.startDate = startDate
         if (endDate != null) it.endDate = endDate
         if (owner is Patch.Of) it.owner = owner.value

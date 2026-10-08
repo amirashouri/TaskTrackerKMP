@@ -84,7 +84,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         StatusChangeRecord::class,
         SprintRecord::class,
     ],
-    version = 4,
+    version = 5,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -103,6 +103,12 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         //
         // `SprintMigrationTest` is the test that would notice if it stopped being true.
         AutoMigration(from = 3, to = 4),
+        // 4 → 5: `sprints.goal`, the goal in prose, split out of the numeric
+        // `goalStoryPoints` (which becomes the capacity cap). Nullable for the same reason
+        // 3 → 4's columns are: every existing row migrates with no goal sentence, which is
+        // what it actually had. `SprintMigrationTest` opens a v4 store and lets Room run
+        // this migration itself.
+        AutoMigration(from = 4, to = 5),
     ],
     exportSchema = true,
 )

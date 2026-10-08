@@ -12,9 +12,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The five project-presentation scenario suites - card content rules, board column
- * behaviour, the board's lane row geometry, the archive round trip, and the projects
- * list - on the Android host, under Robolectric.
+ * The seven project-presentation scenario suites - card content rules, board column
+ * behaviour, the board's lane row geometry, the archive round trip, the projects list,
+ * the sprint detail card, and the sprint editor sheet - on the Android host, under Robolectric.
  *
  * There is no `commonTest` entry point for these on purpose. A Compose UI test on the
  * Android host needs Robolectric, and Robolectric only engages when a JUnit 4 runner is
@@ -23,7 +23,7 @@ import org.robolectric.annotation.GraphicsMode
  * host's own file beside it. Every assertion lives in the scenario objects in `commonTest`;
  * these files are only entry points, which is why they are near-identical.
  *
- * The 31 entry points below are generated from the `val`s declared on those five
+ * The 49 entry points below are generated from the `val`s declared on those seven
  * objects, so a new scenario cannot be written and then quietly not run.
  *
  * ## Robolectric, or nothing runs at all
@@ -215,4 +215,19 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
+
+    @Test
+    fun theCardShowsTheGoalAndItsEditButtonOpensTheEditor() = runComposeUiTest(block = SprintDetailScenarios.theCardShowsTheGoalAndItsEditButtonOpensTheEditor)
+
+    @Test
+    fun theCardOmitsTheGoalLineWhenThereIsNone() = runComposeUiTest(block = SprintDetailScenarios.theCardOmitsTheGoalLineWhenThereIsNone)
+
+    @Test
+    fun aBusyCardOffersNoEdit() = runComposeUiTest(block = SprintDetailScenarios.aBusyCardOffersNoEdit)
+
+    @Test
+    fun theLockedWindowFreezesTheCapAndTheDates() = runComposeUiTest(block = SprintEditorScenarios.theLockedWindowFreezesTheCapAndTheDates)
+
+    @Test
+    fun anUnlockedWindowDrawsNoNoteAndEverythingLive() = runComposeUiTest(block = SprintEditorScenarios.anUnlockedWindowDrawsNoNoteAndEverythingLive)
 }

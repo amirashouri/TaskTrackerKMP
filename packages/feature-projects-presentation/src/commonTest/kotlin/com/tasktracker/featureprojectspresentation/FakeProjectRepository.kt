@@ -160,6 +160,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         projectID: ProjectID,
         name: String,
         goalStoryPoints: Int,
+        goal: String?,
         startDate: Instant,
         endDate: Instant,
         owner: String?,
@@ -177,6 +178,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             projectID = projectID,
             name = ProjectRules.normaliseName(name),
             goalStoryPoints = goalStoryPoints,
+            goal = goal,
             startDate = startDate,
             endDate = endDate,
             owner = owner,
@@ -193,6 +195,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         id: SprintID,
         name: String?,
         goalStoryPoints: Int?,
+        goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
         owner: Patch<String?>,
@@ -202,6 +205,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         val existing = storedSprints.first { it.id == id }
         if (name != null) existing.name = name
         if (goalStoryPoints != null) existing.goalStoryPoints = goalStoryPoints
+        if (goal is Patch.Of) existing.goal = goal.value
         if (startDate != null) existing.startDate = startDate
         if (endDate != null) existing.endDate = endDate
         if (owner is Patch.Of) existing.owner = owner.value
@@ -650,6 +654,7 @@ fun testSprint(
     projectID: ProjectID,
     name: String = "Sprint 1",
     goalStoryPoints: Int = 10,
+    goal: String? = null,
     startDate: Instant = Instant.parse("2026-03-02T00:00:00Z"),
     endDate: Instant = Instant.parse("2026-03-16T00:00:00Z"),
     owner: String? = "Amir",
@@ -661,6 +666,7 @@ fun testSprint(
     projectID = projectID,
     name = name,
     goalStoryPoints = goalStoryPoints,
+    goal = goal,
     startDate = startDate,
     endDate = endDate,
     owner = owner,

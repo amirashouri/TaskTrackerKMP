@@ -107,6 +107,7 @@ class RecordCompletenessTest {
             projectID = "11111111-1111-4111-8111-111111111111",
             name = "Sprint 1",
             goalStoryPoints = 21,
+            goal = "Ship the migration",
             startDate = Moments.start,
             endDate = Moments.day,
             owner = "Ada",
@@ -247,6 +248,7 @@ class RecordCompletenessTest {
             projectID = "11111111-1111-4111-8111-111111111111",
             name = "Sprint 1",
             goalStoryPoints = 21,
+            goal = "Ship the migration",
             startDate = Moments.start,
             endDate = Moments.day,
             owner = "Ada",
@@ -259,6 +261,7 @@ class RecordCompletenessTest {
         val incoming = aSprint(
             name = "Sprint 1 (extended)",
             goalStoryPoints = 34,
+            goal = "Ship the migration, then celebrate",
             startDate = Moments.later,
             endDate = Moments.muchLater,
             owner = null,
@@ -273,6 +276,7 @@ class RecordCompletenessTest {
             projectID = stored.projectID,
             name = "Sprint 1 (extended)",
             goalStoryPoints = 34,
+            goal = "Ship the migration, then celebrate",
             startDate = Moments.later,
             endDate = Moments.muchLater,
             owner = null,
@@ -352,6 +356,7 @@ class RecordCompletenessTest {
             projectID = "11111111-1111-4111-8111-111111111111",
             name = "Sprint 1",
             goalStoryPoints = 21,
+            goal = "Ship the migration",
             startDate = Moments.start,
             endDate = Moments.day,
             owner = "Ada",
@@ -415,7 +420,7 @@ class RecordCompletenessTest {
     // constructor call that omits a parameter does not compile — so the enumeration is the
     // compiler's, it runs on every target, and it cannot be stale. A reflective version would
     // have been a *report* of the same fact that could be out of date, rather than a build
-    // failure. The eight project columns, fifteen work-item columns, eleven sprint columns
+    // failure. The eight project columns, fifteen work-item columns, twelve sprint columns
     // and eight status-change columns are all here; `sequence` is the one column with no
     // domain counterpart, and it is the one that is not named in an expected record.
 

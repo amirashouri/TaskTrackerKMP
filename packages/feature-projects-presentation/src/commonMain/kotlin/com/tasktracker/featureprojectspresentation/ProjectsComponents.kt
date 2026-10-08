@@ -134,6 +134,15 @@ internal fun ProjectsTextField(
     placeholder: String? = null,
     isFocused: Boolean = false,
     isReadOnly: Boolean = false,
+    /**
+     * Whether the value may be changed at all — the counterpart of [isReadOnly], for the
+     * case that one is *not*: a field the form refuses while the sprint is under way is a
+     * value the user is being prevented from changing, which is what the read-only rendering
+     * above says it is not. `BasicTextField` takes it, so the node answers
+     * `assertIsNotEnabled()` on the same tag a tap would land on, and the ink drops to
+     * secondary so the field reads dead rather than merely quiet.
+     */
+    enabled: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
     imeAction: ImeAction = ImeAction.Next,
@@ -153,7 +162,8 @@ internal fun ProjectsTextField(
                 value = value,
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth().testTag(title.tagSuffix()),
-                textStyle = ttTypography.body.copy(color = ttLabel()),
+                enabled = enabled,
+                textStyle = ttTypography.body.copy(color = if (enabled) ttLabel() else ttLabelSecondary()),
                 cursorBrush = SolidColor(ttAccent()),
                 singleLine = singleLine,
                 minLines = minLines,

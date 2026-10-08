@@ -300,6 +300,10 @@
     <string name="sprint_list_empty_body">A sprint is a short window of work with a goal measured in story points.</string>
     <string name="sprint_list_new">New Sprint</string>
     <string name="sprint_open">Open</string>
+    <!-- The content description of the detail card's edit affordance. A content description
+         rather than a label: the control is an icon, and its name is what a screen reader
+         announces. -->
+    <string name="sprint_edit">Edit sprint</string>
     <string name="sprint_finished">Finished</string>
     <string name="sprint_progress">%1$d of %2$d pts</string>
     <string name="sprint_editor_new_title">New Sprint</string>
@@ -307,6 +311,15 @@
     <string name="sprint_name_label">Name</string>
     <string name="sprint_goal_label">Goal (pts)</string>
     <string name="sprint_goal_placeholder">Points to aim for</string>
+    <!-- The goal in prose, the half of the goal that is not a number. Both fields are
+         called the goal on purpose: this one is the sentence, `sprint_goal_label` is the
+         quantified target, and the (pts) qualifier is what tells them apart. -->
+    <string name="sprint_goal_text_label">Goal</string>
+    <string name="sprint_goal_text_placeholder">What this sprint is for</string>
+    <!-- Shown over the form once the sprint has started, naming which fields are frozen
+         and why. Not a banner: it is a statement about the form's own state, so it sits
+         with the title rather than under any one field. -->
+    <string name="sprint_editor_locked_note">The window and the point cap are fixed once the sprint starts.</string>
     <string name="sprint_start_label">Start</string>
     <string name="sprint_end_label">End</string>
     <string name="sprint_owner_label">Owner</string>
