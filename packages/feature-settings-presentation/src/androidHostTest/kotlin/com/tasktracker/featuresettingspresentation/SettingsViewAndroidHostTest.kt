@@ -63,6 +63,10 @@ class SettingsViewAndroidHostTest {
     fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
         runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
 
+    @Test
+    fun theStatusFieldSitsCentredInItsPill() =
+        runComposeUiTest(block = SettingsScenarios.theStatusFieldSitsCentredInItsPill)
+
     /**
      * [GlassIntensityScenarios] on the Android host.
      *

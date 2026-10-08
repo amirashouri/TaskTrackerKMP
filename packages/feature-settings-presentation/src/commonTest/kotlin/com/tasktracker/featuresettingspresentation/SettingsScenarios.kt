@@ -4,11 +4,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -36,6 +39,7 @@ import com.tasktracker.resources.settings_position_label
 import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
 import com.tasktracker.resources.settings_user_details_section
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -294,6 +298,44 @@ object SettingsScenarios {
         // decided by a `?.let` at composition rather than by a null check at draw.
         screenShowing(version = SettingsPreviewData.versionless)
         onNodeWithTag(SettingsVersionRowTag).assertDoesNotExist()
+    }
+
+    /**
+     * The status field's text sits on the vertical centre of its glass pill.
+     *
+     * Composed directly rather than through the screen's `LazyColumn`, because a lazy list
+     * drops items below its composition window and the three hosts disagree about the viewport
+     * — a row measured through the list would be laid out on the JVM and iOS and uncomposed on
+     * the short Android Robolectric screen. The pill is the tagged outer `Box`; the field is the
+     * `BasicTextField`'s own semantics node, found by its text. The assertion is the two centres
+     * agreeing within 1dp — a `Box` that still defaulted to `TopStart` pins the field to the top
+     * of the 36dp content area and lands it 4dp high (measured 20.0dp against the pill's 24.0dp),
+     * which is what this catches.
+     */
+    val theStatusFieldSitsCentredInItsPill: suspend ComposeUiTest.() -> Unit = {
+        val text = "Back on Monday"
+        setContent {
+            Themed {
+                StatusTextEditor(
+                    value = text,
+                    onValueChange = {},
+                    modifier = Modifier.testTag(SettingsStatusTextRowTag),
+                )
+            }
+        }
+
+        val pill = onNodeWithTag(SettingsStatusTextRowTag).getBoundsInRoot()
+        val field = onNodeWithText(text).getBoundsInRoot()
+        val pillCentreY = (pill.top.value + pill.bottom.value) / 2f
+        val fieldCentreY = (field.top.value + field.bottom.value) / 2f
+        val offset = abs(pillCentreY - fieldCentreY)
+
+        assertTrue(
+            offset < 1f,
+            "the status field's centre is ${fieldCentreY}dp against the pill's ${pillCentreY}dp — " +
+                "${offset}dp apart, so the text rides high in the glass pill instead of sitting on " +
+                "its centre (a top-aligned Box leaves it 4dp off)",
+        )
     }
 }
 

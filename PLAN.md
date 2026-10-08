@@ -6252,12 +6252,14 @@ green.
 
 **Baseline.** Deciding command `./gradlew jvmTest iosSimulatorArm64Test
 verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin --continue`: JVM
-**1391** (1236 common + 155 jvm-only), iOS **1361** (1236 + 125), both from the JUnit XML and
+**1392** (1236 common + 156 jvm-only), iOS **1362** (1236 + 126), both from the JUnit XML and
 cross-checked against `@Test` declarations exactly, both with the unchanged 5-failure set
 (`SeedingTest` ×3, `aChosenThemeOutlivesTheProcess`, `theBoardReturnsToTheList`);
-architecture checks and `:androidApp:compileDebugKotlin` green. Android host **1115 / 30**
-(1100 + 15; the same 30: design-system 14, feature-settings-presentation 6,
+architecture checks and `:androidApp:compileDebugKotlin` green. Android host **1116 / 30**
+(1100 + 16; the same 30: design-system 14, feature-settings-presentation 6,
 feature-projects-presentation 3, shared-ui 7). The deltas attribute per file:
 migration 5 → 6, drift 3 → 5, use cases 28 → 32, model 18 → 24, entry points 45/44/44 →
-50/49/49. AGENTS.md's host table was updated in the same change (1373→1391, 1345→1361,
-1100→1115).
+50/49/49. The status-text centring fix adds one structural scenario per host
+(`theStatusFieldSitsCentredInItsPill`, green on all three), taking the entry points to
+51/50/50 and the host totals to 1392/1362/1116. AGENTS.md's host table was updated in the
+same change (1391→1392, 1361→1362, 1115→1116).

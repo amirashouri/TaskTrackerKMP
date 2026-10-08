@@ -46,6 +46,10 @@ class SettingsViewIosTest {
     fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
         runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
 
+    @Test
+    fun theStatusFieldSitsCentredInItsPill() =
+        runComposeUiTest(block = SettingsScenarios.theStatusFieldSitsCentredInItsPill)
+
     /**
      * [GlassIntensityScenarios] on the iOS simulator.
      *

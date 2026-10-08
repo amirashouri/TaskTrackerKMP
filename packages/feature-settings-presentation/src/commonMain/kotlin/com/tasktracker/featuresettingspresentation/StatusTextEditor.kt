@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
@@ -39,6 +40,11 @@ internal fun StatusTextEditor(
             .heightIn(min = 48.dp)
             .padding(vertical = ttSpacing.sm)
             .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row)),
+        // A `Box` defaults to `TopStart`, which pinned the single-line field to the top of
+        // the 36dp content area and left the text riding high in the pill. Centring it
+        // vertically is the whole fix; the field is `fillMaxWidth`, so the horizontal
+        // placement is unchanged.
+        contentAlignment = Alignment.Center,
     ) {
         BasicTextField(
             value = value,

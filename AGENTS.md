@@ -60,9 +60,9 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **green** (1391 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
-| iOS simulator | `iosSimulatorArm64Test` | **green** (1361 tests, 5 failed — the same 5) |
-| Android host | `testAndroidHostTest` | **red** — 1115 tests, 30 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 6, feature-projects-presentation 3, shared-ui 7) |
+| JVM | `jvmTest` | **green** (1392 tests, 5 failed — pre-existing `SeedingTest` ×3 and `shared-ui`'s `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList`) |
+| iOS simulator | `iosSimulatorArm64Test` | **green** (1362 tests, 5 failed — the same 5) |
+| Android host | `testAndroidHostTest` | **red** — 1116 tests, 30 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 6, feature-projects-presentation 3, shared-ui 7) |
 
 The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.
 
