@@ -1,6 +1,9 @@
 ---
 name: kmp-architecture-workflow
 description: Use when adding or changing a feature, module dependency, platform-specific implementation, or shared Compose UI in TaskTrackerKMP. Covers this repository's Clean Architecture boundaries, checked Gradle graph, KMP source sets, and Liquid Glass design-system ownership.
+related:
+  - kmp-compose-tests
+  - rendered-ui-measurement
 ---
 
 # KMP feature and architecture workflow
@@ -21,6 +24,41 @@ Use the closest existing feature and layer instead of creating a parallel module
   all library modules.
 - `:shared-ui`: assemble shared screens and navigation from presentation modules.
 - `:packages:design-system`: shared UI tokens and Compose resources.
+
+## Module reference
+
+| Module | Owns | Depends on |
+| --- | --- | --- |
+| `:packages:design-system` | Liquid Glass tokens, `compose.resources`, `expect`/`actual` for rasterisation gates | nothing |
+| `:packages:database` | Room stores, DAOs, migrations | `:packages:domain` |
+| `*-domain` | business rules, ports | nothing |
+| `*-data` | adapters implementing that feature's ports | its `*-domain` |
+| `*-presentation` | feature state, Compose UI | its `*-domain`, not its `*-data` |
+| `:composition-root` | binds ports to implementations | everything |
+| `:shared-ui` | assembles shared screens and navigation | presentation modules |
+| `:androidApp`, `:iosApp` | platform entry points | `:composition-root` |
+
+`presentation` must never depend on its feature's `data` module; `domain` must never
+depend on UI or infrastructure. `:composition-root` is the only module allowed to see all
+library modules.
+
+## Setup and gotchas
+
+- **JDK 25 is required.** `java_home` cannot find it on this machine, so every Gradle
+  invocation needs `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`.
+  Without it the build dies immediately with `Unable to locate a Java Runtime`.
+- **`applyDefaultHierarchyTemplate()`** is called in the convention plugin. It is what makes
+  `iosTest` and the explicit `actual` source sets compile. Never assume a file in
+  `src/iosMain` is compiled — the convention plugin has a long comment about a file that
+  sat there silently uncompiled for a whole phase.
+- **Configuration cache is on.** If a build behaves as though it ignored an edit, re-run
+  rather than debugging the code.
+- **`NavigationHost.kt` and most of `shared-ui` are untracked.** Git cannot recover an
+  accidental edit. Do not use broad scripted search-and-replace in this tree; read the file
+  and edit deliberately.
+- **Staleness traps:** editing a file and then checking `build/reports` PNGs can show the
+  previous run's output. Re-run with `--rerun-tasks` after editing outside Gradle
+  (`cp`, `git checkout`).
 
 For a new dependency or module, inspect only the relevant entries in
 `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts`:

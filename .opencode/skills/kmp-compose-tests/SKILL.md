@@ -1,6 +1,9 @@
 ---
 name: kmp-compose-tests
 description: Use when adding, running, or debugging any test in this Kotlin Multiplatform Compose project - jvmTest, iosSimulatorArm64Test, testAndroidHostTest, runComposeUiTest, commonTest source sets, or screenshot capture. Covers the three-host matrix, the Android host's known gaps, and the rasterisation skip.
+related:
+  - kmp-architecture-workflow
+  - rendered-ui-measurement
 ---
 
 # Tests in this multiplatform Compose project
@@ -22,7 +25,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 the only host that catches iOS-specific rendering behaviour, which is not a theoretical
 concern — see the next section.
 
-`testAndroidHostTest` is red with 10 failures of 817. Do not fix it incidentally and do not
+`testAndroidHostTest` is red with 30 failures of 1116. Do not fix it incidentally and do not
 report it as your regression. Two distinct causes remain:
 
 1. **Five `:composition-root` assertions need a `Context`.** They resolve
@@ -31,15 +34,19 @@ report it as your regression. Two distinct causes remain:
    never builds. Robolectric is on the classpath and never engages: it only takes over for a
    class that names its runner, and a runner annotation is not expressible from `commonTest`.
    The fix is the split `shared-ui` already uses — bodies in `commonTest`, thin entry points
-   per host, `@RunWith(RobolectricTestRunner::class)` on the Android one.
-2. **Five Compose UI assertions fail on layout, not behaviour.** Robolectric's default
-   viewport is far smaller than the other two hosts, so a node inside a `LazyColumn` or a
-   `horizontalScroll` row *exists* but reports `assertIsDisplayed()` failing. Raising
-   `@Config(qualifiers = ...)` does get past that, and then exposes a genuinely different
-   problem: `theVersionRowHidesItselfWithNoVersion` calls `setContent` twice, which Android's
-   `ComponentActivity` refuses (*"has already set content"*). Fixing it properly means
-   changing a shared scenario that two green hosts currently pass — so it is a decision, not
-   a chore.
+   per host, `@RunWith(RobolectricTestRunner::class)` on the Android one. One of the five,
+   `the outbox is left alone`, still cannot run on the Android host — it opens a
+   `RoomOutboxQueue` and the Android host has no `sqliteJni` on its `java.library.path` (same
+   limit that disables `:packages:database`'s host tests) — so it asks `thisHostOpensRoomStores()`
+   and registers as a pass there. The other four need only a `Context` and pass on all three
+   hosts.
+2. **Seven `:shared-ui` Compose UI assertions fail on layout, not behaviour.** Robolectric's
+   default viewport is far smaller than the other two hosts, so a node inside a `LazyColumn` or
+   a `horizontalScroll` row *exists* but reports `assertIsDisplayed()` failing. Two of the seven
+   are known-not-portable (the sheet scenarios, which read `Build` version fields that
+   Robolectric leaves `null`, and `theVersionRowHidesItselfWithNoVersion`, which calls
+   `setContent` twice): they are skipped on the Android host via `thisHostRasterisesText()`.
+   Do not add another of these as a UI change; write a behaviour assertion instead.
 
 The resource packaging that used to fail 61 of these is **fixed**, in
 `tasktracker.kmp.compose.gradle.kts`. Worth knowing why it needed a `Copy` rather than a
