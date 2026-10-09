@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -35,8 +36,8 @@ import kotlin.test.assertTrue
  *
  * ## Why the wash is measured and not read off the modifier chain
  *
- * "The selected option carries an accent wash at [SelectedOptionFillAlpha]" is spelled in the
- * code, but spelling is not drawing: the wash is a colour-and-alpha change on a row the test
+ * "The selected option carries an accent wash at [com.tasktracker.designsystem.ttGlass.SELECTION_WASH_ALPHA]"
+ * is spelled in the code, but spelling is not drawing: the wash is a colour-and-alpha change on a row the test
  * cannot see through semantics, and a source-level assertion could not tell it apart from one
  * the compositor dropped. This is the case the repo's pixel rule exists for — a fill whose
  * absence reads as a defect (`rendered-ui-measurement`). The wash lives on a `Popup` in the
@@ -106,7 +107,7 @@ object ThemeOptionScenarios {
                     "against the $OptionBackdrop backdrop. A washless row is indistinguishable " +
                     "from the glass, which is exactly the defect the ring used to prevent and " +
                     "the accent title alone does not prevent — expected the accent-at-" +
-                    "${(SelectedOptionFillAlpha * 100).toInt()}% wash across a 216px row minus " +
+                    "${(ttGlass.SELECTION_WASH_ALPHA * 100).toInt()}% wash across a 216px row minus " +
                     "its rounded corners (roughly 1000 pixels), saw $selectedPainted",
             )
             assertTrue(
@@ -202,7 +203,7 @@ object ThemeOptionScenarios {
 
     /**
      * Distance from the backdrop above which a pixel counts as painted, measured rather than
-     * guessed: at [SelectedOptionFillAlpha] over 0xFF1B1B1F the *dimmest* palette's dark
+     * guessed: at [ttGlass.SELECTION_WASH_ALPHA] over 0xFF1B1B1F the *dimmest* palette's dark
      * accent — the default Classic, 0xFF5F6873 — composites to a distance of 21, and the
      * palette sweep runs 21…47. Backdrop pixels are exactly 0, so 12 sits between the two
      * with margin on both sides.

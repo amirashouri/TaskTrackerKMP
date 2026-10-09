@@ -1,5 +1,6 @@
 package com.tasktracker.designsystem
 
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.util.lerp as lerpFloat
@@ -255,6 +257,19 @@ object ttGlass {
      * just smaller.
      */
     const val TAB_LENS_FADE: Float = 0.75f
+
+    /**
+     * The selection wash's alpha, for a dropdown option row.
+     *
+     * 0.25, and the intent was already measured before this token existed: at this alpha over
+     * the pixel test's near-black backdrop (0xFF1B1B1F) the *dimmest* palette's dark accent —
+     * the default Classic, 0xFF5F6873 — composites to a channel distance of 21, and the
+     * palette sweep runs 21…47, so every palette clears the test's 12-channel bar with margin
+     * while the row still reads as glass rather than as a filled chip. The measurement lives in
+     * `ThemeOptionScenarios.PAINTED_BAR` and `OptionBackdrop`; this is the token that holds the
+     * value, so the feature and the test cannot drift.
+     */
+    const val SELECTION_WASH_ALPHA: Float = 0.25f
 
     /**
      * How far the rim's colour falls off toward its bottom, as a fraction of its own alpha.
@@ -667,6 +682,117 @@ fun Modifier.ttGlassLens(
 }
 
 /**
+ * A selection wash: the accent at a fixed alpha, animated in and out on selection change.
+ *
+ * The settings theme picker's selected row, and the user position / status pickers that share
+ * its dropdown vocabulary. It is the dropdown's answer to the same question the tab bar's lens
+ * answers with travel: **how does a selection announce itself?**
+ *
+ * ## Why it is animated rather than swapped
+ *
+ * The picker's options are full-width rows in a vertical popup column, so there is no
+ * horizontal distance to travel and no capsule to slide between them — a lens that *moved*
+ * here would be a lens sliding down a list, which is a different effect entirely and not the
+ * one the tab bar does. What the picker *can* do is fade: the accent wash arrives with a
+ * spring and leaves with one, and that is enough to make the change read as a response rather
+ * than a repaint.
+ *
+ * ## Why it lives here rather than in the feature
+ *
+ * Three dropdowns already painted this wash, and the alpha was duplicated across them as
+ * `SelectedOptionFillAlpha` in `feature-settings-presentation`. A wash that is one token is a
+ * wash that cannot drift: the feature can pick the accent and the rounding, but the *how* —
+ * the alpha, the spring, the fact that it animates at all — is the design system's to own.
+ *
+ * ## What it does not do
+ *
+ * It is not a lens and does not call [ttGlassSurface]: the picker rows sit inside a glass
+ * column and stacking a second full fill ramp on top of one would be two materials where one
+ * belongs. It is a translucent accent wash over the row's own background, which is the
+ * vocabulary the dropdown uses.
+ */
+@Composable
+fun Modifier.ttSelectionWash(
+    selected: Boolean,
+    alpha: Float = ttGlass.SELECTION_WASH_ALPHA,
+): Modifier {
+    val target = if (selected) alpha else 0f
+    val washAlpha by animateFloatAsState(
+        targetValue = target,
+        animationSpec = ttGlass.selectionSpring,
+        label = "selectionWash",
+    )
+    val accent = ttAccent()
+    return this.background(
+        color = accent.copy(alpha = washAlpha),
+        shape = RoundedCornerShape(ttRadius.control),
+    )
+}
+
+/**
+ * Where a traveling lens should sit, as four animated Dp values.
+ *
+ * A lens that *moves* is a lens that reads as material being displaced rather than a highlight
+ * that jumped: it travels, and while it travels it leans into the motion and settles. The
+ * segmented picker, the flow picker, and — after this — the accent palette picker all do the
+ * same four-value animation, and the four were inline in two of them before this existed,
+ * which is how two copies of the same spring and the same `IntRect`-to-Dp arithmetic came to
+ * sit in three places. This is the one copy.
+ *
+ * The four values are animated rather than computed once, because the lens has to *arrive* at
+ * the new position — the first composition of a picker has no previous bounds to travel from,
+ * and a lens that snaps to its cell on open looks like a repaint, not a response.
+ */
+@Composable
+fun <Option> ttLensPlacement(
+    positions: Map<Option, IntRect>,
+    selection: Option,
+    density: Density,
+): LensPlacement {
+    val selectedBounds = positions[selection]
+    // Inline `spring(...)` rather than [ttGlass.selectionSpring]: the latter is typed
+    // `SpringSpec<Float>` for the selection wash's `animateFloatAsState`, and
+    // `animateDpAsState` has no `AnimationSpec<Float>` overload — passing the constant
+    // there fails to resolve. The values are the same (damping 0.7, stiffness MediumLow),
+    // which is the point: this is the one spring the app uses for a selection that moves.
+    val lensSpring: AnimationSpec<Dp> = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
+    val lensX by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
+        animationSpec = lensSpring,
+        label = "lensX",
+    )
+    val lensY by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
+        animationSpec = lensSpring,
+        label = "lensY",
+    )
+    val lensWidth by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
+        animationSpec = lensSpring,
+        label = "lensWidth",
+    )
+    val lensHeight by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
+        animationSpec = lensSpring,
+        label = "lensHeight",
+    )
+    return LensPlacement(lensX, lensY, lensWidth, lensHeight)
+}
+
+/**
+ * The four animated dimensions of a traveling lens.
+ *
+ * A data class rather than four separate return values so a caller writes one destructuring
+ * and cannot update one without the other — the four have to move together or the lens distorts.
+ */
+data class LensPlacement(
+    val x: Dp,
+    val y: Dp,
+    val width: Dp,
+    val height: Dp,
+)
+
+/**
  * A glass card, for content that floats over a scrolling surface.
  *
  * The original's only real consumer was the work item card, at
@@ -714,27 +840,11 @@ fun <Option> TTGlassSegmentedPicker(
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val selectedBounds = positions[selection]
 
-    // Lens animation — mirrors the bottom nav's moving pill. Same spring as TTGlassTabBar.
-    val lensX by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "segmentLensX",
-    )
-    val lensY by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "segmentLensY",
-    )
-    val lensWidth by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "segmentLensWidth",
-    )
-    val lensHeight by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "segmentLensHeight",
-    )
+    // Lens animation — mirrors the bottom nav's moving pill. The four values come from
+    // [ttLensPlacement], which is the one copy of this spring and this arithmetic; the
+    // segmented picker, the flow picker, and the accent palette picker all travel the same
+    // way and were inline in two of them before this existed.
+    val (lensX, lensY, lensWidth, lensHeight) = ttLensPlacement(positions, selection, density)
 
     val lensShape = RoundedCornerShape(ttRadius.control)
 
@@ -811,30 +921,11 @@ fun <Option> TTGlassFlowPicker(
 ) {
     val accent = ttAccent()
     val canvas = ttCanvas()
-    val density = LocalDensity.current
+val density = LocalDensity.current
     val positions = remember { mutableStateMapOf<Option, IntRect>() }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val selectedBounds = positions[selection]
-    val lensX by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "flowPickerLensX",
-    )
-    val lensY by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "flowPickerLensY",
-    )
-    val lensWidth by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "flowPickerLensWidth",
-    )
-    val lensHeight by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
-        label = "flowPickerLensHeight",
-    )
+    val (lensX, lensY, lensWidth, lensHeight) = ttLensPlacement(positions, selection, density)
 
     Box(
         modifier = modifier
