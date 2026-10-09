@@ -849,6 +849,8 @@ private fun SprintsDestination(
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Sprints) },
+        currentSection = model.currentSection,
+        onSectionChanged = { model.setSection(it) },
     )
 
     // Open the editor for a sprint by id, reading it first. `null` when it has gone — the

@@ -11,6 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -22,6 +27,8 @@ import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
+import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.sprintSummary
 import com.tasktracker.resources.Res
@@ -66,6 +73,8 @@ fun SprintListScreen(
     onOpenSwitcher: (() -> Unit)? = null,
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
+    currentSection: SprintSection = SprintSection.Active,
+    onSectionChanged: (SprintSection) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -106,6 +115,23 @@ fun SprintListScreen(
             errorMessage?.let { message ->
                 ttBanner(message = message, onDismiss = onDismissError)
             }
+            var localSection by remember { mutableStateOf(currentSection) }
+            LaunchedEffect(currentSection) { localSection = currentSection }
+            TTGlassSegmentedPicker(
+                options = listOf(SprintSection.Active, SprintSection.Archived),
+                selection = localSection,
+                onSelect = { section ->
+                    localSection = section
+                    onSectionChanged(section)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                title = { option ->
+                    when (option) {
+                        SprintSection.Active -> "Active"
+                        SprintSection.Archived -> "Archive"
+                    }
+                },
+            )
             when {
                 // `null` is still loading, and it is kept distinct from `true` because a
                 // screen that claimed "no sprints" during the first read would flash an

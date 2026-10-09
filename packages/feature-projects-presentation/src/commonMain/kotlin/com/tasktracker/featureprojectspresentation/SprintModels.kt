@@ -7,6 +7,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.domain.sprintSummary
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -170,8 +171,22 @@ class SprintListModel(
     override fun isRelevant(change: ProjectChange): Boolean =
         change.projectID == null || change.projectID == projectID
 
+    /** The current section filter — Active or Archived. Defaults to Active. */
+    var currentSection: SprintSection = SprintSection.Active
+        private set
+
+    /** Set the current section filter. Triggers a reload with the new filter applied. */
+    fun setSection(section: SprintSection) {
+        currentSection = section
+    }
+
     override suspend fun reload() {
-        val sprints = repository.sprints(projectID)
+        val allSprints = repository.sprints(projectID)
+        // Filter by current section: Active shows scheduled/in-progress/finished, Archived shows only archived
+        val sprints = when (currentSection) {
+            SprintSection.Active -> allSprints.filter { !it.isArchived }
+            SprintSection.Archived -> allSprints.filter { it.isArchived }
+        }
         // Read once, and only if there is something to answer for: a project with no
         // sprints does not need its items fetched to say so.
         val items = if (sprints.isEmpty()) emptyList() else repository.workItems(projectID)
