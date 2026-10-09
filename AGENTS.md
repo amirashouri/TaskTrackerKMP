@@ -231,6 +231,20 @@ that explicitly mention a skill. These skills carry the detail this file deliber
 There is also a `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) that reviews
 a proposed test adversarially, specifically for whether it can fail.
 
+## Local rules
+
+The root file above is the repo-wide contract. Rules that are true in only one package
+live next to the code they govern — a local file may only contain rules that are *false
+elsewhere*, so the two can never drift into saying the same thing twice:
+
+- `packages/design-system/AGENTS.md` — token ownership, `compose.resources`, pixel tests
+- `packages/database/AGENTS.md` — foreign keys, DAO ownership, migrations
+- `packages/feature-projects-presentation/AGENTS.md` — file splitting, fixtures, previews
+- `shared-ui/AGENTS.md` — untracked files, router ownership, host-split tests
+
+Working in one of those packages, read both files. Working anywhere else, the root file
+is the whole contract.
+
 ## Conventions
 
 - **Comments explain why, and carry the measurement.** This house style is not decoration;
