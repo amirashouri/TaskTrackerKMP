@@ -533,33 +533,102 @@ fun <Option> TTGlassSegmentedPicker(
     // still accepts a plain lambda literal here, so this costs existing callers nothing.
     title: @Composable (Option) -> String,
 ) {
-    val accent = ttAccent()
-    val canvas = ttCanvas()
+    val density = LocalDensity.current
+    val positions = remember { mutableStateMapOf<Option, IntRect>() }
+    var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val selectedBounds = positions[selection]
 
-    Row(
+    // Lens animation — mirrors the bottom nav's moving pill. Same spring as TTGlassTabBar.
+    val lensX by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "segmentLensX",
+    )
+    val lensY by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "segmentLensY",
+    )
+    val lensWidth by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "segmentLensWidth",
+    )
+    val lensHeight by animateDpAsState(
+        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
+        animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+        label = "segmentLensHeight",
+    )
+
+    val intensity = LocalGlassIntensity.current
+    val lensShape = RoundedCornerShape(ttRadius.control)
+
+    Box(
         modifier = modifier
             // Rule 1, in code: the slab's own inset is *inside* the material, and the
             // segment gaps are inside the slab. Nothing here adds space outside the glass,
             // because a caller that did would get a bar the same size with worse hit
             // targets.
             .ttGlassSurface(
-                shape = CircleShape,
+                shape = lensShape,
                 tint = tint,
                 borderWidth = ttGlass.hairlineWidth,
             )
-            .padding(ttSpacing.hairlineInset),
-        horizontalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(ttSpacing.hairlineInset)
+            .onGloballyPositioned { containerCoordinates = it },
     ) {
-        for (option in options) {
-            val optionTestTag = testTag(option)
-            Segment(
-                label = title(option),
-                isSelected = option == selection,
-                accent = accent,
-                canvas = canvas,
-                onClick = { onSelect(option) },
-                modifier = Modifier.weight(1f).let { if (optionTestTag != null) it.testTag(optionTestTag) else it },
+        // Segments (bottom layer)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (option in options) {
+                val optionTestTag = testTag(option)
+                Segment(
+                    label = title(option),
+                    isSelected = option == selection,
+                    onClick = { onSelect(option) },
+                    onPositioned = { coordinates ->
+                        val parent = containerCoordinates
+                        if (parent != null) {
+                            val position = parent.localPositionOf(coordinates, Offset.Zero)
+                            positions[option] = IntRect(
+                                left = position.x.roundToInt(),
+                                top = position.y.roundToInt(),
+                                right = position.x.roundToInt() + coordinates.size.width,
+                                bottom = position.y.roundToInt() + coordinates.size.height,
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f).let { if (optionTestTag != null) it.testTag(optionTestTag) else it },
+                )
+            }
+        }
+
+        // Clear glass selection lens (top layer) — like the tab bar's selection lens.
+        // No backdrop, no translucent accent fill.
+        if (selectedBounds != null) {
+            Box(
+                modifier = Modifier
+                    .size(lensWidth, lensHeight)
+                    .offset(x = lensX, y = lensY)
+                    .clip(lensShape)
+                    .drawBehind {
+                        val lensAlpha = ttGlass.TAB_LENS_ALPHA * intensity.coerceIn(0f, 1f)
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = lensAlpha),
+                                    Color.White.copy(alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE)),
+                                ),
+                            ),
+                        )
+                    }
+                    .border(
+                        width = ttGlass.hairlineWidth,
+                        color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
+                        shape = lensShape,
+                    ),
             )
         }
     }
@@ -719,27 +788,14 @@ private const val FLOW_PICKER_INACTIVE_LIGHTENING = 0.18f
 private fun Segment(
     label: String,
     isSelected: Boolean,
-    accent: Color,
-    canvas: Color,
     onClick: () -> Unit,
+    onPositioned: (LayoutCoordinates) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
 ) {
-    // One shared animation drives the selected pill's fill. The label stays opaque while the
-    // fill moves, so inactive options remain readable throughout the transition.
-    val selectionAlpha by animateFloatAsState(
-        targetValue = if (isSelected) 1f else 0f,
-        animationSpec = ttGlass.selectionSpring,
-        label = "segmentSelection",
-    )
-
     Box(
         modifier = modifier
-            .clip(CircleShape)
-            .background(
-                color = if (isSelected) accent.copy(alpha = selectionAlpha) else canvas.copy(alpha = 0f),
-                shape = CircleShape,
-            )
+            .onGloballyPositioned(onPositioned)
             .then(
                 Modifier.padding(
                     vertical = if (compact) ttSpacing.xs else ttSpacing.controlPaddingV,
@@ -747,28 +803,14 @@ private fun Segment(
                 ),
             )
             .clickable(role = Role.Tab, onClick = onClick)
-            // The label carries the selected state for accessibility, because a tint alone
-            // is not a state: a screen reader user has no way to tell a selected segment
-            // from an unselected one otherwise, and neither has anyone who cannot separate
-            // the two colours.
-            // `isSelected` rather than a parameter named `selected`: the semantics
-            // property has that name too, and the two shadow each other into an
-            // unassignable `val`.
             .semantics { selected = isSelected },
         contentAlignment = Alignment.Center,
     ) {
-        // The label colour is chosen against the pill, not against the canvas — and the
-        // pill only exists when selected, which is why this is a two-way choice rather than
-        // a modifier chain. `ttOnAccent` is the pairing `AccentContrastTest` enforces.
-        val content = if (isSelected) ttOnAccent else ttLabel()
+        val content = ttLabel()
         Box(modifier = Modifier.semantics { contentDescription = label }) {
             ttText(
                 text = label,
-                style = if (isSelected) {
-                    ttTypography.subheadlineSelected
-                } else {
-                    ttTypography.subheadline
-                },
+                style = if (isSelected) ttTypography.subheadlineSelected else ttTypography.subheadline,
                 color = content,
                 textAlign = TextAlign.Center,
             )
