@@ -278,6 +278,7 @@ private fun ProjectBoardDestination(
             showOnlyMyTasks = model.showOnlyMyTasks,
             onToggleMyTasks = model::toggleShowOnlyMyTasks,
             activeSprint = model.activeSprint,
+            canAddTask = !model.addsLocked,
         )
     }
 }

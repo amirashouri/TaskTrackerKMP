@@ -49,7 +49,8 @@ class SprintListModelTest {
     private fun listModel(
         repository: FakeProjectRepository,
         projectID: com.tasktracker.core.ProjectID,
-    ) = SprintListModel(projectID, repository, timeZone = zone)
+        clockDate: kotlin.time.Instant = FIXED_NOW,
+    ) = SprintListModel(projectID, repository, TestDateProvider(clockDate), timeZone = zone)
 
     @Test
     fun `a project with no sprints says so once it has read`() = runTest {
@@ -61,8 +62,12 @@ class SprintListModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertTrue(model.rows.isEmpty())
-        assertEquals(true, model.isEmpty)
+        assertTrue(model.inProgressRows.isEmpty())
+        assertTrue(model.scheduledRows.isEmpty())
+        assertTrue(model.finishedRows.isEmpty())
+        assertTrue(model.archivedRows.isEmpty())
+        assertEquals(true, model.activeIsEmpty)
+        assertEquals(true, model.archivedIsEmpty)
     }
 
     @Test
@@ -75,7 +80,8 @@ class SprintListModelTest {
 
         // Before `observe`. A `Boolean` would read `false` here and a screen would flash an
         // empty state over a populated list on every cold start.
-        assertNull(model.isEmpty)
+        assertNull(model.activeIsEmpty)
+        assertNull(model.archivedIsEmpty)
     }
 
     @Test
@@ -86,11 +92,12 @@ class SprintListModelTest {
         val sprint = testSprint(project.id)
         repository.seed(sprint)
 
-        val model = listModel(repository, project.id)
+        // Use a clock date inside the sprint's window so it is categorised as in-progress
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        val row = model.rows.single()
+        val row = model.inProgressRows.single()
         assertEquals(LocalDate(2026, Month.MARCH, 2), row.startDate)
         assertEquals(LocalDate(2026, Month.MARCH, 16), row.endDate)
     }
@@ -125,11 +132,12 @@ class SprintListModelTest {
             ),
         )
 
-        val model = listModel(repository, project.id)
+        // Use a clock date after both sprints started so they are categorised as in-progress
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        val rows = model.rows.associateBy { it.sprint.id }
+        val rows = model.inProgressRows.associateBy { it.sprint.id }
         assertEquals(8, rows.getValue(first.id).achievedStoryPoints)
         assertEquals(8, rows.getValue(first.id).committedStoryPoints)
         assertEquals(3, rows.getValue(second.id).achievedStoryPoints)
@@ -150,11 +158,11 @@ class SprintListModelTest {
             testWorkItem(projectID = project.id, key = "AP-2", storyPoints = null, sprintID = sprint.id),
         )
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        val row = model.rows.single()
+        val row = model.inProgressRows.single()
         assertEquals(5, row.committedStoryPoints)
         assertEquals(0, row.achievedStoryPoints)
     }
@@ -176,11 +184,11 @@ class SprintListModelTest {
             ),
         )
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertEquals(0.75f, model.rows.single().progressFraction)
+        assertEquals(0.75f, model.inProgressRows.single().progressFraction)
     }
 
     @Test
@@ -200,13 +208,13 @@ class SprintListModelTest {
             ),
         )
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
         // 2.5, not 1.0. A bar pinned at the end would throw away the most interesting thing
         // about a sprint that beat its target.
-        assertEquals(2.5f, model.rows.single().progressFraction)
+        assertEquals(2.5f, model.inProgressRows.single().progressFraction)
     }
 
     @Test
@@ -216,11 +224,11 @@ class SprintListModelTest {
         repository.seed(project)
         repository.seed(testSprint(project.id, goalStoryPoints = 0))
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        val row = model.rows.single()
+        val row = model.inProgressRows.single()
         assertFalse(row.hasGoal)
         // `null`, not `0f`: a sprint nobody gave a target has not made no progress.
         assertNull(row.progressFraction)
@@ -234,15 +242,40 @@ class SprintListModelTest {
         repository.seed(testSprint(project.id, isFinished = false))
         repository.seed(testSprint(project.id, isFinished = true))
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
         // Both are rows: the rule is about a *window* now, so an open sprint neither hides
         // itself nor stops another one being created — see `SprintListModel`'s KDoc.
-        assertEquals(2, model.rows.size)
-        assertTrue(model.rows.any { !it.sprint.isFinished })
-        assertTrue(model.rows.any { it.sprint.isFinished })
+        // The unfinished one is in progress, the finished one is in finished
+        assertEquals(1, model.inProgressRows.size)
+        assertEquals(1, model.finishedRows.size)
+        assertTrue(model.inProgressRows.any { !it.sprint.isFinished })
+        assertTrue(model.finishedRows.any { it.sprint.isFinished })
+    }
+
+    @Test
+    fun `an archived sprint lives in the archive and leaves the active partitions empty`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        repository.seed(testSprint(project.id, name = "Filed away", isFinished = true, isArchived = true))
+
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        // One flat row in the archive, with no header partition of its own...
+        assertEquals(listOf("Filed away"), model.archivedRows.map { it.sprint.name })
+        // ...and nothing of it leaks into the Active partitions, which are independently
+        // empty. A single `isEmpty` would have called this project non-empty and left the
+        // archive blank.
+        assertTrue(model.inProgressRows.isEmpty())
+        assertTrue(model.scheduledRows.isEmpty())
+        assertTrue(model.finishedRows.isEmpty())
+        assertEquals(true, model.activeIsEmpty)
+        assertEquals(false, model.archivedIsEmpty)
     }
 
     @Test
@@ -254,7 +287,9 @@ class SprintListModelTest {
         val model = listModel(repository, project.id)
         model.observe(eagerScope())
         advanceUntilIdle()
-        assertTrue(model.rows.isEmpty())
+        assertTrue(model.inProgressRows.isEmpty())
+        assertTrue(model.scheduledRows.isEmpty())
+        assertTrue(model.finishedRows.isEmpty())
 
         repository.seed(testSprint(project.id))
         // The fake publishes a change after a write, and this list is subscribed to it. A
@@ -263,10 +298,9 @@ class SprintListModelTest {
         repository.finishSprint(id = repository.sprints(project.id).single().id, now = FIXED_NOW)
         advanceUntilIdle()
 
-        // A sprint write announces the *project's* id, so the subscription cannot match on
-        // the sprint's own id — see `SprintListModel.isRelevant`. If that filter were ever
-        // tightened to the sprint's id, this is the assertion that would catch it.
-        assertEquals(1, model.rows.size)
+        // After finishing, the sprint moves to finished section
+        assertEquals(0, model.inProgressRows.size)
+        assertEquals(1, model.finishedRows.size)
     }
 
     @Test
@@ -288,11 +322,13 @@ class SprintListModelTest {
             ),
         )
 
-        val model = SprintListModel(project.id, repository, timeZone = eastEleven)
+        // Use a clock date inside the sprint's window
+        val clockDate = Instant.parse("2026-03-10T00:00:00Z")
+        val model = SprintListModel(project.id, repository, TestDateProvider(clockDate), timeZone = eastEleven)
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        val row = model.rows.single()
+        val row = model.inProgressRows.single()
         assertEquals(
             LocalDate(2026, Month.MARCH, 3),
             row.startDate,
@@ -305,10 +341,10 @@ class SprintListModelTest {
         )
         // And the same sprint, read in UTC, is the day before. Stated as an equality so the
         // test fails loudly if the zone ever stops mattering.
-        val utcModel = SprintListModel(project.id, repository, timeZone = TimeZone.UTC)
+        val utcModel = SprintListModel(project.id, repository, TestDateProvider(clockDate), timeZone = TimeZone.UTC)
         utcModel.observe(eagerScope())
         advanceUntilIdle()
-        assertEquals(LocalDate(2026, Month.MARCH, 16), utcModel.rows.single().endDate)
+        assertEquals(LocalDate(2026, Month.MARCH, 16), utcModel.inProgressRows.single().endDate)
     }
 
     @Test
@@ -364,7 +400,7 @@ class SprintListModelTest {
             ),
         )
 
-        val model = listModel(repository, project.id)
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -372,7 +408,7 @@ class SprintListModelTest {
         // progress for the same items, and the only thing holding them together is that both
         // read the domain's summariser rather than summing for themselves.
         val expected = sprintSummary(sprint, repository.workItems(project.id))
-        val row = model.rows.single()
+        val row = model.inProgressRows.single()
         assertEquals(expected.committedStoryPoints, row.committedStoryPoints)
         assertEquals(expected.achievedStoryPoints, row.achievedStoryPoints)
     }

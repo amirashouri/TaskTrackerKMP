@@ -902,6 +902,30 @@ class RoomProjectRepository(
                 enqueueWorkItem(item, stamp, now)
                 created += 1
             }
+
+            for (entry in seed.sprints) {
+                val sprint = Sprint(
+                    id = randomSprintID(),
+                    projectID = project.id,
+                    name = ProjectRules.normaliseName(entry.name),
+                    goalStoryPoints = maxOf(0, entry.goalStoryPoints),
+                    goal = entry.goal,
+                    startDate = now + entry.startsInDays.days,
+                    endDate = now + entry.endsInDays.days,
+                    owner = WorkItemRules.normaliseAssignee(entry.owner),
+                    isFinished = entry.isFinished,
+                    // Kept in step with `isFinished` by hand, for the same reason the test
+                    // fake does: a fixture that broke the entity's own invariant would seed a
+                    // state the store cannot otherwise hold.
+                    finishedAt = if (entry.isFinished) now else null,
+                    isArchived = entry.isArchived,
+                    createdAt = now,
+                    updatedAt = now,
+                )
+                database.sprintDao().insert(sprint.toRecord())
+                enqueueSprint(sprint, stamp, now)
+                created += 1
+            }
         }
         return created
     }

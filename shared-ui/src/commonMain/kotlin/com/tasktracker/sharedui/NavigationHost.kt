@@ -678,6 +678,7 @@ private fun BoardDestination(
         // 24.2: the Board tab was the one board host that dropped the sprint, so its header
         // never named a running sprint. It must, for the title to say which sprint is active.
         activeSprint = model.activeSprint,
+        canAddTask = !model.addsLocked,
     )
 }
 
@@ -798,7 +799,7 @@ private fun SprintsDestination(
     preferences: ShellPreferences,
 ) {
     val model = remember(projectID, environment) {
-        SprintListModel(projectID, environment.repository)
+        SprintListModel(projectID, environment.repository, environment.dateProvider)
     }
     DisposableEffect(model) {
         model.observe(scope)
@@ -829,9 +830,12 @@ private fun SprintsDestination(
     var isEditorBusy by remember(projectID) { mutableStateOf(false) }
 
     SprintListScreen(
-        rows = model.rows,
-        isLoading = model.isLoading,
-        isEmpty = model.isEmpty,
+        inProgressRows = model.inProgressRows,
+        scheduledRows = model.scheduledRows,
+        finishedRows = model.finishedRows,
+        archivedRows = model.archivedRows,
+        activeIsEmpty = model.activeIsEmpty,
+        archivedIsEmpty = model.archivedIsEmpty,
         errorMessage = model.errorMessage,
         project = currentProject,
         onOpen = { sprintID ->
@@ -849,8 +853,6 @@ private fun SprintsDestination(
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Sprints) },
-        currentSection = model.currentSection,
-        onSectionChanged = { model.setSection(it) },
     )
 
     // Open the editor for a sprint by id, reading it first. `null` when it has gone — the

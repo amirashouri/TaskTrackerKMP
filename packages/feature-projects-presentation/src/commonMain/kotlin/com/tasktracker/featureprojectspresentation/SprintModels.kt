@@ -3,11 +3,11 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
-import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.domain.sprintSummary
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -151,49 +151,72 @@ class SprintListModel(
     /** The project whose sprints these are. */
     val projectID: ProjectID,
     repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ObservingProjectModel(repository) {
 
-    /** The rows, in the store's order. Empty until the first read finishes. */
-    var rows: List<SprintListRow> by mutableStateOf(emptyList())
+    /**
+     * The sprints currently in progress: started but not yet finished.
+     *
+     * Empty until the first read finishes. A screen showing this list should state the
+     * section's own emptiness rather than the project's — a project with no in-progress
+     * sprints is not a project with no sprints.
+     */
+    var inProgressRows: List<SprintListRow> by mutableStateOf(emptyList())
         private set
 
     /**
-     * Whether this list has nothing to show.
-     *
-     * `null` until the first read finishes, which is what lets a screen say "loading"
-     * rather than claiming a project has no sprints before anybody has asked. A `Boolean`
-     * would start at `false` and flash an empty state over a populated list on every cold
-     * start.
+     * The sprints scheduled for the future: not yet started and not finished.
      */
-    val isEmpty: Boolean? get() = if (isLoading) null else rows.isEmpty()
+    var scheduledRows: List<SprintListRow> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * The sprints that have been finished: closed and summarised.
+     */
+    var finishedRows: List<SprintListRow> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * The archived sprints, as one flat list.
+     *
+     * Archived is a terminal state and not a *phase* of the sprint's window, so it is not
+     * partitioned the way the active sprints are: an archived sprint is filed away, and
+     * "scheduled", "in progress" and "finished" are questions about a window that is still
+     * being worked. The archive screen therefore reads this list directly, with no headers.
+     */
+    var archivedRows: List<SprintListRow> by mutableStateOf(emptyList())
+        private set
+
+    /**
+     * Whether the active section has nothing to show, or `null` while the first read is in
+     * flight.
+     *
+     * `null` rather than `false` for the reason the old single `isEmpty` gave: a screen that
+     * claimed "no sprints" during the first read would flash an empty state over a populated
+     * list on every cold start.
+     */
+    val activeIsEmpty: Boolean? get() = if (isLoading) null else {
+        inProgressRows.isEmpty() && scheduledRows.isEmpty() && finishedRows.isEmpty()
+    }
+
+    /** Whether the archive has nothing to show, or `null` while the first read is in flight. */
+    val archivedIsEmpty: Boolean? get() = if (isLoading) null else archivedRows.isEmpty()
 
     override fun isRelevant(change: ProjectChange): Boolean =
         change.projectID == null || change.projectID == projectID
 
-    /** The current section filter — Active or Archived. Defaults to Active. */
-    var currentSection: SprintSection = SprintSection.Active
-        private set
-
-    /** Set the current section filter. Triggers a reload with the new filter applied. */
-    fun setSection(section: SprintSection) {
-        currentSection = section
-    }
-
     override suspend fun reload() {
         val allSprints = repository.sprints(projectID)
-        // Filter by current section: Active shows scheduled/in-progress/finished, Archived shows only archived
-        val sprints = when (currentSection) {
-            SprintSection.Active -> allSprints.filter { !it.isArchived }
-            SprintSection.Archived -> allSprints.filter { it.isArchived }
-        }
         // Read once, and only if there is something to answer for: a project with no
         // sprints does not need its items fetched to say so.
-        val items = if (sprints.isEmpty()) emptyList() else repository.workItems(projectID)
+        val items = if (allSprints.isEmpty()) emptyList() else repository.workItems(projectID)
 
-        rows = sprints.map { sprint ->
+        // One row per sprint, then split into the active partitions and the archive. The
+        // archive is deliberately not partitioned — see [archivedRows].
+        val rowsByID = allSprints.associate { sprint ->
             val summary = sprintSummary(sprint, items)
-            SprintListRow(
+            sprint.id to SprintListRow(
                 sprint = sprint,
                 startDate = sprintLocalDate(sprint.startDate, timeZone),
                 endDate = sprintLocalDate(sprint.endDate, timeZone),
@@ -201,5 +224,31 @@ class SprintListModel(
                 achievedStoryPoints = summary.achievedStoryPoints,
             )
         }
+
+        // Categorise each active sprint by its lifecycle status. The ordering within each
+        // partition is the store's: unfinished first, then by start date.
+        val now = dateProvider.now()
+        val inProgressList = mutableListOf<SprintListRow>()
+        val scheduledList = mutableListOf<SprintListRow>()
+        val finishedList = mutableListOf<SprintListRow>()
+        val archivedList = mutableListOf<SprintListRow>()
+
+        for (sprint in allSprints) {
+            val row = rowsByID.getValue(sprint.id)
+            if (sprint.isArchived) {
+                archivedList.add(row)
+            } else {
+                when {
+                    sprint.isFinished -> finishedList.add(row)
+                    sprint.startDate > now -> scheduledList.add(row)
+                    else -> inProgressList.add(row)
+                }
+            }
+        }
+
+        inProgressRows = inProgressList
+        scheduledRows = scheduledList
+        finishedRows = finishedList
+        archivedRows = archivedList
     }
 }

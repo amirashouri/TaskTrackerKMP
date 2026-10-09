@@ -173,6 +173,12 @@ class ProjectsUiJvmTest {
     fun theMyTasksFilterButtonIsDisplayed() = runComposeUiTest(block = BoardLaneScenarios.theMyTasksFilterButtonIsDisplayed)
 
     @Test
+    fun aRunningSprintHidesEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.aRunningSprintHidesEveryLaneAdd)
+
+    @Test
+    fun kanbanKeepsEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.kanbanKeepsEveryLaneAdd)
+
+    @Test
     fun theCardShowsTheGoalAndItsEditButtonOpensTheEditor() = runComposeUiTest(block = SprintDetailScenarios.theCardShowsTheGoalAndItsEditButtonOpensTheEditor)
 
     @Test

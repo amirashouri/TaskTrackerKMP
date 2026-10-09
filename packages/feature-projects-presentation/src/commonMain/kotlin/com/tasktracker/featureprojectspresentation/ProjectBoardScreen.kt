@@ -126,6 +126,11 @@ fun ProjectBoardScreen(
     showOnlyMyTasks: Boolean = false,
     onToggleMyTasks: () -> Unit = {},
     activeSprint: Sprint? = null,
+    /**
+     * Whether lane-add is allowed. False while a sprint is InProgress: the column "+" hides.
+     * True for Kanban (no sprint) and scheduled sprints.
+     */
+    canAddTask: Boolean = true,
 ) {
     Column(
         modifier = modifier
@@ -242,7 +247,7 @@ fun ProjectBoardScreen(
                     BoardColumnView(
                         column = column,
                         onSelect = { onSelect(it.id) },
-                        onAddTask = onAddTask?.let { addTask -> { addTask(column.status) } },
+                        onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
                         modifier = Modifier,
                         cardTrailing = { item ->
                             BoardCardActions(

@@ -6263,3 +6263,45 @@ migration 5 → 6, drift 3 → 5, use cases 28 → 32, model 18 → 24, entry po
 (`theStatusFieldSitsCentredInItsPill`, green on all three), taking the entry points to
 51/50/50 and the host totals to 1392/1362/1116. AGENTS.md's host table was updated in the
 same change (1391→1392, 1361→1362, 1115→1116).
+
+### 26.1 The sprints Archive segment is a flat list, not three partitions
+
+**Asked for.** The Active/Archive picker on the sprint list "is not filtering the tasks
+inside the list": every segment drew the In Progress / Scheduled / Finished headers, and
+switching to Archive did not change the rows.
+
+**Two causes, one split.** `SprintListModel.setSection` only assigned `currentSection` —
+nothing re-read the store, and the property was not even `mutableState`, so the picker
+moved a `localSection` in the screen while the model kept the Active list. And `reload`
+filtered the *sprints* by segment but the screen ignored the segment when it laid out the
+three headers, so an archived sprint (which is `isFinished`) landed under "Finished" with
+the other two headers drawn empty above it — exactly the partitions the archive should not
+have.
+
+**The split is now done once, in the model.** `reload` builds one row per sprint and routes
+non-archived sprints into `inProgressRows` / `scheduledRows` / `finishedRows` and archived
+sprints into a single flat `archivedRows`. Archived is a terminal state, not a phase of a
+window being worked, so it is not partitioned. `currentSection` / `setSection` are removed:
+the picker is screen-local `remember` state, the way `ProjectBacklogScreen`'s segments
+already are, and changing segment is a recomposition rather than a read. Emptiness is per
+segment — `activeIsEmpty` and `archivedIsEmpty`, both `null` while loading — so one archived
+sprint no longer makes the Active section read as populated (the old single `isEmpty` counted
+it, then drew the archive blank). The screen renders the three partitioned sections for
+Active and `SprintSectionList(archivedRows)` with no headers for Archive, each branch with
+its own empty state.
+
+`SprintListModelTest` 13 → 14: `an archived sprint lives in the archive and leaves the active
+partitions empty`. Mutation-checked — forcing the `isArchived` branch false routes the sprint
+back into `finishedRows`, empties `archivedRows`, and turns the test red.
+
+**Also in this change.** `EmptySection`'s fixed `height(ttSpacing.xxxl)` left 8dp for body
+text after its 8dp vertical padding, clipping every placeholder; it now wraps its content.
+
+**Baseline.** Scoped, because the full deciding command cannot complete at this revision for
+a reason outside this change: `:shared-ui:compileTestKotlinJvm` is red at HEAD — its
+`commonTest` `FakeProjectRepository` predates the committed `archiveSprint`/`unarchiveSprint`
+port methods and never implemented them — and `feature-projects-data`'s `jvmTest` carries the
+documented `SeedingTest` ×3. `:packages:feature-projects-presentation:jvmTest` is green at 14
+in `SprintListModelTest`; `verifyArchitectureGraph`, `verifyModuleImports` and
+`:androidApp:compileDebugKotlin` are green.
+

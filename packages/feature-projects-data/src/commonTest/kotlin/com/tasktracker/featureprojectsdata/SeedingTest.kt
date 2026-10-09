@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.SprintStatus
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import kotlinx.coroutines.test.runTest
@@ -318,5 +319,61 @@ class SeedingTest {
         val history = harness.database.statusChangeDao().all()
         assertTrue(history.isNotEmpty())
         assertTrue(history.all { it.changedByUserID == userID })
+    }
+
+    @Test
+    fun geminiSeedsFourSprintsInFourStatusesWithExactlyOneInProgress() = runTest {
+        // One sprint per lifecycle status, and every window disjoint from every other — no
+        // two share an instant regardless of status. A finished sprint overlapping another
+        // finished one would still seed, but the fixture would teach that overlap is only a
+        // live-sprint problem; disjoint windows keep the seeded history unambiguous.
+        val harness = Harness()
+
+        harness.repository.seedSampleDataIfNeeded()
+
+        val project = harness.repository.projects(includeArchived = true).first { it.keyPrefix == "GEM" }
+        val sprints = harness.repository.sprints(project.id)
+        assertEquals(4, sprints.size, "Gemini seeds one sprint per status, got ${sprints.map { it.name }}")
+
+        val byName = sprints.associateBy { it.name }
+        val scheduled = assertNotNull(byName["Gemini Sprint 4"], "scheduled sprint")
+        val inProgress = assertNotNull(byName["Gemini Sprint 3"], "in-progress sprint")
+        val finished = assertNotNull(byName["Gemini Sprint 2"], "finished sprint")
+        val archived = assertNotNull(byName["Gemini Sprint 1"], "archived sprint")
+
+        val seedInstant = harness.clock.now()
+        assertEquals(SprintStatus.Scheduled, scheduled.statusAt(seedInstant))
+        assertEquals(SprintStatus.InProgress, inProgress.statusAt(seedInstant))
+        assertEquals(SprintStatus.Finished, finished.statusAt(seedInstant))
+        assertEquals(SprintStatus.Archived, archived.statusAt(seedInstant))
+        assertEquals(
+            listOf(SprintStatus.InProgress),
+            sprints.filter { it.statusAt(seedInstant) == SprintStatus.InProgress }
+                .map { it.statusAt(seedInstant) },
+            "exactly one seeded sprint is in progress",
+        )
+
+        val windows = sprints.map { it.startDate to it.endDate }
+        for ((i, a) in windows.withIndex()) {
+            for (b in windows.drop(i + 1)) {
+                assertFalse(
+                    a.first <= b.second && b.first <= a.second,
+                    "seeded windows must not share an instant: $a vs $b",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun seedingQueuesEverySprintRowItWrote() = runTest {
+        // Sprints go through the outbox like every other seeded row, so sample data is not a
+        // back door that stays local-only once a server is attached.
+        val harness = Harness()
+
+        harness.repository.seedSampleDataIfNeeded()
+
+        val sprints = harness.database.sprintDao().count()
+        assertTrue(sprints > 0)
+        assertEquals(sprints, harness.queued().count { it.entityKind == "sprint" })
     }
 }

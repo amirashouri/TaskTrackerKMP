@@ -85,6 +85,12 @@ class ProjectsUiIosTest {
     fun everyLaneIsStillDrawn() = runComposeUiTest(block = BoardLaneScenarios.everyLaneIsStillDrawn)
 
     @Test
+    fun aRunningSprintHidesEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.aRunningSprintHidesEveryLaneAdd)
+
+    @Test
+    fun kanbanKeepsEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.kanbanKeepsEveryLaneAdd)
+
+    @Test
     fun listsEveryProject() = runComposeUiTest(block = ProjectsListScenarios.listsEveryProject)
 
     @Test

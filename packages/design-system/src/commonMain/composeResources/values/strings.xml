@@ -341,6 +341,9 @@
     <string name="sprint_remove">Remove Sprint</string>
     <string name="sprint_remove_confirm">Remove this sprint?</string>
     <string name="sprint_remove_confirm_body">%1$s will be deleted. Its tasks will be returned to the backlog.</string>
+    <string name="sprint_section_in_progress">In Progress</string>
+    <string name="sprint_section_scheduled">Scheduled</string>
+    <string name="sprint_section_finished">Finished</string>
     <string name="sprint_status_scheduled">Scheduled</string>
     <string name="sprint_status_in_progress">In Progress</string>
     <string name="sprint_status_finished">Finished</string>

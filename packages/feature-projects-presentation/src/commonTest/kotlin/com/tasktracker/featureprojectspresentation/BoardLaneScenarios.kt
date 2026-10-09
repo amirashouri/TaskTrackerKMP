@@ -299,6 +299,41 @@ object BoardLaneScenarios {
             "and the last lane is off past the middle, i.e. the row really does scroll",
         )
     }
+
+    /**
+     * A running sprint hides every lane's "+" — adding mid-sprint is against the logic, and a
+     * task created this way would join the sprint's filtered board silently.
+     *
+     * Structural (no pixels): the property is the node's absence, which the semantics tree
+     * answers directly. Kanban (null sprint) and scheduled sprints keep the button.
+     */
+    val aRunningSprintHidesEveryLaneAdd: suspend ComposeUiTest.() -> Unit = {
+        // onAddTask is non-null on purpose: the lock must win even when a host wired the
+        // callback. A scenario with null here would pass with the gate inverted (!canAddTask),
+        // which the mutation check caught — Kanban went red, this stayed green.
+        boardShowing(onAddTask = {}, activeSprint = ViewPreviewData.openSprint, canAddTask = false)
+
+        WorkItemStatus.boardOrder.forEach { status ->
+            onAllNodesWithTag(BoardColumnAddTaskTag(status)).assertCountEquals(0)
+        }
+    }
+
+    /**
+     * Kanban keeps every lane's "+": with no sprint the board is open to new tasks and the
+     * added task lands on the same board it was created from.
+     *
+     * Existence rather than displayed: the lane row scrolls, so the far lanes exist but are
+     * off-viewport (the same reason `everyLaneIsStillDrawn` asserts bounds, not display, for
+     * the last lane). The lock is about presence — `assertCountEquals(0)` above vs exists
+     * here — not about scroll position.
+     */
+    val kanbanKeepsEveryLaneAdd: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(onAddTask = {}, canAddTask = true)
+
+        WorkItemStatus.boardOrder.forEach { status ->
+            onAllNodesWithTag(BoardColumnAddTaskTag(status)).assertCountEquals(1)
+        }
+    }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -306,6 +341,8 @@ private fun ComposeUiTest.boardShowing(
     projection: BoardProjection = ViewPreviewData.boardProjection(),
     onOpenSwitcher: (() -> Unit)? = null,
     activeSprint: Sprint? = null,
+    onAddTask: ((WorkItemStatus) -> Unit)? = null,
+    canAddTask: Boolean = true,
 ) {
     setContent {
         Themed {
@@ -320,6 +357,8 @@ private fun ComposeUiTest.boardShowing(
                 onDismissError = {},
                 onOpenSwitcher = onOpenSwitcher,
                 activeSprint = activeSprint,
+                onAddTask = onAddTask,
+                canAddTask = canAddTask,
             )
         }
     }

@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +25,11 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.domain.Project
@@ -35,6 +38,9 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_list_empty_body
 import com.tasktracker.resources.sprint_list_empty_title
 import com.tasktracker.resources.sprint_list_new
+import com.tasktracker.resources.sprint_section_finished
+import com.tasktracker.resources.sprint_section_in_progress
+import com.tasktracker.resources.sprint_section_scheduled
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -62,9 +68,12 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun SprintListScreen(
-    rows: List<SprintListRow>,
-    isLoading: Boolean,
-    isEmpty: Boolean?,
+    inProgressRows: List<SprintListRow>,
+    scheduledRows: List<SprintListRow>,
+    finishedRows: List<SprintListRow>,
+    archivedRows: List<SprintListRow>,
+    activeIsEmpty: Boolean?,
+    archivedIsEmpty: Boolean?,
     errorMessage: String?,
     project: Project? = null,
     onOpen: (SprintID) -> Unit,
@@ -73,8 +82,6 @@ fun SprintListScreen(
     onOpenSwitcher: (() -> Unit)? = null,
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
-    currentSection: SprintSection = SprintSection.Active,
-    onSectionChanged: (SprintSection) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -115,15 +122,11 @@ fun SprintListScreen(
             errorMessage?.let { message ->
                 ttBanner(message = message, onDismiss = onDismissError)
             }
-            var localSection by remember { mutableStateOf(currentSection) }
-            LaunchedEffect(currentSection) { localSection = currentSection }
+            var section by remember { mutableStateOf(SprintSection.Active) }
             TTGlassSegmentedPicker(
                 options = listOf(SprintSection.Active, SprintSection.Archived),
-                selection = localSection,
-                onSelect = { section ->
-                    localSection = section
-                    onSectionChanged(section)
-                },
+                selection = section,
+                onSelect = { section = it },
                 modifier = Modifier.fillMaxWidth(),
                 title = { option ->
                     when (option) {
@@ -132,26 +135,52 @@ fun SprintListScreen(
                     }
                 },
             )
-            when {
+            // Active is the three partitions of a sprint's window; Archive is one flat list.
+            // The picker only chooses between the two, and the switch is screen-local state
+            // rather than a reload — the model already holds both, so changing segment must
+            // not re-read the store.
+            when (section) {
                 // `null` is still loading, and it is kept distinct from `true` because a
                 // screen that claimed "no sprints" during the first read would flash an
                 // empty state over a populated list on every cold start.
-                isEmpty == true -> ProjectsEmptyState(
-                    title = stringResource(Res.string.sprint_list_empty_title),
-                    body = stringResource(Res.string.sprint_list_empty_body),
-                )
-
-                else -> LazyColumn(
-                    modifier = Modifier.testTag(SprintListTag),
-                    contentPadding = PaddingValues(bottom = ttSpacing.xxxl),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                ) {
-                    items(items = rows, key = { it.sprint.id.stringValue }) { row ->
-                        SprintListRowView(
-                            row = row,
-                            onClick = { onOpen(row.sprint.id) },
+                SprintSection.Active -> if (activeIsEmpty == true) {
+                    ProjectsEmptyState(
+                        title = stringResource(Res.string.sprint_list_empty_title),
+                        body = stringResource(Res.string.sprint_list_empty_body),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                    ) {
+                        InProgressSection(
+                            rows = inProgressRows,
+                            onOpen = onOpen,
+                        )
+                        ScheduledSection(
+                            rows = scheduledRows,
+                            onOpen = onOpen,
+                        )
+                        FinishedSection(
+                            rows = finishedRows,
+                            onOpen = onOpen,
                         )
                     }
+                }
+
+                // No headers here: archived sprints are filed away, not "scheduled",
+                // "in progress" or "finished" — see `SprintListModel.archivedRows`.
+                SprintSection.Archived -> if (archivedIsEmpty == true) {
+                    ProjectsEmptyState(
+                        title = stringResource(Res.string.sprint_list_empty_title),
+                        body = stringResource(Res.string.sprint_list_empty_body),
+                    )
+                } else {
+                    SprintSectionList(
+                        rows = archivedRows,
+                        onOpen = onOpen,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
@@ -162,6 +191,139 @@ fun SprintListScreen(
 const val SprintListScreenTag = "sprints.list"
 const val SprintListTag = "sprints.list.rows"
 const val SprintListNewTag = "sprints.list.new"
+
+// ---------------------------------------------------------------------------------------------
+// Section helpers
+// ---------------------------------------------------------------------------------------------
+
+/** A section header with a label and the count of items in it. */
+@Composable
+private fun SprintSectionHeader(
+    label: String,
+    count: Int,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = ttSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        ttText(
+            text = label,
+            style = ttTypography.subheadlineSelected,
+            color = ttLabel(),
+        )
+        ttText(
+            text = "($count)",
+            style = ttTypography.captionSmall,
+            color = ttLabelSecondary(),
+        )
+    }
+}
+
+/** An empty section placeholder. */
+@Composable
+private fun EmptySection(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = ttSpacing.xxl),
+        contentAlignment = Alignment.Center,
+    ) {
+        ttText(
+            text = title,
+            style = ttTypography.body,
+            color = ttLabelSecondary(),
+        )
+    }
+}
+
+/** A section's list of sprint rows. */
+@Composable
+private fun SprintSectionList(
+    rows: List<SprintListRow>,
+    onOpen: (SprintID) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier
+            .testTag(SprintListTag),
+        contentPadding = PaddingValues(bottom = ttSpacing.xxxl),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+    ) {
+        items(items = rows, key = { it.sprint.id.stringValue }) { row ->
+            SprintListRowView(
+                row = row,
+                onClick = { onOpen(row.sprint.id) },
+            )
+        }
+    }
+}
+
+/** The in-progress section: started sprints still under way. */
+@Composable
+private fun InProgressSection(
+    rows: List<SprintListRow>,
+    onOpen: (SprintID) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        SprintSectionHeader(
+            label = stringResource(Res.string.sprint_section_in_progress),
+            count = rows.size,
+        )
+        if (rows.isEmpty()) {
+            EmptySection(title = stringResource(Res.string.sprint_section_in_progress))
+        } else {
+            SprintSectionList(rows = rows, onOpen = onOpen)
+        }
+    }
+}
+
+/** The scheduled section: future sprints not yet started. */
+@Composable
+private fun ScheduledSection(
+    rows: List<SprintListRow>,
+    onOpen: (SprintID) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        SprintSectionHeader(
+            label = stringResource(Res.string.sprint_section_scheduled),
+            count = rows.size,
+        )
+        if (rows.isEmpty()) {
+            EmptySection(title = stringResource(Res.string.sprint_section_scheduled))
+        } else {
+            SprintSectionList(rows = rows, onOpen = onOpen)
+        }
+    }
+}
+
+/** The finished section: closed sprints with their summaries. */
+@Composable
+private fun FinishedSection(
+    rows: List<SprintListRow>,
+    onOpen: (SprintID) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        SprintSectionHeader(
+            label = stringResource(Res.string.sprint_section_finished),
+            count = rows.size,
+        )
+        if (rows.isEmpty()) {
+            EmptySection(title = stringResource(Res.string.sprint_section_finished))
+        } else {
+            SprintSectionList(rows = rows, onOpen = onOpen)
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // Previews
@@ -185,13 +347,26 @@ private fun previewSprintRows(): List<SprintListRow> {
     }
 }
 
+/** Categorise preview rows into the three sections. */
+private fun previewSectionedRows(): Triple<List<SprintListRow>, List<SprintListRow>, List<SprintListRow>> {
+    val allRows = previewSprintRows()
+    val inProgress = allRows.filter { !it.sprint.isFinished && it.sprint.startDate <= ViewPreviewData.instant }
+    val scheduled = allRows.filter { !it.sprint.isFinished && it.sprint.startDate > ViewPreviewData.instant }
+    val finished = allRows.filter { it.sprint.isFinished }
+    return Triple(inProgress, scheduled, finished)
+}
+
 @Preview(name = "Sprint list", showBackground = true, widthDp = 380, heightDp = 720)
 @Composable
 private fun SprintListScreenPreview() = ProjectsPreview(ThemeScheme.Light) {
+    val (inProgress, scheduled, finished) = previewSectionedRows()
     SprintListScreen(
-        rows = previewSprintRows(),
-        isLoading = false,
-        isEmpty = false,
+        inProgressRows = inProgress,
+        scheduledRows = scheduled,
+        finishedRows = finished,
+        archivedRows = emptyList(),
+        activeIsEmpty = false,
+        archivedIsEmpty = true,
         errorMessage = null,
         onOpen = {},
         onNewSprint = {},
@@ -203,9 +378,12 @@ private fun SprintListScreenPreview() = ProjectsPreview(ThemeScheme.Light) {
 @Composable
 private fun SprintListScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Dark) {
     SprintListScreen(
-        rows = emptyList(),
-        isLoading = false,
-        isEmpty = true,
+        inProgressRows = emptyList(),
+        scheduledRows = emptyList(),
+        finishedRows = emptyList(),
+        archivedRows = emptyList(),
+        activeIsEmpty = true,
+        archivedIsEmpty = true,
         errorMessage = null,
         onOpen = {},
         onNewSprint = {},

@@ -7,6 +7,7 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintStatus
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
@@ -62,6 +63,17 @@ class ProjectBoardModel(
     var activeSprint: Sprint? by mutableStateOf(null)
         private set
 
+    /**
+     * Whether lane-add is locked because a sprint is in progress.
+     *
+     * True only when [activeSprint]'s [Sprint.statusAt] is [SprintStatus.InProgress] on the
+     * model's clock: a scheduled (future) sprint does not own the board yet, Kanban (null)
+     * never does, and a finished/archived one is history. The screen hides the column "+"
+     * while this holds; the backlog/sprint pickers stay the way tasks join a running sprint.
+     */
+    var addsLocked: Boolean by mutableStateOf(false)
+        private set
+
     private var rawItems: List<WorkItem> = emptyList()
 
     /** Whether to show only tasks assigned to the current user. */
@@ -112,6 +124,7 @@ class ProjectBoardModel(
         val now = dateProvider.now()
         activeSprint = sprints.firstOrNull { !it.isFinished && it.isActiveOn(now) }
             ?: sprints.firstOrNull { !it.isFinished }
+        addsLocked = activeSprint?.statusAt(now) == SprintStatus.InProgress
 
         projection = BoardProjection(
             project = project,

@@ -304,6 +304,70 @@ class ProjectBoardModelTest {
     }
 
     @Test
+    fun `adds are locked while a sprint is in progress`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+        repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 10,
+            startDate = now - 1.days,
+            endDate = now + 1.days,
+            owner = null,
+            now = now,
+        )
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertNotNull(model.activeSprint, "an in-window sprint is the board's active sprint")
+        assertTrue(model.addsLocked, "an InProgress sprint locks lane-add on the board")
+    }
+
+    @Test
+    fun `adds stay open for a scheduled sprint and for kanban`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+        // Scheduled: the window has not opened, so the board is not owned by the sprint yet.
+        repository.createSprint(
+            projectID = project.id,
+            name = "Sprint future",
+            goalStoryPoints = 10,
+            startDate = now + 5.days,
+            endDate = now + 12.days,
+            owner = null,
+            now = now,
+        )
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertNotNull(model.activeSprint)
+        assertFalse(model.addsLocked, "a scheduled sprint must keep lane-add open")
+    }
+
+    @Test
+    fun `adds stay open when no sprint exists`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertNull(model.activeSprint)
+        assertFalse(model.addsLocked, "kanban is always open to new tasks")
+    }
+
+    @Test
     fun `the board falls back to all project work items when no active sprint exists`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()

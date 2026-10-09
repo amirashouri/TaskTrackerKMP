@@ -149,6 +149,45 @@ object SampleData {
                 ProjectSeed.Item("Handle revoked notification permission", status = WorkItemStatus.Todo, priority = Priority.Medium),
                 ProjectSeed.Item("Add an in-app notification inbox", status = WorkItemStatus.Todo, priority = Priority.High),
             ),
+            // One sprint per status, and every window disjoint from every other — no two share
+            // an instant regardless of status. The finished/archived flags alone would already
+            // keep the stores from refusing each other, but a fixture whose finished sprints
+            // overlap teaches that overlap is only a live-sprint problem; disjoint windows keep
+            // the seeded history unambiguous too. Offsets, not dates, so the statuses hold at
+            // any install time: InProgress always contains the seed instant.
+            sprints = listOf(
+                ProjectSeed.SprintSeed(
+                    name = "Gemini Sprint 3",
+                    goalStoryPoints = 13,
+                    goal = "Notification inbox and preferences.",
+                    startsInDays = -7,
+                    endsInDays = 7,
+                    owner = "Amir",
+                ),
+                ProjectSeed.SprintSeed(
+                    name = "Gemini Sprint 4",
+                    goalStoryPoints = 8,
+                    goal = "Quiet hours and reminders.",
+                    startsInDays = 30,
+                    endsInDays = 44,
+                    owner = "Amir",
+                ),
+                ProjectSeed.SprintSeed(
+                    name = "Gemini Sprint 2",
+                    goalStoryPoints = 10,
+                    startsInDays = -44,
+                    endsInDays = -30,
+                    isFinished = true,
+                ),
+                ProjectSeed.SprintSeed(
+                    name = "Gemini Sprint 1",
+                    goalStoryPoints = 5,
+                    startsInDays = -74,
+                    endsInDays = -60,
+                    isFinished = true,
+                    isArchived = true,
+                ),
+            ),
         ),
         ProjectSeed(
             keyPrefix = "ORI",
@@ -204,6 +243,7 @@ class ProjectSeed(
     val name: String,
     val details: String = "",
     val items: List<Item> = emptyList(),
+    val sprints: List<SprintSeed> = emptyList(),
 ) {
 
     /**
@@ -230,5 +270,28 @@ class ProjectSeed(
         val assignee: String? = null,
         val dueInDays: Int? = null,
         val rank: Int = 0,
+    )
+
+    /**
+     * One seeded sprint.
+     *
+     * Windows are day offsets from the seeding instant, for the same reason
+     * [Item.dueInDays] is: a fixture with fixed dates has a different status every month it
+     * is installed in. Offsets keep the seeded statuses stable — the InProgress window always
+     * contains the seed instant, the Scheduled one always starts after it, and the two
+     * finished ones always ended before it.
+     *
+     * @param startsInDays first day of the window, relative to the seeding instant.
+     * @param endsInDays last day, inclusive, relative to the seeding instant.
+     */
+    class SprintSeed(
+        val name: String,
+        val goalStoryPoints: Int = 0,
+        val goal: String? = null,
+        val startsInDays: Int,
+        val endsInDays: Int,
+        val owner: String? = null,
+        val isFinished: Boolean = false,
+        val isArchived: Boolean = false,
     )
 }
