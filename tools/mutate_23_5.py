@@ -55,7 +55,7 @@ DESIGN_SYSTEM = (
     "packages/design-system/build/test-results/jvmTest",
 )
 
-# Red before this phase and red on purpose (PLAN.md, Phase 22). Never evidence of
+# Red before this phase and red on purpose (docs/PORT-LOG.md, Phase 22). Never evidence of
 # anything, and counting them would make every mutation look caught.
 PRE_EXISTING = (
     "a caption on the rendered glass fill still clears the large-text bar",

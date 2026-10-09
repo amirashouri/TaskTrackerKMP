@@ -35,7 +35,7 @@ import kotlin.test.assertTrue
  * about what could be typed and full ink makes an empty field look filled. And the ~50
  * `ttLabelSecondary` calls that sit on **glass** are untouched: over a glass card that token
  * measures **2.81:1** in light, which is a real defect, but fixing it needs rendered pixels on
- * both rasterisers (`PLAN.md` 19.9) and swapping in full ink across every caption would flatten
+ * both rasterisers (`docs/PORT-LOG.md` 19.9) and swapping in full ink across every caption would flatten
  * a deliberate hierarchy rather than fix a number.
  */
 class BodyLabelContrastTest {

@@ -1,8 +1,9 @@
 # Project.md
 
-How this project is built, run, and verified. Companion to [`PLAN.md`](PLAN.md), which is the
+How this project is built, run, and verified. Companion to [`docs/DECISIONS.md`](docs/DECISIONS.md), which is the
 design record — why each decision was made. This file is the short operational answer to "how do
-I build and run this, and what will bite me".
+I build and run this, and what will bite me". The finished port log is frozen at
+[`docs/PORT-LOG.md`](docs/PORT-LOG.md).
 
 ---
 
@@ -131,9 +132,9 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1088 tests, 5 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1067 tests, 5 failed** (same 5) |
-| Android host | `testAndroidHostTest` | Robolectric; **853 tests, 17 failed** — all layout, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1089 tests, 5 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1068 tests, 5 failed** (same 5) |
+| Android host | `testAndroidHostTest` | Robolectric; **854 tests, 17 failed** — all layout, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. `commonTest` holds
@@ -141,7 +142,7 @@ Those totals are measured from the JUnit XML, per module and de-duplicated acros
 
 The 5 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`) and
 `aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList` (`:shared-ui`). All were failing
-before this section existed and none is caused by it — see `PLAN.md`, "test-count baseline".
+before this section existed and none is caused by it — see `docs/DECISIONS.md`, measurement lore.
 
 The 17 on the Android host are all Compose layout failures, not behaviour: Robolectric's default
 viewport is far smaller, so content inside a `LazyColumn` or a `horizontalScroll` row exists but
@@ -258,7 +259,7 @@ to one host ships a defect to the other. `tools/inspect_frame.py` reads a PNG wi
 dependencies and prints geometry, contrast, and an ASCII map.
 
 Rendered pixel assertions belong in a test whose name says what is being measured. See
-`PLAN.md` §16 for a case where the assertion looked reasonable and encoded the defect as correct.
+`docs/DECISIONS.md` measurement lore for a case where the assertion looked reasonable and encoded the defect as correct.
 
 ---
 
@@ -536,7 +537,7 @@ would publish a session that does not survive a relaunch, and step 5 is delibera
 Steps 3 and 7 are the two invariants the whole design rests on: one transaction writes the record
 and its outbox row, and a pull never enqueues. A two-step write in step 3 leaves a crash window
 where an edit exists with nothing queued; a queuing sink in step 7 makes every pull generate a
-push, forever. Both are on the non-negotiable list in `PLAN.md`.
+push, forever. Both are on the non-negotiable list in `docs/DECISIONS.md`.
 
 ### Ending a session
 

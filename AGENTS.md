@@ -2,8 +2,8 @@
 
 Agent instructions for this repository. Read this before running anything.
 
-`PLAN.md` is the project's design record — 2700 lines of phase history, decisions, and
-measured justifications. It is the source of truth for *why* things are the way they are.
+`docs/DECISIONS.md` is the design record — the curated why behind every rule here. The
+finished port log is frozen at `docs/PORT-LOG.md` and is archaeology, not instructions.
 This file is the short version of *how to work here* and points at the rest.
 
 ## Setup
@@ -69,9 +69,8 @@ The two modules that reported no executions before are now fixed: `WorkItemCardS
 `:shared-ui` was also uncompilable until recently — `ShellPreferences.currentUserName` was a
 non-suspend `val` whose getter called the `suspend` `UserDefaultsStore.value(DefaultsKey)`. It is
 now a `StateFlow` refreshed when the router root becomes `Main`, so the module compiles and its 49
-JVM / 47 iOS tests run; see PLAN.md §20.10 and Phase 24.4 (its backlog section scenarios moved
-here and its host registration was re-aligned to the canonical 13-method mapping). §20.10 also
-records a known **coverage gap**: no
+JVM / 47 iOS tests run; see the finished port log (`docs/PORT-LOG.md` Phases 20/24) for the
+full history. There is a known **coverage gap**: no
 scenario seeds a `CachedProfile` and asserts the board filter, so deleting the refresh call leaves
 the suite byte-identical. Do not read `:shared-ui` being green as evidence that filter works.
 
@@ -175,7 +174,7 @@ assertion you wrote:
 4. Restore the fix. Run again. Green.
 
 If step 3 is green, the test is not measuring what you fixed. Throw it away and write a
-different one. PLAN.md records 23 mutations run and 23 caught, and specifically two that
+different one. `docs/DECISIONS.md` records 23 mutations run and 23 caught, and specifically two that
 were missed on the first pass — both because the *test* was at fault.
 
 Write the failure message as part of the test. Put the measured number and both colours in
@@ -250,8 +249,8 @@ is the whole contract.
 - **Comments explain why, and carry the measurement.** This house style is not decoration;
   a change to a non-obvious value is expected to arrive with the number that justifies it.
   Routine tuning does not need a paragraph.
-- **`PLAN.md` is updated in the same change as any test addition**, including the test-count
-  baseline. It says so twice and has been wrong three times. Counts come from the JUnit XML
+- **`Project.md` test-count baseline is updated in the same change as any test addition**.
+  It says so twice and has been wrong three times. Counts come from the JUnit XML
   the build writes, cross-checked against `@Test` in the source — never from `grep -c`
   alone, which over-counts because KDoc mentions the string in backticks.
 - **`NavigationHost.kt` and most of `shared-ui` are untracked.** Git cannot recover an

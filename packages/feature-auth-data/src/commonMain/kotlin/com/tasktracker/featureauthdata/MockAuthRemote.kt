@@ -45,7 +45,7 @@ import kotlin.uuid.Uuid
  *
  * The one thing a reader must not do is reach for this type directly. When the root gains its
  * build-mode switch, this becomes unreachable from a release root the same day — noted in
- * `PLAN.md` under the phase that wires the root, so the decision is not left implicit here.
+ * `docs/PORT-LOG.md` under the phase that wires the root, so the decision is not left implicit here.
  */
 class MockAuthRemote(
     private val dateProvider: DateProvider,

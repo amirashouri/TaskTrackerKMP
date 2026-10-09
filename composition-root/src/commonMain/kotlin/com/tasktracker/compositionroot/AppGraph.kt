@@ -224,7 +224,7 @@ object AppGraph {
         // "a release build must never be handed this instead of `HttpAuthRemote`", and the
         // enforcement point is this `if`, not the class's source set. Until there is a base
         // URL to configure there is nothing to switch between, so a switch would be a
-        // constant with a misleading name. See `PLAN.md`, Phase 13.
+        // constant with a misleading name. See `docs/PORT-LOG.md`, Phase 13.
         app<AuthRemotePort> { resolver ->
             MockAuthRemote(dateProvider = resolver.resolve(DateProvider::class))
         }

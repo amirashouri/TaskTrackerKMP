@@ -57,7 +57,7 @@ SHARED = (
 )
 
 # Red before this phase and red on purpose, or documented as pre-existing. Never evidence of
-# anything, and counting them would make every mutation look caught (PLAN.md).
+# anything, and counting them would make every mutation look caught (docs/PORT-LOG.md).
 PRE_EXISTING = (
     "a caption on the rendered glass fill still clears the large-text bar",
     "the hairline reads as a lit edge in light",

@@ -130,7 +130,7 @@ plugins.withId("tasktracker.kmp.library") {
  *     composeResources/com.tasktracker.resources/values/strings.commonMain.cvr
  *
  * 61 of them, across the four modules whose tests compose UI. It is not a test bug: the same
- * missing asset crashed the shipped app on its first frame (see PLAN.md, Phase 12), and
+ * missing asset crashed the shipped app on its first frame (see docs/PORT-LOG.md, Phase 12), and
  * `:androidApp` was fixed by hand. This is that same fix, applied to the test hosts.
  *
  * ## Why it has to be a copy, and not a source directory

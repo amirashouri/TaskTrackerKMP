@@ -88,4 +88,8 @@ class SettingsViewIosTest {
     @Test
     fun theLongAccentCaptionWrapsInsteadOfClipping() =
         runComposeUiTest(block = ThemeOptionScenarios.theLongAccentCaptionWrapsInsteadOfClipping)
+
+    @Test
+    fun theSelectedAccentSwatchCarriesTheGlassLens() =
+        runComposeUiTest(block = AccentSwatchScenarios.theSelectedAccentSwatchCarriesTheGlassLens)
 }

@@ -9,7 +9,7 @@ went red, "rejected at compile time" means the type system refused the defect be
 ran, and "nothing ran" means something else went wrong and the result is not evidence of
 anything.
 
-`GlassSurfacePixelTest` has two tests that are red *by design* on every run (PLAN.md, Phase
+`GlassSurfacePixelTest` has two tests that are red *by design* on every run (docs/PORT-LOG.md, Phase
 22). They are excluded from the caught/not-caught comparison by name, because counting them
 would make every mutation look caught and the table meaningless -- the same failure mode 23.1
 and 23.3 hit twice.

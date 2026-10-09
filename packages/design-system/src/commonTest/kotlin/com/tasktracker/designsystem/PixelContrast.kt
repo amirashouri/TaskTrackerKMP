@@ -55,7 +55,7 @@ import kotlin.math.round
  * A composite is not a measurement. `over` builds the colour a translucent token *would* make
  * against a known background, which is legitimate for **building the frame to render** and
  * for **cross-checking a rendered reading**. It is not an answer to "can this be read", and
- * `AGENTS.md` rule 2's reason is that the model is not the compositor: `PLAN.md` Phase 19
+ * `AGENTS.md` rule 2's reason is that the model is not the compositor: `docs/PORT-LOG.md` Phase 19
  * modelled `ttLabelSecondary` over a glass card at 2.81:1 and the two rasterisers both
  * reported 2.88:1, and modelled the hairline at 1.08:1 against a rendered 1.07:1. The model
  * was *close*, and being close is what made it believable — but both defects were repaired

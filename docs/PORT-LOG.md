@@ -1,6 +1,11 @@
-# TaskTrackerKMP — Port Plan
+# TaskTrackerKMP — Port Plan (ARCHIVED)
 
-Resumable task list for porting `/Users/amirreza/Desktop/SampleProjects/TaskTracker`
+> **Frozen October 2026.** The port is done; this file no longer changes. Living rules
+> were curated into [`DECISIONS.md`](DECISIONS.md) — read that, not this. Kept whole
+> because phase history explains *why* a line is the way it is, and archaeology needs
+> the unedited record. Do not add phases, tick boxes, or update counts here.
+>
+> Resumable task list for porting `/Users/amirreza/Desktop/SampleProjects/TaskTracker`
 (SwiftUI/SwiftData, 165 files, 13 SwiftPM packages, 395 unit + 10 UI tests) to
 Kotlin Multiplatform.
 

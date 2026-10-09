@@ -196,7 +196,7 @@ object ttGlass {
      * How far a disabled control is dimmed, from `.opacity(isEnabled ? 1 : 0.4)`.
      *
      * The same value `PrimaryButton` uses, and deliberately not raised: the disabled figure in
-     * `PLAN.md`'s measurement table is 2.08–2.15:1, and it is left there because a control
+     * `docs/PORT-LOG.md`'s measurement table is 2.08–2.15:1, and it is left there because a control
      * the user cannot press *should* read as less available. Buying back its contrast would be
      * buying back the state the dim is communicating.
      *
@@ -264,6 +264,27 @@ object ttGlass {
      * perimeter, not behind any glyph, so this costs the label nothing.
      */
     const val TAB_LENS_RIM_ALPHA: Float = 0.45f
+
+    /**
+     * The lens over a *solid, saturated* fill: the theme swatch's glass sheen.
+     *
+     * More than three times [TAB_LENS_ALPHA], and the reason is the backdrop. The tab lens is
+     * a hint because it sits on a fill that is already [FILL_ALPHA] of white and *under an
+     * accent label* whose contrast margin the wash spends. A palette swatch has neither: it is
+     * a flat, fully saturated fill, and the lens is the only thing on it, so the wash has to
+     * carry the whole "this is glass" reading rather than confirm one. At [TAB_LENS_ALPHA] the
+     * selected swatch measured only a 1.15:1 top-to-bottom lift — a sheen a person cannot see,
+     * which is the defect this value exists to fix. `AccentSwatchScenarios` holds the measured
+     * lift on both rasterisers.
+     */
+    const val SOLID_LENS_ALPHA: Float = 0.45f
+
+    /**
+     * The rim for [SOLID_LENS_ALPHA], stronger than [TAB_LENS_RIM_ALPHA] for the same reason:
+     * over a saturated fill the tab-strength rim muddies toward the fill's hue and stops
+     * reading as a raised glass edge.
+     */
+    const val SOLID_LENS_RIM_ALPHA: Float = 0.6f
 
     /**
      * How much wider the lens gets at the peak of its travel, as a fraction of its resting
@@ -491,6 +512,61 @@ fun Modifier.ttGlassSurface(
 }
 
 /**
+ * The selection lens, as a modifier over whatever fill the node already paints.
+ *
+ * This is the shared half of the treatment [TTGlassSegmentedPicker], [TTGlassFlowPicker] and the
+ * theme colour picker put on their selected item. The parts that move — the segment bounds, the
+ * tab bar's travel and stretch — stay with those components; the wash-and-rim pair itself is one
+ * object, so a new selected state cannot drift into drawing a differently-lit lens.
+ *
+ * It is a plain translucent wash plus a rim rather than a [ttGlassSurface], deliberately: the
+ * pickers already sit inside a glass slab, and a second [ttGlassSurface] would stack two full
+ * fill ramps and two borders. [ttGlass.TAB_LENS_ALPHA] and [ttGlass.TAB_LENS_RIM_ALPHA] carry
+ * the measurements for both stops. The wash scales with [LocalGlassIntensity], so an opaque
+ * appearance has no dome to catch it.
+ *
+ * [washAlpha] and [rimAlpha] default to that tab-lens pair. A caller placing the lens over a
+ * *solid, saturated* fill instead — where there is no glass slab to carry the light and no
+ * label to protect — raises them to [ttGlass.SOLID_LENS_ALPHA] and
+ * [ttGlass.SOLID_LENS_RIM_ALPHA]; see those for why.
+ *
+ * The wash is clipped to [shape]; the rim is not, because `border` draws its own outline. That
+ * is the same arrangement the tab bar's lens uses, and it is what keeps a rectangle wearing a
+ * capsule's outline from ever reappearing (see the measurement in `TabBar.kt`'s `TabLens`).
+ */
+@Composable
+fun Modifier.ttGlassLens(
+    shape: Shape,
+    washAlpha: Float = ttGlass.TAB_LENS_ALPHA,
+    rimAlpha: Float = ttGlass.TAB_LENS_RIM_ALPHA,
+): Modifier {
+    val intensity = LocalGlassIntensity.current
+    return this
+        .clip(shape)
+        .drawBehind {
+            // `endY` spelled out for the reason documented on `ttGlassSurface`: an unbounded
+            // `Brush.verticalGradient` collapses onto its last stop, and this element's height
+            // is not known when the brush is built.
+            val lensAlpha = washAlpha * intensity.coerceIn(0f, 1f)
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = lensAlpha),
+                        Color.White.copy(alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE)),
+                    ),
+                    startY = 0f,
+                    endY = size.height,
+                ),
+            )
+        }
+        .border(
+            width = ttGlass.hairlineWidth,
+            color = Color.White.copy(alpha = rimAlpha),
+            shape = shape,
+        )
+}
+
+/**
  * A glass card, for content that floats over a scrolling surface.
  *
  * The original's only real consumer was the work item card, at
@@ -560,7 +636,6 @@ fun <Option> TTGlassSegmentedPicker(
         label = "segmentLensHeight",
     )
 
-    val intensity = LocalGlassIntensity.current
     val lensShape = RoundedCornerShape(ttRadius.control)
 
     Box(
@@ -612,23 +687,7 @@ fun <Option> TTGlassSegmentedPicker(
                 modifier = Modifier
                     .size(lensWidth, lensHeight)
                     .offset(x = lensX, y = lensY)
-                    .clip(lensShape)
-                    .drawBehind {
-                        val lensAlpha = ttGlass.TAB_LENS_ALPHA * intensity.coerceIn(0f, 1f)
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.White.copy(alpha = lensAlpha),
-                                    Color.White.copy(alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE)),
-                                ),
-                            ),
-                        )
-                    }
-                    .border(
-                        width = ttGlass.hairlineWidth,
-                        color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
-                        shape = lensShape,
-                    ),
+                    .ttGlassLens(lensShape),
             )
         }
     }
@@ -652,7 +711,6 @@ fun <Option> TTGlassFlowPicker(
 ) {
     val accent = ttAccent()
     val canvas = ttCanvas()
-    val intensity = LocalGlassIntensity.current
     val density = LocalDensity.current
     val positions = remember { mutableStateMapOf<Option, IntRect>() }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -690,34 +748,11 @@ fun <Option> TTGlassFlowPicker(
             .onGloballyPositioned { containerCoordinates = it },
     ) {
         if (selectedBounds != null) {
-Box(
-        modifier = Modifier
-            .offset(x = lensX, y = lensY)
-            .size(lensWidth, lensHeight)
-            .clip(CircleShape)
-            .drawBehind {
-                // The lens over the selected tab is scaled by the glass intensity as a whole,
-                // not resolved through a `ttGlass*` accessor, because it is a bare `drawBehind`
-                // rather than a `ttGlassSurface` — there is no fill under it to cross-fade from.
-                // What it shares is the reason the wash goes to nothing at `0f`: it is light
-                // catching a dome, and an opaque tab bar has no dome to catch it.
-                val lensAlpha = ttGlass.TAB_LENS_ALPHA * intensity.coerceIn(0f, 1f)
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = lensAlpha),
-                            Color.White.copy(
-                                alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE),
-                            ),
-                        ),
-                    ),
-                        )
-                    }
-                    .border(
-                        width = ttGlass.hairlineWidth,
-                        color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
-                        shape = CircleShape,
-                    ),
+            Box(
+                modifier = Modifier
+                    .offset(x = lensX, y = lensY)
+                    .size(lensWidth, lensHeight)
+                    .ttGlassLens(CircleShape),
             )
         }
 
@@ -867,7 +902,7 @@ data class TTGlassButtonStyle(
  * belongs with.
  *
  * The dim is [ttGlass.DISABLED_ALPHA] over the whole control, label included. The original's
- * `.opacity(isEnabled ? 1 : 0.4)` did the same, and the measurement in `PLAN.md` records
+ * `.opacity(isEnabled ? 1 : 0.4)` did the same, and the measurement in `docs/PORT-LOG.md` records
  * why the dim is kept: a disabled control is *supposed* to look less available, so buying
  * back contrast on it is buying back the thing the state is communicating.
  */
@@ -956,7 +991,7 @@ fun ttGlassButton(
  *
  * **Unused.** It was written for a floating create action no screen ended up needing, and it is
  * the one component in this package with zero call sites and zero tests. Kept for now because the
- * affordance is plausible; see `PLAN.md` Phase 19. If the next screen that wants a floating
+ * affordance is plausible; see `docs/PORT-LOG.md` Phase 19. If the next screen that wants a floating
  * create does not reach for it, it should go rather than sit here reading as available.
  */
 @Composable

@@ -23,7 +23,7 @@ options:
 # project.pbxproj that the next `xcodegen generate` silently discards. The original
 # project records the same lesson at project.yml:10-15.
 fileGroups:
-  - ../PLAN.md
+  - ../docs/DECISIONS.md
   - project.yml
 
 targets:

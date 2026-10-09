@@ -33,7 +33,7 @@ import androidx.compose.ui.graphics.Color
  * `DefaultsKey` is session-scoped state: sign-out walks the enum and clears it, which is
  * right for `LastSeenProject` and `CachedProfile`. An appearance choice is a property of
  * the device, not of the account, so it is stored through the store's un-enummed
- * overloads and survives by construction. `PLAN.md` records the same reasoning in the
+ * overloads and survives by construction. `docs/PORT-LOG.md` records the same reasoning in the
  * original's own terms.
  */
 enum class ThemeScheme(val wireValue: String, val title: String) {

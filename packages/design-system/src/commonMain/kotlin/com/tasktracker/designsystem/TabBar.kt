@@ -32,7 +32,6 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -121,54 +120,13 @@ fun <Tab> TTGlassTabBar(
 
     val accent = ttAccent()
 
-    // The selected tab's colour is the one thing on this bar that is *not* the same token in
-    // both appearances, and the reason is arithmetic rather than taste.
-    //
-    // Measured off the rendered frames by `TabLensContrastTest`, which is where these numbers
-    // come from and where they are held. Light is the accent at 4.61:1 and clears the 4.5:1 that
-    // normal text needs, though not by a lot — it is the thinnest margin on this bar, and
-    // darkening the accent or cooling the fill would eat into it. Dark as the accent measures
-    // 2.83:1 and fails. `TaskTrackerAccent.Dark` is documented as clearing 5.65:1 *against
-    // white*; this bar is not white in dark appearance, so using it here was the same class of
-    // mistake `GlassFillContrastTest` documents for the sign-in button — a correct token in the
-    // wrong compositing.
-    //
-    // A stronger lens was the other candidate and it is a dead end: the caption is below the
-    // lens, so no amount of extra wash reaches it, and the alpha that *would* have reached it
-    // turns the lens into an opaque white pill. Changing the glyph's colour is the fix that
-    // costs the design nothing, and `ttLabel` on this bar measures 14.41:1.
-    //
-    // Light is the accent too, darkened a fifth of the way toward the label rather than used
-    // raw. The unmodified accent clears the threshold on the JVM and misses it on iOS, and the
-    // reason is the rasteriser rather than the token: a caption-sized stroke reaches full
-    // coverage on one and about 85% on the other, and a stroke that is 85% covered is a
-    // lighter ink than the colour it was drawn with. The same token on the same backdrop
-    // measures 5.37:1 on the JVM and 3.98:1 on iOS. Darkening keeps the accent's hue - it is
-    // still recognisably the accent, just a shade deeper - and clears 4.5:1 on both, at 6.97:1
-    // and 4.95:1. Mixing rather than substituting is the point: the accent everywhere else in
-    // the app is untouched.
-    val selectedInk =
-        if (ttIsDarkTheme()) ttLabel() else lerp(accent, ttLabel(), TAB_CAPTION_SELECTED_DARKENING)
-
-    // The unselected caption's ink, which is a bar-local value rather than
-    // `ttLabelSecondary`. That token resolves to the platform's `secondaryLabel`, which is the
-    // label at 60% and is chosen for an *opaque* `systemBackground`, where the same alpha lands
-    // around 4.6:1. This bar is not opaque: its fill is a translucent glass wash, so the
-    // effective backdrop behind the caption is a mid grey-blue around #C5CEDA rather than white,
-    // and 60% of the label over *that* measures 2.78:1 - below the 4.5:1 that normal text needs.
-    // Raising the alpha is the fix that keeps the caption subordinate to the selected one: at
-    // this bar's backdrop the light caption needs roughly two thirds of the label to clear the
-    // threshold with margin, which still leaves a clear gap to the selected accent above it.
-    //
-    // The icon takes the same ink as the caption beside it, so an unselected tab does not end up
-    // with a faint glyph over a caption that had to be darkened to stay readable.
-    //
-    // Dark needs no adjustment. The same 60% lands on a near-black backdrop there, where it
-    // measures 5.92:1, so dark keeps the platform's own value and this stays a light-appearing
-    // correction. `TabLensContrastTest` renders both appearances and holds both to
-    // `TEXT_CONTRAST_MINIMUM` rather than trusting that reasoning to stay true.
-    val inactiveInk =
-        if (ttIsDarkTheme()) ttLabelSecondary() else ttLabel().copy(alpha = TAB_CAPTION_INACTIVE_ALPHA)
+    // The selected and unselected caption inks are shared with the settings accent picker,
+    // because both put a label under the same kind of glass selection lens. The derivation — why
+    // dark is white and light a darkened accent, why the unselected caption is not the platform's
+    // `secondaryLabel` — and the numbers on both rasterisers live on [ttSelectionLabelInk], which
+    // `TabLensContrastTest` holds.
+    val selectedInk = ttSelectionLabelInk(selected = true)
+    val inactiveInk = ttSelectionLabelInk(selected = false)
 
     val density = LocalDensity.current
 
@@ -459,30 +417,3 @@ private fun TabCell(
         )
     }
 }
-
-/**
- * How much of [ttLabel] the unselected tab caption and icon carry on the light appearance.
- *
- * The platform's `secondaryLabel` is 60% of the label, chosen against an opaque white
- * background. This bar is a translucent wash over whatever is behind it, so the caption needs
- * more of the label to stay readable on the mid grey-blue the fill leaves behind.
- *
- * The value is set by the *worse* of the two rasterisers, not the better one. The same token
- * and the same backdrop measure 6.07:1 on the JVM and 4.36:1 on the iOS simulator, because a
- * small glyph's stroke reaches full coverage on one and not the other, and a stroke that is 82%
- * covered is a lighter ink than the token it was drawn with. Tuning to the JVM number would
- * have left iOS short, which is the whole reason [TabLensContrastTest] runs on both. At 0.82
- * both clear 4.5:1, and the caption still sits well below the selected accent above it.
- */
-private const val TAB_CAPTION_INACTIVE_ALPHA = 0.82f
-
-/**
- * How far the light-appearance selected caption and icon are mixed from [ttAccent] toward
- * [ttLabel].
- *
- * A fifth. Enough to clear 4.5:1 on the iOS rasteriser, which draws this caption's stroke at
- * roughly 85% coverage and therefore reads lighter than the token it was given, while leaving
- * the hue recognisably the accent. See the reasoning where the value is used, and
- * [TabLensContrastTest] for the numbers on both rasterisers.
- */
-private const val TAB_CAPTION_SELECTED_DARKENING = 0.20f

@@ -33,7 +33,7 @@ making the input obviously wrong. Delete it and write a different one.
 This costs one build cycle. The alternative — debugging a measurement you have never
 established is sensitive — costs eight, and is what happens if you skip it.
 
-PLAN.md records 22 mutations run and 22 caught, and two that were missed on the first pass,
+`docs/DECISIONS.md` records 23 mutations run and 23 caught, and two that were missed on the first pass,
 both because the *test* was at fault. This repo's own history says the ritual is not optional.
 
 ### The cheapest sensitivity probe
