@@ -26,13 +26,9 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttActionIcons
-import com.tasktracker.designsystem.ttAccent
-import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
-import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
-import com.tasktracker.featureprojectsdomain.BacklogProjection
 import com.tasktracker.featureprojectsdomain.BacklogSection
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.resources.Res
@@ -42,52 +38,19 @@ import com.tasktracker.resources.backlog_empty_body
 import com.tasktracker.resources.backlog_empty_title
 import com.tasktracker.resources.backlog_kanban_empty_body
 import com.tasktracker.resources.backlog_kanban_empty_title
-import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
 import com.tasktracker.resources.board_add_task
-import com.tasktracker.resources.archive_reopen
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The backlog tab: the work not yet on a board, the board itself, and the work filed away.
- *
- * ## Why three sections
- *
- * The backlog tab is read as three piles: what still needs doing, what is being worked on
- * right now, and what was done here. That is three different questions, and the tab answers
- * all three without leaving it, so the screen renders them as three sections the user can
- * switch between rather than one list that folds the present into the past.
- *
- * ## Why the sections are a switch, not a split
- *
- * A split keeps the lists on screen simultaneously, and a backlog with anything filed away
- * is then exactly as tall as the longer of the two — which, on a project with a long archive,
- * is the archive, and a user scrolling the backlog then has to fight the archive's tail. A
- * switch keeps each list the height of its own content and is the cheaper screen to read.
- *
- * ## Why archived is closed-only, newest first
- *
- * The backlog's file-away verb moves a task to [WorkItemStatus.Closed], and the backlog tab's
- * "what was done here" is that verb's result, not the full month-grouped archive the separate
- * archive tab already renders. Keeping this tab's archived section flat and newest-first is the
- * shape that matches a backlog log: the last thing filed is the first thing you look at.
- *
- * ## Why each section keeps its own empty state
- *
- * The backlog emptiness, the board emptiness and the archive emptiness are not the same
- * sentence. One means "nothing still to do", another means "nothing on the board yet", and the
- * third means "nothing filed away yet", and a user who files the last backlogged task away has
- * just done something worth acknowledging in the words. Three empty states also make the
- * section switch testable without imagining which list was in front.
- *
- * ## Why the busy item survives a section switch
- *
- * Filing away and putting on board are both writes that take a moment, and the card in flight
- * is the row the user tapped, not the row currently in front. The busy id is the same id the
- * row uses to show the wait, so switching sections while a write is in flight keeps the wait on
- * whichever section the item is really in.
+ * The backlog tab: untriaged work, the board, and filed-away work, as three switchable
+ * sections rather than one split column — a split would be as tall as the longest list (a long
+ * archive wins), and a switch keeps each list to its own height. Each section owns its own empty
+ * state (three different sentences, also testable without guessing which list was in front), and
+ * the busy id tracks the row the user tapped rather than the section now showing, so a write in
+ * flight keeps its wait on whatever section the item is really in.
  */
 @Composable
 fun ProjectBacklogScreen(
@@ -124,14 +87,8 @@ fun ProjectBacklogScreen(
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
             onOpenSwitcher?.let { openSwitcher ->
-                // The add action rides the switcher's row rather than floating over the list.
-                // It used to float at the bottom trailing corner, over a list that reserved only
-                // the tab bar's inset, and it sat on the *rows* - which are clickable across their
-                // full width - so tapping the bottom right of a backlog did nothing. It did not
-                // cover "Put on board" or "File away" as one might assume: this row lays those out
-                // with no `Alignment.End`, so they sit at the leading edge, well clear of the
-                // corner. `weight(1f)` keeps the switcher at its own content width rather than
-                // stretching it under the action. See `ProjectsHeader` for the projects list.
+                // The add action rides the switcher's row so it does not overlap the clickable rows
+                // below; `weight(1f)` keeps the switcher at its own width, clear of the action.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -179,10 +136,9 @@ fun ProjectBacklogScreen(
                 }
             )
             when (currentSection) {
-                // The section tags are applied inside each list, on the node that renders it.
-                // A chained `Modifier.testTag(a).testTag(b)` keeps the first value in this Compose
-                // version, so tagging the shared container here would leave the empty states
-                // carrying the list's tag and no way to query them separately.
+                // Section tags live on each list, not the shared container: a chained
+                // `testTag(a).testTag(b)` keeps only the first value in this Compose version, so
+                // a container tag would hide the empty states from separate queries.
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = projection,
                     busyItemID = busyItemID,
@@ -253,12 +209,8 @@ private fun ProjectBacklogScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Lig
 
 
 /**
- * The backlog section's list: the untriaged work, each row offering "Put on board" and "File away"
- * and opening the task on its own tap — the same open the Kanban section's rows carry.
- *
- * The backlog section is the one the tab is named after, and it is the only section where the
- * backlog's two verbs — put on board and file away — both make sense. The archived section shows
- * closed work for reading, with no put-on-board action and no file-away action.
+ * The backlog section: untriaged work, each row offering "Put on board" and "File away" and
+ * opening the task on tap — the only section where both verbs apply.
  */
 @Composable
 private fun BacklogSectionList(
@@ -295,13 +247,10 @@ private fun BacklogSectionList(
 }
 
 /**
- * The Kanban section's list: the board, read as rows, each row opening the task and offering
- * "File away".
- *
- * Every item here is already on a board, so the row drops its put-on-board action and its tap
- * becomes the open (`onSelect`) — the board's own verbs, on the board's own rows. A tiny
- * duplication of `BacklogSectionList` on purpose: the two sections differ in exactly one
- * handler and one empty state, and folding them together would buy a parameter nobody else uses.
+ * The Kanban section: the board as rows, each offering "File away" and opening on tap. Every item
+ * is already on a board, so the row drops its put-on-board action. This duplicates
+ * `BacklogSectionList` on purpose: the two differ by one handler and one empty state, and folding
+ * them together would add a parameter nobody else uses.
  */
 @Composable
 private fun KanbanSectionList(
@@ -337,12 +286,9 @@ private fun KanbanSectionList(
 }
 
 /**
- * The archived section's list: closed work, newest first, for reading.
- *
- * No put-on-board and no file-away, because every item here is already `Closed` — the backlog's
- * file-away verb refuses on `Closed`, and "put on board" from `Closed` would be re-opening a
- * task the user chose to file away. The section shows a Reopen button instead, which moves the
- * item back to the backlog and clears its resolution date.
+ * The archived section: closed work, newest first, read-only. No put-on-board or file-away — every
+ * item is already `Closed`, so the section shows Reopen instead, which returns the item to the
+ * backlog and clears its resolution date.
  */
 @Composable
 private fun ArchivedSectionList(
@@ -377,13 +323,7 @@ private fun ArchivedSectionList(
     }
 }
 
-/**
- * The backlog section's empty state: backlog is empty but the tab may still have an archive.
- *
- * Shown when the backlog section is selected and the backlog section is empty, regardless of the
- * archived section — the archived section gets its own empty state, and mixing the two would make
- * the section switch untestable without imagining which list was in front.
- */
+/** The backlog section's empty state. Kept separate from the archive's so the sections stay testable. */
 @Composable
 private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
@@ -393,14 +333,7 @@ private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * The Kanban section's empty state: the board has no on-board tasks yet.
- *
- * A different sentence from the backlog's empty state, because the two sections are different
- * questions — one is "nothing still to do" and the other is "nothing on the board yet" — and a
- * user who triaged the last backlogged task onto the board has just done something worth
- * acknowledging in the words.
- */
+/** The Kanban section's empty state: the board has no on-board tasks yet. */
 @Composable
 private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
@@ -410,14 +343,7 @@ private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * The archived section's empty state: nothing has been filed away from this backlog yet.
- *
- * A different sentence from the backlog's and the Kanban section's empty states, because the
- * sections are different questions — "nothing still to do", "nothing on the board yet" and
- * "nothing filed away yet" — and a user who just filed the last backlogged task away has done
- * something worth acknowledging in the words.
- */
+/** The archived section's empty state: nothing has been filed away from this backlog yet. */
 @Composable
 private fun EmptyArchivedSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
