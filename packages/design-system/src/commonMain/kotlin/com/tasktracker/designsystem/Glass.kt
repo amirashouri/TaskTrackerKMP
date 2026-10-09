@@ -40,6 +40,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.util.lerp as lerpFloat
@@ -255,6 +257,18 @@ object ttGlass {
     const val TAB_LENS_FADE: Float = 0.75f
 
     /**
+     * How far the rim's colour falls off toward its bottom, as a fraction of its own alpha.
+     *
+     * The rim is a gradient rather than a flat line because iOS's edge is a function of
+     * the surface normal: it catches light along the top and darkens toward the bottom.
+     * 0.6 keeps the bottom of the rim clearly present — it is still the same edge, just
+     * dimmer — while the top stays at full [HAIRLINE_ALPHA] / [LIGHT_HAIRLINE_ALPHA], which
+     * is the value `GlassSurfacePixelTest` measures. A value much below 0.4 would start
+     * to read as a shadow at the bottom rather than as the same rim tapering.
+     */
+    const val RIM_BOTTOM_ALPHA: Float = 0.6f
+
+    /**
      * The tab lens's rim, which is what actually makes it visible.
      *
      * Over three times [HAIRLINE_ALPHA]. This is the load-bearing value of the whole
@@ -301,6 +315,49 @@ object ttGlass {
 
     /** The matching height shrink at the peak, as a fraction of the lens's resting height. */
     const val TAB_LENS_SQUASH: Float = 0.06f
+
+    /**
+     * A specular highlight along a surface's top edge: white at this alpha, fading to
+     * nothing over [SPECULAR_HEIGHT] of the surface.
+     *
+     * iOS glass is a dome, and the thing that makes it read as a *surface* rather than a
+     * flat translucent card is the band of light it catches along its top edge. The fill
+     * ramp already does "lit at the top, calmer at the bottom" but only as a **colour**
+     * ramp — the top stop is the tint at [FILL_ALPHA], with no separate bright band, and
+     * without this every surface in the app is a tinted slab.
+     *
+     * This is the one addition above the original's grammar that is not a port of it,
+     * and it is worth saying so because it is the part most likely to be mistaken for a
+     * bug: the original gets its highlight for free from live backdrop sampling, and this
+     * port cannot. A highlight band that is *there* is better than one that is *modelled*,
+     * which is why it is painted rather than asserted into existence.
+     *
+     * 0.12, and low on purpose: over the dark fill white at this alpha composites to a
+     * visible bright edge, and over the light fill — which is already near the top of
+     * what white can reach — it is a quiet brightening. A band strong enough to read as
+     * a white stripe on the light appearance would be the "white shadow" defect this
+     * file already caught once, arriving from the other direction.
+     */
+    const val SPECULAR_ALPHA: Float = 0.12f
+
+    /**
+     * How far down the surface the highlight runs.
+     *
+     * A `Dp`, not a `Float`, because it is drawn through `toPx()` inside a `DrawScope` and
+     * that is the only overload that exists. Narrow and **fixed in dp rather than as a
+     * fraction of the surface**: a fraction was the first choice — 6% of a 240dp card is
+     * 14dp, which is a plausible band — and it turned out to be the wrong shape for a rim
+     * highlight. It is a property of the *edge*, not of the face, and a band that wide reads
+     * as a second, whiter fill rather than as light catching a dome. It also broke
+     * `StoryPointsTest`, whose background sample sits 6dp below the card's top edge and
+     * therefore landed *inside* the band, reading the highlight as the "fill" and the rest
+     * of the card as "painted" — 93% coverage, a false pill.
+     *
+     * 3dp is below that sample on any card tall enough to hold a numeral, and above the
+     * antialiasing noise a rasteriser introduces at a hairline. At the host's density 1 it
+     * is 3 device rows; at 3x it is 9, still a rim.
+     */
+    val SPECULAR_HEIGHT_DP: Dp = 3.dp
 
     /**
      * How far the selected glyph grows, over the resting size.
@@ -442,6 +499,7 @@ fun Modifier.ttGlassSurface(
     val accent = ttAccent()
     val canvas = ttCanvas()
     val intensity = LocalGlassIntensity.current
+    val rim = ttGlassHairline()
 
     // Two different washes, because there are two different things being modelled. Without a
     // base the fill *is* the glass, so it runs from the tint at the top to a calmer version of
@@ -497,16 +555,58 @@ fun Modifier.ttGlassSurface(
                     endY = size.height,
                 ),
             )
+            // The rim highlight, drawn over the fill and under the border. See
+            // [ttGlass.SPECULAR_ALPHA] for why this exists at all and why it is this low: it
+            // is the one part of the look that is not a port of the original, and the original
+            // gets it for free from live backdrop sampling. The band is painted here rather
+            // than in the fill ramp because it is a property of the *edge* — it fades out
+            // over a small fraction of the height — and belongs to the surface rather than
+            // to the arithmetic the ramp does.
+            //
+            // Fixed in dp rather than a fraction of the surface (see [ttGlass.SPECULAR_HEIGHT_DP]):
+            // a fraction grows with the card, and on a 240dp card the band reached 14dp — past
+            // the point where a rim highlight stops being a rim and starts being a second fill.
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = ttGlass.SPECULAR_ALPHA),
+                        Color.White.copy(alpha = 0f),
+                    ),
+                    startY = 0f,
+                    endY = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() },
+                ),
+            )
         }
-        // The hairline. It is not `ttSeparator`, because a separator is a
+        // The rim. It is not `ttSeparator`, because a separator is a
         // *structural* divider and this is an edge: the point of a rim is that the
         // surface reads as raised, which is lighter-than-the-fill in dark and —
         // because the light fill is already near the top of what white can reach —
         // darker-than-the-fill in light. See [ttGlass.HAIRLINE_ALPHA] and
         // [ttGlass.LIGHT_HAIRLINE_ALPHA] for the measurements behind both.
+        //
+        // Drawn with a `Brush` rather than a flat colour, and the reason is the rim's
+        // **gradient**. iOS's edge is a function of the surface normal, so it is brightest
+        // where it catches the light along the top and darkest along the bottom; a flat
+        // border cannot express that, and a flat rim is the single biggest thing that
+        // keeps these surfaces reading as a painted card rather than as material. The
+        // strongest row is unchanged — it is still the top of the stroke at full rim
+        // colour — so `GlassSurfacePixelTest`'s two rim figures hold without moving.
+        //
+        // `.border(brush=...)` rather than `.border(color=...)` is the only portable
+        // way to get a gradient on the stroke: `drawOutline` and `Shape.createOutline`
+        // are not in Compose Multiplatform 1.12.1's commonMain. The brush variant draws
+        // the gradient along the stroke, which is what makes the top edge brighter than
+        // the bottom.
         .border(
             width = borderWidth,
-            color = ttGlassHairline(),
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    rim,
+                    rim.copy(alpha = rim.alpha * ttGlass.RIM_BOTTOM_ALPHA),
+                ),
+                startY = 0f,
+                endY = Float.POSITIVE_INFINITY,
+            ),
             shape = shape,
         )
 }
