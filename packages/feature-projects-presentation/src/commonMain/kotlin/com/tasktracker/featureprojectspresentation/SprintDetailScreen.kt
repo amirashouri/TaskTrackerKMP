@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,10 @@ import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassSurface
+import com.tasktracker.designsystem.ConfirmPopup
+import com.tasktracker.designsystem.TTConfirmPopupTag
+import com.tasktracker.designsystem.TTConfirmPopupCancelTag
+import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ttDateRange
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
@@ -146,31 +151,15 @@ fun SprintDetailScreen(
 
     // The confirmation dialog, drawn inline so it is part of the same semantics tree
     // and a UI test finds it with a tag like anything else.
-    pendingAction?.let { action ->
-        SprintActionConfirmation(
-            sprintName = detail.sprint.name,
-            action = action,
-            onConfirm = {
-                when (action) {
-                    SprintStatus.Scheduled -> onRemove()
-                    SprintStatus.InProgress -> onFinish()
-                    SprintStatus.Finished -> onArchive()
-                    SprintStatus.Archived -> {}
-                }
-                pendingAction = null
-            },
-            onDismiss = {
-                pendingAction = null
-                onDismissError()
-            },
-        )
-    }
-
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
-            .testTag(SprintDetailScreenTag),
+    //
+    // Placed in a Box *outside* the LazyColumn so it floats over the content rather than
+    // rendering as a list item buried under the sprint card.
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
+                .testTag(SprintDetailScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
         item {
@@ -357,77 +346,43 @@ fun SprintDetailScreen(
             }
         }
     }
-}
 
-/**
- * The confirmation dialog for the sprint's destructive actions.
- *
- * Drawn inline rather than through `Dialog`, for the same reason `RemoveProjectConfirmation`
- * is: Compose Multiplatform's `Dialog` does not render under `runComposeUiTest` on every
- * target, and a confirmation a test cannot see is a confirmation that cannot be asserted.
- *
- * The dialog words itself from the action, so the screen does not need to know which
- * sentence goes with which button — adding a fourth action is a new `when` branch here
- * and a new string, not a new parameter through the screen.
- */
-@Composable
-private fun SprintActionConfirmation(
-    sprintName: String,
-    action: SprintStatus,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = RoundedCornerShape(ttRadius.surface)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .ttGlassSurface(shape = shape)
-            .padding(ttSpacing.formStack)
-            .testTag(SprintActionConfirmationTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-    ) {
-        ttText(
-            text = when (action) {
-                SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm, sprintName)
-                SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm, sprintName)
-                SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm, sprintName)
-                SprintStatus.Archived -> sprintName
-            },
-            style = ttTypography.titleSmall,
-            color = ttLabel(),
-        )
-        ttText(
-            text = when (action) {
-                SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm_body, sprintName)
-                SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm_body, sprintName)
-                SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm_body, sprintName)
-                SprintStatus.Archived -> sprintName
-            },
-            style = ttTypography.callout,
-            color = ttLabelSecondary(),
-            textAlign = TextAlign.Start,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
-        ) {
-            ttGlassButton(
-                label = "Cancel",
-                onClick = onDismiss,
-                modifier = Modifier.testTag(SprintActionCancelTag),
-            )
-            ttGlassButton(
-                label = when (action) {
+        // The confirmation dialog floats over the list content.
+        pendingAction?.let { action ->
+            ConfirmPopup(
+                title = when (action) {
+                    SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm, detail.sprint.name)
+                    SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm, detail.sprint.name)
+                    SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm, detail.sprint.name)
+                    SprintStatus.Archived -> detail.sprint.name
+                },
+                body = when (action) {
+                    SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove_confirm_body, detail.sprint.name)
+                    SprintStatus.InProgress -> stringResource(Res.string.sprint_finish_confirm_body, detail.sprint.name)
+                    SprintStatus.Finished -> stringResource(Res.string.sprint_archive_confirm_body, detail.sprint.name)
+                    SprintStatus.Archived -> detail.sprint.name
+                },
+                confirmLabel = when (action) {
                     SprintStatus.Scheduled -> stringResource(Res.string.sprint_remove)
                     SprintStatus.InProgress -> stringResource(Res.string.sprint_finish)
                     SprintStatus.Finished -> stringResource(Res.string.sprint_archive)
-                    SprintStatus.Archived -> sprintName
+                    SprintStatus.Archived -> detail.sprint.name
                 },
-                onClick = onConfirm,
-                modifier = Modifier.testTag(SprintActionConfirmTag),
-                style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+                onConfirm = {
+                    when (action) {
+                        SprintStatus.Scheduled -> onRemove()
+                        SprintStatus.InProgress -> onFinish()
+                        SprintStatus.Finished -> onArchive()
+                        SprintStatus.Archived -> {}
+                    }
+                    pendingAction = null
+                },
+                onCancel = {
+                    pendingAction = null
+                    onDismissError()
+                },
+                confirmTint = ttError(),
+                tag = SprintActionConfirmationTag,
             )
         }
     }
@@ -461,8 +416,6 @@ const val SprintDetailItemsEmptyTag = "sprints.detail.itemsEmpty"
 const val SprintDetailRemoveTag = "sprints.detail.remove"
 const val SprintDetailArchiveTag = "sprints.detail.archive"
 const val SprintActionConfirmationTag = "sprints.detail.actionConfirmation"
-const val SprintActionConfirmTag = "sprints.detail.actionConfirm"
-const val SprintActionCancelTag = "sprints.detail.actionCancel"
 
 // ---------------------------------------------------------------------------------------------
 // Previews
