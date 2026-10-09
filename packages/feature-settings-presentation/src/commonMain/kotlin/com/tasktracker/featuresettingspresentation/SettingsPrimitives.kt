@@ -37,27 +37,18 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 
-/** A titled, inset group in the shared Settings list. */
+/** A glass group in the shared Settings list. */
 @Composable
 internal fun SettingsSection(
-    title: String,
     content: @Composable () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
-        ttText(
-            text = title,
-            style = ttTypography.caption,
-            color = ttLabelSecondary(),
-            modifier = Modifier.padding(start = ttSpacing.xs, bottom = ttSpacing.xs),
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.surface))
-                .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.xs),
-            content = { content() },
-        )
-    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.surface))
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.xs),
+        content = { content() },
+    )
 }
 
 /** A compact label/value row with the leading symbol and trailing setting value. */

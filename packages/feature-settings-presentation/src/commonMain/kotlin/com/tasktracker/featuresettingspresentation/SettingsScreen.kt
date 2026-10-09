@@ -14,7 +14,6 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
-import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
@@ -26,8 +25,6 @@ import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.resources.Res
-import com.tasktracker.resources.settings_about_section
-import com.tasktracker.resources.settings_account_section
 import com.tasktracker.resources.settings_activity_failed
 import com.tasktracker.resources.settings_activity_idle
 import com.tasktracker.resources.settings_activity_retrying
@@ -39,18 +36,13 @@ import com.tasktracker.resources.settings_connectivity_needs_connection
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_connectivity_unknown
-import com.tasktracker.resources.settings_connection_section
-import com.tasktracker.resources.settings_appearance_section
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_sign_out
 import com.tasktracker.resources.settings_status_label
 import com.tasktracker.resources.settings_sync_now
-import com.tasktracker.resources.settings_sync_section
 import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
-import com.tasktracker.resources.settings_title
-import com.tasktracker.resources.settings_user_details_section
 import com.tasktracker.resources.settings_version
 import org.jetbrains.compose.resources.stringResource
 
@@ -122,20 +114,12 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
         item {
-            ttText(
-                text = stringResource(Res.string.settings_title),
-                style = ttTypography.largeTitle,
-                color = ttLabel(),
-                modifier = Modifier.padding(bottom = ttSpacing.xs),
-            )
-        }
-        // First section on the page, directly under the title: it is the identity the rest of
-        // the screen belongs to, not a preference filed with the others. It renders even when
-        // empty — the row that reads "—" is the honest answer, whereas a section that hides
-        // itself would leave the user with no idea where their profile went. The position picker
-        // dispatches through the same callback as every other edit here; the model persists it.
-        item {
-            SettingsSection(title = stringResource(Res.string.settings_user_details_section)) {
+            // First section on the page: it is the identity the rest of the screen belongs to,
+            // not a preference filed with the others. It renders even when empty — the row that
+            // reads "—" is the honest answer, whereas a section that hides itself would leave
+            // the user with no idea where their profile went. The position picker dispatches
+            // through the same callback as every other edit here; the model persists it.
+            SettingsSection {
                 UserDetailsRow(
                     details = userDetails,
                     onDetailsChange = onUserDetailsChange,
@@ -168,7 +152,7 @@ fun SettingsScreen(
             }
         }
         item {
-            SettingsSection(title = stringResource(Res.string.settings_appearance_section)) {
+            SettingsSection {
                 ThemePickerRow(
                     selected = themeScheme,
                     onSelect = onThemeChange,
@@ -187,7 +171,7 @@ fun SettingsScreen(
             }
         }
         item {
-            SettingsSection(title = stringResource(Res.string.settings_connection_section)) {
+            SettingsSection {
                 SettingsIconRow(
                     label = stringResource(Res.string.settings_status_label),
                     value = connectivityLabel(connectivity),
@@ -197,7 +181,7 @@ fun SettingsScreen(
             }
         }
         item {
-            SettingsSection(title = stringResource(Res.string.settings_sync_section)) {
+            SettingsSection {
                 SettingsIconRow(
                     label = stringResource(Res.string.settings_status_label),
                     value = activityLabel(activity.phase),
@@ -270,7 +254,7 @@ fun SettingsScreen(
             }
         }
         item {
-            SettingsSection(title = stringResource(Res.string.settings_account_section)) {
+            SettingsSection {
                 // Through the port, which the app backs with the session coordinator: that is
                 // what forgets the credentials, ends the session-scoped state and routes back
                 // to sign-in. Tearing down from here would leave the tokens behind.
@@ -288,7 +272,7 @@ fun SettingsScreen(
         // version, which is only true for a build with no version keys at all.
         version.display?.let { displayed ->
             item {
-                SettingsSection(title = stringResource(Res.string.settings_about_section)) {
+                SettingsSection {
                     SettingsIconRow(
                         label = stringResource(Res.string.settings_version),
                         value = displayed,

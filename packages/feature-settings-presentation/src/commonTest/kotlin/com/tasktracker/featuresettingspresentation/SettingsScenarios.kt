@@ -289,8 +289,10 @@ object SettingsScenarios {
     /** The About row is present when there is a version and absent when there is not. */
     val theVersionRowHidesItselfWithNoVersion: suspend ComposeUiTest.() -> Unit = {
         screenShowing(version = SettingsPreviewData.version)
-        // 6: the User details section leads the list (index 1), pushing About to 6.
-        onNodeWithTag(SettingsScreenTag).performScrollToIndex(6)
+        // 5: the User details section leads the list (index 0), pushing About to 5. The title
+        // used to sit at 0 and the number was 6; it was 6 because of the title, not because
+        // the list is long.
+        onNodeWithTag(SettingsScreenTag).performScrollToIndex(5)
         onNodeWithTag(SettingsVersionRowTag).assertIsDisplayed()
 
         // Remounted rather than re-composed with a new argument: `AppVersion.display` is a
