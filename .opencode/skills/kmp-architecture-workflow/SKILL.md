@@ -60,6 +60,12 @@ library modules.
   previous run's output. Re-run with `--rerun-tasks` after editing outside Gradle
   (`cp`, `git checkout`).
 
+## Agentic Reading and Execution Limits (CRITICAL)
+
+- **Tool Execution Ceiling:** You are strictly limited to a maximum of **3 consecutive file-reading or search tool actions** during dependency resolution or architectural discovery phase. If the target layout or dependency map cannot be found within 3 hits, halt immediately and ask the user for exact paths.
+- **Plan Verification Rule:** Your Phase 1 proposal must explicitly declare the absolute target file paths and specific function/class names targeted.
+- **Drift Enforcer:** If during Phase 2 source modification you find a dependency error requiring a file modification outside your approved Phase 1 bounds, you must **abort generation instantly**, output an updated path map, and demand a secondary `ACK`.
+
 For a new dependency or module, inspect only the relevant entries in
 `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts`:
 `allowedLibraryTable`, `allowedDependenciesTable`, and `packageOwnersTable`. Update the
@@ -72,9 +78,9 @@ compile or re-export a type through an unrelated module.
 Start in `commonMain` for domain behavior, state, and Compose UI. Put code in `androidMain`
 or `iosMain` only when it uses a platform API or must honor a platform behavior. Express a
 shared call site with `expect`/`actual` only when a real platform seam is needed, and supply
-all actuals required by the configured hierarchy. The convention plugin adds a JVM target,
-so a new `expect` commonly also needs a `jvmMain` actual. Check the existing module's source
-sets and convention plugin before deciding.
+all actuals required by the configured hierarchy. 
+
+* **Atomicity Rule:** The convention plugin adds a JVM target, so a new `expect` commonly also needs a `jvmMain` actual. When writing or modifying an `expect` declaration, you must supply the corresponding platform `actual` definitions across **all matching source sets** concurrently within the *same tool transaction*. Never emit asymmetric multiplatform code.
 
 Keep screens and their Liquid Glass language shared on both mobile platforms. Reuse the
 existing `:packages:design-system` tokens and modifiers; do not recreate blur, gradients,

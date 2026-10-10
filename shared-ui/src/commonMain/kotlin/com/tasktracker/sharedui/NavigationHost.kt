@@ -29,7 +29,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
@@ -165,9 +165,13 @@ fun NavigationHost(
     // Editors that have been dismissed but are still playing their exit transition.
     // Kept composed until the animation finishes so the exit can be seen.
     val dismissingEditors = remember { mutableStateListOf<AppRoute.WorkItemEditor>() }
-    // Duration for the editor exit transition (fadeOut 200ms + slideOut 300ms).
-    // Used to wait for the animation to complete before popping the route.
-    val EDITOR_EXIT_MS = 350L
+    // Exit transition durations. The pop waits EDITOR_EXIT_MS after dismissal so the slide
+    // can finish; it is derived from EDITOR_EXIT_SLIDE_MS + slack so raising the spec cannot
+    // silently cut the animation mid-flight. The +50ms slack matches the previous hand-tuned
+    // 350ms over a 300ms slide.
+    val EDITOR_EXIT_FADE_MS = 200L
+    val EDITOR_EXIT_SLIDE_MS = 300L
+    val EDITOR_EXIT_MS = EDITOR_EXIT_SLIDE_MS + 50L
 
     // No `testTag` of this composable's own, deliberately. The caller supplies one — see
     // `SignedInShellTag` — and `testTag` *overwrites* rather than merges, so a tag here would
@@ -293,13 +297,15 @@ fun NavigationHost(
 
                             AnimatedVisibility(
                                 visibleState = transitionState,
-                                enter = fadeIn(animationSpec = tween(300, easing = { it * it })) + slideInVertically(
+                                enter = fadeIn(animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) })) + slideInVertically(
                                     animationSpec = tween(400, easing = { 1f - (1f - it) * (1f - it) }),
                                     initialOffsetY = { height -> height },
                                 ),
-                                exit = fadeOut(animationSpec = tween(200)) + slideOutHorizontally(
-                                    animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) }),
-                                    targetOffsetX = { width -> width },
+                                // Exits the way it entered: downward, not sideways. A sheet
+                                // that leaves on the horizontal axis reads as a screen push.
+                                exit = fadeOut(animationSpec = tween(EDITOR_EXIT_FADE_MS.toInt())) + slideOutVertically(
+                                    animationSpec = tween(EDITOR_EXIT_SLIDE_MS.toInt(), easing = { 1f - (1f - it) * (1f - it) }),
+                                    targetOffsetY = { height -> height },
                                 ),
                                 label = editorRoute.workItemID?.stringValue ?: "new-${editorRoute.projectID}",
                             ) {

@@ -25,16 +25,22 @@ To optimize token usage and prevent infinite tool loops, you must tightly scope 
 * **Constraint:** Do not read or scan modules outside the explicit scope of your task.
 * **Action:** If adding a feature or fixing a bug, request context *only* for the specific `shared` domain logic or the target UI file. Never run repository-wide string replacements or mass directory indexing.
 
-### 2. KMP Structural Isolation
+### 2. Algorithmic Backoff & Reading Constraints
+* **Tool Execution Ceiling:** You are limited to a maximum of **3 consecutive file-reading or search tool actions** per exploration phase. If you cannot locate the target within 3 attempts, halt and request exact paths from the user.
+* **No Speculative Reading:** Never read files to "understand the coding style" if they do not contain logic directly interacting with your current task. Lean entirely on the architecture documentation in `Project.md` for architectural context.
+
+### 3. KMP Structural Isolation
 * **Constraint:** Shared behavior belongs in `commonMain`; platform code belongs in a platform source set only when an API or behavior is genuinely platform-specific.
 * **Action:** Keep app features and Compose UI shared across Android and iOS. Add or change `expect`/`actual` declarations only for real platform seams, and provide every required host implementation (including `jvm` when the convention plugin requires it). Do not add thin native wrappers that only forward calls.
+* **Atomicity of expect/actual:** When adding or modifying an `expect` declaration, you must implement the corresponding `actual` declarations across **all matching source sets** within the *same tool transaction*. Never emit an `expect` change with a plan to add platform actuals later.
 
-### 3. Plan-First Execution Mode (Two-Phase Protocol)
+### 4. Plan-First Execution Mode (Two-Phase Protocol)
 For any task requiring modifications across more than one file, you must execute in two phases:
-* **Phase 1 (Token-Light):** Output a short, maximum 3-bullet plan detailing exactly which files will be modified and why. Stop and wait for user acknowledgment (`ACK`).
-* **Phase 2 (Code Generation):** Write the implementation only *after* receiving an `ACK`. Never write complete files from scratch if editing a single function; emit minimal unified diff patches.
+* **Phase 1 (Token-Light):** Output a short, maximum 3-bullet plan detailing exactly which files will be modified (with absolute paths and targeted functions) and why. Stop and wait for user acknowledgment (`ACK`).
+* **Phase 2 (Code Generation):** Output a single sentence confirming which underlying repository skill guidelines you are actively executing against. Then, write the implementation only *after* receiving an `ACK`. Never write complete files from scratch if editing a single function; emit minimal unified diff patches.
+* **Drift Constraint:** If during Phase 2 you discover that a file outside your approved Phase 1 plan must be edited, you must immediately abort execution, output an updated plan, and request a **secondary `ACK`**. Do not proceed with unapproved file modifications.
 
-### 4. Clean Architecture and Package Boundaries
+### 5. Clean Architecture and Package Boundaries
 * **Constraint:** Gradle modules are the architecture boundary. Domain modules hold business rules and ports; data modules implement those ports; presentation modules depend on their own domain and render UI; `:composition-root` binds implementations; `:shared-ui` assembles the shared screen tree.
 * **Action:** Before adding a dependency or module, inspect `allowedLibraryTable` and `packageOwnersTable` in `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts`. Keep presentation independent of feature data modules and keep domain free of UI and infrastructure. Update the checked tables deliberately when the intended graph changes; never work around `verifyArchitectureGraph` or `verifyModuleImports`.
 * **Action:** Put shared visual tokens and Compose resources in `:packages:design-system`. It is the only module that configures `compose.resources`.
@@ -95,43 +101,16 @@ The Compose resource packaging that used to fail 61 of the Android-host tests is
    of these as a UI change; write a behaviour assertion instead, and measure pixels where the
    table says to.
 
-On top of that, and also confirmed pre-existing by stashing:
-
-- `SeedingTest` — 3 failures in `:feature-projects-data`, on the JVM and iOS hosts.
-- `aChosenThemeOutlivesTheProcess` and `theBoardReturnsToTheList` in `:shared-ui`, on all
-  three hosts.
-
-The Compose resource packaging that used to fail 61 of these is **fixed** — see
-`tasktracker.kmp.compose.gradle.kts`, which copies the resources into the merged assets
-Robolectric reads. What remains is two distinct things:
-
-1. **Five `:composition-root` assertions need a `Context`** — Room's
-   `inMemoryDatabaseBuilder` refuses to open without one, so `testPlatformHost()` returns
-   `Unit` and the graph never builds. A real `Context` needs
-   `@RunWith(RobolectricTestRunner::class)`, which cannot be written in `commonTest`. The fix
-   is the split `shared-ui` already uses: bodies in `commonTest`, entry points per host.
-2. **Seven Compose UI assertions fail on layout, not behaviour.** Robolectric's default
-   viewport is far smaller than the other two hosts, so content inside a `LazyColumn`
-   (`settings.versionRow`) or a `horizontalScroll` row (`board.column.in_review`) exists but
-   is not displayed. `theVersionRowHidesItselfWithNoVersion` has a second, independent
-   problem: it calls `setContent` twice, which Android's `ComponentActivity` rejects with
-   *"has already set content"*, so making that scenario portable means changing shared
-   assertions that the JVM and iOS hosts currently pass.
-
-Consequence for new tests: a test that renders Compose and reads pixels must call
-`thisHostRasterisesText()` (an `expect` in `:packages:design-system`'s `commonTest` with
-actuals in `jvmTest`, `iosTest`, `androidHostTest`) or it will fail on that host. Be aware
-the skip registers as a *pass* there, not a skip.
+Consequence for new tests: a test that renders Compose and reads pixels must call `thisHostRasterisesText()` (an `expect` in `:packages:design-system`'s `commonTest` with actuals in `jvmTest`, `iosTest`, `androidHostTest`) or it will fail on that host. Be aware the skip registers as a *pass* there, not a skip.
 
 ## When a UI change needs a rendered-pixel test
-
 Default to a structural assertion. Render pixels only when the property does not survive
 being read off the modifier chain.
 
 One question decides it: **can you write the failing assertion without rendering anything?**
 
-| The property | Assert it |
-| --- | --- |
+| **The property** | **Assert it** |
+|---|---|
 | a fill clipped to the shape its own outline uses | structural |
 | a modifier present, absent, or ordered | structural |
 | a token's value, or a relationship between two | structural |
@@ -150,21 +129,13 @@ invert the modifier and confirm the assertion goes red. That is seconds of editi
 than a build cycle, and it is the entire reason to prefer a structural assertion. The
 expensive form of the same ritual is what the `rendered-ui-measurement` skill is for.
 
-Know what you are giving up. A structural assertion is a **proxy**: it asserts the intent is
-spelled, not that the pixels came out. Reimplement the lens's wash as a `drawOutline` with the
-right shape and delete the `.clip(CircleShape)`, and a structural test goes red on correct
-pixels. That is a false red rather than a missed defect, which is the cheap direction to
-fail, but it is not free either.
-
 If the honest answer to "can I assert this without rendering?" is no, render it. Do not use
 this section to justify skipping a measurement you cannot make any other way.
 
 ## Four rules
-
 These exist because each one has already cost real time here.
 
-### 1. Mutation-check before you trust a green
-
+## 1. Mutation-check before you trust a green
 A new test that has never failed is not evidence of anything. Before believing any
 assertion you wrote:
 
@@ -180,9 +151,8 @@ were missed on the first pass — both because the *test* was at fault.
 Write the failure message as part of the test. Put the measured number and both colours in
 it. That message is frequently how the real bug gets found.
 
-### 2. Measure rendered pixels, never model the composite
-
-**Scope first**: [when a UI change needs a rendered-pixel test](#when-a-ui-change-needs-a-rendered-pixel-test),
+## 2. Measure rendered pixels, never model the composite
+**Scope first**: [when a UI change needs a rendered-pixel test],
 above. This rule says *how* to measure once you have decided to; that one says *whether* to.
 
 A correct token in the wrong compositing is a real and recurring defect in this codebase —
@@ -198,95 +168,67 @@ They disagree: the same token on the same backdrop measured 5.37:1 on the JVM an
 iOS, because iOS rasterizes a small glyph's stroke at roughly 85% coverage. Tuning to the
 JVM number alone ships a defect to the platform that matters.
 
-### 3. One complete diagnostic, never incremental
+## 3. One complete diagnostic, never incremental
+When a measurement or scenario is wrong, add **one** diagnostic that dumps everything you might need—token values, per-row counts, per-row extremes, bounding boxes—then read it once. Adding one `println` per hypothesis and rebuilding is prohibited.
 
-When a measurement is wrong, add **one** diagnostic that dumps everything you might need —
-token values, per-row counts, per-row extremes, bounding boxes — then read it once. Adding
-one `println` per hypothesis and rebuilding is the same as having no diagnostic, only
-slower. Partial diagnostics send you theorising for cycles instead of looking.
+Your immediate next response after a test failure must output your diagnostic block matching this layout before attempting any theorizing:
 
-### 4. Prose last, with numbers frozen
+```markdown
+## DIAGNOSTIC RECONCILIATION
+*   **Failing Scenario/Assertion:** [Name]
+*   **Host Environment:** [JVM / iOS / Android Host]
+*   **Expected vs Actual Primitives:** [Token Values/Hex/Dimensions]
+*   **System State Summary:** [Dump of relevant Cache/Outbox/Router states]
+```
 
+## 4. Prose last, with numbers frozen
 Do not write explanatory comments while the numbers are still moving. Investigate first,
 freeze the numbers, then write the rationale once. Comments rewritten three times as a
 figure changes are how contradictory comments get left behind in the tree.
 
 ## Skills
-
 At session start, discover the repository skills under `.opencode/skills/*/SKILL.md` and
 read each skill's frontmatter description. Before starting task work, read the full
 instructions for every skill whose description matches the task; follow its referenced
 resources as needed. This applies to every agent using this repository, not only tasks
 that explicitly mention a skill. These skills carry the detail this file deliberately omits.
 
-- **`kmp-compose-tests`** — adding or running tests in this multiplatform Compose project:
-  the host matrix, source-set layout, the rasterisation skip, screenshot capture.
-- **`rendered-ui-measurement`** — proving a UI assertion: the mutation ritual, twin-frame
-  diffing and its contamination traps, contrast measurement on two rasterisers.
-- **`kmp-architecture-workflow`** — placing feature logic and platform-specific behavior in
-  this project's KMP module/source-set structure, checking dependency edges, and preserving
-  shared Android/iOS UI.
+*   `kmp-compose-tests` — adding or running tests in this multiplatform Compose project: the host matrix, source-set layout, the rasterisation skip, screenshot capture.
+*   `rendered-ui-measurement` — proving a UI assertion: the mutation ritual, twin-frame diffing and its contamination traps, contrast measurement on two rasterisers.
+*   `kmp-architecture-workflow` — placing feature logic and platform-specific behavior in this project's KMP module/source-set structure, checking dependency edges, and preserving shared Android/iOS UI.
 
 There is also a `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) that reviews
 a proposed test adversarially, specifically for whether it can fail.
 
 ## Local rules
-
 The root file above is the repo-wide contract. Rules that are true in only one package
-live next to the code they govern — a local file may only contain rules that are *false
-elsewhere*, so the two can never drift into saying the same thing twice:
+live next to the code they govern — a local file may only contain rules that are *false elsewhere*, so the two can never drift into saying the same thing twice:
 
-- `packages/design-system/AGENTS.md` — token ownership, `compose.resources`, pixel tests
-- `packages/database/AGENTS.md` — foreign keys, DAO ownership, migrations
-- `packages/feature-projects-presentation/AGENTS.md` — file splitting, fixtures, previews
-- `shared-ui/AGENTS.md` — untracked files, router ownership, host-split tests
+*   `packages/design-system/AGENTS.md` — token ownership, `compose.resources`, pixel tests
+*   `packages/database/AGENTS.md` — foreign keys, DAO ownership, migrations
+*   `packages/feature-projects-presentation/AGENTS.md` — file splitting, fixtures, previews
+*   `shared-ui/AGENTS.md` — untracked files, router ownership, host-split tests
 
 Working in one of those packages, read both files. Working anywhere else, the root file
 is the whole contract.
 
 ## Conventions
-
-- **Comments explain why, and carry the measurement.** This house style is not decoration;
-  a change to a non-obvious value is expected to arrive with the number that justifies it.
-  Routine tuning does not need a paragraph.
-- **`Project.md` test-count baseline is updated in the same change as any test addition**.
-  It says so twice and has been wrong three times. Counts come from the JUnit XML
-  the build writes, cross-checked against `@Test` in the source — never from `grep -c`
-  alone, which over-counts because KDoc mentions the string in backticks.
-- **`NavigationHost.kt` and most of `shared-ui` are untracked.** Git cannot recover an
-  accidental edit. Do not use broad scripted search-and-replace in this tree; read the file
-  and edit deliberately.
-- **Compose Multiplatform 1.12.1 specifics** bite regularly: `BasicText` has no `textAlign`
-  parameter (it goes in the style), `TextStyle` has no `overflow` property, and
-  `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it
-  renders nothing at all, silently, even with a `ColorFilter` tint.
+*   **Comments explain why, and carry the measurement.** This house style is not decoration;
+a change to a non-obvious value is expected to arrive with the number that justifies it.
+Routine tuning does not need a paragraph.
+*   `Project.md` test-count baseline is updated in the same change as any test addition. It says so twice and has been wrong three times. Counts come from the JUnit XML the build writes, cross-checked against `@Test` in the source — never from `grep -c` alone, which over-counts because KDoc mentions the string in backticks.
+*   `NavigationHost.kt` and most of `shared-ui` are untracked. Git cannot recover an accidental edit. Do not use broad scripted search-and-replace in this tree; read the file and edit deliberately.
+*   **Compose Multiplatform 1.12.1 specifics** bite regularly: `BasicText` has no `textAlign` parameter (it goes in the style), `TextStyle` has no `overflow` property, and `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it renders nothing at all, silently, even with a `ColorFilter` tint.
 
 ## Splitting a presentation screen into files
-
 A presentation file grows by addition — a row, a badge, a footer — and each addition makes
 the whole harder to hold in your head and a piece in it harder to reuse. So the unit of a
 presentation file is **one public composable**, and the file is named after it.
 
-- **A new public composable gets its own file, never an append to someone else's.**
-  `ProjectRow.kt`, `WorkItemCard.kt`, `BoardColumn.kt`. A public `@Composable` is
-  something other screens read and tests reach for, so it has a name and a path of its own.
-- **Its private helpers, tag constants, `@Preview`s and file-local `const val`s move with
-  it.** They are that component's contract: a tag left in another file is a tag the next
-  rename misses, and a preview stored elsewhere stops showing what its name says. See
-  `ProjectRow.kt` and `WorkItemCard.kt` — the tags sit at the bottom of the file that draws
-  the nodes.
-- **Split when a file passes ~400 lines or carries more than one top-level `@Composable`.**
-  That is a prompt to look, not a lint error: below it a screen and its one helper read
-  better together. `ProjectRow.kt` (223), `WorkItemCard.kt` (326) and `BoardColumn.kt` (298)
-  are the shape to aim at; `WorkItemEditor.kt` (754) and `ProjectBoardScreen.kt` (492) are
-  still past it. The worked example is the 1158-line `SprintScreens.kt`, split into
-  `SprintListScreen.kt`, `SprintListRowView.kt`, `SprintProgressBar.kt`,
-  `SprintEditorSheet.kt`, `SprintDetailScreen.kt`, `SprintTotal.kt` and
-  `SprintSummaryScreen.kt`: the five screens, plus the two composables (`SprintProgressBar`,
-  `SprintTotal`) that two screens each drew and so could not stay private in either.
-- **Reuse comes from the boundary, not from copy-paste.** Two screens that want the same row
-  import one file instead of each drawing it, which is what makes the shared piece visible
-  and changeable in one place.
+*   **A new public composable gets its own file, never an append to someone else's.** `ProjectRow.kt`, `WorkItemCard.kt`, `BoardColumn.kt`. A public `@Composable` is something other screens read and tests reach for, so it has a name and a path of its own.
+*   **Its private helpers, tag constants, `@Preview`s and file-local `const val`s move with it.** They are that component's contract: a tag left in another file is a tag the next rename misses, and a preview stored elsewhere stops showing what its name says. See `ProjectRow.kt` and `WorkItemCard.kt` — the tags sit at the bottom of the file that draws the nodes.
+*   **Split when a file passes ~400 lines or carries more than one top-level `@Composable`.** That is a prompt to look, not a lint error: below it a screen and its one helper read better together. `ProjectRow.kt` (223), `WorkItemCard.kt` (326) and `BoardColumn.kt` (298) are the shape to aim at; `WorkItemEditor.kt` (754) and `ProjectBoardScreen.kt` (492) are still past it. The worked example is the 1158-line `SprintScreens.kt`, split into `SprintListScreen.kt`, `SprintListRowView.kt`, `SprintProgressBar.kt`, `SprintEditorSheet.kt`, `SprintDetailScreen.kt`, `SprintTotal.kt` and `SprintSummaryScreen.kt`: the five screens, plus the two composables (`SprintProgressBar`, `SprintTotal`) that two screens each drew and so could not stay private in either.
+*   **Reuse comes from the boundary, not from copy-paste.** Two screens that want the same row import one file instead of each drawing it, which is what makes the shared piece visible and changeable in one place.
 
 This is a *presentation* rule: it says where a `@Composable` lives, and does not change how
 models, use cases or domain code are organised.

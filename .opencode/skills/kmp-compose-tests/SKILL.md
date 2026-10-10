@@ -56,6 +56,19 @@ variant `variant.sources.assets` is null while `sources.resources` is not. Robol
 also has no `assets` option on `@Config`. So the files have to physically land in the
 directory `test_config.properties` names as `android_merged_assets`.
 
+## Boundary Rules for Testing Failures
+
+- **No Incremental Debugging Loops:** If a suite compilation or run fails, you are explicitly blocked from executing sequential `println` or minor code-poking patches to guess layout trees. You must pull structural info in one dump.
+- **Mandatory Failure Receipt:** Immediately following any test run containing unexpected red lines, you must generate a unified tracking reconciliation state before modifying files.
+
+```markdown
+### DIAGNOSTIC RECONCILIATION
+- **Failing Scenario/Assertion:** [Name]
+- **Host Environment:** [JVM / iOS / Android Host]
+- **Expected vs Actual Primitives:** [Token Values/Hex/Dimensions]
+- **System State Summary:** [Dump of relevant Cache/Outbox/Router states]
+```
+
 ## A test that reads pixels must declare where it can run
 
 A Compose UI test that captures a frame and inspects it cannot run on the Android host, for
