@@ -7,41 +7,43 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -112,7 +114,6 @@ import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -160,6 +161,13 @@ fun NavigationHost(
     LaunchedEffect(router) { router.state.collect { navigation = it } }
 
     val tab = navigation.selectedTab
+
+    // Editors that have been dismissed but are still playing their exit transition.
+    // Kept composed until the animation finishes so the exit can be seen.
+    val dismissingEditors = remember { mutableStateListOf<AppRoute.WorkItemEditor>() }
+    // Duration for the editor exit transition (fadeOut 200ms + slideOut 300ms).
+    // Used to wait for the animation to complete before popping the route.
+    val EDITOR_EXIT_MS = 350L
 
     // No `testTag` of this composable's own, deliberately. The caller supplies one — see
     // `SignedInShellTag` — and `testTag` *overwrites* rather than merges, so a tag here would
@@ -229,7 +237,18 @@ fun NavigationHost(
                     enabled = path.size > 1,
                     onBack = {
                         val currentPath = router.path(tab)
-                        if (currentPath.size > 1) {
+                        val editorRoute = currentPath.lastOrNull() as? AppRoute.WorkItemEditor
+                        if (editorRoute != null && editorRoute !in dismissingEditors) {
+                            dismissingEditors.add(editorRoute)
+                            scope.launch {
+                                delay(EDITOR_EXIT_MS)
+                                dismissingEditors.remove(editorRoute)
+                                val latestPath = router.path(tab)
+                                if (latestPath.lastOrNull() == editorRoute) {
+                                    router.setPath(latestPath.dropLast(1), tab)
+                                }
+                            }
+                        } else if (currentPath.size > 1) {
                             router.setPath(currentPath.dropLast(1), tab)
                         }
                     },
@@ -258,25 +277,59 @@ fun NavigationHost(
                     )
                 }
 
-                if (editorOverlay) {
-                    val editorRoute = pushed
-                    WorkItemEditorDestination(
-                        projectID = editorRoute.projectID,
-                        workItemID = editorRoute.workItemID,
-                        initialStatus = editorRoute.initialStatus,
-                        initialSprintID = editorRoute.initialSprintID,
-                        repository = environment.repository,
-                        dateProvider = environment.dateProvider,
-                        scope = scope,
-                        router = router,
-                        tab = tab,
-                        onDismiss = {
-                            val currentPath = router.path(tab)
-                            if (currentPath.lastOrNull() == editorRoute) {
-                                router.setPath(currentPath.dropLast(1), tab)
+                // Render all editors in the path with proper enter/exit animations.
+                // Each editor gets an AnimatedVisibility driven by a MutableTransitionState
+                // that is born invisible so the enter transition actually plays. Dismissed
+                // editors stay composed until their exit transition finishes.
+                val editorsInPath = path.filterIsInstance<AppRoute.WorkItemEditor>()
+                // Keep dismissing editors composed so their exit transition can finish.
+                val editorsToRender = editorsInPath + dismissingEditors.filter { it !in editorsInPath }
+                Box(Modifier.fillMaxSize()) {
+                    editorsToRender.forEach { editorRoute ->
+                        key(editorRoute) {
+                            // Born invisible so that flipping targetState to true triggers the enter transition.
+                            val transitionState = remember(editorRoute) { MutableTransitionState(false) }
+                            transitionState.targetState = editorRoute !in dismissingEditors
+
+                            AnimatedVisibility(
+                                visibleState = transitionState,
+                                enter = fadeIn(animationSpec = tween(300, easing = { it * it })) + slideInVertically(
+                                    animationSpec = tween(400, easing = { 1f - (1f - it) * (1f - it) }),
+                                    initialOffsetY = { height -> height },
+                                ),
+                                exit = fadeOut(animationSpec = tween(200)) + slideOutHorizontally(
+                                    animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) }),
+                                    targetOffsetX = { width -> width },
+                                ),
+                                label = editorRoute.workItemID?.stringValue ?: "new-${editorRoute.projectID}",
+                            ) {
+                                WorkItemEditorDestination(
+                                    projectID = editorRoute.projectID,
+                                    workItemID = editorRoute.workItemID,
+                                    initialStatus = editorRoute.initialStatus,
+                                    initialSprintID = editorRoute.initialSprintID,
+                                    repository = environment.repository,
+                                    dateProvider = environment.dateProvider,
+                                    scope = scope,
+                                    router = router,
+                                    tab = tab,
+                                    onDismiss = {
+                                        if (editorRoute !in dismissingEditors) {
+                                            dismissingEditors.add(editorRoute)
+                                            scope.launch {
+                                                delay(EDITOR_EXIT_MS)
+                                                dismissingEditors.remove(editorRoute)
+                                                val currentPath = router.path(tab)
+                                                if (currentPath.lastOrNull() == editorRoute) {
+                                                    router.setPath(currentPath.dropLast(1), tab)
+                                                }
+                                            }
+                                        }
+                                    },
+                                )
                             }
-                        },
-                    )
+                        }
+                    }
                 }
             }
 
