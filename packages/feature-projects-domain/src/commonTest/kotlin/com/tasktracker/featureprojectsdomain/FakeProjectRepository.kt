@@ -423,6 +423,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storyPoints: Int?,
         sprintID: SprintID?,
         now: Instant,
+        blockedByIDs: List<WorkItemID>,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -440,6 +441,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 assignee = assignee,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
+                blockedByIDs = blockedByIDs,
                 sprintID = sprintID,
                 rank = itemCounter,
                 createdAt = now,
@@ -475,6 +477,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        blockedByIDs: Patch<List<WorkItemID>>,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -498,6 +501,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             when (storyPoints) {
                 is Patch.Unmentioned -> Unit
                 is Patch.Of -> item.storyPoints = storyPoints.value
+            }
+            when (blockedByIDs) {
+                is Patch.Unmentioned -> Unit
+                is Patch.Of -> item.blockedByIDs = blockedByIDs.value
             }
             item.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))

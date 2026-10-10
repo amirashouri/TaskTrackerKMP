@@ -127,6 +127,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         storyPoints: Int?,
         sprintID: SprintID?,
         now: Instant,
+        blockedByIDs: List<WorkItemID>,
     ): WorkItem = boom()
 
     override suspend fun updateWorkItem(
@@ -138,6 +139,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        blockedByIDs: Patch<List<WorkItemID>>,
     ): WorkItem = boom()
 
     override suspend fun moveWorkItem(

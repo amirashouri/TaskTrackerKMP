@@ -261,6 +261,12 @@ interface ProjectRepositoryPort {
         storyPoints: Int? = null,
         sprintID: SprintID? = null,
         now: Instant,
+        /**
+         * Last, and defaulted, so every existing positional call site still reads `now` as its
+         * final argument. Putting it before `now` silently re-typed that argument and broke a
+         * dozen tests at once.
+         */
+        blockedByIDs: List<WorkItemID> = emptyList(),
     ): WorkItem
 
     /**
@@ -282,6 +288,8 @@ interface ProjectRepositoryPort {
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        /** Last and defaulted, for the same reason as [createWorkItem]'s. */
+        blockedByIDs: Patch<List<WorkItemID>> = Patch.Unmentioned,
     ): WorkItem
 
     /**

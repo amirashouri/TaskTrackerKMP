@@ -227,6 +227,14 @@
     <string name="work_item_collapse">Collapse</string>
     <string name="work_item_key_read_only">%1$s is issued by the project and cannot be changed.</string>
     <string name="work_item_overdue">Overdue</string>
+    <string name="work_item_depends_label">Depends on</string>
+    <string name="work_item_depends_add">Add dependency</string>
+    <string name="work_item_depends_done">Done</string>
+    <string name="work_item_depends_empty">Nothing blocking this task yet.</string>
+    <string name="work_item_depends_search_placeholder">Search tasks</string>
+    <string name="work_item_depends_picker_title">Choose blockers</string>
+    <string name="work_item_depends_remove">Remove %1$s</string>
+    <string name="work_item_back">Back</string>
 
     <!-- The board, the backlog, and the archive. -->
     <string name="board_empty_column">Nothing here yet</string>

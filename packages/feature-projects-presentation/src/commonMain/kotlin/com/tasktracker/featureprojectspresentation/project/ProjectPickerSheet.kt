@@ -115,7 +115,7 @@ private fun ProjectPickerContent(
             )
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxWidth().testTag(ProjectPickerListTag),
+                modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag(ProjectPickerListTag),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             ) {
                 items(projects, key = { it.id.stringValue }) { project ->

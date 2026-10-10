@@ -1,11 +1,5 @@
 package com.tasktracker.featureprojectspresentation
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,9 +17,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
-import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.ThemeScheme
@@ -43,20 +37,20 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.work_item_archive
 import com.tasktracker.resources.work_item_assignee_label
-import com.tasktracker.resources.work_item_collapse
+import com.tasktracker.resources.work_item_back
 import com.tasktracker.resources.work_item_details_label
 import com.tasktracker.resources.work_item_due_clear
 import com.tasktracker.resources.work_item_due_label
 import com.tasktracker.resources.work_item_due_set
 import com.tasktracker.resources.work_item_editor_edit_title
 import com.tasktracker.resources.work_item_editor_new_title
-import com.tasktracker.resources.work_item_expand
 import com.tasktracker.resources.work_item_key_read_only
 import com.tasktracker.resources.work_item_priority_label
 import com.tasktracker.resources.work_item_status_label
@@ -197,13 +191,18 @@ fun WorkItemEditorSheet(
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
-    /** Whether the user has asked for a full page. */
-    expanded: Boolean = false,
-    /** Called when the user asks to expand or collapse. */
+    /** @deprecated The editor is now always full-screen; expand/collapse is no longer supported. */
+    expanded: Boolean = true,
+    /** @deprecated The editor is now always full-screen; expand/collapse is no longer supported. */
     onToggleExpanded: (Boolean) -> Unit = {},
+    /** See [WorkItemEditorForm.onBack]; `null` for a sheet with nothing under it. */
+    onBack: (() -> Unit)? = null,
+    /** See [WorkItemEditorForm.blockers]. */
+    blockers: List<WorkItem> = emptyList(),
+    onOpenBlocker: (WorkItemID) -> Unit = {},
+    onRemoveBlocker: (WorkItemID) -> Unit = {},
+    onAddBlockerClick: () -> Unit = {},
 ) {
-    val sheetVisible = visible && !expanded
-
     val editTitle = if (isCreating) {
         stringResource(Res.string.work_item_editor_new_title)
     } else {
@@ -211,90 +210,43 @@ fun WorkItemEditorSheet(
         stringResource(Res.string.work_item_editor_edit_title, keyString)
     }
 
-    AnimatedContent(
-        targetState = expanded,
-        transitionSpec = {
-            if (targetState) {
-                (slideInVertically { height -> height } + fadeIn()) togetherWith
-                    (slideOutVertically { height -> -height / 3 } + fadeOut())
-            } else {
-                (slideInVertically { height -> -height / 3 } + fadeIn()) togetherWith
-                    (slideOutVertically { height -> height } + fadeOut())
-            }
-        },
-        label = "WorkItemEditorExpansion",
-        modifier = modifier,
-    ) { isExpanded ->
-        if (isExpanded) {
-            ProjectsEditorFullScreen(
-                title = editTitle,
-                details = details,
-                storyPointsText = storyPointsText,
-                status = status,
-                priority = priority,
-                assignee = assignee,
-                hasDueDate = hasDueDate,
-                isCreating = isCreating,
-                issuedKey = issuedKey,
-                selectableStatuses = selectableStatuses,
-                isFiledAway = isFiledAway,
-                canSave = canSave,
-                isBusy = isBusy,
-                errorMessage = errorMessage,
-                onTitleChanged = onTitleChanged,
-                onDetailsChanged = onDetailsChanged,
-                onStoryPointsChanged = onStoryPointsChanged,
-                onStatusChanged = onStatusChanged,
-                onPriorityChanged = onPriorityChanged,
-                onAssigneeChanged = onAssigneeChanged,
-                onToggleDueDate = onToggleDueDate,
-                onFileAway = onFileAway,
-                onSave = onSave,
-                onCancel = onCancel,
-                onDismissError = onDismissError,
-                onToggleExpanded = onToggleExpanded,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag(WorkItemEditorFullScreenTag),
-            )
-        } else {
-            TTBottomSheetScaffold(
-                visible = sheetVisible,
-                onDismissRequest = onDismissRequest,
-                onDismissed = onDismissed,
-            ) {
-                WorkItemEditorForm(
-                    title = title,
-                    details = details,
-                    storyPointsText = storyPointsText,
-                    status = status,
-                    priority = priority,
-                    assignee = assignee,
-                    hasDueDate = hasDueDate,
-                    isCreating = isCreating,
-                    issuedKey = issuedKey,
-                    selectableStatuses = selectableStatuses,
-                    isFiledAway = isFiledAway,
-                    canSave = canSave,
-                    isBusy = isBusy,
-                    errorMessage = errorMessage,
-                    onTitleChanged = onTitleChanged,
-                    onDetailsChanged = onDetailsChanged,
-                    onStoryPointsChanged = onStoryPointsChanged,
-                    onStatusChanged = onStatusChanged,
-                    onPriorityChanged = onPriorityChanged,
-                    onAssigneeChanged = onAssigneeChanged,
-                    onToggleDueDate = onToggleDueDate,
-                    onFileAway = onFileAway,
-                    onSave = onSave,
-                    onCancel = onCancel,
-                    onDismissError = onDismissError,
-                    onToggleExpanded = { onToggleExpanded(true) },
-                    modifier = Modifier.testTag(WorkItemEditorSheetTag),
-                )
-            }
-        }
-    }
+    // The editor is now always full-screen. We keep the deprecated parameters
+    // for binary compatibility with NavigationHost.
+    ProjectsEditorFullScreen(
+        title = editTitle,
+        details = details,
+        storyPointsText = storyPointsText,
+        status = status,
+        priority = priority,
+        assignee = assignee,
+        hasDueDate = hasDueDate,
+        isCreating = isCreating,
+        issuedKey = issuedKey,
+        selectableStatuses = selectableStatuses,
+        isFiledAway = isFiledAway,
+        canSave = canSave,
+        isBusy = isBusy,
+        errorMessage = errorMessage,
+        onTitleChanged = onTitleChanged,
+        onDetailsChanged = onDetailsChanged,
+        onStoryPointsChanged = onStoryPointsChanged,
+        onStatusChanged = onStatusChanged,
+        onPriorityChanged = onPriorityChanged,
+        onAssigneeChanged = onAssigneeChanged,
+        onToggleDueDate = onToggleDueDate,
+        onFileAway = onFileAway,
+        onSave = onSave,
+        onCancel = onCancel,
+        onDismissError = onDismissError,
+        onBack = onBack,
+        blockers = blockers,
+        onOpenBlocker = onOpenBlocker,
+        onRemoveBlocker = onRemoveBlocker,
+        onAddBlockerClick = onAddBlockerClick,
+        modifier = modifier
+            .fillMaxSize()
+            .testTag(WorkItemEditorFullScreenTag),
+    )
 }
 
 @Composable
@@ -333,13 +285,18 @@ private fun ProjectsEditorFullScreen(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
-    onToggleExpanded: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /** See [WorkItemEditorForm.onBack]. */
+    onBack: (() -> Unit)? = null,
+    blockers: List<WorkItem> = emptyList(),
+    onOpenBlocker: (WorkItemID) -> Unit = {},
+    onRemoveBlocker: (WorkItemID) -> Unit = {},
+    onAddBlockerClick: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ttCanvas())
+            .background(ttCanvas().copy(alpha = 0.96f))
             .padding(ttSpacing.screenGutterLarge)
             .verticalScroll(rememberScrollState())
             .padding(bottom = LocalTabBarScrollUnderInset.current),
@@ -350,6 +307,14 @@ private fun ProjectsEditorFullScreen(
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onBack != null) {
+                ttGlassIconButton(
+                    image = ttActionIcons.chevronLeft,
+                    contentDescription = stringResource(Res.string.work_item_back),
+                    onClick = onBack,
+                    modifier = Modifier.testTag(WorkItemBackTag),
+                )
+            }
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
@@ -370,17 +335,6 @@ private fun ProjectsEditorFullScreen(
                     )
                 }
             }
-            ttGlassIconButton(
-                image = ttActionIcons.collapse,
-                contentDescription = stringResource(Res.string.work_item_collapse),
-                onClick = { onToggleExpanded(false) },
-                modifier = Modifier.testTag(WorkItemCollapseTag),
-            )
-            ttGlassButton(
-                label = stringResource(Res.string.common_cancel),
-                onClick = onCancel,
-                modifier = Modifier.testTag(WorkItemCancelTag),
-            )
         }
         ProjectsTextField(
             title = stringResource(Res.string.work_item_title_label),
@@ -461,6 +415,12 @@ private fun ProjectsEditorFullScreen(
                 modifier = Modifier.testTag(WorkItemDueToggleTag),
             )
         }
+        WorkItemDependencyPills(
+            blockers = blockers,
+            onOpenBlocker = onOpenBlocker,
+            onRemoveBlocker = onRemoveBlocker,
+            onAddClick = onAddBlockerClick,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -495,8 +455,6 @@ private fun ProjectsEditorFullScreen(
     }
 }
 
-const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
-
 @Suppress("LongParameterList")
 @Composable
 private fun WorkItemEditorForm(
@@ -526,7 +484,18 @@ private fun WorkItemEditorForm(
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
-    onToggleExpanded: ((Boolean) -> Unit)? = null,
+    blockers: List<WorkItem> = emptyList(),
+    onOpenBlocker: (WorkItemID) -> Unit = {},
+    onRemoveBlocker: (WorkItemID) -> Unit = {},
+    onAddBlockerClick: () -> Unit = {},
+    /**
+     * Returns to the sheet underneath this one, or `null` when nothing is underneath.
+     *
+     * Only a sheet stacked over another editor has one: the base editor is dismissed by
+     * Cancel/Save, while a sheet opened *from* a pill has a draft below it that must not be
+     * thrown away, so it needs a distinct gesture that pops exactly one level.
+     */
+    onBack: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -534,9 +503,17 @@ private fun WorkItemEditorForm(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (onBack != null) {
+                ttGlassIconButton(
+                    image = ttActionIcons.chevronLeft,
+                    contentDescription = stringResource(Res.string.work_item_back),
+                    onClick = onBack,
+                    modifier = Modifier.testTag(WorkItemBackTag),
+                )
+            }
             ttText(
                 text = if (isCreating) {
                     stringResource(Res.string.work_item_editor_new_title)
@@ -547,14 +524,6 @@ private fun WorkItemEditorForm(
                 color = ttLabel(),
                 modifier = Modifier.weight(1f),
             )
-            if (onToggleExpanded != null) {
-                ttGlassIconButton(
-                    image = ttActionIcons.expand,
-                    contentDescription = stringResource(Res.string.work_item_expand),
-                    onClick = { onToggleExpanded(true) },
-                    modifier = Modifier.testTag(WorkItemExpandTag),
-                )
-            }
         }
         errorMessage?.let { message ->
             ttBanner(message = message, onDismiss = onDismissError)
@@ -645,6 +614,12 @@ private fun WorkItemEditorForm(
                 modifier = Modifier.testTag(WorkItemDueToggleTag),
             )
         }
+        WorkItemDependencyPills(
+            blockers = blockers,
+            onOpenBlocker = onOpenBlocker,
+            onRemoveBlocker = onRemoveBlocker,
+            onAddClick = onAddBlockerClick,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
@@ -742,8 +717,9 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
 
 const val WorkItemEditorScreenTag = "workItem.editor.screen"
 const val WorkItemEditorSheetTag = "workItem.editor.sheet"
-const val WorkItemExpandTag = "workItem.editor.expand"
-const val WorkItemCollapseTag = "workItem.editor.collapse"
+const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
+/** The chevron in a stacked sheet's header, present only when a sheet sits underneath it. */
+const val WorkItemBackTag = "workItem.editor.back"
 const val WorkItemStatusPickerTag = "workItem.editor.status"
 const val WorkItemPriorityPickerTag = "workItem.editor.priority"
 const val WorkItemDueToggleTag = "workItem.editor.dueToggle"

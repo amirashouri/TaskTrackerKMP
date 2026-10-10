@@ -93,6 +93,8 @@ class RecordCompletenessTest {
             resolvedAt = null,
             storyPoints = 5,
             sprintID = "33333333-3333-4333-8333-333333333333",
+            blockedByIDs =
+                "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
         )
 
         assertEquals(expected, item.toRecord())
@@ -236,6 +238,10 @@ class RecordCompletenessTest {
             // able to teach a device that has been offline which sprint a card was put into.
             storyPoints = 5,
             sprintID = "33333333-3333-4333-8333-333333333333",
+            // Blockers ride in from the payload for the same reason the estimate and the sprint
+            // do: a device that has been offline has to learn which tasks now gate this one.
+            blockedByIDs =
+                "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
         )
 
         assertEquals(expected, stored.apply(incoming))
@@ -344,6 +350,8 @@ class RecordCompletenessTest {
             resolvedAt = null,
             storyPoints = 5,
             sprintID = "33333333-3333-4333-8333-333333333333",
+            blockedByIDs =
+                "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
         )
 
         assertEquals(aWorkItem(), record.domainValue)

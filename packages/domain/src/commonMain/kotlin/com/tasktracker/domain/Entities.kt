@@ -449,6 +449,15 @@ data class WorkItem(
      */
     var storyPoints: Int? = null,
     /**
+     * The tasks this one waits on, as stable ids.
+     *
+     * A plain list on the item rather than a join table: the relation is small, unordered,
+     * and read with its owner every time the editor opens. Empty is "no blockers" rather
+     * than "unknown" — items created before this field existed migrate in with none, and a
+     * blocker deleted elsewhere shrinks the list on the next read.
+     */
+    var blockedByIDs: List<WorkItemID> = emptyList(),
+    /**
      * The sprint this item has been pulled into, or `null` for "in the backlog".
      *
      * `null` is the state almost every item starts in and is not a temporary one — the

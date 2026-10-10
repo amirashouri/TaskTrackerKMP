@@ -373,6 +373,112 @@ class WorkItemEditorModelTest {
         assertNull(model.errorMessage)
     }
 
+    // MARK: Dependencies
+
+    /**
+     * The blockers chosen in the picker are the ones the store ends up holding.
+     *
+     * This is the whole feature on the model side: a draft that collected ids and never
+     * forwarded them would leave every pill a local-only lie, and this is the assertion that
+     * would catch it.
+     */
+    @Test
+    fun `selected blockers reach the store on save`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val blocker = testWorkItem(projectID = project.id, key = "AP-1", title = "Design the API")
+        val item = testWorkItem(projectID = project.id, key = "AP-2", title = "Build it")
+        repository.seed(blocker)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.addBlockedBy(listOf(blocker.id))
+        assertNotNull(model.save())
+
+        assertEquals(listOf(blocker.id), repository.workItem(item.id)?.blockedByIDs)
+    }
+
+    /** A pill is added twice in the picker, and the list holds one pill. */
+    @Test
+    fun `a blocker selected twice is stored once`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val blocker = testWorkItem(projectID = project.id, key = "AP-1")
+        val item = testWorkItem(projectID = project.id, key = "AP-2")
+        repository.seed(blocker)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.addBlockedBy(listOf(blocker.id))
+        model.addBlockedBy(listOf(blocker.id))
+
+        assertEquals(listOf(blocker.id), model.blockedByIDs)
+        assertNotNull(model.save())
+        assertEquals(1, repository.workItem(item.id)?.blockedByIDs?.size)
+    }
+
+    /** The picker excludes the open task, but the model screens it again in case it is not. */
+    @Test
+    fun `an item is never its own blocker`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(projectID = project.id, key = "AP-1")
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.addBlockedBy(listOf(item.id))
+
+        assertEquals(emptyList(), model.blockedByIDs)
+    }
+
+    /** Removing the last pill saves an empty list rather than leaving the old one behind. */
+    @Test
+    fun `removing a blocker reaches the store as an empty list`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val blocker = testWorkItem(projectID = project.id, key = "AP-1")
+        val item = testWorkItem(
+            projectID = project.id,
+            key = "AP-2",
+            blockedByIDs = listOf(blocker.id),
+        )
+        repository.seed(blocker)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.removeBlockedBy(blocker.id)
+        assertNotNull(model.save())
+
+        assertEquals(emptyList(), repository.workItem(item.id)?.blockedByIDs)
+    }
+
+    /**
+     * A blocker edit is a change, so an untouched form is not.
+     *
+     * [WorkItemEditorModel.hasChanges] reads its `Draft`, and a field left out of that record
+     * would be invisible to it — a user could add a blocker and cancel out with no warning.
+     */
+    @Test
+    fun `a blocker edit counts as a change`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val blocker = testWorkItem(projectID = project.id, key = "AP-1")
+        val item = testWorkItem(projectID = project.id, key = "AP-2")
+        repository.seed(blocker)
+        repository.seed(item)
+        val model = editing(item, repository)
+        assertFalse(model.hasChanges)
+
+        model.addBlockedBy(listOf(blocker.id))
+
+        assertTrue(model.hasChanges)
+    }
+
     // MARK: Helpers
 
     private fun newItem(repository: FakeProjectRepository = FakeProjectRepository()) =

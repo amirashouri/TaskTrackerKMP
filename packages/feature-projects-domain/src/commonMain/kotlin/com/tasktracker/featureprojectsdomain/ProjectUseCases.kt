@@ -222,11 +222,15 @@ class SaveWorkItem(
         assignee: String? = null,
         dueDate: Instant? = null,
         storyPoints: Int? = null,
+        blockedByIDs: List<WorkItemID> = emptyList(),
         initialSprintID: SprintID? = null,
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
         val assignee = WorkItemRules.normaliseAssignee(assignee)
+        // A task cannot wait on itself, and duplicates are one blocker stated twice.
+        // Sanitised here so every caller gets the same rule rather than each screening it.
+        val blockers = blockedByIDs.filter { it != id }.distinct()
 
         if (id == null) {
             val created = repository.createWorkItem(
@@ -238,6 +242,7 @@ class SaveWorkItem(
                 assignee = assignee,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
+                blockedByIDs = blockers,
                 sprintID = initialSprintID,
                 now = dateProvider.now(),
             )
@@ -259,6 +264,7 @@ class SaveWorkItem(
             assignee = Patch.Of(assignee),
             dueDate = Patch.Of(dueDate),
             storyPoints = Patch.Of(storyPoints),
+            blockedByIDs = Patch.Of(blockers),
             now = dateProvider.now(),
         )
 

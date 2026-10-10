@@ -1408,26 +1408,29 @@ object ShellScenarios {
         onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
 
         // The path above proves the row pushed from *here*; this is what the shell drew
-        // behind the sheet. The route-pushing wiring was already correct when the editor
+        // behind the editor. The route-pushing wiring was already correct when the editor
         // opened over the *board* from a sprint: the background `when` in `PushedRoute`
         // lumped SprintDetail into its Board default, so the sheet sat on a board the user
         // had never opened and the pop then "returned" to a sprint they never saw leave.
-        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+        // With the editor now full-screen, the sprint detail remains composed underneath
+        // but is fully covered by the editor and not in the semantics tree while the editor
+        // is open. It becomes visible again once the editor is dismissed.
         assertTrue(
             onAllNodes(hasTestTag(ProjectBoardScreenTag)).fetchSemanticsNodes().isEmpty(),
             "expected the sprint detail, not the board, behind the editor opened from a " +
                 "sprint task row",
         )
 
-        // Cancel has to land back on that same sprint detail — closing the sheet the user
+        // Cancel has to land back on that same sprint detail — closing the editor the user
         // opened over it, not on the board the background used to fall back to.
         onNodeWithTag(WorkItemCancelTag).performScrollTo().performClick()
         waitForIdle()
         assertTrue(
             onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
-            "expected Cancel to close the editor rather than leave the sheet standing over " +
+            "expected Cancel to close the editor rather than leave it standing over " +
                 "the sprint",
         )
+        // After the editor is dismissed, the sprint detail should be visible again.
         onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
         onNodeWithTag(WorkItemBacklogRowTag(committed)).performScrollTo().assertIsDisplayed()
         assertEquals(

@@ -84,7 +84,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         StatusChangeRecord::class,
         SprintRecord::class,
     ],
-    version = 6,
+    version = 7,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -115,6 +115,12 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         // `0` is. A NOT NULL DEFAULT 0 column is what lets Room run this as an auto-migration
         // rather than a rebuild — the same shape as 3 → 4 and 4 → 5.
         AutoMigration(from = 5, to = 6),
+        // 6 → 7: `work_items.blockedByIDs`, the comma-joined blocker ids.
+        //
+        // Additive and cannot lose data: every existing item waited on nothing, which is what
+        // `null` is. A nullable TEXT column is what lets Room run this as an
+        // auto-migration rather than a rebuild — the same shape as 3 → 4 and 4 → 5.
+        AutoMigration(from = 6, to = 7),
     ],
     exportSchema = true,
 )

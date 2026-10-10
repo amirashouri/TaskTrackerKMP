@@ -207,6 +207,13 @@ internal fun aWorkItem(
     // both. A value here is what makes forgetting one a visible difference.
     storyPoints: Int? = 5,
     sprintID: SprintID? = parseSprintID("33333333-3333-4333-8333-333333333333"),
+    // Non-default for exactly the reason the two above are: this column encodes `null` for an
+    // empty list, so a fixture with no blockers would let an `expected` record that omits the
+    // column match a mapping that silently dropped it. Two ids also prove the join order.
+    blockedByIDs: List<WorkItemID> = listOf(
+        parseWorkItemID("44444444-4444-4444-8444-444444444444")!!,
+        parseWorkItemID("55555555-5555-4555-8555-555555555555")!!,
+    ),
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -223,6 +230,7 @@ internal fun aWorkItem(
     resolvedAt = resolvedAt,
     storyPoints = storyPoints,
     sprintID = sprintID,
+    blockedByIDs = blockedByIDs,
 )
 
 /** As [aProject], for a sprint. */

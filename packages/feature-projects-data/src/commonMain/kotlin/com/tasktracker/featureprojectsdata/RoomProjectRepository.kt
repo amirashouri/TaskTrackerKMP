@@ -615,6 +615,7 @@ class RoomProjectRepository(
         storyPoints: Int?,
         sprintID: SprintID?,
         now: Instant,
+        blockedByIDs: List<WorkItemID>,
     ): WorkItem {
         val normalisedTitle = WorkItemRules.normaliseTitle(title)
         val normalisedDetails = WorkItemRules.normaliseDetails(details)
@@ -625,8 +626,9 @@ class RoomProjectRepository(
         val created = inTransaction(database) {
             val project = readProject(projectID)
             val number = project.nextItemNumber
+            val freshID = randomWorkItemID()
             val item = WorkItem(
-                id = randomWorkItemID(),
+                id = freshID,
                 projectID = projectID,
                 key = ProjectRules.workItemKey(project.keyPrefix, number),
                 title = normalisedTitle,
@@ -636,6 +638,7 @@ class RoomProjectRepository(
                 assignee = normalisedAssignee,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
+                blockedByIDs = blockedByIDs.filter { it != freshID }.distinct(),
                 sprintID = sprintID,
                 rank = topRankIn(projectID, status),
                 createdAt = now,
@@ -691,6 +694,7 @@ class RoomProjectRepository(
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        blockedByIDs: Patch<List<WorkItemID>>,
     ): WorkItem {
         val normalisedTitle = title?.let { WorkItemRules.normaliseTitle(it) }
         val normalisedDetails = details?.let { WorkItemRules.normaliseDetails(it) }
@@ -708,6 +712,8 @@ class RoomProjectRepository(
             if (assignee is Patch.Of) item.assignee = WorkItemRules.normaliseAssignee(assignee.value)
             if (dueDate is Patch.Of) item.dueDate = dueDate.value
             if (storyPoints is Patch.Of) item.storyPoints = storyPoints.value
+            if (blockedByIDs is Patch.Of) item.blockedByIDs =
+                blockedByIDs.value.filter { it != id }.distinct()
             item.updatedAt = now
 
             database.workItemDao().update(item.toRecord())

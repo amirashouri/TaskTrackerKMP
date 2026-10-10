@@ -81,6 +81,14 @@ data class WorkItemRecord(
      */
     val storyPoints: Int? = null,
     /**
+     * The ids this item waits on, as comma-separated UUID strings, or `null` for none.
+     *
+     * Nullable so the `AutoMigration(6, 7)` brings every existing row across with no
+     * blockers and keeps existing construction sites compiling — the same shape as
+     * `storyPoints`/`sprintID` in 3 → 4.
+     */
+    val blockedByIDs: String? = null,
+    /**
      * The sprint this item is in, or `null` for the backlog.
      *
      * Indexed because the sprint detail screen reads by sprint, not by project, and

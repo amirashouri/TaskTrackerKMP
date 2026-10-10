@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
@@ -146,6 +147,25 @@ internal val ProjectRecord.domainValue: Project?
 private fun priorityFor(rank: Int): Priority = Priority.entries.getOrElse(rank) { Priority.Medium }
 
 /**
+ * Encodes a blocker list for [WorkItemRecord.blockedByIDs].
+ *
+ * Comma-joined UUID strings, `null` for none — the same encoding `memberIDs` uses. `null`
+ * rather than `""` so the migration default and the empty state are one value, and an
+ * empty split never has to be defended against.
+ */
+internal fun List<WorkItemID>.toBlockedByColumn(): String? =
+    if (isEmpty()) null else joinToString(",") { it.stringValue }
+
+/**
+ * Decodes [WorkItemRecord.blockedByIDs], dropping ids this build cannot parse.
+ *
+ * Drop rather than fail, for the same reason an unreadable sprint id reads as `null`:
+ * one corrupt id costs one blocker, where a thrown decode costs the whole card.
+ */
+internal fun String?.toBlockedByIDs(): List<WorkItemID> =
+    this?.split(',')?.mapNotNull { runCatching { WorkItemID(it) }.getOrNull() }.orEmpty()
+
+/**
  * A new row for [this], with `resolvedAt` reconciled first.
  *
  * Reconciled on the way *in* as well as on the way out, so a row written from a value that
@@ -178,6 +198,7 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         // `WorkItem`, and a repository that quietly changed its `sprintID` would be editing
         // a value its caller goes on to re-save.
         storyPoints = reconciled.storyPoints,
+        blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
         sprintID = reconciled.sprintID?.stringValue,
     )
 }
@@ -212,6 +233,7 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         updatedAt = reconciled.updatedAt,
         resolvedAt = reconciled.resolvedAt,
         storyPoints = reconciled.storyPoints,
+        blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
         // Sprint membership is a pulled value like any other: a device that has been offline
         // for a week has to be able to *learn* which sprint a card was put into, not only
         // ever add one locally. The incoming value wins outright, including its absence —
@@ -258,6 +280,7 @@ internal val WorkItemRecord.domainValue: WorkItem?
             updatedAt = updatedAt,
             resolvedAt = resolvedAt,
             storyPoints = storyPoints,
+            blockedByIDs = blockedByIDs.toBlockedByIDs(),
             sprintID = parsedSprint,
         )
         value.reconcileResolutionAt(updatedAt)

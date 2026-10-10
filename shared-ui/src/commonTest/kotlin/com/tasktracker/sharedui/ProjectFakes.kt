@@ -266,6 +266,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint = unused("reopenSprint")
 
+    // Present only to satisfy the port: no shell test archives a sprint, so these follow the
+    // same `unused` contract as `createSprint`/`finishSprint` above. They were missing, which
+    // left this class failing to compile before any dependency work landed.
+    override suspend fun archiveSprint(id: SprintID, now: Instant): Sprint = unused("archiveSprint")
+
+    override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint =
+        unused("unarchiveSprint")
+
     override suspend fun deleteSprint(id: SprintID, now: Instant): Unit = unused("deleteSprint")
 
     override suspend fun updateProject(
@@ -289,6 +297,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storyPoints: Int?,
         sprintID: SprintID?,
         now: Instant,
+        blockedByIDs: List<WorkItemID>,
     ): WorkItem = unused("createWorkItem")
 
     override suspend fun updateWorkItem(
@@ -300,6 +309,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        blockedByIDs: Patch<List<WorkItemID>>,
     ): WorkItem = unused("updateWorkItem")
 
     override suspend fun deleteWorkItem(id: WorkItemID): Unit = unused("deleteWorkItem")

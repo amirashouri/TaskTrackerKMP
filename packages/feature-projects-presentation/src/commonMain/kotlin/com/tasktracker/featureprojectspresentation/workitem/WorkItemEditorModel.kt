@@ -109,6 +109,17 @@ class WorkItemEditorModel(
     var dueDate: Instant? by mutableStateOf(existing?.dueDate)
         private set
 
+    /**
+     * The ids this task waits on, as a draft list.
+     *
+     * Held as ids rather than resolved items: the editor is a snapshot and must not re-read
+     * the store on every keystroke, so resolution happens at the call site that renders the
+     * pills. Dedupe and self-exclusion happen on add, so the save path never has to defend
+     * against either.
+     */
+    var blockedByIDs: List<WorkItemID> by mutableStateOf(existing?.blockedByIDs.orEmpty())
+        private set
+
     /** The id and key of the task once a save has succeeded. */
     var savedWorkItemID: WorkItemID? by mutableStateOf(existing?.id)
         private set
@@ -165,6 +176,7 @@ class WorkItemEditorModel(
                 assignee = assignee.trim(),
                 dueDate = dueDate,
                 storyPoints = storyPoints,
+                blockedByIDs = blockedByIDs,
             )
             return original == null || current != original
         }
@@ -213,6 +225,23 @@ class WorkItemEditorModel(
     }
 
     /**
+     * Adds blockers, ignoring duplicates and the item itself.
+     *
+     * Self-exclusion uses the saved id when editing; a new item has no id yet, so the
+     * use case re-screens on save. Both layers screen because the model cannot see the
+     * future id and the use case cannot see the draft's intent.
+     */
+    fun addBlockedBy(ids: Collection<WorkItemID>) {
+        val self = savedWorkItemID
+        blockedByIDs = (blockedByIDs + ids.filter { it != self }).distinct()
+    }
+
+    /** Removes one blocker. A no-op for an id that was never there. */
+    fun removeBlockedBy(id: WorkItemID) {
+        blockedByIDs = blockedByIDs.filterNot { it == id }
+    }
+
+    /**
      * Saves, creating or updating as appropriate, and returns the outcome.
      *
      * `null` when the save did not happen, so a caller can stay on the editor. The key is
@@ -232,6 +261,7 @@ class WorkItemEditorModel(
                 assignee = assignee,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
+                blockedByIDs = blockedByIDs,
                 initialSprintID = if (savedWorkItemID == null) initialSprintID else null,
             )
         } ?: return null
@@ -292,6 +322,7 @@ class WorkItemEditorModel(
         val assignee: String,
         val dueDate: Instant?,
         val storyPoints: Int?,
+        val blockedByIDs: List<WorkItemID>,
     ) {
         companion object {
             fun of(item: WorkItem) = Draft(
@@ -302,6 +333,7 @@ class WorkItemEditorModel(
                 assignee = item.assignee.orEmpty().trim(),
                 dueDate = item.dueDate,
                 storyPoints = item.storyPoints,
+                blockedByIDs = item.blockedByIDs.toList(),
             )
         }
     }

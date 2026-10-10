@@ -16,7 +16,7 @@ import kotlin.test.Test
  * host's own file beside it. Every assertion lives in the scenario objects in `commonTest`;
  * these files are only entry points, which is why they are near-identical.
  *
- * The 49 entry points below are generated from the `val`s declared on those seven
+ * The 50 entry points below are generated from the `val`s declared on those seven
  * objects, so a new scenario cannot be written and then quietly not run.
  *
  * The same entry points as `ProjectsUiJvmTest`, on the platform where the real iOS
@@ -164,12 +164,6 @@ class ProjectsUiIosTest {
     fun tappingACardSelectsItsTask() = runComposeUiTest(block = WorkItemCardScenarios.tappingACardSelectsItsTask)
 
     @Test
-    fun expandButtonTogglesExpandedState() = runComposeUiTest(block = WorkItemEditorScenarios.expandButtonTogglesExpandedState)
-
-    @Test
-    fun collapseButtonTogglesExpandedState() = runComposeUiTest(block = WorkItemEditorScenarios.collapseButtonTogglesExpandedState)
-
-    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test
@@ -186,4 +180,13 @@ class ProjectsUiIosTest {
 
     @Test
     fun anUnlockedWindowDrawsNoNoteAndEverythingLive() = runComposeUiTest(block = SprintEditorScenarios.anUnlockedWindowDrawsNoNoteAndEverythingLive)
+
+    @Test
+    fun blockersRenderAsWrappedPillsEachWithARemoveCross() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.blockersRenderAsWrappedPillsEachWithARemoveCross)
+
+    @Test
+    fun noBlockersShowsAPlainMessageAndHidesThePillRow() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.noBlockersShowsAPlainMessageAndHidesThePillRow)
+
+    @Test
+    fun wrappingPillsDoNotOverflowTheFirstRow() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.wrappingPillsDoNotOverflowTheFirstRow)
 }

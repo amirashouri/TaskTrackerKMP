@@ -402,6 +402,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storyPoints: Int?,
         sprintID: SprintID?,
         now: Instant,
+        blockedByIDs: List<WorkItemID>,
     ): WorkItem = writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID) }) {
         failIfSet()
         val project = storedProjects.first { it.id == projectID }
@@ -418,6 +419,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             assignee = assignee,
             dueDate = dueDate,
             storyPoints = storyPoints,
+            blockedByIDs = blockedByIDs,
             sprintID = sprintID,
             createdAt = now,
             updatedAt = now,
@@ -438,6 +440,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
+        blockedByIDs: Patch<List<WorkItemID>>,
     ): WorkItem = writing({
         ProjectChange(ProjectChange.Kind.WorkItems, storedItems.first { it.id == id }.projectID)
     }) {
@@ -456,6 +459,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
         when (storyPoints) {
             is Patch.Of -> existing.storyPoints = storyPoints.value
+            Patch.Unmentioned -> Unit
+        }
+        when (blockedByIDs) {
+            is Patch.Of -> existing.blockedByIDs = blockedByIDs.value
             Patch.Unmentioned -> Unit
         }
         existing.updatedAt = now
@@ -642,6 +649,7 @@ fun testWorkItem(
     id: WorkItemID = randomWorkItemID(),
     storyPoints: Int? = null,
     sprintID: SprintID? = null,
+    blockedByIDs: List<WorkItemID> = emptyList(),
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -654,6 +662,7 @@ fun testWorkItem(
     dueDate = dueDate,
     storyPoints = storyPoints,
     sprintID = sprintID,
+    blockedByIDs = blockedByIDs,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,

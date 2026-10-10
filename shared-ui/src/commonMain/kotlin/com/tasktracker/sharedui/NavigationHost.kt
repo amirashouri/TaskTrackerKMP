@@ -84,6 +84,7 @@ import com.tasktracker.featureprojectspresentation.SprintEditorModel
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
 import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
+import com.tasktracker.featureprojectspresentation.WorkItemDependencyPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListScreen
 import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreen
@@ -267,6 +268,8 @@ fun NavigationHost(
                         repository = environment.repository,
                         dateProvider = environment.dateProvider,
                         scope = scope,
+                        router = router,
+                        tab = tab,
                         onDismiss = {
                             val currentPath = router.path(tab)
                             if (currentPath.lastOrNull() == editorRoute) {
@@ -1134,6 +1137,8 @@ private fun WorkItemEditorDestination(
     dateProvider: DateProvider,
     scope: CoroutineScope,
     onDismiss: () -> Unit,
+    router: Router,
+    tab: AppTab,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -1162,18 +1167,31 @@ private fun WorkItemEditorDestination(
     // Tracked here rather than on the model because the model has no in-flight flag, and an
     // editor without one answers a double tap with two writes. Named rather than defaulted at
     // the call site so the omission is visible: adding a flag is a model change.
+    // Tracked here rather than on the model because the model has no in-flight flag, and an
+    // editor without one answers a double tap with two writes. Named rather than defaulted at
+    // the call site so the omission is visible: adding a flag is a model change.
     var isBusy by remember(model) { mutableStateOf(false) }
-    var isSheetVisible by remember(projectID, workItemID, initialStatus) { mutableStateOf(true) }
-    var isSheetExpanded by remember(projectID, workItemID, initialStatus) { mutableStateOf(false) }
 
-    val toggleExpanded = { expanded: Boolean ->
-        kotlin.run {
-            scope.launch {
-                isSheetExpanded = expanded
-            }
-            Unit
-        }
+    // The project's tasks, read once for two jobs: resolving the draft's blocker ids into
+    // pills, and offering candidates to the picker. Backlog and board work are the same
+    // query — `workItems(projectID)` is every task in the project whatever its status.
+    val projectItems by produceState<List<WorkItem>>(
+        initialValue = emptyList(),
+        projectID,
+        repository,
+    ) {
+        value = runCatching { repository.workItems(projectID) }.getOrDefault(emptyList())
     }
+
+    // Resolved here rather than on the model: the model is a draft and must not re-read the
+    // store, and an id whose task has since been deleted simply drops out of the row.
+    val blockers = model.blockedByIDs.mapNotNull { id -> projectItems.firstOrNull { it.id == id } }
+    // The task itself is never its own blocker. A create has no id yet, and there is nothing
+    // to exclude until the item exists in the store.
+    val candidates = projectItems.filter { it.id != workItemID }
+
+    var isPickerVisible by remember(model) { mutableStateOf(false) }
+    var pickerSelectedIDs by remember(model) { mutableStateOf<Set<WorkItemID>>(emptySet()) }
 
     WorkItemEditorSheet(
         title = model.title,
@@ -1213,11 +1231,7 @@ private fun WorkItemEditorDestination(
         onFileAway = {
             scope.launch {
                 if (model.fileAway()) {
-                    if (isSheetExpanded) {
-                        onDismiss()
-                    } else {
-                        isSheetVisible = false
-                    }
+                    onDismiss()
                 }
             }
         },
@@ -1229,37 +1243,72 @@ private fun WorkItemEditorDestination(
                 val outcome = model.save()
                 isBusy = false
                 if (outcome != null) {
-                    if (isSheetExpanded) {
-                        onDismiss()
-                    } else {
-                        isSheetVisible = false
-                    }
+                    onDismiss()
                 }
             }
         },
         onCancel = {
-            if (isSheetExpanded) {
-                onDismiss()
-            } else {
-                isSheetVisible = false
-            }
+            onDismiss()
         },
         onDismissError = model::dismissError,
-        visible = isSheetVisible,
+        // Blocker/dependency management
+        blockers = blockers,
+        onOpenBlocker = { itemID ->
+            router.push(
+                AppRoute.WorkItemEditor(
+                    projectID = projectID,
+                    workItemID = itemID,
+                ),
+                tab,
+            )
+        },
+        onRemoveBlocker = model::removeBlockedBy,
+        // Seeded from the draft so a reopen shows what is already there rather than an empty
+        // selection — the sheet is a picker over a list the form already holds.
+        onAddBlockerClick = {
+            pickerSelectedIDs = model.blockedByIDs.toSet()
+            isPickerVisible = true
+        },
         onDismissRequest = {
             if (!isBusy) {
-                if (isSheetExpanded) {
-                    onDismiss()
-                } else {
-                    isSheetVisible = false
-                }
+                onDismiss()
             }
         },
         onDismissed = onDismiss,
-        expanded = isSheetExpanded,
-        onToggleExpanded = toggleExpanded,
         modifier = Modifier.fillMaxSize().testTag(WorkItemEditorDestinationTag),
     )
+
+    // Dependency picker sheet — composed in a Box so it overlays the editor properly.
+    Box(
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        WorkItemDependencyPickerSheet(
+            candidates = candidates,
+            selectedIDs = pickerSelectedIDs,
+            onToggle = { id ->
+                pickerSelectedIDs =
+                    if (id in pickerSelectedIDs) pickerSelectedIDs - id else pickerSelectedIDs + id
+            },
+            onConfirm = {
+                model.addBlockedBy(pickerSelectedIDs)
+                pickerSelectedIDs = emptySet()
+                isPickerVisible = false
+            },
+            isBusy = isBusy,
+            visible = isPickerVisible,
+            onDismissRequest = {
+                if (!isBusy) {
+                    pickerSelectedIDs = emptySet()
+                    isPickerVisible = false
+                }
+            },
+            onDismissed = {
+                pickerSelectedIDs = emptySet()
+                isPickerVisible = false
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 /**
