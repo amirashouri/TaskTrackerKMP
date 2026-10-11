@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -476,6 +477,244 @@ class WorkItemEditorModelTest {
         model.addBlockedBy(listOf(blocker.id))
 
         assertTrue(model.hasChanges)
+    }
+
+    // MARK: Recurrence
+
+    /**
+     * A repeat edit is a change, so an untouched form is not.
+     *
+     * [WorkItemEditorModel.hasChanges] reads its `Draft`, and a field left out of that
+     * record would be invisible to it — a user could set a repeat rule and cancel out
+     * with no warning, and the rule would never be saved.
+     */
+    @Test
+    fun `a repeat rule counts as a change`() = runTest {
+        val model = editing(testWorkItem(projectID = testProject().id, title = "Ship it"))
+        assertFalse(model.hasChanges)
+
+        model.onRecurrenceChanged(Recurrence.Daily())
+
+        assertTrue(model.hasChanges)
+    }
+
+    @Test
+    fun `a chosen rule is saved with a new item`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Water the plants")
+        model.onRecurrenceChanged(Recurrence.Daily())
+
+        assertNotNull(model.save())
+
+        assertEquals(
+            Recurrence.Daily(),
+            repository.workItems(project.id).single().recurrence,
+            "the create path must carry the rule, not just the update path",
+        )
+    }
+
+    @Test
+    fun `clearing a rule reaches the store as a clear rather than a silence`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Water the plants",
+            recurrence = Recurrence.Weekly(5),
+        )
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onRecurrenceChanged(null)
+        assertNotNull(model.save())
+
+        assertEquals(
+            null,
+            repository.workItem(item.id)?.recurrence,
+            "the editor is the truth: clearing a repeat must clear the stored rule, not leave it",
+        )
+    }
+
+    /**
+     * Finishing a recurring task advances the series by a new card.
+     *
+     * The next instance is dated at the rule's next occurrence, carries the same rule,
+     * and lands in Backlog; the finished card keeps its own status and due date, because
+     * the series advances by a row rather than by rewriting one.
+     */
+    @Test
+    fun `saving a recurring item into Done spawns the next instance`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Water the plants",
+            status = WorkItemStatus.Todo,
+            dueDate = Instant.parse("2026-01-16T12:00:00Z"),
+            recurrence = Recurrence.Weekly(5),
+        )
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onStatusChanged(WorkItemStatus.Done)
+        assertNotNull(model.save())
+
+        val items = repository.workItems(project.id)
+        assertEquals(2, items.size, "finishing a recurring task must create the next instance")
+        val next = items.first { it.id != item.id }
+        assertEquals(
+            Instant.parse("2026-01-23T12:00:00Z"),
+            next.dueDate,
+            "weekly(Friday) from Fri 16 Jan noon should be Fri 23 Jan noon",
+        )
+        assertEquals(Recurrence.Weekly(5), next.recurrence, "the rule travels to the next instance")
+        assertEquals(WorkItemStatus.Backlog, next.status)
+        assertEquals(
+            WorkItemStatus.Done,
+            repository.workItem(item.id)?.status,
+            "the finished instance stays finished with its own history",
+        )
+    }
+
+    /**
+     * Expansion is a transition, not a state.
+     *
+     * The original is the snapshot the form opened with, so re-editing a task that was
+     * already Done — a typo in the title — must not spawn another instance per save.
+     */
+    @Test
+    fun `re-editing an item that was already Done does not expand it again`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Water the plants",
+            status = WorkItemStatus.Done,
+            dueDate = Instant.parse("2026-01-16T12:00:00Z"),
+            recurrence = Recurrence.Weekly(5),
+        )
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onTitleChanged("Water the plants properly")
+        assertNotNull(model.save())
+
+        assertEquals(
+            1,
+            repository.workItems(project.id).size,
+            "an edit to an already-finished recurring task must not spawn another instance",
+        )
+    }
+
+    @Test
+    fun `saving a recurring item not into Done does not expand it`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Water the plants",
+            status = WorkItemStatus.Todo,
+            dueDate = Instant.parse("2026-01-16T12:00:00Z"),
+            recurrence = Recurrence.Weekly(5),
+        )
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onStatusChanged(WorkItemStatus.InProgress)
+        assertNotNull(model.save())
+
+        assertEquals(
+            1,
+            repository.workItems(project.id).size,
+            "moving a recurring card between open lanes must not advance the series",
+        )
+    }
+
+    @Test
+    fun `finishing a one-off does not spawn anything`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Ship the one thing",
+            status = WorkItemStatus.Todo,
+            dueDate = Instant.parse("2026-01-16T12:00:00Z"),
+        )
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.onStatusChanged(WorkItemStatus.Done)
+        assertNotNull(model.save())
+
+        assertEquals(1, repository.workItems(project.id).size)
+    }
+
+    @Test
+    fun `a create saved straight into Done expands exactly once`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Daily standup")
+        model.onRecurrenceChanged(Recurrence.Daily())
+        model.onDueDateChanged(Instant.parse("2026-01-16T12:00:00Z"))
+        model.onStatusChanged(WorkItemStatus.Done)
+
+        assertNotNull(model.save())
+
+        assertEquals(
+            2,
+            repository.workItems(project.id).size,
+            "a brand-new recurring task saved straight into Done expands once, not never",
+        )
+    }
+
+    /**
+     * A failed expansion keeps the editor open on the card that was just saved.
+     *
+     * The save itself succeeded, so dismissing would leave a red banner nobody can read
+     * and a series that silently did not advance. The create is failed while the update
+     * is left alone — a sticky [FakeProjectRepository.failure] would take the save down
+     * with it and test the wrong thing.
+     */
+    @Test
+    fun `an expansion failure keeps the editor open with the banner readable`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            projectID = project.id,
+            title = "Water the plants",
+            status = WorkItemStatus.Todo,
+            dueDate = Instant.parse("2026-01-16T12:00:00Z"),
+            recurrence = Recurrence.Weekly(5),
+        )
+        repository.seed(item)
+        repository.createFailure = AppError.Storage("the outbox is full")
+        val model = editing(item, repository)
+
+        model.onStatusChanged(WorkItemStatus.Done)
+        val outcome = model.save()
+
+        assertNull(outcome, "a failed expansion must keep the editor open")
+        assertEquals(
+            AppError.Storage("the outbox is full").message,
+            model.errorMessage,
+            "the reason the series did not advance must be on the banner, verbatim",
+        )
+        assertEquals(
+            1,
+            repository.workItems(project.id).size,
+            "the save itself landed; only the next instance is missing",
+        )
     }
 
     // MARK: Helpers

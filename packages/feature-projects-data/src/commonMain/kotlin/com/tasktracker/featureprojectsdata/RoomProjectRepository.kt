@@ -26,6 +26,7 @@ import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -616,6 +617,7 @@ class RoomProjectRepository(
         sprintID: SprintID?,
         now: Instant,
         blockedByIDs: List<WorkItemID>,
+        recurrence: Recurrence?,
     ): WorkItem {
         val normalisedTitle = WorkItemRules.normaliseTitle(title)
         val normalisedDetails = WorkItemRules.normaliseDetails(details)
@@ -637,6 +639,7 @@ class RoomProjectRepository(
                 priority = priority,
                 assignee = normalisedAssignee,
                 dueDate = dueDate,
+                recurrence = recurrence,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs.filter { it != freshID }.distinct(),
                 sprintID = sprintID,
@@ -695,6 +698,7 @@ class RoomProjectRepository(
         storyPoints: Patch<Int?>,
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
+        recurrence: Patch<Recurrence?>,
     ): WorkItem {
         val normalisedTitle = title?.let { WorkItemRules.normaliseTitle(it) }
         val normalisedDetails = details?.let { WorkItemRules.normaliseDetails(it) }
@@ -714,6 +718,7 @@ class RoomProjectRepository(
             if (storyPoints is Patch.Of) item.storyPoints = storyPoints.value
             if (blockedByIDs is Patch.Of) item.blockedByIDs =
                 blockedByIDs.value.filter { it != id }.distinct()
+            if (recurrence is Patch.Of) item.recurrence = recurrence.value
             item.updatedAt = now
 
             database.workItemDao().update(item.toRecord())

@@ -14,6 +14,7 @@ import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -100,6 +101,15 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     /** Throw this from the next call of the named operation. */
     var failure: AppError? = null
+
+    /**
+     * Throw this from every `createWorkItem`, leaving updates alone.
+     *
+     * The editor's save is an update whose *expansion* is a create, so a sticky [failure]
+     * would take the save down with it; this knob fails only the create, which is how a
+     * test can hold "the save landed, the next instance did not".
+     */
+    var createFailure: AppError? = null
 
     /** Throw this instead of returning empty, from `seedSampleDataIfNeeded`. */
     var seedFailure: AppError? = null
@@ -403,8 +413,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         sprintID: SprintID?,
         now: Instant,
         blockedByIDs: List<WorkItemID>,
+        recurrence: Recurrence?,
     ): WorkItem = writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID) }) {
         failIfSet()
+        createFailure?.let { throw it }
         val project = storedProjects.first { it.id == projectID }
         val number = nextItemRank ?: project.nextItemNumber
         nextItemRank = null
@@ -418,6 +430,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             priority = priority,
             assignee = assignee,
             dueDate = dueDate,
+            recurrence = recurrence,
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs,
             sprintID = sprintID,
@@ -441,6 +454,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storyPoints: Patch<Int?>,
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
+        recurrence: Patch<Recurrence?>,
     ): WorkItem = writing({
         ProjectChange(ProjectChange.Kind.WorkItems, storedItems.first { it.id == id }.projectID)
     }) {
@@ -463,6 +477,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
         when (blockedByIDs) {
             is Patch.Of -> existing.blockedByIDs = blockedByIDs.value
+            Patch.Unmentioned -> Unit
+        }
+        when (recurrence) {
+            is Patch.Of -> existing.recurrence = recurrence.value
             Patch.Unmentioned -> Unit
         }
         existing.updatedAt = now
@@ -650,6 +668,7 @@ fun testWorkItem(
     storyPoints: Int? = null,
     sprintID: SprintID? = null,
     blockedByIDs: List<WorkItemID> = emptyList(),
+    recurrence: Recurrence? = null,
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -663,6 +682,7 @@ fun testWorkItem(
     storyPoints = storyPoints,
     sprintID = sprintID,
     blockedByIDs = blockedByIDs,
+    recurrence = recurrence,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,

@@ -84,7 +84,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         StatusChangeRecord::class,
         SprintRecord::class,
     ],
-    version = 7,
+    version = 8,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -121,6 +121,13 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         // `null` is. A nullable TEXT column is what lets Room run this as an
         // auto-migration rather than a rebuild — the same shape as 3 → 4 and 4 → 5.
         AutoMigration(from = 6, to = 7),
+        // 7 → 8: `work_items.recurrenceRaw` + `work_items.recurrenceUntil`, the repeat
+        // rule and its end date.
+        //
+        // Additive and cannot lose data: every existing item was a one-off, which is
+        // what two `null`s are — the same shape as 3 → 4 and 6 → 7, and the reason this
+        // is an auto-migration rather than a rebuild.
+        AutoMigration(from = 7, to = 8),
     ],
     exportSchema = true,
 )

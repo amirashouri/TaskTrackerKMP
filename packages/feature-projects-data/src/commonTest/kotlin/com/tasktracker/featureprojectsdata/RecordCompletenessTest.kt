@@ -95,6 +95,8 @@ class RecordCompletenessTest {
             sprintID = "33333333-3333-4333-8333-333333333333",
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            recurrenceRaw = "weekly:3",
+            recurrenceUntil = Moments.muchLater,
         )
 
         assertEquals(expected, item.toRecord())
@@ -242,6 +244,10 @@ class RecordCompletenessTest {
             // do: a device that has been offline has to learn which tasks now gate this one.
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            // A pulled value for the same reason: a device has to learn that a card became
+            // recurring — or stopped being — including its absence.
+            recurrenceRaw = "weekly:3",
+            recurrenceUntil = Moments.muchLater,
         )
 
         assertEquals(expected, stored.apply(incoming))
@@ -352,6 +358,8 @@ class RecordCompletenessTest {
             sprintID = "33333333-3333-4333-8333-333333333333",
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            recurrenceRaw = "weekly:3",
+            recurrenceUntil = Moments.muchLater,
         )
 
         assertEquals(aWorkItem(), record.domainValue)
@@ -428,7 +436,7 @@ class RecordCompletenessTest {
     // constructor call that omits a parameter does not compile — so the enumeration is the
     // compiler's, it runs on every target, and it cannot be stale. A reflective version would
     // have been a *report* of the same fact that could be out of date, rather than a build
-    // failure. The eight project columns, fifteen work-item columns, twelve sprint columns
+    // failure. The eight project columns, eighteen work-item columns, twelve sprint columns
     // and eight status-change columns are all here; `sequence` is the one column with no
     // domain counterpart, and it is the one that is not named in an expected record.
 

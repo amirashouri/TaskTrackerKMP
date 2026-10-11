@@ -13,11 +13,13 @@ import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemOrderingKey
 import com.tasktracker.domain.WorkItemStatus
+import kotlin.time.Instant
 
 /**
  * The two directions of the record↔domain mapping, for all three records.
@@ -165,6 +167,42 @@ internal fun String?.toBlockedByIDs(): List<WorkItemID> =
     this?.split(',')?.mapNotNull { runCatching { WorkItemID(it) }.getOrNull() }.orEmpty()
 
 /**
+ * Encodes a repeat rule for [WorkItemRecord.recurrenceRaw], or `null` for a one-off.
+ *
+ * `null` rather than `""` so "no rule" and "unreadable rule" are never the same
+ * stored value — the same shape [toBlockedByColumn] uses.
+ */
+internal fun Recurrence?.toRecurrenceColumn(): String? = this?.wireValue()
+
+/**
+ * Decodes [WorkItemRecord.recurrenceRaw] and pairs it with [WorkItemRecord.recurrenceUntil].
+ *
+ * An unreadable cadence reads as `null` — "no rule" — which is the same trade as an
+ * unreadable `statusRaw`: one row from a future build costs its recurrence, where a
+ * thrown decode costs the whole card. The `until` is attached here rather than at the
+ * call site so the two columns cannot be recombined differently in two places.
+ */
+internal fun String?.toRecurrence(until: Instant?): Recurrence? {
+    val cadence = this ?: return null
+    val parsed = Recurrence.parseWireValue(cadence) ?: return null
+    return parsed.withUntil(until)
+}
+
+/**
+ * A copy of this rule ending at [until].
+ *
+ * Always a copy, even when [until] is null: `until` never rides in the wire string
+ * (see [toRecurrenceColumn]), so the column is the only place it can come from, and
+ * a `null` column means the series genuinely has no end rather than a forgotten one.
+ */
+private fun Recurrence.withUntil(until: Instant?): Recurrence = when (this) {
+    is Recurrence.Daily -> copy(until = until)
+    is Recurrence.Weekly -> copy(until = until)
+    is Recurrence.Monthly -> copy(until = until)
+    is Recurrence.Yearly -> copy(until = until)
+}
+
+/**
  * A new row for [this], with `resolvedAt` reconciled first.
  *
  * Reconciled on the way *in* as well as on the way out, so a row written from a value that
@@ -198,6 +236,8 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         // a value its caller goes on to re-save.
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
+        recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
+        recurrenceUntil = reconciled.recurrence?.until,
         sprintID = reconciled.sprintID?.stringValue,
     )
 }
@@ -233,6 +273,10 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         resolvedAt = reconciled.resolvedAt,
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
+        // A pulled value like any other: a device has to be able to *learn* that a
+        // card was made recurring, or that one stopped being — including its absence.
+        recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
+        recurrenceUntil = reconciled.recurrence?.until,
         // Sprint membership is a pulled value like any other: a device that has been offline
         // for a week has to be able to *learn* which sprint a card was put into, not only
         // ever add one locally. The incoming value wins outright, including its absence —
@@ -280,6 +324,7 @@ internal val WorkItemRecord.domainValue: WorkItem?
             resolvedAt = resolvedAt,
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs.toBlockedByIDs(),
+            recurrence = recurrenceRaw.toRecurrence(recurrenceUntil),
             sprintID = parsedSprint,
         )
         value.reconcileResolutionAt(updatedAt)

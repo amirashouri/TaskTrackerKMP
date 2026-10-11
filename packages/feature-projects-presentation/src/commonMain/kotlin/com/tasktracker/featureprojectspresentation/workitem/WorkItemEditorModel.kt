@@ -9,9 +9,11 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
+import com.tasktracker.featureprojectsdomain.ExpandRecurrence
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SaveWorkItem
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
@@ -65,6 +67,7 @@ class WorkItemEditorModel(
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
     private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
+    private val expandRecurrence = ExpandRecurrence(repository, dateProvider)
 
     private val original: Draft? = existing?.let { Draft.of(it) }
 
@@ -106,6 +109,17 @@ class WorkItemEditorModel(
 
     /** The due date, or `null` for none. */
     var dueDate: Instant? by mutableStateOf(existing?.dueDate)
+        private set
+
+    /**
+     * The repeat rule, or `null` for a one-off.
+     *
+     * The day a weekly/monthly/yearly rule repeats on is fixed when the picker choice is
+     * made, from the due date as it stands then — see [WorkItemRecurrenceRow]. The model
+     * stores the rule as chosen and never re-derives it, so an edit to the due date does
+     * not silently rewrite a series the user already set.
+     */
+    var recurrence: Recurrence? by mutableStateOf(existing?.recurrence)
         private set
 
     /**
@@ -176,6 +190,7 @@ class WorkItemEditorModel(
                 dueDate = dueDate,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
+                recurrence = recurrence,
             )
             return original == null || current != original
         }
@@ -223,6 +238,11 @@ class WorkItemEditorModel(
         dueDate = value
     }
 
+    /** Sets or clears the repeat rule. */
+    fun onRecurrenceChanged(value: Recurrence?) {
+        recurrence = value
+    }
+
     /**
      * Adds blockers, ignoring duplicates and the item itself.
      *
@@ -262,6 +282,7 @@ class WorkItemEditorModel(
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
                 initialSprintID = if (savedWorkItemID == null) initialSprintID else null,
+                recurrence = recurrence,
             )
         } ?: return null
 
@@ -272,6 +293,22 @@ class WorkItemEditorModel(
             }
 
             is WorkItemSaveOutcome.Updated -> savedWorkItemID = outcome.workItemID
+        }
+
+        // A recurring item that lands in Done is finished and the series has to advance —
+        // by a new card, so this one keeps its own history. The test is the *transition*:
+        // the original is the snapshot the form opened with, so re-editing an item that was
+        // already Done (a typo in the title) must not spawn another instance per save, and
+        // a create has no snapshot, so saving straight into Done expands exactly once.
+        val expandedID = savedWorkItemID
+        val enteredDone = status == WorkItemStatus.Done && original?.status != WorkItemStatus.Done
+        if (recurrence != null && enteredDone && expandedID != null) {
+            val next = reporting { expandRecurrence(expandedID) }
+            // `reporting` nulls on failure *and* on a use case that found nothing to do;
+            // the banner is what tells them apart. A series whose `until` has passed, or
+            // one whose item has no anchor date, expands to nothing and that is not an
+            // error — only a reported failure keeps the editor open on the saved card.
+            if (next == null && errorMessage != null) return null
         }
         return outcome
     }
@@ -322,6 +359,7 @@ class WorkItemEditorModel(
         val dueDate: Instant?,
         val storyPoints: Int?,
         val blockedByIDs: List<WorkItemID>,
+        val recurrence: Recurrence?,
     ) {
         companion object {
             fun of(item: WorkItem) = Draft(
@@ -333,6 +371,7 @@ class WorkItemEditorModel(
                 dueDate = item.dueDate,
                 storyPoints = item.storyPoints,
                 blockedByIDs = item.blockedByIDs.toList(),
+                recurrence = item.recurrence,
             )
         }
     }

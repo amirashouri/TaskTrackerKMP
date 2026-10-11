@@ -436,6 +436,15 @@ data class WorkItem(
     var assignee: String? = null,
     var dueDate: Instant? = null,
     /**
+     * How this item repeats, or `null` for a one-off.
+     *
+     * The rule travels with the item rather than living in a series table: an item
+     * either repeats or it does not, and completing one creates the next instance
+     * rather than sliding this one's due date — so the finished instance stays
+     * finished with its own history, and the series advances by a new row.
+     */
+    var recurrence: Recurrence? = null,
+    /**
      * The item's estimate, in points. `null` means **unestimated**.
      *
      * Nullable rather than `0` on purpose. A non-null zero makes "nobody estimated this"

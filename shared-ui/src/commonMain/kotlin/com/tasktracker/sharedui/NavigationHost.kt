@@ -1253,6 +1253,10 @@ private fun WorkItemEditorDestination(
         priority = model.priority,
         assignee = model.assignee,
         hasDueDate = model.dueDate != null,
+        recurrence = model.recurrence,
+        // The repeat row takes its day from the due date, so the draft's due date is the
+        // anchor; `null` there means the row falls back to today's date.
+        repeatAnchor = model.dueDate,
         isCreating = model.isCreating,
         issuedKey = model.issuedKey,
         selectableStatuses = if (workItemID == null && initialStatus == WorkItemStatus.Backlog) {
@@ -1277,6 +1281,7 @@ private fun WorkItemEditorDestination(
                 model.onDueDateChanged(if (on) dateProvider.now() else null)
             }
         },
+        onRecurrenceChanged = model::onRecurrenceChanged,
         // File away is a close, like save: the task is gone from the board, so a sheet left
         // standing would keep offering edits to a task the graph no longer shows. It dismisses
         // only on success, so an archive the store refused keeps the error banner readable.

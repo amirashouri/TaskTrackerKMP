@@ -221,6 +221,12 @@
     <string name="work_item_due_label">Due</string>
     <string name="work_item_due_set">Set a due date</string>
     <string name="work_item_due_clear">Clear the due date</string>
+    <string name="work_item_repeat_label">Repeat</string>
+    <string name="work_item_repeat_none">Never</string>
+    <string name="work_item_repeat_daily">Daily</string>
+    <string name="work_item_repeat_weekly">Weekly</string>
+    <string name="work_item_repeat_monthly">Monthly</string>
+    <string name="work_item_repeat_yearly">Yearly</string>
     <string name="work_item_delete">Delete Task</string>
     <string name="work_item_archive">File Away</string>
     <string name="work_item_expand">Expand</string>

@@ -89,6 +89,26 @@ data class WorkItemRecord(
      */
     val blockedByIDs: String? = null,
     /**
+     * The item's repeat rule, in [com.tasktracker.domain.Recurrence]'s wire form —
+     * `daily`, `weekly:3`, `monthly:15`, `yearly:6-15` — or `null` for a one-off.
+     *
+     * The cadence and its parameters are one column rather than four: they are read
+     * and written only as a unit, and a rule with its weekday in a second column is a
+     * rule that can be half-written. The end date is *not* in this string — see
+     * [recurrenceUntil].
+     */
+    val recurrenceRaw: String? = null,
+    /**
+     * When the repeat rule stops, or `null` for a series with no scheduled end.
+     *
+     * Its own column rather than part of [recurrenceRaw], for the same reason
+     * `until` is a separate field in the domain: an `Instant` is already a typed,
+     * Room-convertible value, and string-splicing one into the cadence encoding
+     * would make every reader re-parse it. Nullable, so the `AutoMigration(7, 8)`
+     * brings every existing row across as a one-off — what it actually was.
+     */
+    val recurrenceUntil: Instant? = null,
+    /**
      * The sprint this item is in, or `null` for the backlog.
      *
      * Indexed because the sprint detail screen reads by sprint, not by project, and

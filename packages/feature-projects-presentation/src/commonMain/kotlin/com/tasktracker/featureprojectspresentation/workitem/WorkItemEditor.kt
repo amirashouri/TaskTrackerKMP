@@ -36,6 +36,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
@@ -56,6 +57,7 @@ import com.tasktracker.resources.work_item_status_label
 import com.tasktracker.resources.work_item_story_points_label
 import com.tasktracker.resources.work_item_title_label
 import org.jetbrains.compose.resources.stringResource
+import kotlin.time.Instant
 
 /**
  * The work item form, as a full screen.
@@ -90,6 +92,8 @@ fun WorkItemEditorScreen(
     priority: Priority,
     assignee: String,
     hasDueDate: Boolean,
+    recurrence: Recurrence?,
+    repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
     selectableStatuses: List<WorkItemStatus>,
@@ -104,6 +108,7 @@ fun WorkItemEditorScreen(
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
+    onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -118,6 +123,8 @@ fun WorkItemEditorScreen(
         priority = priority,
         assignee = assignee,
         hasDueDate = hasDueDate,
+        recurrence = recurrence,
+        repeatAnchor = repeatAnchor,
         isCreating = isCreating,
         issuedKey = issuedKey,
         selectableStatuses = selectableStatuses,
@@ -132,6 +139,7 @@ fun WorkItemEditorScreen(
         onPriorityChanged = onPriorityChanged,
         onAssigneeChanged = onAssigneeChanged,
         onToggleDueDate = onToggleDueDate,
+        onRecurrenceChanged = onRecurrenceChanged,
         onFileAway = onFileAway,
         onSave = onSave,
         onCancel = onCancel,
@@ -168,6 +176,8 @@ fun WorkItemEditorSheet(
     priority: Priority,
     assignee: String,
     hasDueDate: Boolean,
+    recurrence: Recurrence?,
+    repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
     selectableStatuses: List<WorkItemStatus>,
@@ -182,6 +192,7 @@ fun WorkItemEditorSheet(
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
+    onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -219,6 +230,8 @@ fun WorkItemEditorSheet(
         priority = priority,
         assignee = assignee,
         hasDueDate = hasDueDate,
+        recurrence = recurrence,
+        repeatAnchor = repeatAnchor,
         isCreating = isCreating,
         issuedKey = issuedKey,
         selectableStatuses = selectableStatuses,
@@ -233,6 +246,7 @@ fun WorkItemEditorSheet(
         onPriorityChanged = onPriorityChanged,
         onAssigneeChanged = onAssigneeChanged,
         onToggleDueDate = onToggleDueDate,
+        onRecurrenceChanged = onRecurrenceChanged,
         onFileAway = onFileAway,
         onSave = onSave,
         onCancel = onCancel,
@@ -266,6 +280,8 @@ private fun ProjectsEditorFullScreen(
     priority: Priority,
     assignee: String,
     hasDueDate: Boolean,
+    recurrence: Recurrence?,
+    repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
     selectableStatuses: List<WorkItemStatus>,
@@ -280,6 +296,7 @@ private fun ProjectsEditorFullScreen(
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
+    onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -414,6 +431,11 @@ private fun ProjectsEditorFullScreen(
                 modifier = Modifier.testTag(WorkItemDueToggleTag),
             )
         }
+        WorkItemRecurrenceRow(
+            recurrence = recurrence,
+            onRecurrenceChanged = onRecurrenceChanged,
+            anchorDate = repeatAnchor,
+        )
         WorkItemDependencyPills(
             blockers = blockers,
             onOpenBlocker = onOpenBlocker,
@@ -464,6 +486,8 @@ private fun WorkItemEditorForm(
     priority: Priority,
     assignee: String,
     hasDueDate: Boolean,
+    recurrence: Recurrence?,
+    repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
     selectableStatuses: List<WorkItemStatus>,
@@ -478,6 +502,7 @@ private fun WorkItemEditorForm(
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (String) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
+    onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
@@ -613,6 +638,11 @@ private fun WorkItemEditorForm(
                 modifier = Modifier.testTag(WorkItemDueToggleTag),
             )
         }
+        WorkItemRecurrenceRow(
+            recurrence = recurrence,
+            onRecurrenceChanged = onRecurrenceChanged,
+            anchorDate = repeatAnchor,
+        )
         WorkItemDependencyPills(
             blockers = blockers,
             onOpenBlocker = onOpenBlocker,
@@ -661,6 +691,8 @@ private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         priority = Priority.Critical,
         assignee = "Amir",
         hasDueDate = false,
+        recurrence = null,
+        repeatAnchor = null,
         isCreating = false,
         issuedKey = ViewPreviewData.workItems.first { it.status == WorkItemStatus.InProgress }.key,
         selectableStatuses = WorkItemStatus.boardOrder,
@@ -675,6 +707,7 @@ private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onPriorityChanged = {},
         onAssigneeChanged = {},
         onToggleDueDate = {},
+        onRecurrenceChanged = {},
         onFileAway = {},
         onSave = {},
         onCancel = {},
@@ -693,6 +726,8 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
         priority = Priority.Low,
         assignee = "",
         hasDueDate = false,
+        recurrence = null,
+        repeatAnchor = null,
         isCreating = false,
         issuedKey = ViewPreviewData.workItems.first { it.status == WorkItemStatus.Closed }.key,
         selectableStatuses = emptyList(),
@@ -707,6 +742,7 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
         onPriorityChanged = {},
         onAssigneeChanged = {},
         onToggleDueDate = {},
+        onRecurrenceChanged = {},
         onFileAway = {},
         onSave = {},
         onCancel = {},

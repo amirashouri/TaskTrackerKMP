@@ -132,17 +132,25 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1089 tests, 5 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1068 tests, 5 failed** (same 5) |
+| JVM | `jvmTest` | fast feedback; run this — **1459 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1429 tests, 12 failed** (same 12) |
 | Android host | `testAndroidHostTest` | Robolectric; **854 tests, 17 failed** — all layout, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. `commonTest` holds
-**980** `@Test`s, plus `shared-ui`'s 25 shell scenarios, which are shared `fun`s counted per host.
+**1719** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
+counted per host.
 
-The 5 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`) and
-`aChosenThemeOutlivesTheProcess` + `theBoardReturnsToTheList` (`:shared-ui`). All were failing
-before this section existed and none is caused by it — see `docs/DECISIONS.md`, measurement lore.
+The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`),
+`theLongAccentCaptionWrapsInsteadOfClipping` + `theUserDetailsSectionIsOnThePage`
+(`:packages:feature-settings-presentation`), and seven `:shared-ui` shell scenarios
+(`theSettingsTabEndsTheSession`, `aLockedSprintOffersNoTaskEdits`,
+`aChosenThemeOutlivesTheProcess`, `theLastRowOfEachListScrollsClearOfTheTabBar`,
+`theBoardReturnsToTheList`, `filingAwayInTheEditorClosesTheSheet`,
+`tappingASprintTaskRowOpensTheEditor`). All twelve were re-verified pre-existing in October
+2026: the shared-ui seven were reproduced at commit `acaef2a` in a clean worktree with none of
+the working tree's uncommitted work, so neither the recurrence feature nor the user-directory
+work caused them. See `docs/DECISIONS.md`, measurement lore.
 
 The 17 on the Android host are all Compose layout failures, not behaviour: Robolectric's default
 viewport is far smaller, so content inside a `LazyColumn` or a `horizontalScroll` row exists but

@@ -6,6 +6,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -267,6 +268,8 @@ interface ProjectRepositoryPort {
          * dozen tests at once.
          */
         blockedByIDs: List<WorkItemID> = emptyList(),
+        /** The repeat rule, or `null` for a one-off. Last for the same reason as [blockedByIDs]. */
+        recurrence: Recurrence? = null,
     ): WorkItem
 
     /**
@@ -290,6 +293,11 @@ interface ProjectRepositoryPort {
         now: Instant,
         /** Last and defaulted, for the same reason as [createWorkItem]'s. */
         blockedByIDs: Patch<List<WorkItemID>> = Patch.Unmentioned,
+        /**
+         * The repeat rule as a [Patch], because a series can be *ended* by clearing it —
+         * "stop repeating" is a real instruction, not an absence of one. Last, as above.
+         */
+        recurrence: Patch<Recurrence?> = Patch.Unmentioned,
     ): WorkItem
 
     /**

@@ -13,6 +13,7 @@ import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -587,6 +588,7 @@ private class PreviewRepository(
         sprintID: SprintID?,
         now: Instant,
         blockedByIDs: List<WorkItemID>,
+        recurrence: Recurrence?,
     ): WorkItem {
         val project = storedProjects.first { it.id == projectID }
         val item = WorkItem(
@@ -599,6 +601,7 @@ private class PreviewRepository(
             priority = priority,
             assignee = assignee,
             dueDate = dueDate,
+            recurrence = recurrence,
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs,
             sprintID = sprintID,
@@ -621,6 +624,7 @@ private class PreviewRepository(
         storyPoints: Patch<Int?>,
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
+        recurrence: Patch<Recurrence?>,
     ): WorkItem = storedItems.first { it.id == id }.also {
         if (title != null) it.title = title
         if (details != null) it.details = details
@@ -629,6 +633,7 @@ private class PreviewRepository(
         if (dueDate is Patch.Of) it.dueDate = dueDate.value
         if (storyPoints is Patch.Of) it.storyPoints = storyPoints.value
         if (blockedByIDs is Patch.Of) it.blockedByIDs = blockedByIDs.value
+        if (recurrence is Patch.Of) it.recurrence = recurrence.value
         it.updatedAt = now
     }.also {
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, it.projectID))

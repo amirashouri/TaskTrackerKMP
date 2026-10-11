@@ -6,6 +6,8 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -128,6 +130,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         sprintID: SprintID?,
         now: Instant,
         blockedByIDs: List<WorkItemID>,
+        recurrence: Recurrence?,
     ): WorkItem = boom()
 
     override suspend fun updateWorkItem(
@@ -140,6 +143,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         storyPoints: Patch<Int?>,
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
+        recurrence: Patch<Recurrence?>,
     ): WorkItem = boom()
 
     override suspend fun moveWorkItem(

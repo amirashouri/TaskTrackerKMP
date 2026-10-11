@@ -9,9 +9,11 @@ import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
 import com.tasktracker.domain.WorkItemStatus
+import kotlinx.datetime.TimeZone
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
@@ -128,6 +130,7 @@ class CreateWorkItem(
         priority: Priority = Priority.Medium,
         assignee: String? = null,
         dueDate: Instant? = null,
+        recurrence: Recurrence? = null,
     ): WorkItem {
         // Same reasoning as [CreateProject]: the rules run here so a bad edit is refused
         // before the port is reached. `normaliseAssignee` turns a blank string into null
@@ -143,6 +146,7 @@ class CreateWorkItem(
             priority = priority,
             assignee = assignee,
             dueDate = dueDate,
+            recurrence = recurrence,
             now = dateProvider.now(),
         )
     }
@@ -224,6 +228,7 @@ class SaveWorkItem(
         storyPoints: Int? = null,
         blockedByIDs: List<WorkItemID> = emptyList(),
         initialSprintID: SprintID? = null,
+        recurrence: Recurrence? = null,
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
@@ -244,6 +249,7 @@ class SaveWorkItem(
                 storyPoints = storyPoints,
                 blockedByIDs = blockers,
                 sprintID = initialSprintID,
+                recurrence = recurrence,
                 now = dateProvider.now(),
             )
             return WorkItemSaveOutcome.Created(created.id)
@@ -265,6 +271,9 @@ class SaveWorkItem(
             dueDate = Patch.Of(dueDate),
             storyPoints = Patch.Of(storyPoints),
             blockedByIDs = Patch.Of(blockers),
+            // Same reasoning as the assignee above: the editor is the truth, so clearing
+            // a repeat rule has to reach the store as a clear, not as silence.
+            recurrence = Patch.Of(recurrence),
             now = dateProvider.now(),
         )
 
@@ -322,5 +331,61 @@ class RemoveProject(
 
         repository.deleteProject(id)
         return ProjectRemovalOutcome.Deleted
+    }
+}
+
+/**
+ * Creates the next instance of a recurring work item, dated at its next occurrence.
+ *
+ * The finished instance is left exactly as it is — status, resolvedAt, history — and a
+ * *new* row carries the series forward. Sliding the original's due date instead would
+ * make the completed occurrence vanish from the archive the moment the next one was
+ * created, which is the one thing a recurring task must not do: the point of the series
+ * is that each occurrence happened and was filed.
+ *
+ * The new instance is a fresh backlog card: same title, details, priority, assignee,
+ * estimate and blockers; a cleared sprint, because a series that silently refills a
+ * finished sprint's capacity is a surprise; and the same [Recurrence], so the series
+ * continues until its `until` says stop.
+ *
+ * Returns `null` when the series has ended — no rule, no due date to step from, or the
+ * next occurrence would fall after `until`. A caller showing "repeat" as a button
+ * should hide it on that result rather than treat it as a failure.
+ *
+ * [timeZone] is a parameter rather than a read of the device's zone, for the reason the
+ * domain rule takes it: a use case that picked its own zone would be untestable outside
+ * one zone, and the editor — which chose the due date the user sees — is the layer that
+ * knows which zone the dates on screen are in.
+ */
+class ExpandRecurrence(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: WorkItemID, timeZone: TimeZone = TimeZone.currentSystemDefault()): WorkItem? {
+        val current = repository.workItem(id)
+            ?: throw AppError.Validation("That work item no longer exists.")
+        val rule = current.recurrence ?: return null
+        // Stepped from the due date rather than from `now`: a weekly task due last
+        // Friday, completed today, recurs on the Friday after — not a week from today.
+        // A task with no due date has nothing to step from, and guessing one would
+        // invent a schedule the user never set.
+        val anchor = current.dueDate ?: return null
+        val next = rule.nextOccurrenceAfter(anchor, timeZone) ?: return null
+
+        return repository.createWorkItem(
+            projectID = current.projectID,
+            title = current.title,
+            details = current.details,
+            status = WorkItemStatus.Backlog,
+            priority = current.priority,
+            assignee = current.assignee,
+            dueDate = next,
+            storyPoints = current.storyPoints,
+            blockedByIDs = current.blockedByIDs,
+            recurrence = rule,
+            now = dateProvider.now(),
+        )
     }
 }

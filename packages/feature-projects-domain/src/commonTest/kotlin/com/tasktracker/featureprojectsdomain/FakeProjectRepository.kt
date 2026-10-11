@@ -11,6 +11,7 @@ import com.tasktracker.core.randomSprintID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -424,6 +425,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         sprintID: SprintID?,
         now: Instant,
         blockedByIDs: List<WorkItemID>,
+        recurrence: Recurrence?,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -440,6 +442,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 priority = priority,
                 assignee = assignee,
                 dueDate = dueDate,
+                recurrence = recurrence,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
                 sprintID = sprintID,
@@ -478,6 +481,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storyPoints: Patch<Int?>,
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
+        recurrence: Patch<Recurrence?>,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -505,6 +509,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             when (blockedByIDs) {
                 is Patch.Unmentioned -> Unit
                 is Patch.Of -> item.blockedByIDs = blockedByIDs.value
+            }
+            when (recurrence) {
+                is Patch.Unmentioned -> Unit
+                is Patch.Of -> item.recurrence = recurrence.value
             }
             item.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))

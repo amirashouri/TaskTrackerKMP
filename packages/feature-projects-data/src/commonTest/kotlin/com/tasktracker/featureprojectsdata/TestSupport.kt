@@ -16,6 +16,7 @@ import com.tasktracker.database.SessionCache
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -214,6 +215,12 @@ internal fun aWorkItem(
         parseWorkItemID("44444444-4444-4444-8444-444444444444")!!,
         parseWorkItemID("55555555-5555-4555-8555-555555555555")!!,
     ),
+    // Non-default, and carrying a non-null `until`, for the same reason the three above
+    // are: both new columns encode `null` for the absent state, so a fixture with no
+    // recurrence would let an `expected` record omit them and match a mapping that
+    // dropped both. The `until` is what makes the *pair* — cadence string plus end
+    // instant — the thing that has to round-trip, rather than either half alone.
+    recurrence: Recurrence? = Recurrence.Weekly(3, until = Moments.muchLater),
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -224,6 +231,7 @@ internal fun aWorkItem(
     priority = priority,
     assignee = assignee,
     dueDate = dueDate,
+    recurrence = recurrence,
     rank = rank,
     createdAt = createdAt,
     updatedAt = updatedAt,
