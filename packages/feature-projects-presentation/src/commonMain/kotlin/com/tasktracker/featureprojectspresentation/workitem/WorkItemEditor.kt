@@ -14,9 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
@@ -43,7 +43,6 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.work_item_archive
-import com.tasktracker.resources.work_item_assignee_label
 import com.tasktracker.resources.work_item_back
 import com.tasktracker.resources.work_item_details_label
 import com.tasktracker.resources.work_item_due_clear
@@ -90,7 +89,10 @@ fun WorkItemEditorScreen(
     storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
-    assignee: String,
+    assigneeID: UserID?,
+    currentUserID: UserID?,
+    currentUserName: String?,
+    otherAssigneeLabel: String?,
     hasDueDate: Boolean,
     recurrence: Recurrence?,
     repeatAnchor: Instant?,
@@ -106,7 +108,7 @@ fun WorkItemEditorScreen(
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
-    onAssigneeChanged: (String) -> Unit,
+    onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
     onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
@@ -121,7 +123,10 @@ fun WorkItemEditorScreen(
         storyPointsText = storyPointsText,
         status = status,
         priority = priority,
-        assignee = assignee,
+        assigneeID = assigneeID,
+        currentUserID = currentUserID,
+        currentUserName = currentUserName,
+        otherAssigneeLabel = otherAssigneeLabel,
         hasDueDate = hasDueDate,
         recurrence = recurrence,
         repeatAnchor = repeatAnchor,
@@ -174,7 +179,10 @@ fun WorkItemEditorSheet(
     storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
-    assignee: String,
+    assigneeID: UserID?,
+    currentUserID: UserID?,
+    currentUserName: String?,
+    otherAssigneeLabel: String?,
     hasDueDate: Boolean,
     recurrence: Recurrence?,
     repeatAnchor: Instant?,
@@ -190,7 +198,7 @@ fun WorkItemEditorSheet(
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
-    onAssigneeChanged: (String) -> Unit,
+    onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
     onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
@@ -228,7 +236,10 @@ fun WorkItemEditorSheet(
         storyPointsText = storyPointsText,
         status = status,
         priority = priority,
-        assignee = assignee,
+        assigneeID = assigneeID,
+        currentUserID = currentUserID,
+        currentUserName = currentUserName,
+        otherAssigneeLabel = otherAssigneeLabel,
         hasDueDate = hasDueDate,
         recurrence = recurrence,
         repeatAnchor = repeatAnchor,
@@ -278,7 +289,10 @@ private fun ProjectsEditorFullScreen(
     storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
-    assignee: String,
+    assigneeID: UserID?,
+    currentUserID: UserID?,
+    currentUserName: String?,
+    otherAssigneeLabel: String?,
     hasDueDate: Boolean,
     recurrence: Recurrence?,
     repeatAnchor: Instant?,
@@ -294,7 +308,7 @@ private fun ProjectsEditorFullScreen(
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
-    onAssigneeChanged: (String) -> Unit,
+    onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
     onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
@@ -403,13 +417,12 @@ private fun ProjectsEditorFullScreen(
                 modifier = Modifier.testTag(WorkItemPriorityPickerTag),
             )
         }
-        ProjectsTextField(
-            title = stringResource(Res.string.work_item_assignee_label),
-            value = assignee,
-            onValueChange = onAssigneeChanged,
-            capitalization = KeyboardCapitalization.Words,
-            imeAction = ImeAction.Done,
-            onImeAction = { if (canSave) onSave() },
+        WorkItemAssigneeRow(
+            assigneeID = assigneeID,
+            currentUserID = currentUserID,
+            currentUserName = currentUserName,
+            otherAssigneeLabel = otherAssigneeLabel,
+            onAssigneeChanged = onAssigneeChanged,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -484,7 +497,13 @@ private fun WorkItemEditorForm(
     storyPointsText: String,
     status: WorkItemStatus,
     priority: Priority,
-    assignee: String,
+    assigneeID: UserID?,
+    /** Who "me" is for the assignee picker, or `null` when no session is known. */
+    currentUserID: UserID?,
+    /** What to call the signed-in user in the picker, or `null` for the "Me" fallback. */
+    currentUserName: String?,
+    /** Label for [assigneeID] when it is neither `null` nor [currentUserID]. */
+    otherAssigneeLabel: String?,
     hasDueDate: Boolean,
     recurrence: Recurrence?,
     repeatAnchor: Instant?,
@@ -500,7 +519,7 @@ private fun WorkItemEditorForm(
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
-    onAssigneeChanged: (String) -> Unit,
+    onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
     onRecurrenceChanged: (Recurrence?) -> Unit,
     onFileAway: () -> Unit,
@@ -610,13 +629,12 @@ private fun WorkItemEditorForm(
                 modifier = Modifier.testTag(WorkItemPriorityPickerTag),
             )
         }
-        ProjectsTextField(
-            title = stringResource(Res.string.work_item_assignee_label),
-            value = assignee,
-            onValueChange = onAssigneeChanged,
-            capitalization = KeyboardCapitalization.Words,
-            imeAction = ImeAction.Done,
-            onImeAction = { if (canSave) onSave() },
+        WorkItemAssigneeRow(
+            assigneeID = assigneeID,
+            currentUserID = currentUserID,
+            currentUserName = currentUserName,
+            otherAssigneeLabel = otherAssigneeLabel,
+            onAssigneeChanged = onAssigneeChanged,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -689,7 +707,10 @@ private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
         storyPointsText = "5",
         status = WorkItemStatus.InProgress,
         priority = Priority.Critical,
-        assignee = "Amir",
+        assigneeID = ViewPreviewData.workItems.first { it.assigneeID != null }.assigneeID,
+        currentUserID = ViewPreviewData.workItems.first { it.assigneeID != null }.assigneeID,
+        currentUserName = "Amir",
+        otherAssigneeLabel = null,
         hasDueDate = false,
         recurrence = null,
         repeatAnchor = null,
@@ -724,7 +745,10 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
         storyPointsText = "",
         status = WorkItemStatus.Closed,
         priority = Priority.Low,
-        assignee = "",
+        assigneeID = null,
+        currentUserID = null,
+        currentUserName = null,
+        otherAssigneeLabel = null,
         hasDueDate = false,
         recurrence = null,
         repeatAnchor = null,

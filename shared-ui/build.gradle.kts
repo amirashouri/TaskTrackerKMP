@@ -18,6 +18,8 @@ dependencies {
     commonMainImplementation(project(":packages:feature-projects-domain"))
     commonMainImplementation(project(":packages:feature-auth-domain"))
     commonMainImplementation(project(":packages:feature-auth-presentation"))
+    // For `TeamPort`, resolved and handed to the projects environment.
+    commonMainImplementation(project(":packages:feature-teams-domain"))
 
     // For `UserDefaultsStore`: the shell owns the persisted appearance and the last-visited
     // project, because both are properties of the *device* rather than of any feature. The

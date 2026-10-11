@@ -31,6 +31,7 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentView
 import com.tasktracker.featureprojectspresentation.ProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProvideProjectEnvironment
@@ -140,7 +141,11 @@ fun RootScreen(
     val environment = remember(resolver) {
         val repository = resolver.getOrNull(ProjectRepositoryPort::class)
         val clock = resolver.getOrNull(DateProvider::class)
-        if (repository == null || clock == null) null else ProjectEnvironment(repository, clock)
+        if (repository == null || clock == null) {
+            null
+        } else {
+            ProjectEnvironment(repository, clock, resolver.getOrNull(TeamPort::class))
+        }
     }
 
     // Handed down to the Settings tab rather than resolved by its screen, so a missing port is

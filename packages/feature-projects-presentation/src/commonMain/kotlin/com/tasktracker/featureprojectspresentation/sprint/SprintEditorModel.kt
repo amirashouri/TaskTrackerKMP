@@ -7,6 +7,7 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import kotlin.time.Instant
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintSummary
@@ -50,13 +51,14 @@ import kotlin.time.Clock
  *
  * ## The owner is a [Patch], and the draft cannot express the difference
  *
- * [UpdateSprint] takes `owner: Patch<String?>` because "leave it alone" and "hand it to
- * nobody" are different instructions. A text field cannot tell them apart — an emptied
- * field is ambiguous between them. The resolution is [hasChanges]: a draft whose owner is
- * blank when the original had one **is** a change, and it is sent as `Patch.Of(null)`. A
- * draft that did not touch the owner at all cannot happen, because the draft starts as the
- * original's value, so an empty field always means the user cleared it. That is the whole
- * of the reasoning, and it is why [originalOwner] is kept rather than discarded.
+ * [UpdateSprint] takes `ownerID: Patch<UserID?>` because "leave it alone" and "hand it to
+ * nobody" are different instructions. A picker cannot tell them apart either — an
+ * "Unassigned" selection is ambiguous between them. The resolution is [hasChanges]: a
+ * draft whose owner is unassigned when the original had one **is** a change, and it is
+ * sent as `Patch.Of(null)`. A draft that did not touch the owner at all cannot happen,
+ * because the draft starts as the original's value, so an Unassigned pick always means
+ * the user cleared it. That is the whole of the reasoning, and it is why [originalOwnerID]
+ * is kept rather than discarded.
  *
  * ## The goal is two fields, and they lock differently
  *
@@ -121,7 +123,7 @@ class SprintEditorModel(
     private val originalName: String? = existing?.name
     private val originalGoalStoryPoints: Int? = existing?.goalStoryPoints
     private val originalGoal: String? = existing?.goal
-    private val originalOwner: String? = existing?.owner
+    private val originalOwnerID: UserID? = existing?.ownerID
     private val originalStartDate: LocalDate? = existing?.let {
         sprintLocalDate(it.startDate, timeZone)
     }
@@ -149,8 +151,8 @@ class SprintEditorModel(
     var endDate: LocalDate? by mutableStateOf(originalEndDate)
         private set
 
-    /** The owner, or `null`/blank for unowned. Held raw, as typed. */
-    var owner: String by mutableStateOf(existing?.owner.orEmpty())
+    /** The owner, or `null` for unowned. An id, never a display name. */
+    var ownerID: UserID? by mutableStateOf(existing?.ownerID)
         private set
 
     /** The id of the sprint once a save has succeeded. */
@@ -202,7 +204,7 @@ class SprintEditorModel(
                 goal.trim() != originalGoal.orEmpty() ||
                 startDate != originalStartDate ||
                 endDate != originalEndDate ||
-                owner.trim() != originalOwner.orEmpty()
+                ownerID != originalOwnerID
             )
 
     /**
@@ -306,9 +308,9 @@ class SprintEditorModel(
         endDate = value
     }
 
-    /** Sets the owner. Blank means unowned, which is a change rather than an absence. */
-    fun onOwnerChanged(value: String) {
-        owner = value
+    /** Sets the owner. `null` means unowned, which is a change rather than an absence. */
+    fun onOwnerChanged(value: UserID?) {
+        ownerID = value
     }
 
     /**
@@ -339,14 +341,14 @@ class SprintEditorModel(
                     goal = goal,
                     startDate = sprintInstant(start, timeZone),
                     endDate = sprintInstant(end, timeZone),
-                    owner = owner.trim().takeIf { it.isNotEmpty() },
+                    ownerID = ownerID,
                 )
             } else {
                 updateSprint(
                     id = requireNotNull(savedSprintID),
                     name = name.trim().takeIf { it != originalName },
                     goalStoryPoints = goalStoryPoints?.takeIf { it != originalGoalStoryPoints },
-                    // The prose goal is a `Patch` for the reason [owner] is one: a draft
+                    // The prose goal is a `Patch` for the reason [ownerID] is one: a draft
                     // that never touched it must say "leave it alone" rather than write an
                     // empty sentence over a goal another device set in the meantime.
                     goal = if (goal.trim() == originalGoal.orEmpty()) {
@@ -358,10 +360,10 @@ class SprintEditorModel(
                         ?.let { sprintInstant(it, timeZone) },
                     endDate = end.takeIf { it != originalEndDate }
                         ?.let { sprintInstant(it, timeZone) },
-                    owner = if (owner.trim() == originalOwner.orEmpty()) {
+                    ownerID = if (ownerID == originalOwnerID) {
                         Patch.Unmentioned
                     } else {
-                        Patch.Of(owner.trim().takeIf { it.isNotEmpty() })
+                        Patch.Of(ownerID)
                     },
                 )
             }
@@ -451,7 +453,7 @@ data class SprintDetail(
         get() = !sprint.isFinished && !isActive && (!hasOwner || isViewerTheOwner)
 
     /** Whether the sprint has an owner at all. */
-    val hasOwner: Boolean get() = sprint.owner != null
+    val hasOwner: Boolean get() = sprint.ownerID != null
 
     /** Whether there is a summary worth opening as its own screen. */
     val hasSummaryToShow: Boolean get() = sprint.isFinished && !summary.isEmpty
@@ -460,19 +462,18 @@ data class SprintDetail(
 /**
  * One sprint's screen: the goal, the window, the totals, and the tasks inside it.
  *
- * ## The viewer is injected, and a `String?` for a reason
+ * ## The viewer is injected, and a `UserID?` for a reason
  *
- * [currentUserName] is the name the app believes is signed in, and it is `null` when it
+ * [currentUserID] is who the app believes is signed in, and it is `null` when it
  * does not know. `null` means "nobody in particular", which is treated as **not** the
  * owner: an owned sprint is closed by its owner, and a viewer the app cannot identify
  * cannot be shown to be that owner. The alternative — treating unknown as owning — would
  * put a button on screen for an identity the app has not established, and the check would
  * be enforced by the store anyway, so the user would press it and be refused.
  *
- * It is a name rather than a [com.tasktracker.core.UserID] for the reason `Sprint.owner`
- * is one: the same two concepts wearing two different words is the inconsistency
- * `Sprint`'s KDoc rules out. Comparing a name to a name is also what makes this testable
- * without a session.
+ * An exact id comparison against [Sprint.ownerID], which is the whole of0.2: the previous
+ * name equality called a viewer whose display name drifted from the owner string not-the-
+ * owner, and could call two people with the same name one person.
  *
  * ## The items are the sprint's, and are re-read on every change
  *
@@ -490,8 +491,8 @@ class SprintDetailModel(
     val sprintID: SprintID,
     repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
-    /** The signed-in user's name, or `null` when the app does not know. See the class KDoc. */
-    private val currentUserName: String? = null,
+    /** The signed-in user's id, or `null` when the app does not know. See the class KDoc. */
+    private val currentUserID: UserID? = null,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ObservingProjectModel(repository) {
 
@@ -589,7 +590,8 @@ class SprintDetailModel(
             endDate = sprintLocalDate(effectiveSprint.endDate, timeZone),
             items = items,
             summary = sprintSummary(effectiveSprint, items),
-            isViewerTheOwner = effectiveSprint.owner != null && effectiveSprint.owner == currentUserName,
+            isViewerTheOwner = effectiveSprint.ownerID != null &&
+                effectiveSprint.ownerID == currentUserID,
             isActive = effectiveSprint.isActiveOn(now),
             status = effectiveSprint.statusAt(now),
         )

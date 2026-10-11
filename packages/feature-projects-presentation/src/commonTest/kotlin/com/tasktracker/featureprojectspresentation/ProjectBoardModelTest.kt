@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -253,23 +254,28 @@ class ProjectBoardModelTest {
     }
 
     @Test
-    fun `toggling showOnlyMyTasks filters items by assignee presence`() = runTest {
+    fun `toggling showOnlyMyTasks filters items by exact assignee id`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        repository.seed(testWorkItem(project.id, key = "AP-1", assignee = "Amir"))
-        repository.seed(testWorkItem(project.id, key = "AP-2", assignee = null))
+        repository.seed(testWorkItem(project.id, key = "AP-1", assigneeID = testUserID))
+        repository.seed(testWorkItem(project.id, key = "AP-2", assigneeID = null))
+        // A different user, on purpose: the rule is membership, not presence. A filter that
+        // matched "any assignee" would show this card to everybody and still pass a test
+        // that only ever seeded one assignee.
+        val otherUserID = UserID("88888888-8888-4888-8888-888888888888")
+        repository.seed(testWorkItem(project.id, key = "AP-3", assigneeID = otherUserID))
 
-        val model = ProjectBoardModel(project.id, repository, TestDateProvider(), currentUserName = "Amir")
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(), currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertEquals(2, model.projection.itemCount)
+        assertEquals(3, model.projection.itemCount)
 
         model.toggleShowOnlyMyTasks()
         assertTrue(model.showOnlyMyTasks)
         assertEquals(1, model.projection.itemCount)
-        assertEquals("Amir", model.projection.items.single().assignee)
+        assertEquals(testUserID, model.projection.items.single().assigneeID)
     }
 
     @Test
@@ -284,7 +290,7 @@ class ProjectBoardModelTest {
             goalStoryPoints = 10,
             startDate = now - 1.days,
             endDate = now + 1.days,
-            owner = null,
+            ownerID = null,
             now = now,
         )
         val itemInSprint = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, sprintID = sprint.id)
@@ -314,7 +320,7 @@ class ProjectBoardModelTest {
             goalStoryPoints = 10,
             startDate = now - 1.days,
             endDate = now + 1.days,
-            owner = null,
+            ownerID = null,
             now = now,
         )
 
@@ -339,7 +345,7 @@ class ProjectBoardModelTest {
             goalStoryPoints = 10,
             startDate = now + 5.days,
             endDate = now + 12.days,
-            owner = null,
+            ownerID = null,
             now = now,
         )
 

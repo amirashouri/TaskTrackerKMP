@@ -1,6 +1,7 @@
 package com.tasktracker.sharedui
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.featureauthdomain.UserIdentity
@@ -94,6 +95,17 @@ class ShellPreferences(
     private val _currentUserName = MutableStateFlow<String?>(null)
 
     /**
+     * Who the signed-in person *is*, as an id, or `null` before [refreshCurrentUser] has run.
+     *
+     * The identity half of [currentUserName], read from the same cached profile for the same
+     * reason and at the same moment. It replaces the name in every comparison that used to
+     * fuzzy-match on first names: the board's "My Tasks" filter and the editor's "assign to
+     * me" are exact-id questions, and a name was always a lossy stand-in for one.
+     */
+    private val _currentUserID = MutableStateFlow<UserID?>(null)
+    val currentUserID: StateFlow<UserID?> = _currentUserID.asStateFlow()
+
+    /**
      * Who to call the signed-in person, or `null` before [refreshCurrentUser] has run.
      *
      * A [StateFlow] and not a `val` for two reasons, and the first is mechanical: the read is
@@ -175,8 +187,9 @@ class ShellPreferences(
      * invent a name, which filters a real person's own work out of their own board.
      */
     suspend fun refreshCurrentUser() {
-        _currentUserName.value =
-            store.value<UserIdentity>(DefaultsKey.CachedProfile)?.preferredGreeting
+        val profile = store.value<UserIdentity>(DefaultsKey.CachedProfile)
+        _currentUserName.value = profile?.preferredGreeting
+        _currentUserID.value = profile?.id
     }
 
     /**

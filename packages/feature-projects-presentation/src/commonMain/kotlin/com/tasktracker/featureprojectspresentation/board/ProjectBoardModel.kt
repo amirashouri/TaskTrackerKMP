@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintStatus
@@ -39,7 +40,14 @@ class ProjectBoardModel(
     val projectID: ProjectID,
     repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
-    private val currentUserName: String? = null,
+    /**
+     * Who the signed-in user is, or `null` when no session is known.
+     *
+     * An exact `UserID` comparison, which is the whole point of 0.2: the previous
+     * first-name substring match called two people named "Ada" the same person, and
+     * called one person "Ada Lovelace" not-themselves when they had typed "Ada L".
+     */
+    private val currentUserID: UserID? = null,
 ) : ObservingProjectModel(repository) {
 
     private val moveWorkItem = MoveWorkItem(repository, dateProvider)
@@ -85,15 +93,6 @@ class ProjectBoardModel(
         updateProjection()
     }
 
-    private fun assigneeMatchesCurrentUser(assignee: String?): Boolean {
-        val current = currentUserName?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-        val target = assignee?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-        val currentFirst = assigneeFirstName(current)
-        val targetFirst = assigneeFirstName(target)
-        return currentFirst.isNotEmpty() && targetFirst.isNotEmpty() &&
-            currentFirst.equals(targetFirst, ignoreCase = true)
-    }
-
     private fun currentFilteredItems(): List<WorkItem> {
         val sprintFiltered = if (activeSprint != null) {
             rawItems.filter { it.sprintID == activeSprint?.id }
@@ -101,7 +100,8 @@ class ProjectBoardModel(
             rawItems
         }
         return if (showOnlyMyTasks) {
-            sprintFiltered.filter { assigneeMatchesCurrentUser(it.assignee) }
+            val me = currentUserID ?: return emptyList()
+            sprintFiltered.filter { it.assigneeID == me }
         } else {
             sprintFiltered
         }

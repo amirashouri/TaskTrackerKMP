@@ -16,6 +16,7 @@ import com.tasktracker.designsystem.OVERFLOW_TAG
 import com.tasktracker.designsystem.ttAvatarSize
 import com.tasktracker.designsystem.ttAvatarStackDefaults
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.WorkItem
@@ -196,7 +197,10 @@ object BoardLaneScenarios {
      * assignee has to be visible *as a number*.
      */
     val theAssigneeStackOverlapsAndCountsWhatItHides: suspend ComposeUiTest.() -> Unit = {
-        boardShowing(projection = BoardProjection(project = ViewPreviewData.seededProject, items = MANY_ASSIGNEES))
+        boardShowing(
+            projection = BoardProjection(project = ViewPreviewData.seededProject, items = MANY_ASSIGNEES),
+            assigneeNames = MANY_ASSIGNEE_NAMES,
+        )
 
         // Sorted by `left` before anything is compared, and that is not tidiness. The semantics
         // tree hands these nodes back in an order this test does not control, and an unsorted
@@ -343,6 +347,7 @@ private fun ComposeUiTest.boardShowing(
     activeSprint: Sprint? = null,
     onAddTask: ((WorkItemStatus) -> Unit)? = null,
     canAddTask: Boolean = true,
+    assigneeNames: Map<UserID, String> = emptyMap(),
 ) {
     setContent {
         Themed {
@@ -359,6 +364,7 @@ private fun ComposeUiTest.boardShowing(
                 activeSprint = activeSprint,
                 onAddTask = onAddTask,
                 canAddTask = canAddTask,
+                assigneeNames = assigneeNames,
             )
         }
     }
@@ -378,6 +384,15 @@ private fun ComposeUiTest.densityPixels(dp: Dp): Float = with(density) { dp.toPx
 /** Six names, because the cap is four and the count chip has to have something to count. */
 private val FIRST_NAMES = listOf("Amir", "Ana", "Priya", "Sam", "Wren", "Yusuf")
 
+/** One fixed id per name above, so a scenario can point a card at a name deterministically. */
+private val MANY_ASSIGNEE_IDS: List<UserID> = FIRST_NAMES.mapIndexed { index, _ ->
+    UserID("0000000$index-0000-4000-8000-00000000000$index")
+}
+
+/** The display names the board resolves those ids through. */
+private val MANY_ASSIGNEE_NAMES: Map<UserID, String> =
+    MANY_ASSIGNEE_IDS.zip(FIRST_NAMES).toMap()
+
 /**
  * Six named assignees on otherwise ordinary cards, for the cap.
  *
@@ -390,7 +405,7 @@ private val FIRST_NAMES = listOf("Amir", "Ana", "Priya", "Sam", "Wren", "Yusuf")
  * it reads it as null.
  */
 private val MANY_ASSIGNEES: List<WorkItem> = ViewPreviewData.workItems
-    .mapIndexed { index, item -> item.copy(assignee = "${FIRST_NAMES[index % FIRST_NAMES.size]} Person") }
+    .mapIndexed { index, item -> item.copy(assigneeID = MANY_ASSIGNEE_IDS[index % MANY_ASSIGNEE_IDS.size]) }
 
 /** The same cards with nothing assigned, which is a state a real project can be in. */
-private val UNASSIGNED: List<WorkItem> = ViewPreviewData.workItems.map { it.copy(assignee = null) }
+private val UNASSIGNED: List<WorkItem> = ViewPreviewData.workItems.map { it.copy(assigneeID = null) }

@@ -119,6 +119,10 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:routing",
         ":packages:di",
         ":packages:feature-projects-domain",
+        // The user directory: assignee/owner display and the "me" picker resolve a
+        // UserID through it. Deliberate cross-feature edge — presentation reads the
+        // directory and never writes it.
+        ":packages:feature-teams-domain",
     ),
 
     ":packages:feature-auth-domain" to setOf(":packages:core", ":packages:domain"),
@@ -210,6 +214,11 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
             ":composition-root",
             ":packages:feature-projects-presentation",
             ":packages:feature-projects-domain",
+            // For `TeamPort`, which the shell resolves and hands to the projects
+            // environment — the same shape as `SettingsPort` below: the shell asks the
+            // graph for the port and passes it down, and it cannot construct a live
+            // directory because `:packages:feature-teams-data` is not an edge either.
+            ":packages:feature-teams-domain",
             ":packages:feature-auth-domain",
             ":packages:feature-auth-presentation",
             // For `SettingsPort` alone, which the settings screen is handed. The shell

@@ -297,7 +297,7 @@ class RoomProjectRepositoryTest {
             details = "",
             status = WorkItemStatus.Todo,
             priority = Priority.Medium,
-            assignee = null,
+            assigneeID = null,
             dueDate = null,
             now = Moments.start,
         )
@@ -322,7 +322,7 @@ class RoomProjectRepositoryTest {
                 details = "",
                 status = WorkItemStatus.Todo,
                 priority = Priority.Medium,
-                assignee = null,
+                assigneeID = null,
                 dueDate = null,
                 now = Moments.start,
             )
@@ -430,14 +430,14 @@ class RoomProjectRepositoryTest {
             details = "  thoroughly  ",
             status = WorkItemStatus.Todo,
             priority = Priority.Medium,
-            assignee = "  Ada  ",
+            assigneeID = adaUserID,
             dueDate = Moments.day,
             now = Moments.start,
         )
 
         assertEquals("Write it", item.title)
         assertEquals("thoroughly", item.details)
-        assertEquals("Ada", item.assignee)
+        assertEquals(adaUserID, item.assigneeID)
         assertEquals(Moments.day, item.dueDate)
         assertEquals(item, harness.repository.workItem(item.id))
     }
@@ -511,13 +511,13 @@ class RoomProjectRepositoryTest {
     @Test
     fun anUnmentionedFieldIsLeftAloneRatherThanCleared() = runTest {
         // The failure this whole `Patch` type exists to prevent: a caller clearing an
-        // assignee passes `null`, a plain `String?` reads it as "no instruction", and the
+        // assignee passes `null`, a plain nullable reads it as "no instruction", and the
         // field silently keeps its old value. The edit reports as saved and the value is
         // wrong.
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, "Ada", Moments.day, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
         )
 
         val untouched = harness.repository.updateWorkItem(
@@ -525,14 +525,14 @@ class RoomProjectRepositoryTest {
             title = "Renamed",
             details = null,
             priority = null,
-            assignee = Patch.Unmentioned,
+            assigneeID = Patch.Unmentioned,
             dueDate = Patch.Unmentioned,
             storyPoints = Patch.Unmentioned,
             now = Moments.later,
         )
 
         assertEquals("Renamed", untouched.title)
-        assertEquals("Ada", untouched.assignee)
+        assertEquals(adaUserID, untouched.assigneeID)
         assertEquals(Moments.day, untouched.dueDate)
     }
 
@@ -541,7 +541,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, "Ada", Moments.day, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
         )
 
         val cleared = harness.repository.updateWorkItem(
@@ -549,13 +549,13 @@ class RoomProjectRepositoryTest {
             title = null,
             details = null,
             priority = null,
-            assignee = Patch.Of(null),
+            assigneeID = Patch.Of(null),
             dueDate = Patch.Of(null),
             storyPoints = Patch.Of(null),
             now = Moments.later,
         )
 
-        assertNull(cleared.assignee)
+        assertNull(cleared.assigneeID)
         assertNull(cleared.dueDate)
     }
 
@@ -894,7 +894,7 @@ class RoomSprintRepositoryTest {
             goalStoryPoints = 21,
             startDate = Moments.start,
             endDate = Moments.day,
-            owner = "Ada",
+            ownerID = adaUserID,
             now = Moments.start,
         )
         return harness to project.id
@@ -911,7 +911,7 @@ class RoomSprintRepositoryTest {
             goalStoryPoints = 21,
             startDate = Moments.start,
             endDate = Moments.day,
-            owner = "Ada",
+            ownerID = adaUserID,
             now = Moments.start,
         )
 
@@ -919,7 +919,7 @@ class RoomSprintRepositoryTest {
         // sprint whose name is two spaces wider than it looks.
         assertEquals("Sprint 1", sprint.name)
         assertEquals(21, sprint.goalStoryPoints)
-        assertEquals("Ada", sprint.owner)
+        assertEquals(adaUserID, sprint.ownerID)
         assertEquals(false, sprint.isFinished)
 
         val stored = assertNotNull(harness.repository.sprint(sprint.id))
@@ -950,7 +950,7 @@ class RoomSprintRepositoryTest {
                 // the rule refuses, not the staggered case below it.
                 startDate = Moments.day,
                 endDate = Moments.day + 10.days,
-                owner = null,
+                ownerID = null,
                 now = Moments.later,
             )
         }
@@ -1188,7 +1188,7 @@ class RoomSprintRepositoryTest {
                 goalStoryPoints = null,
                 startDate = null,
                 endDate = Moments.start.minus(1.days),
-                owner = Patch.Unmentioned,
+                ownerID = Patch.Unmentioned,
                 now = Moments.later,
             )
         }
@@ -1218,7 +1218,7 @@ class RoomSprintRepositoryTest {
                 // another device, and the reason the store re-checks.
                 startDate = Moments.start,
                 endDate = null,
-                owner = Patch.Unmentioned,
+                ownerID = Patch.Unmentioned,
                 now = Moments.muchLater,
             )
         }
@@ -1240,7 +1240,7 @@ class RoomSprintRepositoryTest {
             goalStoryPoints = null,
             startDate = null,
             endDate = null,
-            owner = Patch.Unmentioned,
+            ownerID = Patch.Unmentioned,
             now = Moments.later,
         )
 
@@ -1258,7 +1258,7 @@ class RoomSprintRepositoryTest {
             goalStoryPoints = -8,
             startDate = null,
             endDate = null,
-            owner = Patch.Unmentioned,
+            ownerID = Patch.Unmentioned,
             now = Moments.later,
         )
 

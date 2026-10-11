@@ -128,6 +128,13 @@ fun SprintDetailScreen(
     onEdit: () -> Unit = {},
     onOpenTask: ((WorkItemID) -> Unit)? = null,
     onRemoveTask: ((WorkItemID) -> Unit)? = null,
+    /**
+     * The owner's display name, resolved by the host from [Sprint.ownerID] via the
+     * directory. `null` — unknown to the directory, or unowned — renders the same
+     * "anyone can finish" line an unowned sprint gets: a name this app cannot produce
+     * must not be invented on screen, and the id itself is not a label.
+     */
+    ownerName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     // One reading of the gate for the whole screen: the button, the rows' taps and the
@@ -235,11 +242,11 @@ fun SprintDetailScreen(
                 }
                 SprintProgressBar(fraction = sprintProgressFraction(detail))
                 ttText(
-                    // The owner, or the fact that there is none. `sprint_owner_none` is a claim
-                    // about what may be done with this sprint ("anyone can finish"), not merely a
-                    // dash for a missing value — see `Sprint.owner`'s KDoc on why `null` is not a
-                    // lock.
-                    text = detail.sprint.owner ?: stringResource(Res.string.sprint_owner_none),
+                    // The owner's name, or the fact that there is none. `sprint_owner_none` is
+                    // a claim about what may be done with this sprint ("anyone can finish"),
+                    // not merely a dash for a missing value — see `Sprint.ownerID`'s KDoc on
+                    // why `null` is not a lock.
+                    text = ownerName ?: stringResource(Res.string.sprint_owner_none),
                     style = ttTypography.footnote,
                     color = ttBodyLabel(),
                     modifier = Modifier.testTag(SprintDetailOwnerTag),
@@ -248,7 +255,7 @@ fun SprintDetailScreen(
                     ttText(
                         text = stringResource(
                             Res.string.sprint_owner_only,
-                            detail.sprint.owner.orEmpty(),
+                            ownerName.orEmpty(),
                         ),
                         style = ttTypography.footnote,
                         color = ttBodyLabel(),

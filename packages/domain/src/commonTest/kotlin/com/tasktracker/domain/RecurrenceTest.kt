@@ -362,10 +362,13 @@ class RecurrenceTest {
     fun aWorkItemFromBeforeRecurrenceExistedDecodesWithNone() {
         // The additive-field contract: a payload with no recurrence key is a one-off,
         // exactly as every item created before this column existed migrates in.
+        // `assigneeID` rather than the pre-0.2 `assignee`: JSONCoding is deliberately
+        // strict, so a payload naming a key the entity does not have fails to decode —
+        // this fixture describes the current wire shape minus one optional key.
         val encoded = """
             {"id":"0192f0c2-6a1e-7c3d-8e4f-0a1b2c3d4e5f",
              "projectID":"0192f0c2-6a1e-7c3d-8e4f-0a1b2c3d4e50","key":"TT-1",
-             "title":"Old","details":"","status":"backlog","priority":"Medium","assignee":null,
+             "title":"Old","details":"","status":"backlog","priority":"Medium","assigneeID":null,
              "dueDate":null,"storyPoints":null,"blockedByIDs":[],"sprintID":null,"rank":0,
              "createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","resolvedAt":null}
         """.trimIndent()

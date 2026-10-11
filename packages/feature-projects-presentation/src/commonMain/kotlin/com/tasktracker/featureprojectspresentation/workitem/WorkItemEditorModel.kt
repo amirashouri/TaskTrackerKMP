@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Priority
@@ -63,6 +64,14 @@ class WorkItemEditorModel(
     dateProvider: DateProvider,
     initialStatus: WorkItemStatus? = null,
     private val initialSprintID: SprintID? = null,
+    /**
+     * Who "me" is for the assignee picker, or `null` when no session is known.
+     *
+     * The picker offers unassigned and this identity — the only assignment the directory
+     * can honestly resolve today, since a member list does not exist yet. An identity
+     * arriving from a future sync keeps working: the field is a `UserID`, not a name.
+     */
+    val currentUserID: UserID? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -103,8 +112,8 @@ class WorkItemEditorModel(
     var priority: Priority by mutableStateOf(existing?.priority ?: Priority.Medium)
         private set
 
-    /** The assignee, or `null` for unassigned. Held raw, as typed. */
-    var assignee: String by mutableStateOf(existing?.assignee.orEmpty())
+    /** Who the item is assigned to, or `null` for unassigned. */
+    var assigneeID: UserID? by mutableStateOf(existing?.assigneeID)
         private set
 
     /** The due date, or `null` for none. */
@@ -186,7 +195,7 @@ class WorkItemEditorModel(
                 details = details.trim(),
                 status = status,
                 priority = priority,
-                assignee = assignee.trim(),
+                assigneeID = assigneeID,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
@@ -228,9 +237,9 @@ class WorkItemEditorModel(
         priority = value
     }
 
-    /** Sets the assignee. Blank is stored as unassigned, not as an empty name. */
-    fun onAssigneeChanged(value: String) {
-        assignee = value
+    /** Assigns to [value], or clears the assignment for `null`. */
+    fun onAssigneeChanged(value: UserID?) {
+        assigneeID = value
     }
 
     /** Sets or clears the due date. */
@@ -277,7 +286,7 @@ class WorkItemEditorModel(
                 status = status,
                 details = details,
                 priority = priority,
-                assignee = assignee,
+                assigneeID = assigneeID,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
@@ -355,7 +364,7 @@ class WorkItemEditorModel(
         val details: String,
         val status: WorkItemStatus,
         val priority: Priority,
-        val assignee: String,
+        val assigneeID: UserID?,
         val dueDate: Instant?,
         val storyPoints: Int?,
         val blockedByIDs: List<WorkItemID>,
@@ -367,7 +376,7 @@ class WorkItemEditorModel(
                 details = item.details.trim(),
                 status = item.status,
                 priority = item.priority,
-                assignee = item.assignee.orEmpty().trim(),
+                assigneeID = item.assigneeID,
                 dueDate = item.dueDate,
                 storyPoints = item.storyPoints,
                 blockedByIDs = item.blockedByIDs.toList(),

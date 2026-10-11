@@ -5,10 +5,10 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.domain.WorkItemRules
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
@@ -66,14 +66,9 @@ class CreateSprint(
         goal: String? = null,
         startDate: Instant,
         endDate: Instant,
-        owner: String? = null,
+        ownerID: UserID? = null,
     ): Sprint {
         val name = ProjectRules.normaliseName(name)
-        // `normaliseAssignee`, not a sprint-specific rule, and the reason is in `Sprint`'s
-        // own KDoc: an owner that filtered or displayed differently from an assignee would
-        // be two concepts wearing the same word, and "am I the owner" would then be
-        // answered inconsistently in two places.
-        val owner = WorkItemRules.normaliseAssignee(owner)
         requireWindow(startDate = startDate, endDate = endDate)
         return repository.createSprint(
             projectID = projectID,
@@ -87,7 +82,7 @@ class CreateSprint(
             goal = goal?.trim()?.takeIf { it.isNotEmpty() },
             startDate = startDate,
             endDate = endDate,
-            owner = owner,
+            ownerID = ownerID,
             now = dateProvider.now(),
         )
     }
@@ -126,7 +121,7 @@ class UpdateSprint(
         goal: Patch<String?> = Patch.Unmentioned,
         startDate: Instant? = null,
         endDate: Instant? = null,
-        owner: Patch<String?> = Patch.Unmentioned,
+        ownerID: Patch<UserID?> = Patch.Unmentioned,
     ): Sprint {
         val existing = repository.sprint(id)
             ?: throw AppError.Storage("That sprint no longer exists.")
@@ -147,11 +142,7 @@ class UpdateSprint(
             },
             startDate = startDate,
             endDate = endDate,
-            owner = if (owner is Patch.Of) {
-                Patch.Of(WorkItemRules.normaliseAssignee(owner.value))
-            } else {
-                Patch.Unmentioned
-            },
+            ownerID = ownerID,
             now = dateProvider.now(),
         )
     }

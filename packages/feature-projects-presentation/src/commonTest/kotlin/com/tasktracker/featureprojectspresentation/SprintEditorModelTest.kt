@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -40,6 +41,9 @@ import kotlin.time.Instant
 class SprintEditorModelTest {
 
     private val zone: TimeZone = TimeZone.UTC
+
+    /** The identity the editor tests pick as owner, distinct from [testUserID]. */
+    private val graceUserID = UserID("77777777-7777-4777-8777-777777777777")
 
     private fun editorModel(
         repository: com.tasktracker.featureprojectsdomain.ProjectRepositoryPort,
@@ -180,7 +184,7 @@ class SprintEditorModelTest {
         model.onGoalStoryPointsChanged("12")
         model.onStartDateChanged(LocalDate(2026, Month.MARCH, 2))
         model.onEndDateChanged(LocalDate(2026, Month.MARCH, 16))
-        model.onOwnerChanged("  Grace  ")
+        model.onOwnerChanged(graceUserID)
 
         assertTrue(model.save())
 
@@ -189,7 +193,7 @@ class SprintEditorModelTest {
         // raw draft would put `"  Sprint 7  "` in a list row's title.
         assertEquals("Sprint 7", sprint.name)
         assertEquals(12, sprint.goalStoryPoints)
-        assertEquals("Grace", sprint.owner)
+        assertEquals(graceUserID, sprint.ownerID)
         // The first moment of the chosen day, which is what the user chose. See
         // `sprintLocalDate`'s KDoc for why the end is not rounded up to the day's end.
         assertEquals(Instant.parse("2026-03-02T00:00:00Z"), sprint.startDate)
@@ -201,27 +205,27 @@ class SprintEditorModelTest {
     fun `clearing the owner hands the sprint to nobody`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
 
         val model = editorModel(repository, project.id, existing = sprint)
         assertTrue(model.hasChanges.not())
 
-        model.onOwnerChanged("")
+        model.onOwnerChanged(null)
         assertTrue(model.hasChanges)
         assertTrue(model.save())
 
-        // The whole reason `Patch` exists: an empty field means "set it to nothing", and a
-        // plain nullable argument would have read as "leave it alone" and silently kept
-        // "Amir".
-        assertNull(repository.sprints(project.id).single().owner)
+        // The whole reason `Patch` exists: an unassigned field means "set it to nothing", and
+        // a plain nullable argument would have read as "leave it alone" and silently kept
+        // the previous owner.
+        assertNull(repository.sprints(project.id).single().ownerID)
     }
 
     @Test
     fun `an unchanged edit is not a change`() {
         val repository = FakeProjectRepository()
         val project = testProject()
-        val sprint = testSprint(project.id, name = "Sprint 3", goalStoryPoints = 7, owner = "Grace")
+        val sprint = testSprint(project.id, name = "Sprint 3", goalStoryPoints = 7, ownerID = graceUserID)
 
         val model = editorModel(repository, project.id, existing = sprint)
         assertFalse(model.hasChanges)
@@ -243,7 +247,7 @@ class SprintEditorModelTest {
             goalStoryPoints = 7,
             startDate = Instant.parse("2026-03-02T00:00:00Z"),
             endDate = Instant.parse("2026-03-16T00:00:00Z"),
-            owner = "Grace",
+            ownerID = graceUserID,
         )
         repository.seed(sprint)
 
@@ -254,7 +258,7 @@ class SprintEditorModelTest {
         val updated = repository.sprints(project.id).single()
         assertEquals("Sprint 4", updated.name)
         assertEquals(7, updated.goalStoryPoints)
-        assertEquals("Grace", updated.owner)
+        assertEquals(graceUserID, updated.ownerID)
         assertEquals(sprint.startDate, updated.startDate)
         assertEquals(sprint.endDate, updated.endDate)
         assertEquals("updateSprint", repository.writes.single())
@@ -479,14 +483,14 @@ class SprintEditorModelTest {
         // The parts that describe rather than commit still take the edit...
         model.onNameChanged("Sprint 1 (revised)")
         model.onGoalChanged("Ship the migration, quietly")
-        model.onOwnerChanged("Grace")
+        model.onOwnerChanged(graceUserID)
         assertTrue(model.hasChanges, "a locked window is not an uneditable sprint")
         assertTrue(model.save())
 
         val stored = repository.sprints(project.id).single()
         assertEquals("Sprint 1 (revised)", stored.name)
         assertEquals("Ship the migration, quietly", stored.goal)
-        assertEquals("Grace", stored.owner)
+        assertEquals(graceUserID, stored.ownerID)
         // ...and nothing frozen moved in the write either: the setters refusing is the
         // model's half of the guarantee, and this is that the save is the other half.
         assertEquals(10, stored.goalStoryPoints)

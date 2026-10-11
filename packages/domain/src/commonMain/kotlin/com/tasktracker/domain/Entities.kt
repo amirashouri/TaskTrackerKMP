@@ -252,12 +252,11 @@ data class Sprint(
     /**
      * Who owns the sprint, and who may finish it.
      *
-     * A `String?` and not a [UserID] for the reason [WorkItem.assignee] is one: an owner
-     * that filtered and displayed differently from an assignee would be two concepts
-     * wearing the same word, and "am I the owner" is then answered inconsistently in two
-     * places. `null` is an unowned sprint, which anyone may finish.
+     * A [UserID] for the reason [WorkItem.assigneeID] is one: identity belongs to the
+     * filter and the permission check, and a name would answer "am I the owner"
+     * inconsistently in two places. `null` is an unowned sprint, which anyone may finish.
      */
-    var owner: String? = null,
+    var ownerID: UserID? = null,
     /** Whether the sprint has been closed and summarised. */
     var isFinished: Boolean = false,
     /**
@@ -433,7 +432,14 @@ data class WorkItem(
     var details: String = "",
     var status: WorkItemStatus = WorkItemStatus.Backlog,
     var priority: Priority = Priority.Medium,
-    var assignee: String? = null,
+    /**
+     * Who the item is assigned to, or `null` for unassigned.
+     *
+     * A [UserID] and not a display name: the name is presentation's problem, resolved
+     * through the user directory, while identity is the filter's — "My Tasks" is an
+     * exact comparison here and cannot drift the way a first-name substring could.
+     */
+    var assigneeID: UserID? = null,
     var dueDate: Instant? = null,
     /**
      * How this item repeats, or `null` for a one-off.

@@ -218,6 +218,8 @@
     <string name="work_item_status_label">Status</string>
     <string name="work_item_priority_label">Priority</string>
     <string name="work_item_assignee_label">Assignee</string>
+    <string name="work_item_assignee_unassigned">Unassigned</string>
+    <string name="work_item_assignee_me">Me</string>
     <string name="work_item_due_label">Due</string>
     <string name="work_item_due_set">Set a due date</string>
     <string name="work_item_due_clear">Clear the due date</string>

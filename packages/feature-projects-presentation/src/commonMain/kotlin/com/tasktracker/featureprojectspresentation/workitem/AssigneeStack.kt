@@ -7,6 +7,7 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAvatarDescription
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttInitialsStack
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_assignees_description
@@ -30,10 +31,11 @@ import org.jetbrains.compose.resources.pluralStringResource
  *
  * ## What it says out loud
  *
- * [boardAssigneeInitials] deduplicates free text, so the discs are distinct *strings*, not
- * distinct people: "Amir" and "amir" are two discs and two people called Amir are one. The
- * description reports the same names rather than a count of humans, because a count of humans is
- * a claim this data cannot support.
+ * [boardAssigneeNames] deduplicates resolved *display names*, so the discs are distinct
+ * strings rather than distinct people: two members the directory labels identically are
+ * one disc, and an assignee the directory cannot name is dropped rather than drawn as a
+ * raw id. The description reports the same names rather than a count of humans, because a
+ * count of humans is a claim this data cannot support.
  */
 @Composable
 internal fun AssigneeStack(
@@ -72,22 +74,32 @@ internal fun AssigneeStack(
  * stable sort leaves them in board order - which is deterministic for a given board and is not a
  * claim about the alphabet.
  *
+ * ## Why it takes a name map
+ *
+ * [WorkItem.assigneeID] is an id, and a stack of ids would draw `2f8a…` discs. The host
+ * resolves the ids through the directory and passes the map; an id with no entry is
+ * dropped, because a disc labelled with a uuid is not a person this app can name.
+ *
  * ## Why it returns names and not initials
  *
  * Because the names are also what the stack *says*: the description under the discs is the same
  * list, joined. A function that returned initials would force the caller to recover the names for
- * the description, and the two copies of the rule - trim, drop blanks, distinct, sort - would
+ * the description, and the two copies of the rule - drop blanks, distinct, sort - would
  * then be free to disagree.
  *
  * ## Why it is a named function
  *
- * Because three separate decisions live in it - drop blanks, deduplicate, sort - and all three are
- * invisible in a composition: a stack that quietly showed "amir" twice, or drew a blank disc for
- * an empty assignee, would look correct and be wrong. `WorkItemCardRulesTest` holds this one
+ * Because three separate decisions live in it - resolve, drop unnamed, sort - and all three are
+ * invisible in a composition: a stack that quietly showed "amir" twice, or drew a disc for a
+ * raw id, would look correct and be wrong. `WorkItemCardRulesTest` holds this one
  * without rendering anything.
  */
-internal fun boardAssigneeNames(items: List<WorkItem>): List<String> = items
-    .mapNotNull { it.assignee }
+internal fun boardAssigneeNames(
+    items: List<WorkItem>,
+    names: Map<UserID, String> = emptyMap(),
+): List<String> = items
+    .mapNotNull { it.assigneeID }
+    .mapNotNull { names[it] }
     .filter { it.isNotBlank() }
     .map { it.trim() }
     .distinct()
@@ -98,5 +110,5 @@ const val ProjectBoardAssigneesTag = "board.assignees"
 @Preview
 @Composable
 private fun AssigneeStackPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    AssigneeStack(names = boardAssigneeNames(ViewPreviewData.workItems))
+    AssigneeStack(names = boardAssigneeNames(ViewPreviewData.workItems, ViewPreviewData.previewUserNames))
 }

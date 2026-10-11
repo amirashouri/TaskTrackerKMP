@@ -327,7 +327,7 @@ class RoomProjectRepository(
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint {
         val normalisedName = ProjectRules.normaliseName(name)
@@ -357,7 +357,7 @@ class RoomProjectRepository(
                 goal = goal,
                 startDate = startDate,
                 endDate = endDate,
-                owner = WorkItemRules.normaliseAssignee(owner),
+                ownerID = ownerID,
                 isFinished = false,
                 finishedAt = null,
                 createdAt = now,
@@ -386,7 +386,7 @@ class RoomProjectRepository(
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint {
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
@@ -401,7 +401,7 @@ class RoomProjectRepository(
             if (goal is Patch.Of) sprint.goal = goal.value
             startDate?.let { sprint.startDate = it }
             endDate?.let { sprint.endDate = it }
-            if (owner is Patch.Of) sprint.owner = WorkItemRules.normaliseAssignee(owner.value)
+            if (ownerID is Patch.Of) sprint.ownerID = ownerID.value
             sprint.updatedAt = now
 
             if (sprint.startDate > sprint.endDate) {
@@ -611,7 +611,7 @@ class RoomProjectRepository(
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -621,7 +621,6 @@ class RoomProjectRepository(
     ): WorkItem {
         val normalisedTitle = WorkItemRules.normaliseTitle(title)
         val normalisedDetails = WorkItemRules.normaliseDetails(details)
-        val normalisedAssignee = WorkItemRules.normaliseAssignee(assignee)
         val stamp = currentUserStamp()
         val author = currentAuthor()
 
@@ -637,7 +636,7 @@ class RoomProjectRepository(
                 details = normalisedDetails,
                 status = status,
                 priority = priority,
-                assignee = normalisedAssignee,
+                assigneeID = assigneeID,
                 dueDate = dueDate,
                 recurrence = recurrence,
                 storyPoints = storyPoints,
@@ -678,7 +677,7 @@ class RoomProjectRepository(
      * A partial edit, and the [Patch] parameters are why the signature is not simpler.
      *
      * `title`, `details` and `priority` are plain optionals: `null` means leave alone, and
-     * none of the three can be meaningfully emptied. `assignee` and `dueDate` are [Patch]es,
+     * none of the three can be meaningfully emptied. `assigneeID` and `dueDate` are [Patch]es,
      * because both *can* be emptied and "not mentioned" is a different instruction from "set
      * it to nothing" — see [Patch].
      *
@@ -693,7 +692,7 @@ class RoomProjectRepository(
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -713,7 +712,7 @@ class RoomProjectRepository(
             // mentioned" and "set to null" cannot be collapsed by a later change to this
             // signature. `Unmentioned` falls through as a no-op, which is its only correct
             // reading.
-            if (assignee is Patch.Of) item.assignee = WorkItemRules.normaliseAssignee(assignee.value)
+            if (assigneeID is Patch.Of) item.assigneeID = assigneeID.value
             if (dueDate is Patch.Of) item.dueDate = dueDate.value
             if (storyPoints is Patch.Of) item.storyPoints = storyPoints.value
             if (blockedByIDs is Patch.Of) item.blockedByIDs =
@@ -883,7 +882,9 @@ class RoomProjectRepository(
                     details = entry.details,
                     status = entry.status,
                     priority = entry.priority,
-                    assignee = entry.assignee,
+                    // The seed's flag resolves against the signed-in user: a sample name
+                    // cannot be a `UserID`, and the sample board is the user's own board.
+                    assigneeID = if (entry.assignee) author else null,
                     // Relative, so the sample board is never a wall of overdue cards the
                     // first time somebody runs this months from now.
                     dueDate = entry.dueInDays?.let { now + it.days },
@@ -923,7 +924,7 @@ class RoomProjectRepository(
                     goal = entry.goal,
                     startDate = now + entry.startsInDays.days,
                     endDate = now + entry.endsInDays.days,
-                    owner = WorkItemRules.normaliseAssignee(entry.owner),
+                    ownerID = if (entry.owner) author else null,
                     isFinished = entry.isFinished,
                     // Kept in step with `isFinished` by hand, for the same reason the test
                     // fake does: a fixture that broke the entity's own invariant would seed a

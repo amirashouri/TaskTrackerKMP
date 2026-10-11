@@ -165,7 +165,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint {
         throwIfFailing()
@@ -185,7 +185,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 goal = goal,
                 startDate = startDate,
                 endDate = endDate,
-                owner = owner,
+                ownerID = ownerID,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -203,7 +203,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint {
         throwIfFailing()
@@ -215,7 +215,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             if (goal is Patch.Of) sprint.goal = goal.value
             if (startDate != null) sprint.startDate = startDate
             if (endDate != null) sprint.endDate = endDate
-            if (owner is Patch.Of) sprint.owner = owner.value
+            if (ownerID is Patch.Of) sprint.ownerID = ownerID.value
             sprint.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
             sprint
@@ -419,7 +419,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -440,7 +440,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 details = details,
                 status = status,
                 priority = priority,
-                assignee = assignee,
+                assigneeID = assigneeID,
                 dueDate = dueDate,
                 recurrence = recurrence,
                 storyPoints = storyPoints,
@@ -476,7 +476,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -492,11 +492,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
             if (details != null) item.details = details
             if (priority != null) item.priority = priority
             // The two `Patch`es are the whole reason this type exists: an `Unmentioned`
-            // leaves the field alone and an `Of(null)` clears it, and a plain `String?`
+            // leaves the field alone and an `Of(null)` clears it, and a plain `UserID?`
             // could not tell those apart.
-            when (assignee) {
+            when (assigneeID) {
                 is Patch.Unmentioned -> Unit
-                is Patch.Of -> item.assignee = assignee.value
+                is Patch.Of -> item.assigneeID = assigneeID.value
             }
             when (dueDate) {
                 is Patch.Unmentioned -> Unit

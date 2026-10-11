@@ -43,7 +43,7 @@ object SprintEditorScenarios {
                     goal = "Ship the migration",
                     startDate = LocalDate(2026, 3, 2),
                     endDate = LocalDate(2026, 3, 16),
-                    owner = "Amir",
+                    ownerID = testUserID,
                     isCreating = false,
                     canSave = true,
                     endIsBeforeStart = false,

@@ -166,7 +166,7 @@ interface ProjectRepositoryPort {
         goal: String? = null,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint
 
@@ -174,7 +174,7 @@ interface ProjectRepositoryPort {
      * Applies a partial edit to a sprint.
      *
      * `name`, `goalStoryPoints`, `startDate` and `endDate` are plain optionals — `null`
-     * leaves the field alone. [owner] and `goal` are [Patch]es, because both *can* be
+     * leaves the field alone. [ownerID] and `goal` are [Patch]es, because both *can* be
      * emptied and "not mentioned" is a different instruction from "set it to nothing"; see
      * [Patch].
      *
@@ -190,7 +190,7 @@ interface ProjectRepositoryPort {
         goal: Patch<String?> = Patch.Unmentioned,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint
 
@@ -257,7 +257,7 @@ interface ProjectRepositoryPort {
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int? = null,
         sprintID: SprintID? = null,
@@ -278,16 +278,16 @@ interface ProjectRepositoryPort {
      * [title], [details] and [priority] are plain optionals — a `null` leaves the field
      * alone, and none of the three can be meaningfully emptied.
      *
-     * [assignee] and [dueDate] are [Patch]es, because both *can* be emptied and "not
+     * [assigneeID] and [dueDate] are [Patch]es, because both *can* be emptied and "not
      * mentioned" is a different instruction from "set it to nothing". See [Patch] for why
-     * a plain `String?` could not carry this.
+     * a plain nullable could not carry this.
      */
     suspend fun updateWorkItem(
         id: WorkItemID,
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -383,7 +383,7 @@ data class ProjectChange(
  * outer `nil` means *leave this alone* and an inner `nil` means *clear it*. Kotlin has
  * no second level of nullability, and the two obvious replacements are both wrong:
  *
- * - A plain `String?` collapses the two instructions. A caller clearing an assignee
+ * - A plain `UserID?` collapses the two instructions. A caller clearing an assignee
  *   passes `null`, the store reads it as "no instruction", and the field silently keeps
  *   its old value. The failure is invisible: the edit is reported as saved and the value
  *   is wrong, which is the one combination a user reports as a bug with no reproduction.
@@ -397,9 +397,9 @@ data class ProjectChange(
  * from a type's parentheses.
  *
  * ```
- * repo.updateWorkItem(id, assignee = Patch.of("ada"))   // assigned to Ada
- * repo.updateWorkItem(id, assignee = Patch.of(null))    // unassigned
- * repo.updateWorkItem(id, assignee = Patch.Unmentioned) // dragged from the board
+ * repo.updateWorkItem(id, assigneeID = Patch.of(ada.id))   // assigned to Ada
+ * repo.updateWorkItem(id, assigneeID = Patch.of(null))     // unassigned
+ * repo.updateWorkItem(id, assigneeID = Patch.Unmentioned)  // dragged from the board
  * ```
  */
 sealed interface Patch<out T> {
@@ -410,7 +410,7 @@ sealed interface Patch<out T> {
     /**
      * The caller set this field, possibly to `null`.
      *
-     * The parameter is the nullable type it is assigned to, so [Patch.Of] over `String?`
+     * The parameter is the nullable type it is assigned to, so [Patch.Of] over `UserID?`
      * is what clearing an assignee is built from — a `null` here is an instruction, not
      * an absence.
      */

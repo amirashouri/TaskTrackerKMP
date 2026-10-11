@@ -23,6 +23,7 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.TeamPort
 
 /**
  * The collaborators every screen in this module needs, supplied from outside.
@@ -42,6 +43,15 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 class ProjectEnvironment(
     val repository: ProjectRepositoryPort,
     val dateProvider: DateProvider,
+    /**
+     * The user directory, or `null` when the graph supplied none.
+     *
+     * Nullable because a graph can legitimately be built without teams wired — the same
+     * case [MissingProjectEnvironmentView] covers for projects. A missing directory means
+     * assignee/owner labels render as the unassigned placeholder and the picker offers
+     * nobody; it never crashes a screen.
+     */
+    val teamPort: TeamPort? = null,
 )
 
 /**

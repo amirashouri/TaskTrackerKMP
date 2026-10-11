@@ -22,6 +22,7 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.UserID
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
@@ -82,7 +83,7 @@ fun SprintEditorSheet(
     goal: String,
     startDate: LocalDate?,
     endDate: LocalDate?,
-    owner: String,
+    ownerID: UserID?,
     isCreating: Boolean,
     canSave: Boolean,
     endIsBeforeStart: Boolean?,
@@ -92,7 +93,7 @@ fun SprintEditorSheet(
     onGoalChanged: (String) -> Unit,
     onStartDateChanged: (LocalDate) -> Unit,
     onEndDateChanged: (LocalDate) -> Unit,
-    onOwnerChanged: (String) -> Unit,
+    onOwnerChanged: (UserID?) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -107,6 +108,11 @@ fun SprintEditorSheet(
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
     today: LocalDate? = null,
+    /** Who the signed-in user is, for the owner picker's "me" option. See [WorkItemAssigneeRow]. */
+    currentUserID: UserID? = null,
+    currentUserName: String? = null,
+    /** Label for an owner the directory cannot yet name. */
+    otherOwnerLabel: String? = null,
 ) {
     TTBottomSheetScaffold(
         visible = visible,
@@ -205,12 +211,16 @@ fun SprintEditorSheet(
                     )
                 }
             }
-            ProjectsTextField(
+            // The same picker the work item editor's assignee field uses: ownership is an
+            // id, and "unowned / me" is the whole of what the directory can offer today.
+            WorkItemAssigneeRow(
+                assigneeID = ownerID,
+                currentUserID = currentUserID,
+                currentUserName = currentUserName,
+                otherAssigneeLabel = otherOwnerLabel,
+                onAssigneeChanged = onOwnerChanged,
                 title = stringResource(Res.string.sprint_owner_label),
-                value = owner,
-                onValueChange = onOwnerChanged,
-                imeAction = ImeAction.Done,
-                modifier = Modifier.testTag(SprintEditorOwnerTag),
+                testTag = SprintEditorOwnerTag,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -264,7 +274,7 @@ private fun SprintEditorSheetPreview() = ProjectsPreview(ThemeScheme.Light) {
         goal = "Ship the migration to the new store",
         startDate = LocalDate(2026, 3, 30),
         endDate = LocalDate(2026, 4, 10),
-        owner = "Amir",
+        ownerID = ViewPreviewData.previewUserID,
         isCreating = true,
         canSave = true,
         endIsBeforeStart = false,
@@ -290,7 +300,7 @@ private fun SprintEditorSheetInvalidPreview() = ProjectsPreview(ThemeScheme.Dark
         goal = "",
         startDate = LocalDate(2026, 4, 10),
         endDate = LocalDate(2026, 4, 3),
-        owner = "",
+        ownerID = null,
         isCreating = true,
         canSave = false,
         // The third state the rule has: a chosen end that is before a chosen start.

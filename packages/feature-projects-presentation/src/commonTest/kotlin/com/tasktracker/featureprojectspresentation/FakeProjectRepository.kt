@@ -173,7 +173,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint {
         return sprintWrite({ projectID }) {
@@ -191,7 +191,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             goal = goal,
             startDate = startDate,
             endDate = endDate,
-            owner = owner,
+            ownerID = ownerID,
             createdAt = now,
             updatedAt = now,
         )
@@ -208,7 +208,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint = sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
         failIfSet()
@@ -218,7 +218,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         if (goal is Patch.Of) existing.goal = goal.value
         if (startDate != null) existing.startDate = startDate
         if (endDate != null) existing.endDate = endDate
-        if (owner is Patch.Of) existing.owner = owner.value
+        if (ownerID is Patch.Of) existing.ownerID = ownerID.value
         existing.updatedAt = now
         writes += "updateSprint"
         existing.copy()
@@ -407,7 +407,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -428,7 +428,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             details = details,
             status = status,
             priority = priority,
-            assignee = assignee,
+            assigneeID = assigneeID,
             dueDate = dueDate,
             recurrence = recurrence,
             storyPoints = storyPoints,
@@ -449,7 +449,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -463,8 +463,8 @@ class FakeProjectRepository : ProjectRepositoryPort {
         if (title != null) existing.title = title
         if (details != null) existing.details = details
         if (priority != null) existing.priority = priority
-        when (assignee) {
-            is Patch.Of -> existing.assignee = assignee.value
+        when (assigneeID) {
+            is Patch.Of -> existing.assigneeID = assigneeID.value
             Patch.Unmentioned -> Unit
         }
         when (dueDate) {
@@ -631,6 +631,15 @@ class FakeProjectRepository : ProjectRepositoryPort {
     }
 }
 
+/**
+ * The identity presentation fixtures assign ownership and assignment to.
+ *
+ * Fixed rather than [com.tasktracker.core.randomUserID]: a scenario that asserts "my tasks
+ * shows the card" has to compare the same id twice, and a fixture that moved between runs
+ * would make the second half an assertion about nothing.
+ */
+val testUserID = UserID("99999999-9999-4999-8999-999999999999")
+
 /** A project fixture, on a fixed clock so nothing in a test depends on `now`. */
 fun testProject(
     name: String = "Apollo",
@@ -660,7 +669,7 @@ fun testWorkItem(
     details: String = "",
     status: WorkItemStatus = WorkItemStatus.Todo,
     priority: Priority = Priority.Medium,
-    assignee: String? = null,
+    assigneeID: UserID? = null,
     dueDate: Instant? = null,
     rank: Int = 0,
     resolvedAt: Instant? = null,
@@ -677,7 +686,7 @@ fun testWorkItem(
     details = details,
     status = status,
     priority = priority,
-    assignee = assignee,
+    assigneeID = assigneeID,
     dueDate = dueDate,
     storyPoints = storyPoints,
     sprintID = sprintID,
@@ -706,7 +715,7 @@ fun testSprint(
     goal: String? = null,
     startDate: Instant = Instant.parse("2026-03-02T00:00:00Z"),
     endDate: Instant = Instant.parse("2026-03-16T00:00:00Z"),
-    owner: String? = "Amir",
+    ownerID: UserID? = testUserID,
     isFinished: Boolean = false,
     isArchived: Boolean = false,
     finishedAt: Instant? = null,
@@ -719,7 +728,7 @@ fun testSprint(
     goal = goal,
     startDate = startDate,
     endDate = endDate,
-    owner = owner,        isFinished = isFinished,
+    ownerID = ownerID,        isFinished = isFinished,
             isArchived = isArchived,
             // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
             // own invariant would make every test using it assert against a state the store cannot

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.Test
@@ -73,9 +74,9 @@ object WorkItemCardScenarios {
      * surname fails here, which is the defect the rule exists to prevent.
      */
     val showsTheAssigneeWhenThereIsOne: suspend ComposeUiTest.() -> Unit = {
-        val item = ViewPreviewData.workItems.first { it.assignee != null }.copy(assignee = TWO_PART_ASSIGNEE)
+        val item = ViewPreviewData.workItems.first { it.assigneeID != null }
 
-        cardShowing(item)
+        cardShowing(item, assigneeName = TWO_PART_ASSIGNEE)
 
         onNested(WorkItemCardAssigneeTag).assertIsDisplayed()
         // The literal, not `assigneeFirstName(TWO_PART_ASSIGNEE)`: asking the function under
@@ -88,7 +89,7 @@ object WorkItemCardScenarios {
 
     /** An unassigned task gets no assignee row at all - not an empty one. */
     val omitsTheAssigneeWhenThereIsNone: suspend ComposeUiTest.() -> Unit = {
-        val item = ViewPreviewData.workItems.first { it.assignee == null }
+        val item = ViewPreviewData.workItems.first { it.assigneeID == null }
 
         cardShowing(item)
 
@@ -142,10 +143,10 @@ object WorkItemCardScenarios {
 }
 
 @OptIn(ExperimentalTestApi::class)
-internal fun ComposeUiTest.cardShowing(item: WorkItem) {
+internal fun ComposeUiTest.cardShowing(item: WorkItem, assigneeName: String? = null) {
     setContent {
         Themed {
-            WorkItemCard(item = item, onClick = {})
+            WorkItemCard(item = item, assigneeName = assigneeName, onClick = {})
         }
     }
 }
@@ -213,13 +214,23 @@ class WorkItemCardRulesTest {
 
     @Test
     fun theBoardStackDeduplicatesSortsAndSkipsBlankAssignees() {
+        val priya = UserID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+        val amirLower = UserID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+        val blank = UserID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+        val amir = UserID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
         val items = listOf(
-            ViewPreviewData.workItems[0].copy(assignee = "  Priya  "),
-            ViewPreviewData.workItems[1].copy(assignee = "amir"),
-            ViewPreviewData.workItems[2].copy(assignee = "Priya"),
-            ViewPreviewData.workItems[3].copy(assignee = null),
-            ViewPreviewData.workItems[4].copy(assignee = "   "),
-            ViewPreviewData.workItems[5].copy(assignee = "Amir"),
+            ViewPreviewData.workItems[0].copy(assigneeID = priya),
+            ViewPreviewData.workItems[1].copy(assigneeID = amirLower),
+            ViewPreviewData.workItems[2].copy(assigneeID = priya),
+            ViewPreviewData.workItems[3].copy(assigneeID = null),
+            ViewPreviewData.workItems[4].copy(assigneeID = blank),
+            ViewPreviewData.workItems[5].copy(assigneeID = amir),
+        )
+        val names = mapOf(
+            priya to "  Priya  ",
+            amirLower to "amir",
+            blank to "   ",
+            amir to "Amir",
         )
 
         assertEquals(
@@ -227,7 +238,7 @@ class WorkItemCardRulesTest {
             // two compare equal and the stable sort leaves them in board order. That is the
             // intended reading - a name that differs only in case is not ordered by the case.
             listOf("amir", "Amir", "Priya"),
-            boardAssigneeNames(items),
+            boardAssigneeNames(items, names),
             "sorted case-insensitively so 'Amir' and 'amir' are two, blank and null are none, " +
                 "and the untrimmed '  Priya  ' is the same Priya as the trimmed one",
         )

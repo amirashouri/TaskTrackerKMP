@@ -245,7 +245,7 @@ class ProjectsListModelTest {
             details = "",
             status = WorkItemStatus.Todo,
             priority = com.tasktracker.domain.Priority.Medium,
-            assignee = null,
+            assigneeID = null,
             dueDate = null,
             now = clock.now(),
         )

@@ -74,6 +74,13 @@ fun WorkItemCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    /**
+     * The assignee's display name, resolved by the host from [WorkItem.assigneeID] via
+     * the directory. `null` — unassigned, or an id the directory cannot name — draws no
+     * pill: the card must not invent a label for an identity it cannot produce, and an
+     * id on a card is noise rather than a name.
+     */
+    assigneeName: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -110,7 +117,7 @@ fun WorkItemCard(
             maxLines = CARD_TITLE_MAX_LINES,
             overflow = TextOverflow.Ellipsis,
         )
-        item.assignee?.takeIf { it.isNotBlank() }?.let { assignee ->
+        assigneeName?.takeIf { it.isNotBlank() }?.let { assignee ->
             AssigneeLabel(firstName = assigneeFirstName(assignee))
         }
         // The due date and the card's own action, on one row: the date at the leading edge and
@@ -287,7 +294,11 @@ private fun WorkItemCardPreview() = ProjectsPreview(ThemeScheme.Dark) {
         modifier = Modifier.width(CARD_PREVIEW_WIDTH),
     ) {
         ViewPreviewData.workItems.take(4).forEach { item ->
-            WorkItemCard(item = item, onClick = {})
+            WorkItemCard(
+                item = item,
+                onClick = {},
+                assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
+            )
         }
     }
 }
@@ -300,7 +311,11 @@ private fun WorkItemCardLightPreview() = ProjectsPreview(ThemeScheme.Light) {
         modifier = Modifier.width(CARD_PREVIEW_WIDTH),
     ) {
         ViewPreviewData.workItems.take(4).forEach { item ->
-            WorkItemCard(item = item, onClick = {})
+            WorkItemCard(
+                item = item,
+                onClick = {},
+                assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
+            )
         }
     }
 }

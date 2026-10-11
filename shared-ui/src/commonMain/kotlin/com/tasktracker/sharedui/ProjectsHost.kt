@@ -245,7 +245,9 @@ private fun ProjectBoardDestination(
             projectID = projectID,
             repository = environment.repository,
             dateProvider = environment.dateProvider,
-            currentUserName = null,
+            // No session in this host, so the My Tasks filter honestly matches nothing —
+            // the same `null` the board destination starts with on a cold launch.
+            currentUserID = null,
         )
     }
     DisposableEffect(model) {

@@ -41,7 +41,7 @@ object SampleData {
                     details = "Server wins. The client replays its last local state and lets the server decide.",
                     status = WorkItemStatus.Done,
                     priority = Priority.Critical,
-                    assignee = "Amir",
+                    assignee = true,
                     dueInDays = 3,
                 ),
                 ProjectSeed.Item(
@@ -49,14 +49,14 @@ object SampleData {
                     details = "Every local write queues a row in the same transaction.",
                     status = WorkItemStatus.Done,
                     priority = Priority.High,
-                    assignee = "Amir",
+                    assignee = true,
                     dueInDays = 5,
                 ),
                 ProjectSeed.Item(
                     title = "Wire the board to the local store",
                     status = WorkItemStatus.InProgress,
                     priority = Priority.High,
-                    assignee = "Amir",
+                    assignee = true,
                     dueInDays = 1,
                 ),
                 ProjectSeed.Item(
@@ -64,14 +64,14 @@ object SampleData {
                     details = "Queue depth, dead letters, last failure.",
                     status = WorkItemStatus.InReview,
                     priority = Priority.Medium,
-                    assignee = "Ada",
+                    assignee = true,
                     dueInDays = 2,
                 ),
                 ProjectSeed.Item(
                     title = "Pull changes without pushing them back",
                     status = WorkItemStatus.Todo,
                     priority = Priority.Critical,
-                    assignee = "Amir",
+                    assignee = true,
                     dueInDays = 1,
                 ),
                 ProjectSeed.Item(
@@ -111,7 +111,7 @@ object SampleData {
                     title = "Keychain-backed token storage",
                     status = WorkItemStatus.InProgress,
                     priority = Priority.High,
-                    assignee = "Ada",
+                    assignee = true,
                     dueInDays = 4,
                 ),
                 ProjectSeed.Item(
@@ -125,13 +125,13 @@ object SampleData {
                     title = "Backlog view with a stable order",
                     status = WorkItemStatus.InReview,
                     priority = Priority.Medium,
-                    assignee = "Amir",
+                    assignee = true,
                 ),
                 ProjectSeed.Item(
                     title = "Deep links into a board",
                     status = WorkItemStatus.Done,
                     priority = Priority.Low,
-                    assignee = "Amir",
+                    assignee = true,
                 ),
                 ProjectSeed.Item(
                     title = "Push notifications for assignments",
@@ -162,7 +162,7 @@ object SampleData {
                     goal = "Notification inbox and preferences.",
                     startsInDays = -7,
                     endsInDays = 7,
-                    owner = "Amir",
+                    owner = true,
                 ),
                 ProjectSeed.SprintSeed(
                     name = "Gemini Sprint 4",
@@ -170,7 +170,7 @@ object SampleData {
                     goal = "Quiet hours and reminders.",
                     startsInDays = 30,
                     endsInDays = 44,
-                    owner = "Amir",
+                    owner = true,
                 ),
                 ProjectSeed.SprintSeed(
                     name = "Gemini Sprint 2",
@@ -249,13 +249,17 @@ class ProjectSeed(
     /**
      * One seeded work item.
      *
-     * `details` and `assignee` default to empty rather than being required, because most
-     * items on a real board have neither, and a fixture that has to spell out `details = ""`
-     * thirteen times stops being readable as a board.
+     * `details` defaults to empty rather than being required, because most items on a real
+     * board have neither, and a fixture that has to spell out `details = ""` thirteen times
+     * stops being readable as a board.
      *
      * @param status the column the item lands in. Terminal statuses are dated by the seeder,
      *   because the archive files by resolution date and an undated `Done` item is invisible
      *   in it.
+     * @param assignee seeds the item to the *signed-in user* when true, and leaves it
+     *   unassigned when false. A flag and not a name, because a sample name cannot resolve
+     *   to a `UserID` — the sample board is the user's own board, so "mine" is the only
+     *   assignment a fixture can honestly make until a member directory exists.
      * @param dueInDays days from the seeding instant, or `null` for no due date — which is
      *   the majority, and a board where everything has a due date is its own kind of noise.
      * @param rank position within its own column, which is why every seeded item leaves this
@@ -267,7 +271,7 @@ class ProjectSeed(
         val details: String = "",
         val status: WorkItemStatus = WorkItemStatus.Todo,
         val priority: Priority = Priority.Medium,
-        val assignee: String? = null,
+        val assignee: Boolean = false,
         val dueInDays: Int? = null,
         val rank: Int = 0,
     )
@@ -283,6 +287,8 @@ class ProjectSeed(
      *
      * @param startsInDays first day of the window, relative to the seeding instant.
      * @param endsInDays last day, inclusive, relative to the seeding instant.
+     * @param owner seeds the sprint to the *signed-in user* when true — the same rule as
+     *   [Item.assignee], and for the same reason.
      */
     class SprintSeed(
         val name: String,
@@ -290,7 +296,7 @@ class ProjectSeed(
         val goal: String? = null,
         val startsInDays: Int,
         val endsInDays: Int,
-        val owner: String? = null,
+        val owner: Boolean = false,
         val isFinished: Boolean = false,
         val isArchived: Boolean = false,
     )

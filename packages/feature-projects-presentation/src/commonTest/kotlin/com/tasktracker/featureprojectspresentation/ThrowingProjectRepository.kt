@@ -67,7 +67,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint = boom()
 
@@ -78,7 +78,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint = boom()
 
@@ -124,7 +124,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -138,7 +138,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,

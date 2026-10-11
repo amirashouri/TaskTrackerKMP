@@ -26,12 +26,3 @@ actual fun createParentDirectory(path: String) {
         throw AppError.Storage("Could not create the database directory: ${parent.path}")
     }
 }
-
-internal actual fun deleteStoreFile(path: String) {
-    val file = File(path)
-    // The write-ahead log before the store, because a live store may still be writing
-    // into it; a file that is already gone is not an error, per the declaration's contract.
-    file.delete()
-    File("$path-wal").delete()
-    File("$path-shm").delete()
-}
