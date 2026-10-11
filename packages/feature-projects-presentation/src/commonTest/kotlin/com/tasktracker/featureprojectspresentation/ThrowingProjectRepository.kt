@@ -118,6 +118,8 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
 
     override suspend fun deleteProject(id: ProjectID): Unit = boom()
 
+    override suspend fun invite(id: ProjectID, email: String, now: Instant): Unit = boom()
+
     override suspend fun createWorkItem(
         projectID: ProjectID,
         title: String,

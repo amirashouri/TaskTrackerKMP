@@ -35,6 +35,7 @@ object SampleData {
             keyPrefix = "APO",
             name = "Apollo",
             details = "The first vertical slice: local-first edits with an outbox behind them.",
+            members = true,
             items = listOf(
                 ProjectSeed.Item(
                     title = "Decide the sync conflict policy",
@@ -106,6 +107,7 @@ object SampleData {
             keyPrefix = "GEM",
             name = "Gemini",
             details = "A second project, so the dashboard and deep links have something to point at.",
+            members = true,
             items = listOf(
                 ProjectSeed.Item(
                     title = "Keychain-backed token storage",
@@ -234,6 +236,12 @@ object SampleData {
  * the situation the local-first design has to be tested in.
  *
  * @param keyPrefix the project key, e.g. `APO` produces `APO-1`, `APO-2`.
+ * @param members seeds the *signed-in user* as a project member when true, and nobody when
+ *   false. A flag and not a list of ids, for the same reason [Item.assignee] is: a sample
+ *   name cannot resolve to a `UserID`, and the member section can only *name* a person the
+ *   directory knows — which at seed time is the signed-in user. Previews carry richer
+ *   multi-member fixtures because a preview can hand the name map itself; a seeded install
+ *   gets the one member it can honestly have.
  * @param items seeded in list order, and the position in this list is the number in the
  *   item's key — so the third entry is `APO-3` and a test can assert on key numbering without
  *   counting rows.
@@ -242,6 +250,7 @@ class ProjectSeed(
     val keyPrefix: String,
     val name: String,
     val details: String = "",
+    val members: Boolean = false,
     val items: List<Item> = emptyList(),
     val sprints: List<SprintSeed> = emptyList(),
 ) {

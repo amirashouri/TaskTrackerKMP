@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectEditorModel
@@ -24,10 +26,13 @@ import com.tasktracker.featureprojectspresentation.ProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProjectPickerModel
 import com.tasktracker.featureprojectspresentation.ProjectsListModel
 import com.tasktracker.featureprojectspresentation.ProjectsListScreen
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -70,6 +75,17 @@ fun ProjectsHost(
     router: Router,
     environment: ProjectEnvironment,
     modifier: Modifier = Modifier,
+    /**
+     * Who is signed in, and what to call them, as flows rather than plain values.
+     *
+     * The session arrives after the first frame on a cold launch, so a plain `UserID?`
+     * would freeze `null` into every model and sheet built before it landed — the same
+     * reason [ShellPreferences] exposes these as [StateFlow]s and the board treats the id
+     * as a model key. A defaulted flow of `null` keeps preview and test callers honest:
+     * no session, no "me" affordance.
+     */
+    currentUserID: StateFlow<UserID?> = MutableStateFlow(null),
+    currentUserName: StateFlow<String?> = MutableStateFlow(null),
 ) {
     val scope = rememberCoroutineScope()
     var navigation by remember(router) { mutableStateOf(router.state.value) }
@@ -149,6 +165,9 @@ fun ProjectsHost(
         }
 
         projectEditorModel?.let { editor ->
+            val sessionUserID by currentUserID.collectAsState()
+            val sessionUserName by currentUserName.collectAsState()
+            val memberNames = rememberMemberNames(editor.memberIDs, environment.teamPort)
             NewProjectSheet(
                 name = editor.name,
                 keyPrefix = editor.keyPrefix,
@@ -160,6 +179,16 @@ fun ProjectsHost(
                 onNameChanged = editor::onNameChanged,
                 onKeyPrefixChanged = editor::onKeyPrefixChanged,
                 onDetailsChanged = editor::onDetailsChanged,
+                currentUserID = sessionUserID,
+                currentUserName = sessionUserName,
+                memberNames = memberNames,
+                inviteEmail = editor.inviteEmail,
+                onInviteEmailChanged = editor::onInviteEmailChanged,
+                onSendInvite = {
+                    scope.launch { editor.sendInvite() }
+                },
+                inviteQueuedEmail = editor.inviteQueuedEmail,
+                errorMessage = editor.errorMessage,
                 onSave = {
                     scope.launch {
                         if (editor.save()) isProjectEditorOpen = false
@@ -177,6 +206,31 @@ fun ProjectsHost(
         }
 
     }
+}
+
+/**
+ * Display names for the editor's selected members, resolved in one batch.
+ *
+ * Empty when there is no [com.tasktracker.featureteamsdomain.TeamPort] — the sheet then
+ * draws raw ids rather than inventing labels — and unknown ids are omitted by
+ * `TeamPort.users` itself.
+ */
+@Composable
+private fun rememberMemberNames(
+    ids: List<UserID>,
+    teamPort: TeamPort?,
+): Map<UserID, String> {
+    var names by remember(ids, teamPort) { mutableStateOf<Map<UserID, String>>(emptyMap()) }
+    LaunchedEffect(ids, teamPort) {
+        names = if (teamPort == null || ids.isEmpty()) {
+            emptyMap()
+        } else {
+            runCatching { teamPort.users(ids) }
+                .getOrDefault(emptyList())
+                .associate { it.id to it.preferredGreeting }
+        }
+    }
+    return names
 }
 
 /**

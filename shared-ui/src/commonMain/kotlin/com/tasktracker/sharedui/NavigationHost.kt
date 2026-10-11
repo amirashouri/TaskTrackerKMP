@@ -360,7 +360,12 @@ private fun TabRoot(
     scope: CoroutineScope,
 ) {
     when (tab) {
-        AppTab.Projects -> ProjectsHost(router = router, environment = environment)
+        AppTab.Projects -> ProjectsHost(
+            router = router,
+            environment = environment,
+            currentUserID = preferences.currentUserID,
+            currentUserName = preferences.currentUserName,
+        )
 
         AppTab.Board -> ProjectScopedTabScreen(
             router = router,
