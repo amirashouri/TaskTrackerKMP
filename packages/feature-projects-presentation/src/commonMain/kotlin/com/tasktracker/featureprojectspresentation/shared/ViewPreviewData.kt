@@ -68,6 +68,25 @@ object ViewPreviewData {
      */
     val instant: Instant = Instant.parse("2026-03-15T12:00:00Z")
 
+    /**
+     * The one identity previews assign work to.
+     *
+     * A fixed id rather than a random one, so a preview's assignee and a preview's board
+     * filter can be pointed at the same person by construction. It is not a real account —
+     * previews have no session — which is why the picker label in a preview passes the
+     * name alongside it rather than resolving through the directory.
+     */
+    val previewUserID: UserID = UserID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+
+    /**
+     * The display name previews put beside [previewUserID].
+     *
+     * Cards and stacks take a resolved name rather than an id, so a preview that wants the
+     * assignee pill to appear hands this map the same way a host hands the real one it got
+     * from the directory.
+     */
+    val previewUserNames: Map<UserID, String> = mapOf(previewUserID to "Amir")
+
     private val zone: TimeZone = TimeZone.UTC
 
     /**
@@ -130,7 +149,7 @@ object ViewPreviewData {
                 details = "Reported on a cold install with no keychain entry.",
                 status = WorkItemStatus.InProgress,
                 priority = Priority.Critical,
-                assignee = "Amir",
+                assigneeID = previewUserID,
             ),
         )
         add(
@@ -179,7 +198,7 @@ object ViewPreviewData {
                 details = "Fails once in forty runs, always on the iOS simulator.",
                 status = WorkItemStatus.InProgress,
                 priority = Priority.High,
-                assignee = "Amir",
+                assigneeID = previewUserID,
                 // Past due against `instant`, and *not* finished with - which is the only
                 // combination the overdue chip is for, and the reason the fixture needs one.
                 dueDate = Instant.parse("2026-03-10T00:00:00Z"),
@@ -222,7 +241,7 @@ object ViewPreviewData {
         goalStoryPoints = 12,
         startDate = Instant.parse("2026-03-02T00:00:00Z"),
         endDate = Instant.parse("2026-03-16T00:00:00Z"),
-        owner = "Amir",
+        ownerID = previewUserID,
         isFinished = false,
         finishedAt = null,
         createdAt = instant,
@@ -236,7 +255,7 @@ object ViewPreviewData {
         goalStoryPoints = 8,
         startDate = Instant.parse("2026-02-09T00:00:00Z"),
         endDate = Instant.parse("2026-02-20T00:00:00Z"),
-        owner = "Amir",
+        ownerID = previewUserID,
         isFinished = true,
         // A date, because `finishedAt != null` exactly when `isFinished` is what
         // `Sprint.reconcileFinishedAt` exists to hold and a preview that broke it would be
@@ -330,7 +349,7 @@ object ViewPreviewData {
         details: String = "",
         status: WorkItemStatus = WorkItemStatus.Backlog,
         priority: Priority = Priority.Medium,
-        assignee: String? = null,
+        assigneeID: UserID? = null,
         dueDate: Instant? = null,
         rank: Int = 0,
     ): WorkItem {
@@ -344,7 +363,7 @@ object ViewPreviewData {
             details = details,
             status = status,
             priority = priority,
-            assignee = assignee,
+            assigneeID = assigneeID,
             dueDate = dueDate,
             rank = rank,
             createdAt = instant,
@@ -416,7 +435,7 @@ private class PreviewRepository(
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint {
         // The overlap rule holds here too, and for the same reason the store keeps it: a
@@ -435,7 +454,7 @@ private class PreviewRepository(
             goal = goal,
             startDate = startDate,
             endDate = endDate,
-            owner = owner,
+            ownerID = ownerID,
             createdAt = now,
             updatedAt = now,
         )
@@ -451,7 +470,7 @@ private class PreviewRepository(
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint = storedSprints.first { it.id == id }.also {
         if (name != null) it.name = name
@@ -459,7 +478,7 @@ private class PreviewRepository(
         if (goal is Patch.Of) it.goal = goal.value
         if (startDate != null) it.startDate = startDate
         if (endDate != null) it.endDate = endDate
-        if (owner is Patch.Of) it.owner = owner.value
+        if (ownerID is Patch.Of) it.ownerID = ownerID.value
         it.updatedAt = now
     }.also {
         broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
@@ -582,7 +601,7 @@ private class PreviewRepository(
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -599,7 +618,7 @@ private class PreviewRepository(
             details = details,
             status = status,
             priority = priority,
-            assignee = assignee,
+            assigneeID = assigneeID,
             dueDate = dueDate,
             recurrence = recurrence,
             storyPoints = storyPoints,
@@ -619,7 +638,7 @@ private class PreviewRepository(
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -629,7 +648,7 @@ private class PreviewRepository(
         if (title != null) it.title = title
         if (details != null) it.details = details
         if (priority != null) it.priority = priority
-        if (assignee is Patch.Of) it.assignee = assignee.value
+        if (assigneeID is Patch.Of) it.assigneeID = assigneeID.value
         if (dueDate is Patch.Of) it.dueDate = dueDate.value
         if (storyPoints is Patch.Of) it.storyPoints = storyPoints.value
         if (blockedByIDs is Patch.Of) it.blockedByIDs = blockedByIDs.value

@@ -38,6 +38,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.Sprint
@@ -127,6 +128,13 @@ fun ProjectBoardScreen(
     onToggleMyTasks: () -> Unit = {},
     activeSprint: Sprint? = null,
     /**
+     * Display names for the ids on this board, resolved by the host from the directory.
+     *
+     * Cards and the header stack render names, never raw ids; an id with no entry here is
+     * simply not drawn — the app will not invent a label for a person it cannot name.
+     */
+    assigneeNames: Map<UserID, String> = emptyMap(),
+    /**
      * Whether lane-add is allowed. False while a sprint is InProgress: the column "+" hides.
      * True for Kanban (no sprint) and scheduled sprints.
      */
@@ -155,7 +163,7 @@ fun ProjectBoardScreen(
         // about the board rather than about the switcher: a host that wires no switcher - a
         // preview, a screenshot, a keyboard-only surface - would otherwise lose the one part of
         // the header it had anything to say with.
-        val assignees = boardAssigneeNames(projection.items)
+        val assignees = boardAssigneeNames(projection.items, assigneeNames)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -249,6 +257,9 @@ fun ProjectBoardScreen(
                         onSelect = { onSelect(it.id) },
                         onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
                         modifier = Modifier,
+                        assigneeName = { item ->
+                            item.assigneeID?.let { assigneeNames[it] }
+                        },
                         cardTrailing = { item ->
                             BoardCardActions(
                                 item = item,

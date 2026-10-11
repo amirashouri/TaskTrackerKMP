@@ -89,7 +89,6 @@ object WorkItemRules {
 
     const val MAX_TITLE_LENGTH = 255
     const val MAX_DETAILS_LENGTH = 8_000
-    const val MAX_ASSIGNEE_LENGTH = 120
 
     @Throws(AppError::class)
     fun normaliseTitle(raw: String): String {
@@ -108,23 +107,6 @@ object WorkItemRules {
         val trimmed = raw.trim()
         if (graphemeClusterCount(trimmed) > MAX_DETAILS_LENGTH) {
             throw AppError.Validation("Notes are limited to $MAX_DETAILS_LENGTH characters.")
-        }
-        return trimmed
-    }
-
-    /**
-     * A blank assignee is stored as `null` rather than `""`, so "unassigned" has exactly
-     * one representation and filtering on it stays a single null check.
-     *
-     * Kotlin's `String?` does the `nil` check the original needed a `guard let` for.
-     */
-    @Throws(AppError::class)
-    fun normaliseAssignee(raw: String?): String? {
-        if (raw == null) return null
-        val trimmed = raw.trim()
-        if (trimmed.isEmpty()) return null
-        if (graphemeClusterCount(trimmed) > MAX_ASSIGNEE_LENGTH) {
-            throw AppError.Validation("Assignees are limited to $MAX_ASSIGNEE_LENGTH characters.")
         }
         return trimmed
     }

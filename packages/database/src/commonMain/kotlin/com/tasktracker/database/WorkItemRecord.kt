@@ -56,7 +56,15 @@ data class WorkItemRecord(
      */
     val statusRaw: String,
     val priorityRaw: Int,
-    val assignee: String?,
+    /**
+     * Who the item is assigned to, as a `UserID` string, or `null` for unassigned.
+     *
+     * Named `assigneeID` rather than `assignee` because the free-text column it replaced
+     * is gone, not reused: a row written before the change held a display name that
+     * cannot resolve to an identity, and carrying it across would keep two meanings in
+     * one column. The 8 → 9 migration drops it.
+     */
+    val assigneeID: String?,
     val dueDate: Instant?,
     val rank: Int,
     val createdAt: Instant,
@@ -64,9 +72,9 @@ data class WorkItemRecord(
     /**
      * When the item last reached a terminal status.
      *
-     * Additive rather than required, so a store written before the column existed migrates
-     * in with every row `null`. Which is why the read path reconciles it against the status
-     * instead of trusting it — see `domainValue` in `:packages:feature-projects-data`.
+     * Nullable, and reconciled against the status on read rather than trusted — see
+     * `domainValue` in `:packages:feature-projects-data`: a terminal status with no date
+     * is an item the archive cannot file, so the read path heals it.
      */
     val resolvedAt: Instant?,
     /**
@@ -74,18 +82,14 @@ data class WorkItemRecord(
      *
      * Nullable in the store for the reason it is nullable in the domain: a non-null `0`
      * makes "nobody estimated this" and "worth nothing" one value, and a sprint would then
-     * be able to claim it had measured its whole scope. Both columns added here default to
-     * `null`, which is what lets the `AutoMigration(3, 4)` bring every existing row across
-     * unestimated and in the backlog — and which keeps every existing construction site in
-     * `:packages:feature-projects-data` compiling without being edited.
+     * be able to claim it had measured its whole scope.
      */
     val storyPoints: Int? = null,
     /**
      * The ids this item waits on, as comma-separated UUID strings, or `null` for none.
      *
-     * Nullable so the `AutoMigration(6, 7)` brings every existing row across with no
-     * blockers and keeps existing construction sites compiling — the same shape as
-     * `storyPoints`/`sprintID` in 3 → 4.
+     * `null` — not an empty string — is the one representation of "waits on nothing", so
+     * no reader needs a blank check.
      */
     val blockedByIDs: String? = null,
     /**
@@ -104,8 +108,8 @@ data class WorkItemRecord(
      * Its own column rather than part of [recurrenceRaw], for the same reason
      * `until` is a separate field in the domain: an `Instant` is already a typed,
      * Room-convertible value, and string-splicing one into the cadence encoding
-     * would make every reader re-parse it. Nullable, so the `AutoMigration(7, 8)`
-     * brings every existing row across as a one-off — what it actually was.
+     * would make every reader re-parse it. `null` is a series with no end — what a
+     * one-off also reads as, since [recurrenceRaw] is `null` alongside it.
      */
     val recurrenceUntil: Instant? = null,
     /**

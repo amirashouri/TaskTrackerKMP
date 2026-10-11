@@ -41,7 +41,7 @@ class ArchiveWorkItemTest {
             details = "",
             status = status,
             priority = Priority.Medium,
-            assignee = null,
+            assigneeID = null,
             dueDate = null,
             now = now,
         )

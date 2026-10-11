@@ -6,6 +6,7 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.UserID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseWorkItemID
@@ -188,6 +189,15 @@ internal fun aProject(
     updatedAt = updatedAt,
 )
 
+/**
+ * The one identity the data-layer fixtures assign work to.
+ *
+ * A fixed id rather than [randomUserID]: the completeness and mapping tests hold the exact
+ * string a record must carry, and a fixture id that moved between runs would turn those
+ * assertions into a comparison against themselves.
+ */
+internal val adaUserID = UserID("66666666-6666-4666-8666-666666666666")
+
 /** As [aProject], for a work item. */
 internal fun aWorkItem(
     id: WorkItemID = parseWorkItemID("22222222-2222-4222-8222-222222222222")!!,
@@ -197,7 +207,7 @@ internal fun aWorkItem(
     details: String = "By hand, then check the generated SQL.",
     status: WorkItemStatus = WorkItemStatus.InReview,
     priority: Priority = Priority.High,
-    assignee: String? = "Ada",
+    assigneeID: UserID? = adaUserID,
     dueDate: Instant? = Moments.muchLater,
     rank: Int = 7,
     createdAt: Instant = Moments.start,
@@ -229,7 +239,7 @@ internal fun aWorkItem(
     details = details,
     status = status,
     priority = priority,
-    assignee = assignee,
+    assigneeID = assigneeID,
     dueDate = dueDate,
     recurrence = recurrence,
     rank = rank,
@@ -253,7 +263,7 @@ internal fun aSprint(
     goal: String? = "Ship the migration",
     startDate: Instant = Moments.start,
     endDate: Instant = Moments.day,
-    owner: String? = "Ada",
+    ownerID: UserID? = adaUserID,
     isFinished: Boolean = false,
     finishedAt: Instant? = null,
     createdAt: Instant = Moments.start,
@@ -266,7 +276,7 @@ internal fun aSprint(
     goal = goal,
     startDate = startDate,
     endDate = endDate,
-    owner = owner,
+    ownerID = ownerID,
     isFinished = isFinished,
     finishedAt = finishedAt,
     createdAt = createdAt,

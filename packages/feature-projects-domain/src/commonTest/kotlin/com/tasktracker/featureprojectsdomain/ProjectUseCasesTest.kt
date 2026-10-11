@@ -305,7 +305,7 @@ class ProjectUseCasesTest {
             goalStoryPoints = 20,
             startDate = now,
             endDate = now + 7.days,
-            owner = null,
+            ownerID = null,
             now = now,
         )
         val save = SaveWorkItem(repository, TestDateProvider(now))
@@ -333,7 +333,7 @@ class ProjectUseCasesTest {
             goalStoryPoints = 20,
             startDate = now,
             endDate = now + 7.days,
-            owner = null,
+            ownerID = null,
             now = now,
         )
         val save = SaveWorkItem(repository, TestDateProvider(now))
@@ -407,18 +407,19 @@ class ProjectUseCasesTest {
 
     @Test
     fun `saving with a cleared assignee clears it rather than leaving it alone`() = runTest {
-        // The case a plain `String?` cannot express. `SaveWorkItem` always sends a value
-        // — a `null` assignee *is* an instruction to unassign — so a port that read
+        // The case a plain nullable cannot express on its own. `SaveWorkItem` always sends
+        // a value — a `null` assigneeID *is* an instruction to unassign — so a port that read
         // "not mentioned" from it would keep the old assignee and report the edit as saved.
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
+        val adaID = UserID("33333333-3333-4333-8333-333333333333")
         val item = repository.createWorkItem(
             projectID = project.id,
             title = "Land the capsule",
             details = "",
             status = WorkItemStatus.Todo,
             priority = Priority.Medium,
-            assignee = "ada",
+            assigneeID = adaID,
             dueDate = null,
             now = now,
         )
@@ -429,10 +430,10 @@ class ProjectUseCasesTest {
             projectID = project.id,
             title = "Land the capsule",
             status = WorkItemStatus.Todo,
-            assignee = "",
+            assigneeID = null,
         )
 
-        assertEquals(null, repository.workItem(item.id)?.assignee)
+        assertEquals(null, repository.workItem(item.id)?.assigneeID)
     }
 
     @Test
@@ -440,13 +441,14 @@ class ProjectUseCasesTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
         val due = now + 86_400.seconds
+        val adaID = UserID("33333333-3333-4333-8333-333333333333")
         val item = repository.createWorkItem(
             projectID = project.id,
             title = "Land the capsule",
             details = "",
             status = WorkItemStatus.Todo,
             priority = Priority.Medium,
-            assignee = "ada",
+            assigneeID = adaID,
             dueDate = due,
             now = now,
         )
@@ -456,14 +458,14 @@ class ProjectUseCasesTest {
             title = "Renamed",
             details = null,
             priority = null,
-            assignee = Patch.Unmentioned,
+            assigneeID = Patch.Unmentioned,
             dueDate = Patch.Unmentioned,
             storyPoints = Patch.Unmentioned,
             now = now + 60.seconds,
         )
 
         val stored = assertNotNull(repository.workItem(item.id))
-        assertEquals("ada", stored.assignee)
+        assertEquals(adaID, stored.assigneeID)
         assertEquals(due, stored.dueDate)
     }
 

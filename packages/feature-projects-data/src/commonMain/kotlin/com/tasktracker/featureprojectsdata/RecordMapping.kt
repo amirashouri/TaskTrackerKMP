@@ -225,7 +225,7 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         details = reconciled.details,
         statusRaw = reconciled.status.wireValue,
         priorityRaw = reconciled.priority.rank,
-        assignee = reconciled.assignee,
+        assigneeID = reconciled.assigneeID?.stringValue,
         dueDate = reconciled.dueDate,
         rank = reconciled.rank,
         createdAt = reconciled.createdAt,
@@ -266,7 +266,7 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         details = reconciled.details,
         statusRaw = reconciled.status.wireValue,
         priorityRaw = reconciled.priority.rank,
-        assignee = reconciled.assignee,
+        assigneeID = reconciled.assigneeID?.stringValue,
         dueDate = reconciled.dueDate,
         rank = reconciled.rank,
         updatedAt = reconciled.updatedAt,
@@ -316,7 +316,9 @@ internal val WorkItemRecord.domainValue: WorkItem?
             details = details,
             status = WorkItemStatus.fromWireValue(statusRaw) ?: WorkItemStatus.Backlog,
             priority = priorityFor(priorityRaw),
-            assignee = assignee,
+            // An unreadable user id reads as `null` — "unassigned" — the same trade as an
+            // unreadable sprint id above: the card stays, the assignment is lost.
+            assigneeID = assigneeID?.let { parseUserID(it) },
             dueDate = dueDate,
             rank = rank,
             createdAt = createdAt,
@@ -373,7 +375,7 @@ internal fun Sprint.toRecord(): SprintRecord {
         goal = reconciled.goal,
         startDate = reconciled.startDate,
         endDate = reconciled.endDate,
-        owner = reconciled.owner,
+        ownerID = reconciled.ownerID?.stringValue,
         isFinished = reconciled.isFinished,
         finishedAt = reconciled.finishedAt,
         isArchived = reconciled.isArchived,
@@ -405,7 +407,7 @@ internal fun SprintRecord.apply(value: Sprint): SprintRecord {
         goal = reconciled.goal,
         startDate = reconciled.startDate,
         endDate = reconciled.endDate,
-        owner = reconciled.owner,
+        ownerID = reconciled.ownerID?.stringValue,
         isFinished = reconciled.isFinished,
         finishedAt = reconciled.finishedAt,
         isArchived = reconciled.isArchived,
@@ -424,9 +426,9 @@ internal fun SprintRecord.apply(value: Sprint): SprintRecord {
 internal val SprintRecord.domainValue: Sprint?
     get() {
         val sprintID = parseSprintID(id) ?: return null
-        // Named `projectID` rather than `owner`, because `Sprint.owner` is the sprint's own
-        // free-text owner and a local called `owner` holding a `ProjectID` reads as though
-        // the two were the same thing.
+        // Named `projectID` rather than reusing a shorter local, because `ownerID` below
+        // is the sprint's own owner and a local called `owner` holding a [ProjectID]
+        // reads as though the two were the same thing.
         val projectID = parseProjectID(this.projectID) ?: return null
         val value = Sprint(
             id = sprintID,
@@ -436,7 +438,9 @@ internal val SprintRecord.domainValue: Sprint?
             goal = goal,
             startDate = startDate,
             endDate = endDate,
-            owner = owner,
+            // An unreadable user id reads as `null` — "unowned" — the same trade as an
+            // unreadable status string elsewhere: the sprint stays, the owner is lost.
+            ownerID = ownerID?.let { parseUserID(it) },
             isFinished = isFinished,
             finishedAt = finishedAt,
             isArchived = isArchived,

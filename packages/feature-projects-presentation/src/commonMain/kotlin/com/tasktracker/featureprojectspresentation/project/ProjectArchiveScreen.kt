@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
@@ -71,6 +72,8 @@ fun ProjectArchiveScreen(
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSwitcher: (() -> Unit)? = null,
+    /** Display names for assignee ids, resolved by the host from the directory. */
+    assigneeNames: Map<UserID, String> = emptyMap(),
 ) {
     Column(
         modifier = modifier
@@ -112,7 +115,11 @@ fun ProjectArchiveScreen(
                         )
                     }
                     items(month.items, key = { it.id.stringValue }) { item ->
-                        ArchivedItemRow(item = item, onSelect = { onSelect(item.id) })
+                        ArchivedItemRow(
+                            item = item,
+                            onSelect = { onSelect(item.id) },
+                            assigneeNames = assigneeNames,
+                        )
                     }
                 }
             }
@@ -171,6 +178,7 @@ private fun ArchivedItemRow(
     item: WorkItem,
     onSelect: () -> Unit,
     modifier: Modifier = Modifier,
+    assigneeNames: Map<UserID, String> = emptyMap(),
 ) {
     Column(
         modifier = modifier
@@ -183,7 +191,9 @@ private fun ArchivedItemRow(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.md)) {
             ttText(text = item.key.toString(), style = ttTypography.key, color = ttLabelSecondary())
-            item.assignee?.takeIf { it.isNotBlank() }?.let {
+            // The resolved name, or nothing: an id the directory cannot name is not a label,
+            // and the archive is a list of facts rather than a place to invent them.
+            item.assigneeID?.let { assigneeNames[it] }?.takeIf { it.isNotBlank() }?.let {
                 ttText(text = it, style = ttTypography.footnote, color = ttLabelSecondary())
             }
         }

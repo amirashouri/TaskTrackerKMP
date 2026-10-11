@@ -374,7 +374,7 @@ class LocalDataSyncSinkTest {
         // these two payloads in the other order would end with a stale counter and this test
         // would fail about half the time.
         val item = source.repository.createWorkItem(
-            project.id, "One", "more", WorkItemStatus.Done, Priority.High, "Ada", Moments.day, null, null, Moments.later,
+            project.id, "One", "more", WorkItemStatus.Done, Priority.High, adaUserID, Moments.day, null, null, Moments.later,
         )
         val queued = source.queued()
 

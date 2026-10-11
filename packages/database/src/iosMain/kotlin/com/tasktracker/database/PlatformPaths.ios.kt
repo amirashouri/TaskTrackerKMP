@@ -52,12 +52,3 @@ actual fun createParentDirectory(path: String) {
         throw AppError.Storage("Could not create the database directory: $parent")
     }
 }
-
-/** Removes [path] and its write-ahead log. Absent is not an error; see the declaration. */
-@OptIn(ExperimentalForeignApi::class)
-internal actual fun deleteStoreFile(path: String) {
-    val manager = NSFileManager.defaultManager
-    manager.removeItemAtPath(path, null)
-    manager.removeItemAtPath("$path-wal", null)
-    manager.removeItemAtPath("$path-shm", null)
-}

@@ -248,7 +248,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: String?,
         startDate: Instant,
         endDate: Instant,
-        owner: String?,
+        ownerID: UserID?,
         now: Instant,
     ): Sprint = unused("createSprint")
 
@@ -259,7 +259,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         goal: Patch<String?>,
         startDate: Instant?,
         endDate: Instant?,
-        owner: Patch<String?>,
+        ownerID: Patch<UserID?>,
         now: Instant,
     ): Sprint = unused("updateSprint")
 
@@ -293,7 +293,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String,
         status: WorkItemStatus,
         priority: Priority,
-        assignee: String?,
+        assigneeID: UserID?,
         dueDate: Instant?,
         storyPoints: Int?,
         sprintID: SprintID?,
@@ -307,7 +307,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String?,
         details: String?,
         priority: Priority?,
-        assignee: Patch<String?>,
+        assigneeID: Patch<UserID?>,
         dueDate: Patch<Instant?>,
         storyPoints: Patch<Int?>,
         now: Instant,
@@ -421,7 +421,7 @@ fun shellTestWorkItem(
     details = "",
     status = status,
     priority = Priority.Medium,
-    assignee = null,
+    assigneeID = null,
     dueDate = null,
     rank = 0,
     sprintID = sprintID,
@@ -429,6 +429,14 @@ fun shellTestWorkItem(
     updatedAt = Instant.fromEpochSeconds(1_760_000_000),
     resolvedAt = null,
 )
+
+/**
+ * The identity shell fixtures assign ownership and assignment to.
+ *
+ * Fixed rather than random: a scenario that seeds a sprint and later reads it back has to
+ * compare the same id twice.
+ */
+val shellTestUserID = UserID("99999999-9999-4999-8999-999999999999")
 
 /**
  * A sprint fixture, on a fixed clock so nothing in a shell test depends on `now`.
@@ -448,7 +456,7 @@ fun shellTestSprint(
     projectID: ProjectID,
     name: String = "Sprint 7",
     goalStoryPoints: Int = 12,
-    owner: String? = "Amir",
+    ownerID: UserID? = shellTestUserID,
     isFinished: Boolean = false,
     id: SprintID = SprintID("33333333-3333-3333-3333-333333333333"),
     startDate: Instant = Instant.parse("2026-03-02T00:00:00Z"),
@@ -460,7 +468,7 @@ fun shellTestSprint(
     goalStoryPoints = goalStoryPoints,
     startDate = startDate,
     endDate = endDate,
-    owner = owner,
+    ownerID = ownerID,
     isFinished = isFinished,
     // Presence, not the instant: `Sprint.reconcileFinishedAt`'s invariant is that the two
     // agree — non-null exactly when finished — and no shell assertion reads the date, so

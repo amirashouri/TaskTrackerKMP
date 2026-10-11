@@ -43,7 +43,7 @@ class FakeProjectRepositoryTest {
         details = "",
         status = status,
         priority = Priority.Medium,
-        assignee = null,
+        assigneeID = null,
         dueDate = null,
         now = now,
     )
@@ -353,7 +353,7 @@ class FakeProjectRepositoryTest {
                 title = "Renamed",
                 details = null,
                 priority = null,
-                assignee = Patch.Unmentioned,
+                assigneeID = Patch.Unmentioned,
                 dueDate = Patch.Unmentioned,
                 storyPoints = Patch.Unmentioned,
                 now = now,

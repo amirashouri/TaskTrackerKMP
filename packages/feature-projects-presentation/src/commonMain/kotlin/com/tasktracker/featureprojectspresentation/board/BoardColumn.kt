@@ -105,6 +105,11 @@ fun BoardColumnView(
      * two filing surfaces came to disagree in the first place.
      */
     cardTrailing: @Composable (WorkItem) -> Unit = {},
+    /**
+     * Resolves a card's assignee id to the name the card should draw, or `null` when there
+     * is no id or the directory cannot name it. See [WorkItemCard.assigneeName].
+     */
+    assigneeName: (WorkItem) -> String? = { null },
 ) {
     Box(
         modifier = modifier
@@ -157,6 +162,7 @@ fun BoardColumnView(
                         onClick = { onSelect(item) },
                         modifier = Modifier.fillMaxWidth(),
                         trailing = { cardTrailing(item) },
+                        assigneeName = assigneeName(item),
                     )
                 }
             }

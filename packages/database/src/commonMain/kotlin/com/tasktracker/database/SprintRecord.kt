@@ -59,8 +59,13 @@ data class SprintRecord(
     val goal: String? = null,
     val startDate: Instant,
     val endDate: Instant,
-    /** Free text and nullable, exactly as `WorkItemRecord.assignee` is. See the entity. */
-    val owner: String? = null,
+    /**
+     * Who owns the sprint, as a `UserID` string, or `null` for unowned.
+     *
+     * A rename, not a reuse of the old free-text column: names do not resolve to
+     * identities, and the 8 → 9 migration drops the old column.
+     */
+    val ownerID: String? = null,
     val isFinished: Boolean,
     val finishedAt: Instant?,
     /**

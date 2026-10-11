@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintSummary
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,15 +34,18 @@ class SprintDetailModelTest {
 
     private val zone: TimeZone = TimeZone.UTC
 
+    /** The identity "somebody else" is, wherever a test needs one. */
+    private val graceUserID = UserID("77777777-7777-4777-8777-777777777777")
+
     private fun detailModel(
         repository: FakeProjectRepository,
         sprintID: com.tasktracker.core.SprintID,
-        currentUserName: String? = "Amir",
+        currentUserID: UserID? = testUserID,
     ) = SprintDetailModel(
         sprintID = sprintID,
         repository = repository,
         dateProvider = TestDateProvider(),
-        currentUserName = currentUserName,
+        currentUserID = currentUserID,
         timeZone = zone,
     )
 
@@ -160,10 +164,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Amir")
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -177,10 +181,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Grace")
+        val model = detailModel(repository, sprint.id, currentUserID = graceUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -197,10 +201,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = null)
+        val sprint = testSprint(project.id, ownerID = null)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Grace")
+        val model = detailModel(repository, sprint.id, currentUserID = graceUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -217,10 +221,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = null)
+        val model = detailModel(repository, sprint.id, currentUserID = null)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -234,10 +238,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir", isFinished = true)
+        val sprint = testSprint(project.id, ownerID = testUserID, isFinished = true)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Amir")
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -249,10 +253,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Amir")
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 
@@ -272,11 +276,11 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir")
+        val sprint = testSprint(project.id, ownerID = testUserID)
         repository.seed(sprint)
         repository.failure = AppError.Validation("'Sprint 7' has already been finished.")
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Amir")
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
         repository.failure = AppError.Validation("'Sprint 7' has already been finished.")
@@ -291,10 +295,10 @@ class SprintDetailModelTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
-        val sprint = testSprint(project.id, owner = "Amir", isFinished = true)
+        val sprint = testSprint(project.id, ownerID = testUserID, isFinished = true)
         repository.seed(sprint)
 
-        val model = detailModel(repository, sprint.id, currentUserName = "Amir")
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
         model.observe(eagerScope())
         advanceUntilIdle()
 

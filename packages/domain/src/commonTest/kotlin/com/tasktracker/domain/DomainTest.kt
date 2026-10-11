@@ -108,20 +108,9 @@ class WorkItemRulesTest {
     }
 
     @Test
-    fun aBlankAssigneeBecomesNullSoUnassignedHasOneRepresentation() {
-        assertNull(WorkItemRules.normaliseAssignee(null))
-        assertNull(WorkItemRules.normaliseAssignee(""))
-        assertNull(WorkItemRules.normaliseAssignee("   "))
-        assertEquals("Ada", WorkItemRules.normaliseAssignee("  Ada "))
-    }
-
-    @Test
-    fun overLongTitlesAndAssigneesAreRejected() {
+    fun overLongTitlesAreRejected() {
         assertFailsWith<AppError> {
             WorkItemRules.normaliseTitle("t".repeat(WorkItemRules.MAX_TITLE_LENGTH + 1))
-        }
-        assertFailsWith<AppError> {
-            WorkItemRules.normaliseAssignee("a".repeat(WorkItemRules.MAX_ASSIGNEE_LENGTH + 1))
         }
     }
 
@@ -540,7 +529,7 @@ class SprintTest {
         goalStoryPoints: Int = 21,
         startDate: Instant = start,
         endDate: Instant = end,
-        owner: String? = "amir",
+        ownerID: UserID? = UserID("11111111-1111-4111-8111-111111111111"),
         isFinished: Boolean = false,
         finishedAt: Instant? = null,
     ) = Sprint(
@@ -549,7 +538,7 @@ class SprintTest {
         goalStoryPoints = goalStoryPoints,
         startDate = startDate,
         endDate = endDate,
-        owner = owner,
+        ownerID = ownerID,
         isFinished = isFinished,
         finishedAt = finishedAt,
         createdAt = now,
@@ -608,11 +597,11 @@ class SprintTest {
     }
 
     @Test
-    fun anUnownedSprintIsNullRatherThanAnEmptyString() {
-        // Not "". A blank owner would need a blank check at every place one is read, and
-        // "nobody owns this sprint" is a state both the summary and the Finish button
-        // have to handle — so it gets exactly one representation.
-        assertNull(sprint(owner = null).owner)
+    fun anUnownedSprintIsNullRatherThanAFabricatedId() {
+        // Not a blank string or a zero id. "nobody owns this sprint" is a state both the
+        // summary and the Finish button have to handle — so it gets exactly one
+        // representation: `ownerID == null`.
+        assertNull(sprint(ownerID = null).ownerID)
     }
 
     @Test

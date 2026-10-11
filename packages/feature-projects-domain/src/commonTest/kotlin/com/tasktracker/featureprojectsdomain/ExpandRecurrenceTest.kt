@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
@@ -32,6 +33,7 @@ class ExpandRecurrenceTest {
     private val anchor = Instant.parse("2026-01-16T12:00:00Z")
     private val now = Instant.parse("2026-01-17T09:00:00Z")
     private val utc = TimeZone.UTC
+    private val adaID = UserID("33333333-3333-4333-8333-333333333333")
 
     private suspend fun harness(): Triple<FakeProjectRepository, ExpandRecurrence, com.tasktracker.core.ProjectID> {
         val repository = FakeProjectRepository()
@@ -53,7 +55,7 @@ class ExpandRecurrenceTest {
         details = "From the office window",
         status = status,
         priority = Priority.Medium,
-        assignee = "Ada",
+        assigneeID = adaID,
         dueDate = dueDate,
         storyPoints = 3,
         recurrence = recurrence,
@@ -75,7 +77,7 @@ class ExpandRecurrenceTest {
         )
         assertEquals(finished.title, next.title)
         assertEquals(finished.priority, next.priority)
-        assertEquals(finished.assignee, next.assignee)
+        assertEquals(finished.assigneeID, next.assigneeID)
         assertEquals(finished.storyPoints, next.storyPoints)
         assertEquals(weekly, next.recurrence, "the series rule travels to the next instance")
         assertEquals(

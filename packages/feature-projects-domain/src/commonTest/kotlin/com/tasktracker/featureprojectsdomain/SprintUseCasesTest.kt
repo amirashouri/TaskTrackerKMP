@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItemStatus
@@ -33,6 +34,8 @@ class SprintUseCasesTest {
     private val now: Instant = Instant.fromEpochSeconds(1_760_000_000)
     private val march2: Instant = Instant.parse("2026-03-02T00:00:00Z")
     private val march16: Instant = Instant.parse("2026-03-16T00:00:00Z")
+    private val amirID = UserID("11111111-1111-4111-8111-111111111111")
+    private val graceID = UserID("22222222-2222-4222-8222-222222222222")
 
     private fun create(repository: FakeProjectRepository) = CreateSprint(repository, TestDateProvider(now))
 
@@ -41,7 +44,7 @@ class SprintUseCasesTest {
         goalStoryPoints: Int = 10,
         startDate: Instant = march2,
         endDate: Instant = march16,
-        owner: String? = "Amir",
+        ownerID: UserID? = amirID,
     ): Pair<Project, Sprint> {
         val project = repository.seedProject()
         val sprint = create(repository)(
@@ -50,7 +53,7 @@ class SprintUseCasesTest {
             goalStoryPoints = goalStoryPoints,
             startDate = startDate,
             endDate = endDate,
-            owner = owner,
+            ownerID = ownerID,
         )
         return project to sprint
     }
@@ -68,12 +71,12 @@ class SprintUseCasesTest {
             goalStoryPoints = 12,
             startDate = march2,
             endDate = march16,
-            owner = "Grace",
+            ownerID = graceID,
         )
 
         assertEquals("Sprint 7", sprint.name)
         assertEquals(12, sprint.goalStoryPoints)
-        assertEquals("Grace", sprint.owner)
+        assertEquals(graceID, sprint.ownerID)
         assertEquals(1, repository.sprints(project.id).size)
     }
 
@@ -149,7 +152,7 @@ class SprintUseCasesTest {
     }
 
     @Test
-    fun `a blank owner is nobody rather than whitespace`() = runTest {
+    fun `an unowned sprint stays unowned through a create`() = runTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
 
@@ -158,13 +161,13 @@ class SprintUseCasesTest {
             name = "Sprint 7",
             startDate = march2,
             endDate = march16,
-            owner = "   ",
+            ownerID = null,
         )
 
-        // `null` is unowned, which anyone may finish — see `Sprint`'s KDoc. Storing the
-        // whitespace would make "am I the owner" answer false for a sprint showing a blank
-        // owner field.
-        assertNull(sprint.owner)
+        // `null` is unowned, which anyone may finish — see `Sprint`'s KDoc. An id cannot be
+        // whitespace the way the old free-text field could, so this is the whole of what
+        // "nobody" means now: the picker's Unassigned writes exactly this.
+        assertNull(sprint.ownerID)
     }
 
     // MARK: UpdateSprint
@@ -178,7 +181,7 @@ class SprintUseCasesTest {
 
         assertEquals("Sprint 8", updated.name)
         assertEquals(10, updated.goalStoryPoints)
-        assertEquals("Amir", updated.owner)
+        assertEquals(amirID, updated.ownerID)
         assertEquals(march2, updated.startDate)
         assertEquals(march16, updated.endDate)
     }
@@ -249,26 +252,26 @@ class SprintUseCasesTest {
     @Test
     fun `handing a sprint to nobody is an instruction rather than an absence`() = runTest {
         val repository = FakeProjectRepository()
-        val (_, sprint) = sprintIn(repository, owner = "Amir")
+        val (_, sprint) = sprintIn(repository, ownerID = amirID)
 
         val updated = UpdateSprint(repository, TestDateProvider(now))(
             id = sprint.id,
-            owner = Patch.Of("   "),
+            ownerID = Patch.Of(null),
         )
 
-        // Normalised to `null` on the way through, so the stored value is "unowned" and not
-        // a whitespace owner that would fail an equality check against every real name.
-        assertNull(updated.owner)
+        // `Of(null)` clears; `Unmentioned` would leave the owner alone, and the two remain
+        // different instructions even though neither can be a whitespace id.
+        assertNull(updated.ownerID)
     }
 
     @Test
     fun `an unmentioned owner is left alone`() = runTest {
         val repository = FakeProjectRepository()
-        val (_, sprint) = sprintIn(repository, owner = "Amir")
+        val (_, sprint) = sprintIn(repository, ownerID = amirID)
 
         val updated = UpdateSprint(repository, TestDateProvider(now))(id = sprint.id, name = "Sprint 8")
 
-        assertEquals("Amir", updated.owner)
+        assertEquals(amirID, updated.ownerID)
     }
 
     // MARK: Finish, reopen, delete

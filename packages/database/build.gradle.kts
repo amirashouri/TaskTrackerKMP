@@ -7,13 +7,6 @@ dependencies {
     commonMainImplementation(project(":packages:domain"))
     // Room's transaction primitives are suspend, and so is every DAO method.
     commonMainImplementation(libs.kotlinx.coroutines.core)
-
-    // `jvmTest` only, and only for `SprintSchemaDriftTest`. Room's own exported schemas
-    // are JSON files committed under `schemas/`, and the drift guard has to read one to
-    // check the hand-written version-3 DDL against the version 3 that actually shipped.
-    // A test-only edge, on the module that already owns the artefact — reading it anywhere
-    // else would mean two modules claiming the same file.
-    jvmTestImplementation(libs.kotlinx.serialization.json)
 }
 
 /**

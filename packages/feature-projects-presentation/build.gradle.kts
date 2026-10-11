@@ -9,6 +9,9 @@ dependencies {
     commonMainImplementation(project(":packages:routing"))
     commonMainImplementation(project(":packages:di"))
     commonMainImplementation(project(":packages:feature-projects-domain"))
+    // The user directory: assignee/owner display and the "me" picker resolve a UserID
+    // through TeamPort.
+    commonMainImplementation(project(":packages:feature-teams-domain"))
 
     // For `observe(scope)` on ProjectModel, and for the month headings on the archive -
     // which are cut in a zone rather than in UTC, or a task filed at 23:30 on the last

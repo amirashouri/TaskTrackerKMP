@@ -145,7 +145,7 @@ class RecordMappingTest {
         assertEquals("By hand, then check the generated SQL.", record.details)
         assertEquals("in_review", record.statusRaw)
         assertEquals(Priority.High.rank, record.priorityRaw)
-        assertEquals("Ada", record.assignee)
+        assertEquals(adaUserID.stringValue, record.assigneeID)
         assertEquals(Moments.muchLater, record.dueDate)
         assertEquals(7, record.rank)
         assertEquals(Moments.start, record.createdAt)
@@ -234,7 +234,7 @@ class RecordMappingTest {
             details = "New notes.",
             status = WorkItemStatus.Done,
             priority = Priority.Lowest,
-            assignee = null,
+            assigneeID = null,
             dueDate = null,
             rank = 99,
             createdAt = Moments.muchLater,
@@ -248,7 +248,7 @@ class RecordMappingTest {
         assertEquals("New notes.", updated.details)
         assertEquals(WorkItemStatus.Done.wireValue, updated.statusRaw)
         assertEquals(Priority.Lowest.rank, updated.priorityRaw)
-        assertNull(updated.assignee)
+        assertNull(updated.assigneeID)
         assertNull(updated.dueDate)
         assertEquals(99, updated.rank)
         assertEquals(Moments.muchLater, updated.updatedAt)

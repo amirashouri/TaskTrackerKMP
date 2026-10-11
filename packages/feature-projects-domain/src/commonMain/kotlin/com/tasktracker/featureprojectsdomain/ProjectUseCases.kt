@@ -128,23 +128,22 @@ class CreateWorkItem(
         details: String = "",
         status: WorkItemStatus = WorkItemStatus.Backlog,
         priority: Priority = Priority.Medium,
-        assignee: String? = null,
+        assigneeID: UserID? = null,
         dueDate: Instant? = null,
         recurrence: Recurrence? = null,
     ): WorkItem {
         // Same reasoning as [CreateProject]: the rules run here so a bad edit is refused
-        // before the port is reached. `normaliseAssignee` turns a blank string into null
-        // rather than storing an assignee that is only whitespace.
+        // before the port is reached. [assigneeID] needs no normalisation — a [UserID] is
+        // already an identity, and "unassigned" is exactly its `null`.
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
-        val assignee = WorkItemRules.normaliseAssignee(assignee)
         return repository.createWorkItem(
             projectID = projectID,
             title = title,
             details = details,
             status = status,
             priority = priority,
-            assignee = assignee,
+            assigneeID = assigneeID,
             dueDate = dueDate,
             recurrence = recurrence,
             now = dateProvider.now(),
@@ -223,7 +222,7 @@ class SaveWorkItem(
         status: WorkItemStatus,
         details: String = "",
         priority: Priority = Priority.Medium,
-        assignee: String? = null,
+        assigneeID: UserID? = null,
         dueDate: Instant? = null,
         storyPoints: Int? = null,
         blockedByIDs: List<WorkItemID> = emptyList(),
@@ -232,7 +231,6 @@ class SaveWorkItem(
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
-        val assignee = WorkItemRules.normaliseAssignee(assignee)
         // A task cannot wait on itself, and duplicates are one blocker stated twice.
         // Sanitised here so every caller gets the same rule rather than each screening it.
         val blockers = blockedByIDs.filter { it != id }.distinct()
@@ -244,7 +242,7 @@ class SaveWorkItem(
                 details = details,
                 status = status,
                 priority = priority,
-                assignee = assignee,
+                assigneeID = assigneeID,
                 dueDate = dueDate,
                 storyPoints = storyPoints,
                 blockedByIDs = blockers,
@@ -267,7 +265,7 @@ class SaveWorkItem(
             // Always an instruction, never "unmentioned". The editor holds the truth for
             // every field, so a cleared assignee has to reach the store as a clear; a
             // [Patch.Unmentioned] here would silently keep the previous value.
-            assignee = Patch.Of(assignee),
+            assigneeID = Patch.Of(assigneeID),
             dueDate = Patch.Of(dueDate),
             storyPoints = Patch.Of(storyPoints),
             blockedByIDs = Patch.Of(blockers),
@@ -380,7 +378,7 @@ class ExpandRecurrence(
             details = current.details,
             status = WorkItemStatus.Backlog,
             priority = current.priority,
-            assignee = current.assignee,
+            assigneeID = current.assigneeID,
             dueDate = next,
             storyPoints = current.storyPoints,
             blockedByIDs = current.blockedByIDs,

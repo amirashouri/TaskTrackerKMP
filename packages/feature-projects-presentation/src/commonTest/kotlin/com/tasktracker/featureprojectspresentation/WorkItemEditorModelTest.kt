@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItemStatus
@@ -26,6 +27,9 @@ import kotlin.time.Instant
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkItemEditorModelTest {
+
+    /** The identity the editor tests assign work to. */
+    private val samUserID = UserID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
 
     // MARK: Creating
 
@@ -129,7 +133,7 @@ class WorkItemEditorModelTest {
             details = "Notes",
             status = WorkItemStatus.InProgress,
             priority = Priority.High,
-            assignee = "Sam",
+            assigneeID = samUserID,
         )
         val model = editing(item)
 
@@ -138,7 +142,7 @@ class WorkItemEditorModelTest {
         assertEquals("Notes", model.details)
         assertEquals(WorkItemStatus.InProgress, model.status)
         assertEquals(Priority.High, model.priority)
-        assertEquals("Sam", model.assignee)
+        assertEquals(samUserID, model.assigneeID)
         assertEquals(item.key, model.issuedKey)
         assertFalse(model.hasChanges)
     }
@@ -278,21 +282,21 @@ class WorkItemEditorModelTest {
     /**
      * Clearing a field has to reach the store as a *clear*, not as an ignored write.
      *
-     * `updateWorkItem` takes `Patch<String?>`, precisely because a nullable field cannot
+     * `updateWorkItem` takes `Patch<UserID?>`, precisely because a nullable field cannot
      * otherwise tell "leave this alone" from "set this to nothing". A screen that sent the
      * assignee as `null` on save would silently keep the old assignee.
      */
     @Test
     fun `clearing the assignee reaches the store as a clear`() = runTest {
         val repository = FakeProjectRepository()
-        val item = testWorkItem(projectID = testProject().id, assignee = "Sam")
+        val item = testWorkItem(projectID = testProject().id, assigneeID = samUserID)
         repository.seed(item)
         val model = editing(item, repository)
 
-        model.onAssigneeChanged("")
+        model.onAssigneeChanged(null)
         assertNotNull(model.save())
 
-        assertEquals(null, repository.workItem(item.id)?.assignee)
+        assertEquals(null, repository.workItem(item.id)?.assigneeID)
     }
 
     @Test

@@ -12,6 +12,8 @@ that are true here and false elsewhere.
   silently touches the rank. See `SprintDao`'s KDoc.
 - **Inserts are ABORT, not REPLACE.** A conflict is a bug, not a repair; silent replace
   hides duplicate-key races the outbox protocol must surface.
-- **A schema change ships three things:** the entity edit, the generated schema JSON, and
-  a migration covered by both the drift test and the migration test. One without the
-  others is an incomplete change.
+- **A schema change ships two things:** the entity edit and the regenerated schema JSON.
+  There is no migration suite — the store is at version 1 with destructive fallback, so a
+  store left behind by an earlier dev build is recreated, not migrated. That stops being
+  true at the first production release: from then on a schema change also ships a
+  migration, and the version is bumped rather than reset.

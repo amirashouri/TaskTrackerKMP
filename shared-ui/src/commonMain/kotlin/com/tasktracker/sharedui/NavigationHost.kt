@@ -50,6 +50,7 @@ import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -70,6 +71,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
@@ -312,6 +314,8 @@ fun NavigationHost(
                                     scope = scope,
                                     router = router,
                                     tab = tab,
+                                    preferences = preferences,
+                                    teamPort = environment.teamPort,
                                     onDismiss = {
                                         if (editorRoute !in dismissingEditors) {
                                             dismissingEditors.add(editorRoute)
@@ -461,6 +465,7 @@ private fun PushedRoute(
             repository = environment.repository,
             dateProvider = environment.dateProvider,
             scope = scope,
+            teamPort = environment.teamPort,
         )
 
         is AppRoute.SprintList -> SprintsDestination(
@@ -662,6 +667,44 @@ private fun ProjectPicker(
     )
 }
 
+/**
+ * Display names for a set of ids, resolved through the directory in one batch.
+ *
+ * Empty when there is no [TeamPort] — a host that wired none simply draws no pills rather
+ * than inventing labels — and unknown ids are omitted by [TeamPort.users] itself.
+ */
+@Composable
+private fun rememberAssigneeNames(
+    ids: List<UserID>,
+    teamPort: TeamPort?,
+): Map<UserID, String> {
+    var names by remember(ids, teamPort) { mutableStateOf<Map<UserID, String>>(emptyMap()) }
+    LaunchedEffect(ids, teamPort) {
+        names = if (teamPort == null || ids.isEmpty()) {
+            emptyMap()
+        } else {
+            runCatching { teamPort.users(ids) }
+                .getOrDefault(emptyList())
+                .associate { it.id to it.preferredGreeting }
+        }
+    }
+    return names
+}
+
+/** One id's display name, or `null` when the directory cannot produce one. */
+@Composable
+private fun rememberUserName(id: UserID?, teamPort: TeamPort?): String? {
+    var name by remember(id, teamPort) { mutableStateOf<String?>(null) }
+    LaunchedEffect(id, teamPort) {
+        name = if (id == null || teamPort == null) {
+            null
+        } else {
+            runCatching { teamPort.user(id) }.getOrNull()?.preferredGreeting
+        }
+    }
+    return name
+}
+
 /** One project's board. */
 @Composable
 private fun BoardDestination(
@@ -671,20 +714,20 @@ private fun BoardDestination(
     scope: CoroutineScope,
     preferences: ShellPreferences,
 ) {
-    val currentUserName by preferences.currentUserName.collectAsState()
-    // `currentUserName` is a `remember` key on purpose. The board's filter freezes the name into
-    // the model, so a name that arrived after this screen was composed has to build a new model
-    // rather than leave the first one filtering on a stale or absent name — the same
+    val currentUserID by preferences.currentUserID.collectAsState()
+    // `currentUserID` is a `remember` key on purpose. The board's filter freezes the id into
+    // the model, so an id that arrived after this screen was composed has to build a new model
+    // rather than leave the first one filtering on a stale or absent id — the same
     // rebuild-and-cancel-the-previous-observation `ProjectBoardDestination` documents, and the
     // `DisposableEffect` below cancels the old observation, so this cannot leave two boards
     // watching the store. On a cold launch this does build the model twice: once with `null`,
     // then again once the session is known.
-    val model = remember(projectID, environment, preferences, currentUserName) {
+    val model = remember(projectID, environment, preferences, currentUserID) {
         ProjectBoardModel(
             projectID = projectID,
             repository = environment.repository,
             dateProvider = environment.dateProvider,
-            currentUserName = currentUserName,
+            currentUserID = currentUserID,
         )
     }
     DisposableEffect(model) {
@@ -696,6 +739,11 @@ private fun BoardDestination(
         picker.observe(scope)
         onDispose { picker.stopObserving() }
     }
+
+    val assigneeNames = rememberAssigneeNames(
+        ids = model.projection.items.mapNotNull { it.assigneeID },
+        teamPort = environment.teamPort,
+    )
 
     ProjectBoardScreen(
         projection = model.projection,
@@ -734,6 +782,7 @@ private fun BoardDestination(
         // never named a running sprint. It must, for the title to say which sprint is active.
         activeSprint = model.activeSprint,
         canAddTask = !model.addsLocked,
+        assigneeNames = assigneeNames,
     )
 }
 
@@ -794,6 +843,7 @@ private fun ArchiveDestination(
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     scope: CoroutineScope,
+    teamPort: TeamPort? = null,
 ) {
     val model = remember(projectID, repository, dateProvider) {
         ProjectArchiveModel(projectID, repository, dateProvider)
@@ -802,6 +852,13 @@ private fun ArchiveDestination(
         model.observe(scope)
         onDispose { model.stopObserving() }
     }
+
+    val assigneeNames = rememberAssigneeNames(
+        ids = model.projection.months.flatMap { month -> month.items }
+            .mapNotNull { it.assigneeID }
+            .distinct(),
+        teamPort = teamPort,
+    )
 
     ProjectArchiveScreen(
         projection = model.projection,
@@ -812,6 +869,7 @@ private fun ArchiveDestination(
         },
         onDismissError = model::dismissError,
         onOpenSwitcher = { router.popToRoot() },
+        assigneeNames = assigneeNames,
     )
 }
 
@@ -955,13 +1013,18 @@ private fun SprintsDestination(
     // Same reason the task form has one: the model has no in-flight flag, and a save button
     // that can be pressed twice answers a double tap with two writes.
     if (isEditorVisible) {
+        val currentUserID by preferences.currentUserID.collectAsState()
+        val currentUserName by preferences.currentUserName.collectAsState()
+        // An owner the directory cannot name shows as its id rather than vanishing from the
+        // picker: the selection must stay visible, and the id is the only honest label left.
+        val otherOwnerLabel = rememberUserName(editor.ownerID, environment.teamPort)
         SprintEditorSheet(
             name = editor.name,
             goalStoryPoints = editor.goalStoryPoints,
             goal = editor.goal,
             startDate = editor.startDate,
             endDate = editor.endDate,
-            owner = editor.owner,
+            ownerID = editor.ownerID,
             isCreating = editor.isCreating,
             canSave = editor.canSave,
             endIsBeforeStart = editor.endIsBeforeStart,
@@ -973,6 +1036,9 @@ private fun SprintsDestination(
             onStartDateChanged = editor::onStartDateChanged,
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
+            currentUserID = currentUserID,
+            currentUserName = currentUserName,
+            otherOwnerLabel = otherOwnerLabel,
             onSave = {
                 scope.launch {
                     isEditorBusy = true
@@ -993,10 +1059,10 @@ private fun SprintsDestination(
 /**
  * One sprint's own screen.
  *
- * ## The viewer's name is a `remember` key, for the same reason the board's is
+ * ## The viewer's id is a `remember` key, for the same reason the board's is
  *
  * `SprintDetail.canFinish` depends on who is looking, and the board's filter has already
- * established the pattern: a name that arrives after this screen was composed has to build
+ * established the pattern: an id that arrives after this screen was composed has to build
  * a new model rather than leave the first one answering "is this mine" from a stale `null`.
  * On a cold launch that builds the model twice, which is the cost of the alternative being
  * a Finish button that appears a moment late.
@@ -1018,13 +1084,14 @@ private fun SprintDetailDestination(
     scope: CoroutineScope,
     preferences: ShellPreferences,
 ) {
+    val currentUserID by preferences.currentUserID.collectAsState()
     val currentUserName by preferences.currentUserName.collectAsState()
-    val model = remember(sprintID, environment, preferences, currentUserName) {
+    val model = remember(sprintID, environment, preferences, currentUserID) {
         SprintDetailModel(
             sprintID = sprintID,
             repository = environment.repository,
             dateProvider = environment.dateProvider,
-            currentUserName = currentUserName,
+            currentUserID = currentUserID,
         )
     }
     DisposableEffect(model) {
@@ -1043,6 +1110,8 @@ private fun SprintDetailDestination(
         // a failure, and a banner saying "could not load" would be inventing a cause.
         return
     }
+
+    val ownerName = rememberUserName(detail.sprint.ownerID, environment.teamPort)
 
     // The editor over this sprint, opened by the card's edit button. Declared before the
     // screen because the screen's [SprintDetailScreen.onEdit] is what sets it.
@@ -1077,6 +1146,7 @@ private fun SprintDetailDestination(
             router.push(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
         },
         onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
+        ownerName = ownerName,
     )
 
     // The editor over this sprint, opened by the card's edit button. Unlike
@@ -1112,13 +1182,14 @@ private fun SprintDetailDestination(
         )
     }
     if (isEditorVisible) {
+        val otherOwnerLabel = rememberUserName(editor.ownerID, environment.teamPort)
         SprintEditorSheet(
             name = editor.name,
             goalStoryPoints = editor.goalStoryPoints,
             goal = editor.goal,
             startDate = editor.startDate,
             endDate = editor.endDate,
-            owner = editor.owner,
+            ownerID = editor.ownerID,
             isCreating = editor.isCreating,
             canSave = editor.canSave,
             endIsBeforeStart = editor.endIsBeforeStart,
@@ -1130,6 +1201,9 @@ private fun SprintDetailDestination(
             onStartDateChanged = editor::onStartDateChanged,
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
+            currentUserID = currentUserID,
+            currentUserName = currentUserName,
+            otherOwnerLabel = otherOwnerLabel,
             onSave = {
                 scope.launch {
                     isEditorBusy = true
@@ -1191,6 +1265,8 @@ private fun WorkItemEditorDestination(
     onDismiss: () -> Unit,
     router: Router,
     tab: AppTab,
+    preferences: ShellPreferences,
+    teamPort: TeamPort? = null,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -1211,9 +1287,29 @@ private fun WorkItemEditorDestination(
 
     // `initialSprintID` is a model key alongside `initialStatus`: both are create-time facts
     // frozen into the draft, so a different sprint pair must build a different model rather
-    // than have the remembered one hold the old sprint forever.
-    val model = remember(projectID, workItemID, repository, existing, initialStatus, initialSprintID) {
-        WorkItemEditorModel(projectID, existing.item, repository, dateProvider, initialStatus, initialSprintID)
+    // than have the remembered one hold the old sprint forever. `currentUserID` is a key for
+    // the same reason the board's is: the draft's assignee picker labels "me" from it, and an
+    // id that arrives mid-edit must relabel rather than leave a stale name on the row.
+    val currentUserID by preferences.currentUserID.collectAsState()
+    val currentUserName by preferences.currentUserName.collectAsState()
+    val model = remember(
+        projectID,
+        workItemID,
+        repository,
+        existing,
+        initialStatus,
+        initialSprintID,
+        currentUserID,
+    ) {
+        WorkItemEditorModel(
+            projectID,
+            existing.item,
+            repository,
+            dateProvider,
+            initialStatus,
+            initialSprintID,
+            currentUserID = currentUserID,
+        )
     }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
@@ -1245,13 +1341,20 @@ private fun WorkItemEditorDestination(
     var isPickerVisible by remember(model) { mutableStateOf(false) }
     var pickerSelectedIDs by remember(model) { mutableStateOf<Set<WorkItemID>>(emptySet()) }
 
+    // An assignee the directory cannot name shows as its id in the picker's third option —
+    // the selection stays visible, and the id is the only honest label left.
+    val otherAssigneeLabel = rememberUserName(model.assigneeID, teamPort)
+
     WorkItemEditorSheet(
         title = model.title,
         details = model.details,
         storyPointsText = model.storyPointsText,
         status = model.status,
         priority = model.priority,
-        assignee = model.assignee,
+        assigneeID = model.assigneeID,
+        currentUserID = currentUserID,
+        currentUserName = currentUserName,
+        otherAssigneeLabel = otherAssigneeLabel,
         hasDueDate = model.dueDate != null,
         recurrence = model.recurrence,
         // The repeat row takes its day from the due date, so the draft's due date is the
