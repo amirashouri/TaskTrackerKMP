@@ -164,9 +164,14 @@
     <string name="project_new">New Project</string>
     <string name="project_edit">Edit Project</string>
     <string name="project_members_label">Members</string>
-    <string name="project_members_placeholder">Search people by name or email</string>
-    <string name="project_members_empty">No matching people</string>
+    <string name="project_members_none">No members yet</string>
     <string name="project_member_remove">Remove member</string>
+    <string name="project_member_me">Me</string>
+    <string name="project_member_add_me">Add %1$s</string>
+    <string name="project_members_invite_label">Invite by email</string>
+    <string name="project_members_invite_placeholder">name@example.com</string>
+    <string name="project_members_invite_send">Send invite</string>
+    <string name="project_members_invite_queued">Invite queued for %1$s</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>

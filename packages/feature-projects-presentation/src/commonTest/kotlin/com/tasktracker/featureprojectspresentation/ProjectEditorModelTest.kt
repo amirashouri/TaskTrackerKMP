@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -70,23 +71,14 @@ class ProjectEditorModelTest {
     }
 
     @Test
-    fun `members are saved on create and can be searched by name or email`() = runTest {
+    fun `members are saved on create and duplicates collapse`() = runTest {
         val repository = FakeProjectRepository()
         val model = ProjectEditorModel(null, repository, TestDateProvider())
-        val ada = MockProjectMembers.members.first()
         model.onNameChanged("Apollo")
-        model.onMemberIDsChanged(listOf(ada.id, ada.id))
+        model.onMemberIDsChanged(listOf(testUserID, testUserID))
 
         assertTrue(model.save())
-        assertEquals(listOf(ada.id), repository.storedProjects().single().memberIDs)
-    }
-
-    @Test
-    fun `mock member search filters names and emails without case sensitivity`() {
-        val ada = MockProjectMembers.members.first()
-        assertEquals(listOf(ada), MockProjectMembers.search("ada"))
-        assertEquals(listOf(ada), MockProjectMembers.search("ADA@EXAMPLE"))
-        assertEquals(emptyList(), MockProjectMembers.search("nobody"))
+        assertEquals(listOf(testUserID), repository.storedProjects().single().memberIDs)
     }
 
     @Test
@@ -95,12 +87,12 @@ class ProjectEditorModelTest {
         val project = testProject(name = "Apollo")
         repository.seed(project)
         val model = ProjectEditorModel(project, repository, TestDateProvider())
-        val grace = MockProjectMembers.members[2]
+        val grace = UserID("77777777-7777-4777-8777-777777777777")
 
-        model.onMemberIDsChanged(listOf(grace.id))
+        model.onMemberIDsChanged(listOf(grace))
         assertTrue(model.hasChanges)
         assertTrue(model.save())
-        assertEquals(listOf(grace.id), repository.storedProjects().single().memberIDs)
+        assertEquals(listOf(grace), repository.storedProjects().single().memberIDs)
     }
 
     /**
@@ -296,5 +288,81 @@ class ProjectEditorModelTest {
 
         model.dismissError()
         assertNull(model.errorMessage)
+    }
+
+    // MARK: Invites
+
+    @Test
+    fun `an email that is not an address queues nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(name = "Apollo")
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+
+        model.onInviteEmailChanged("not-an-address")
+
+        assertFalse(model.canInvite)
+        assertFalse(model.sendInvite())
+        assertEquals(emptyList(), repository.invites)
+    }
+
+    @Test
+    fun `a valid invite queues confirms and clears the field`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(name = "Apollo")
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+
+        // Surrounding whitespace is a paste artifact, not part of the address — the trim
+        // is what makes this assertion about the queue row rather than about the keyboard.
+        model.onInviteEmailChanged("  ada@example.com ")
+
+        assertTrue(model.canInvite)
+        assertTrue(model.sendInvite())
+        assertEquals(listOf(project.id to "ada@example.com"), repository.invites)
+        assertEquals("ada@example.com", model.inviteQueuedEmail)
+        assertEquals("", model.inviteEmail)
+        assertNull(model.errorMessage)
+    }
+
+    @Test
+    fun `editing the field after a queued invite clears the confirmation`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(name = "Apollo")
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+        model.onInviteEmailChanged("ada@example.com")
+        model.sendInvite()
+
+        model.onInviteEmailChanged("grace@example.com")
+
+        assertNull(model.inviteQueuedEmail)
+    }
+
+    @Test
+    fun `an invite failure reports and keeps the field`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(name = "Apollo")
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+        model.onInviteEmailChanged("ada@example.com")
+        repository.failure = AppError.Offline
+
+        assertFalse(model.sendInvite())
+        assertEquals(AppError.Offline.message, model.errorMessage)
+        assertEquals("ada@example.com", model.inviteEmail, "a failed send keeps the draft for a retry")
+        assertNull(model.inviteQueuedEmail)
+        assertEquals(emptyList(), repository.invites)
+    }
+
+    @Test
+    fun `inviting while creating does nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = ProjectEditorModel(null, repository, TestDateProvider())
+        model.onInviteEmailChanged("ada@example.com")
+
+        assertFalse(model.canInvite)
+        assertFalse(model.sendInvite())
+        assertEquals(emptyList(), repository.invites)
     }
 }

@@ -59,6 +59,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
+    private val queuedInvites = mutableListOf<Pair<ProjectID, String>>()
 
     private var itemCounter = 0
     private var moveCalls = 0
@@ -74,6 +75,9 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     /** Every [ProjectChange] published so far, in order. */
     suspend fun publishedChanges(): List<ProjectChange> = lock.withLock { recordedChanges.toList() }
+
+    /** Every invitation queued so far, as `(project, email)` pairs in call order. */
+    suspend fun queuedInvites(): List<Pair<ProjectID, String>> = lock.withLock { queuedInvites.toList() }
 
     suspend fun moveCallCount(): Int = lock.withLock { moveCalls }
 
@@ -410,6 +414,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
             storedItems.removeAll { it.projectID == id }
             storedStatusChanges.removeAll { it.projectID == id }
             publish(ProjectChange(ProjectChange.Kind.Projects, id))
+        }
+    }
+
+    override suspend fun invite(id: ProjectID, email: String, now: Instant) {
+        throwIfFailing()
+        lock.withLock {
+            if (storedProjects.none { it.id == id }) throw AppError.Validation("No such project.")
+            queuedInvites += id to email
         }
     }
 

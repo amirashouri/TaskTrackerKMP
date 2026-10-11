@@ -132,13 +132,13 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1447 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1422 tests, 12 failed** (same 12) |
+| JVM | `jvmTest` | fast feedback; run this — **1454 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1429 tests, 12 failed** (same 12) |
 | Android host | `testAndroidHostTest` | Robolectric; **854 tests, 17 failed** — all layout, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. `commonTest` holds
-**1712** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
+**1714** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
 counted per host.
 
 The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`),

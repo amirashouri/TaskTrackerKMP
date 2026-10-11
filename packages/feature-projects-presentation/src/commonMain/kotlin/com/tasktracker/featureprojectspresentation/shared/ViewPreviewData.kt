@@ -79,13 +79,41 @@ object ViewPreviewData {
     val previewUserID: UserID = UserID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 
     /**
+     * A second person previews can put on a project, so a member row is more than one chip.
+     *
+     * Fixed for the same reason [previewUserID] is: a preview's pill must render the same
+     * initials every time it is opened. "Grace" is not a real account either.
+     */
+    val previewGraceID: UserID = UserID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+
+    /**
+     * A third project member previews can put on a project, deliberately left unnamed.
+     *
+     * The directory cannot name a member it has never seen, and the sheet's honest fallback
+     * is the raw id — so a preview that shows only named pills is a preview of a case that
+     * does not yet exist in production. This one keeps the unnamed path on the page.
+     */
+    val previewUnnamedUserID: UserID = UserID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+
+    /**
+     * The members [seededProject] carries, and the set sheet previews render.
+     *
+     * Two named plus one unnamed, so a preview shows the disc-and-initials pill, the name
+     * fallback, and the add-me affordance (Amir is on the list, so add-me hides) all at once.
+     */
+    val previewMemberIDs: List<UserID> = listOf(previewUserID, previewGraceID, previewUnnamedUserID)
+
+    /**
      * The display name previews put beside [previewUserID].
      *
      * Cards and stacks take a resolved name rather than an id, so a preview that wants the
      * assignee pill to appear hands this map the same way a host hands the real one it got
      * from the directory.
      */
-    val previewUserNames: Map<UserID, String> = mapOf(previewUserID to "Amir")
+    val previewUserNames: Map<UserID, String> = mapOf(
+        previewUserID to "Amir",
+        previewGraceID to "Grace",
+    )
 
     private val zone: TimeZone = TimeZone.UTC
 
@@ -106,6 +134,7 @@ object ViewPreviewData {
         name = "Task Tracker",
         details = "Everything that has to happen before this app is finished.",
         nextItemNumber = 5,
+        memberIDs = previewMemberIDs,
         createdAt = instant,
         updatedAt = instant,
     )
@@ -594,6 +623,9 @@ private class PreviewRepository(
         storedItems.removeAll { it.projectID == id }
         broadcaster.send(ProjectChange(ProjectChange.Kind.Projects, id))
     }
+
+    // A preview never sends an invitation, so there is nothing here to record or refuse.
+    override suspend fun invite(id: ProjectID, email: String, now: Instant) = Unit
 
     override suspend fun createWorkItem(
         projectID: ProjectID,

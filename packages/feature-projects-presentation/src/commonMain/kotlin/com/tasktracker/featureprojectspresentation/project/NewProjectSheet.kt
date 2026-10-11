@@ -1,22 +1,10 @@
 package com.tasktracker.featureprojectspresentation
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -24,17 +12,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
-import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
-import com.tasktracker.designsystem.ttLabelSecondary
-import com.tasktracker.designsystem.ttGlassSurface
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -48,15 +33,10 @@ import com.tasktracker.resources.project_key_prefix_placeholder
 import com.tasktracker.resources.project_name_label
 import com.tasktracker.resources.project_editor_edit_title
 import com.tasktracker.resources.project_editor_new_title
-import com.tasktracker.resources.project_members_empty
-import com.tasktracker.resources.project_members_label
-import com.tasktracker.resources.project_members_placeholder
-import com.tasktracker.resources.project_member_remove
 import org.jetbrains.compose.resources.stringResource
-import com.tasktracker.core.UserID
 
 /**
- * The shared project form: project details and member search, in create or edit mode.
+ * The shared project form: project details and member management, in create or edit mode.
  *
  * ## The prefix is shown, not chosen
  *
@@ -73,6 +53,14 @@ import com.tasktracker.core.UserID
  * stays *visible* so a miss is noticed at creation rather than discovered later. It is
  * editable - [onKeyPrefixChanged] exists and the model accepts it - but the default is
  * offered rather than demanded.
+ *
+ * ## Members are ids with names painted on
+ *
+ * There is no searchable member directory yet — [com.tasktracker.featureteamsdomain.TeamPort]
+ * can name a [UserID] it is given, not list people — so this sheet does not offer a search
+ * box over a pretend directory. The member chips, the "Add me" action and the invite field
+ * all live in [ProjectMembersSection], which the old mock search that used to sit here has
+ * been replaced by along with its hardcoded eight people.
  *
  * ## Why this is a sheet and not a screen
  *
@@ -100,8 +88,17 @@ fun NewProjectSheet(
     isCreating: Boolean = true,
     selectedMemberIDs: List<UserID> = emptyList(),
     onMemberIDsChanged: (List<UserID>) -> Unit = {},
+    currentUserID: UserID? = null,
+    currentUserName: String? = null,
+    /** Display names for [selectedMemberIDs], resolved by the caller; the id is the fallback. */
+    memberNames: Map<UserID, String> = emptyMap(),
+    inviteEmail: String = "",
+    onInviteEmailChanged: (String) -> Unit = {},
+    onSendInvite: () -> Unit = {},
+    /** The address an invite was just queued for, shown as confirmation; `null` shows none. */
+    inviteQueuedEmail: String? = null,
+    errorMessage: String? = null,
 ) {
-    var memberQuery by remember { mutableStateOf("") }
     TTBottomSheetScaffold(
         visible = visible,
         onDismissRequest = onDismissRequest,
@@ -142,86 +139,31 @@ fun NewProjectSheet(
             minLines = DETAILS_MIN_LINES,
             imeAction = ImeAction.Next,
         )
-        ProjectsTextField(
-            title = stringResource(Res.string.project_members_label),
-            value = memberQuery,
-            onValueChange = { memberQuery = it },
-            placeholder = stringResource(Res.string.project_members_placeholder),
-            imeAction = ImeAction.Search,
+        // Chips, "Add me", and the edit-mode invite field, as one section: the invite is
+        // how you add somebody who is not yet in the directory, so it belongs with the
+        // members rather than floating as a form field of its own. Hidden half in create
+        // mode, because an invitation names a project id a project being created has none
+        // of yet — see [ProjectMembersSection].
+        ProjectMembersSection(
+            selectedMemberIDs = selectedMemberIDs,
+            onMemberIDsChanged = onMemberIDsChanged,
+            currentUserID = currentUserID,
+            currentUserName = currentUserName,
+            memberNames = memberNames,
+            isCreating = isCreating,
+            isBusy = isBusy,
+            inviteEmail = inviteEmail,
+            onInviteEmailChanged = onInviteEmailChanged,
+            onSendInvite = onSendInvite,
+            inviteQueuedEmail = inviteQueuedEmail,
         )
-        if (memberQuery.isNotBlank()) {
-            val matches = MockProjectMembers.search(memberQuery)
-            Column(
-                modifier = Modifier.fillMaxWidth()
-                    .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
-                    .padding(ttSpacing.md)
-                    .testTag(ProjectMembersDropdownTag),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-            ) {
-                if (matches.isEmpty()) {
-                    ttText(
-                        text = stringResource(Res.string.project_members_empty),
-                        style = ttTypography.footnote,
-                        color = ttLabelSecondary(),
-                    )
-                } else {
-                    matches.forEach { member ->
-                        val selected = member.id in selectedMemberIDs
-                        Column(
-                            modifier = Modifier.fillMaxWidth()
-                                .clickable {
-                                    onMemberIDsChanged(
-                                        if (selected) selectedMemberIDs - member.id
-                                        else selectedMemberIDs + member.id,
-                                    )
-                                }
-                                .testTag(ProjectMemberOptionTag(member)),
-                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-                        ) {
-                            ttText(
-                                text = if (selected) "${member.name} ✓" else member.name,
-                                style = ttTypography.callout,
-                                color = if (selected) ttAccent() else ttLabel(),
-                            )
-                            ttText(text = member.email, style = ttTypography.captionSmall, color = ttLabelSecondary())
-                        }
-                    }
-                }
-            }
-        }
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-        ) {
-            MockProjectMembers.members.forEach { member ->
-                AnimatedVisibility(
-                    visible = member.id in selectedMemberIDs,
-                    enter = expandVertically() + fadeIn(),
-                    exit = shrinkVertically() + fadeOut(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth()
-                            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
-                            .padding(start = ttSpacing.md, end = ttSpacing.sm, top = ttSpacing.sm, bottom = ttSpacing.sm),
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-                        ) {
-                            ttText(text = member.name, style = ttTypography.callout, color = ttLabel())
-                            ttText(text = member.email, style = ttTypography.captionSmall, color = ttLabelSecondary())
-                        }
-                        ttGlassIconButton(
-                            image = ttActionIcons.remove,
-                            contentDescription = stringResource(Res.string.project_member_remove),
-                            onClick = { onMemberIDsChanged(selectedMemberIDs - member.id) },
-                            modifier = Modifier.testTag(ProjectMemberRemoveTag(member)),
-                        )
-                    }
-                }
-            }
+        if (errorMessage != null) {
+            ttText(
+                text = errorMessage,
+                style = ttTypography.footnote,
+                color = ttError(),
+                modifier = Modifier.testTag(NewProjectSheetErrorTag),
+            )
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -263,6 +205,10 @@ private fun NewProjectSheetPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onDetailsChanged = {},
         onSave = {},
         onCancel = {},
+        selectedMemberIDs = ViewPreviewData.previewMemberIDs,
+        currentUserID = ViewPreviewData.previewUserID,
+        currentUserName = ViewPreviewData.previewUserNames[ViewPreviewData.previewUserID],
+        memberNames = ViewPreviewData.previewUserNames,
     )
 }
 
@@ -285,8 +231,6 @@ private fun NewProjectSheetDisabledPreview() = ProjectsPreview(ThemeScheme.Light
 const val NewProjectSheetTag = "projects.newSheet"
 const val NewProjectCreateTag = "projects.newSheet.create"
 const val NewProjectCancelTag = "projects.newSheet.cancel"
-const val ProjectMembersDropdownTag = "projects.editor.members.dropdown"
-fun ProjectMemberOptionTag(member: ProjectMember): String = "projects.editor.members.option.${member.id}"
-fun ProjectMemberRemoveTag(member: ProjectMember): String = "projects.editor.members.remove.${member.id}"
+const val NewProjectSheetErrorTag = "projects.newSheet.error"
 
 private const val DETAILS_MIN_LINES = 3

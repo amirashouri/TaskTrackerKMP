@@ -292,6 +292,35 @@ class RoomProjectRepository(
         changeBus.announceProjectDeletion(id)
     }
 
+    override suspend fun invite(id: ProjectID, email: String, now: Instant) {
+        val stamp = currentUserStamp()
+        // An invitation is a request, not a record: the project row does not change, so
+        // there is nothing to announce on the change bus and nothing for a screen to
+        // re-read. The outbox row is the whole write, and it goes in inside a transaction
+        // like every other queued change — not because two rows must agree here, but
+        // because a half-written queue is exactly what the transaction boundary exists
+        // to make impossible.
+        inTransaction(database) {
+            // Existence is checked, not assumed: an invitation for a project the store has
+            // never heard of would make the server email about something this device cannot
+            // show, and nothing downstream could catch it. `readProject` throws the same
+            // [AppError.Storage] every other missing-project read does.
+            readProject(id)
+            database.outboxDao().insert(
+                NewOutboxEntry(
+                    id = newOutboxID(OutboxEntity.Project, id.stringValue, OutboxOperation.Invite),
+                    entity = OutboxEntity.Project,
+                    entityID = id.stringValue,
+                    operation = OutboxOperation.Invite,
+                    payload = JSONCoding.json.encodeToString(ProjectInvite(id, email))
+                        .encodeToByteArray(),
+                    createdAt = now,
+                    userID = stamp,
+                ).toRecord(),
+            )
+        }
+    }
+
     // MARK: Sprint reads
 
     override suspend fun sprints(projectID: ProjectID): List<Sprint> =
@@ -865,6 +894,11 @@ class RoomProjectRepository(
                 name = seed.name,
                 details = seed.details,
                 nextItemNumber = seed.items.size + 1,
+                // The seed's flag resolves against the signed-in user, exactly like
+                // `Item.assignee`: a sample name cannot be a `UserID`, and the member
+                // section can only *name* a person the directory knows — which at seed
+                // time is the signed-in user.
+                memberIDs = if (seed.members) listOfNotNull(author) else emptyList(),
                 createdAt = now,
                 updatedAt = now,
             )
