@@ -50,6 +50,8 @@ val packageOwnersTable: Map<String, String> = mapOf(
     "com.tasktracker.featuresettingsdomain" to ":packages:feature-settings-domain",
     "com.tasktracker.featuresettingsdata" to ":packages:feature-settings-data",
     "com.tasktracker.featuresettingspresentation" to ":packages:feature-settings-presentation",
+    "com.tasktracker.featureteamsdomain" to ":packages:feature-teams-domain",
+    "com.tasktracker.featureteamsdata" to ":packages:feature-teams-data",
     "com.tasktracker.compositionroot" to ":composition-root",
     "com.tasktracker.sharedui" to ":shared-ui",
 )
@@ -164,6 +166,16 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:routing",
         ":packages:di",
         ":packages:feature-settings-domain",
+    ),
+
+    // The user directory: a read-only UserID -> User lookup backed by the session cache.
+    // feature-teams-data performs no network or sync work yet — no server transport for a
+    // member list exists — so it is deliberately narrower than the other data modules.
+    ":packages:feature-teams-domain" to setOf(":packages:core"),
+    ":packages:feature-teams-data" to setOf(
+        ":packages:core",
+        ":packages:database",
+        ":packages:feature-teams-domain",
     ),
 )
 

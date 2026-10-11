@@ -64,6 +64,9 @@ include(":packages:feature-settings-domain")
 include(":packages:feature-settings-data")
 include(":packages:feature-settings-presentation")
 
+include(":packages:feature-teams-domain")
+include(":packages:feature-teams-data")
+
 // --- 4 new modules ----------------------------------------------------------
 // AGP 9 forbids the Android application plugin inside a multiplatform module,
 // so the Android entry point cannot live in :shared-ui. :composition-root is

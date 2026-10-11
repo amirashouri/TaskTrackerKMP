@@ -132,6 +132,26 @@ expensive form of the same ritual is what the `rendered-ui-measurement` skill is
 If the honest answer to "can I assert this without rendering?" is no, render it. Do not use
 this section to justify skipping a measurement you cannot make any other way.
 
+## Multi-Agent Parallelism & Worktree Isolation
+
+When multiple agent instances operate simultaneously across separate branches or git worktrees, they must adhere to strict synchronization boundaries to prevent state corruption, stale compilation locks, and logical merge conflicts.
+
+### 1. Worktree Path & Workspace Isolation
+* **Untracked State Trashing:** Files designated as untracked or gitignored (such as `NavigationHost.kt` and parts of `:shared-ui`) are shared across local environments if using standard directory switches. You must use `git worktree add <path> <branch>` to completely isolate files, local build caches, and test artifacts.
+* **Gradle Daemon Collision:** Running parallel builds across different worktrees simultaneously on the same host can lead to lock collisions on the Gradle build cache and configuration cache. Always pass `--no-daemon` or explicitly target isolated project cache directories if executing tasks concurrently:
+  ```bash
+  ./gradlew jvmTest --no-daemon -Dorg.gradle.project.cachedir=.gradle-worktree-cache
+  ```
+
+### 2. Upstream Reconciliation Protocol
+* **The Stale-Base Trap:** Before submitting a Phase 1 Plan for user `ACK`, you must pull the latest upstream tracking branch (`git fetch origin && git rebase origin/main`) and verify that no concurrent tasks have modified files or layers within your designated target scope.
+* **Test Baseline Overwrites:** Your `Project.md` test-count baseline is updated in the same change as any test addition. If a parallel agent commits an updated test baseline while you are running generation, your local count is stale. You must pull, re-verify the full validation command, update the count based on the *merged* JUnit XML, and only then proceed to request final review.
+
+### 3. Structural Splitting to Reduce Concurrency Conflicts
+* **Anti-Monolith Commits:** To allow parallel feature development without merge failures, aggressively enforce the **Presentation Splitting Rules**. If two concurrent tasks require additions to the same package layer, they must land in completely separate files rather than appending code to shared module files.
+* **DI Graph Splitting:** When modifying the dependency graph in `:composition-root` or the convention tables in `tasktracker.architecture.gradle.kts`, keep declarations organized cleanly within unique feature blocks. Do not interleave dependency links, or the text-based git merge tools will produce unresolvable structural conflicts.
+
+
 ## Four rules
 These exist because each one has already cost real time here.
 

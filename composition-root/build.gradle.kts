@@ -22,4 +22,6 @@ dependencies {
     commonMainImplementation(project(":packages:feature-settings-domain"))
     commonMainImplementation(project(":packages:feature-settings-data"))
     commonMainImplementation(project(":packages:feature-settings-presentation"))
+    commonMainImplementation(project(":packages:feature-teams-domain"))
+    commonMainImplementation(project(":packages:feature-teams-data"))
 }

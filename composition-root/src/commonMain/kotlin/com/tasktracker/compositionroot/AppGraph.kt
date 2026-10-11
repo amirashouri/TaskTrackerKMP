@@ -27,6 +27,8 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featureteamsdata.RoomTeamRepository
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.keychain.KeychainAccess
 import com.tasktracker.keychain.KeychainStore
 import com.tasktracker.keychain.systemKeychain
@@ -126,6 +128,7 @@ object AppGraph {
             registerPlatform(platforms)
             registerPersistence(platforms)
             registerProjects()
+            registerTeams()
             registerAuth(platforms)
             registerSync()
             registerSession()
@@ -316,6 +319,21 @@ object AppGraph {
             LocalDataSyncSink(
                 database = resolver.resolve(TaskTrackerDatabase::class),
                 changeBus = resolver.resolve(ProjectChangeBus::class),
+            )
+        }
+    }
+
+    /**
+     * The user directory: [TeamPort] resolves a UserID into a User profile.
+     *
+     * Backed by the session cache, which SessionCoordinator seeds on sign-in, so the directory
+     * can always answer for the signed-in account. Registered after persistence and projects —
+     * both depend only on [SessionCache], which persistence owns, and projects reads it too.
+     */
+    private fun ResolverBuilder.registerTeams() {
+        app<TeamPort> { resolver ->
+            RoomTeamRepository(
+                sessionCache = resolver.resolve(SessionCache::class),
             )
         }
     }
