@@ -419,9 +419,6 @@ private fun ProjectsEditorFullScreen(
         }
         WorkItemAssigneeRow(
             assigneeID = assigneeID,
-            currentUserID = currentUserID,
-            currentUserName = currentUserName,
-            otherAssigneeLabel = otherAssigneeLabel,
             onAssigneeChanged = onAssigneeChanged,
         )
         Row(
@@ -631,9 +628,6 @@ private fun WorkItemEditorForm(
         }
         WorkItemAssigneeRow(
             assigneeID = assigneeID,
-            currentUserID = currentUserID,
-            currentUserName = currentUserName,
-            otherAssigneeLabel = otherAssigneeLabel,
             onAssigneeChanged = onAssigneeChanged,
         )
         Row(

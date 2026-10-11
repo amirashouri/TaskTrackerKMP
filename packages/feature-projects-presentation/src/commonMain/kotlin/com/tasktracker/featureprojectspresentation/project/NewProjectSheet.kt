@@ -23,6 +23,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
@@ -54,13 +55,13 @@ import org.jetbrains.compose.resources.stringResource
  * editable - [onKeyPrefixChanged] exists and the model accepts it - but the default is
  * offered rather than demanded.
  *
- * ## Members are ids with names painted on
+ * ## Members are chosen, not typed
  *
- * There is no searchable member directory yet — [com.tasktracker.featureteamsdomain.TeamPort]
- * can name a [UserID] it is given, not list people — so this sheet does not offer a search
- * box over a pretend directory. The member chips, the "Add me" action and the invite field
- * all live in [ProjectMembersSection], which the old mock search that used to sit here has
- * been replaced by along with its hardcoded eight people.
+ * [ProjectMembersSection] renders the searchable [MemberPicker] over the member directory
+ * — multi-select, with the directory behind it a fake until the backend member API lands.
+ * An earlier revision offered chips plus invite-by-email; both are gone, because adding a
+ * member is the backend admin's job and the picker chooses among people the directory
+ * already knows.
  *
  * ## Why this is a sheet and not a screen
  *
@@ -88,15 +89,8 @@ fun NewProjectSheet(
     isCreating: Boolean = true,
     selectedMemberIDs: List<UserID> = emptyList(),
     onMemberIDsChanged: (List<UserID>) -> Unit = {},
-    currentUserID: UserID? = null,
-    currentUserName: String? = null,
-    /** Display names for [selectedMemberIDs], resolved by the caller; the id is the fallback. */
-    memberNames: Map<UserID, String> = emptyMap(),
-    inviteEmail: String = "",
-    onInviteEmailChanged: (String) -> Unit = {},
-    onSendInvite: () -> Unit = {},
-    /** The address an invite was just queued for, shown as confirmation; `null` shows none. */
-    inviteQueuedEmail: String? = null,
+    /** The directory behind the member picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
+    searchMembers: suspend (String) -> List<User> = { emptyList() },
     errorMessage: String? = null,
 ) {
     TTBottomSheetScaffold(
@@ -139,23 +133,10 @@ fun NewProjectSheet(
             minLines = DETAILS_MIN_LINES,
             imeAction = ImeAction.Next,
         )
-        // Chips, "Add me", and the edit-mode invite field, as one section: the invite is
-        // how you add somebody who is not yet in the directory, so it belongs with the
-        // members rather than floating as a form field of its own. Hidden half in create
-        // mode, because an invitation names a project id a project being created has none
-        // of yet — see [ProjectMembersSection].
         ProjectMembersSection(
             selectedMemberIDs = selectedMemberIDs,
             onMemberIDsChanged = onMemberIDsChanged,
-            currentUserID = currentUserID,
-            currentUserName = currentUserName,
-            memberNames = memberNames,
-            isCreating = isCreating,
-            isBusy = isBusy,
-            inviteEmail = inviteEmail,
-            onInviteEmailChanged = onInviteEmailChanged,
-            onSendInvite = onSendInvite,
-            inviteQueuedEmail = inviteQueuedEmail,
+            searchMembers = searchMembers,
         )
         if (errorMessage != null) {
             ttText(
@@ -206,9 +187,7 @@ private fun NewProjectSheetPreview() = ProjectsPreview(ThemeScheme.Dark) {
         onSave = {},
         onCancel = {},
         selectedMemberIDs = ViewPreviewData.previewMemberIDs,
-        currentUserID = ViewPreviewData.previewUserID,
-        currentUserName = ViewPreviewData.previewUserNames[ViewPreviewData.previewUserID],
-        memberNames = ViewPreviewData.previewUserNames,
+        searchMembers = ViewPreviewData.previewSearchMembers,
     )
 }
 

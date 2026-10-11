@@ -287,9 +287,6 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun deleteProject(id: ProjectID): Unit = unused("deleteProject")
 
-    override suspend fun invite(id: ProjectID, email: String, now: Instant): Unit =
-        unused("invite")
-
     override suspend fun createWorkItem(
         projectID: ProjectID,
         title: String,

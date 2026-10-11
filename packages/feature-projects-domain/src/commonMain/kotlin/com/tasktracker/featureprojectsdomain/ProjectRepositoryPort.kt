@@ -142,18 +142,6 @@ interface ProjectRepositoryPort {
 
     suspend fun deleteProject(id: ProjectID)
 
-    /**
-     * Queues an invitation for [email] to join the project [id].
-     *
-     * Writes no entity row — the invitee does not become a member until they accept and
-     * their id lands in `memberIDs` — so the outbox entry is the entire change, and the
-     * local store never pretends to have sent an email itself. Validation of the address
-     * is the form's job; this method's contract is "queue exactly this", so a caller that
-     * holds a project id and a string gets a queued row rather than a silently ignored
-     * typo.
-     */
-    suspend fun invite(id: ProjectID, email: String, now: Instant)
-
     // MARK: Sprints
 
     /**

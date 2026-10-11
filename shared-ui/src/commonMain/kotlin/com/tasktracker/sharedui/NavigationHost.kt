@@ -1018,11 +1018,6 @@ private fun SprintsDestination(
     // Same reason the task form has one: the model has no in-flight flag, and a save button
     // that can be pressed twice answers a double tap with two writes.
     if (isEditorVisible) {
-        val currentUserID by preferences.currentUserID.collectAsState()
-        val currentUserName by preferences.currentUserName.collectAsState()
-        // An owner the directory cannot name shows as its id rather than vanishing from the
-        // picker: the selection must stay visible, and the id is the only honest label left.
-        val otherOwnerLabel = rememberUserName(editor.ownerID, environment.teamPort)
         SprintEditorSheet(
             name = editor.name,
             goalStoryPoints = editor.goalStoryPoints,
@@ -1041,9 +1036,9 @@ private fun SprintsDestination(
             onStartDateChanged = editor::onStartDateChanged,
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
-            currentUserID = currentUserID,
-            currentUserName = currentUserName,
-            otherOwnerLabel = otherOwnerLabel,
+            searchMembers = { query ->
+                environment.teamPort?.searchMembers(query) ?: emptyList()
+            },
             onSave = {
                 scope.launch {
                     isEditorBusy = true
@@ -1187,7 +1182,6 @@ private fun SprintDetailDestination(
         )
     }
     if (isEditorVisible) {
-        val otherOwnerLabel = rememberUserName(editor.ownerID, environment.teamPort)
         SprintEditorSheet(
             name = editor.name,
             goalStoryPoints = editor.goalStoryPoints,
@@ -1206,9 +1200,9 @@ private fun SprintDetailDestination(
             onStartDateChanged = editor::onStartDateChanged,
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
-            currentUserID = currentUserID,
-            currentUserName = currentUserName,
-            otherOwnerLabel = otherOwnerLabel,
+            searchMembers = { query ->
+                environment.teamPort?.searchMembers(query) ?: emptyList()
+            },
             onSave = {
                 scope.launch {
                     isEditorBusy = true

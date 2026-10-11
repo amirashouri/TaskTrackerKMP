@@ -133,52 +133,6 @@ class ProjectEditorModel(
     }
 
     /**
-     * The draft of an email invitation, cleared once the invite is queued.
-     *
-     * An invitation is an immediate action rather than part of [hasChanges]: it queues an
-     * outbox row the moment it is sent, because there is nothing to save - the local
-     * project does not change until the invitee accepts, at which point their id arrives
-     * as a member edit from the server. Treating the field as draft state would offer a
-     * Save that silently discards it, which is the worse of the two failure modes.
-     */
-    var inviteEmail: String by mutableStateOf("")
-        private set
-
-    /** The address the most recent successful [sendInvite] queued, or `null` for none. */
-    var inviteQueuedEmail: String? by mutableStateOf(null)
-        private set
-
-    /** Whether [sendInvite] would queue anything. */
-    val canInvite: Boolean
-        get() = savedProjectID != null &&
-            inviteEmail.trim().let { it.isNotBlank() && EMAIL_SHAPE.matches(it) }
-
-    /** Sets the invite draft. Editing it clears the queued confirmation. */
-    fun onInviteEmailChanged(value: String) {
-        inviteEmail = value
-        inviteQueuedEmail = null
-    }
-
-    /**
-     * Queues an invitation to [inviteEmail], returning whether it was queued.
-     *
-     * Refuses while creating: an invitation names a project id, and a project being
-     * created has none until [save] has run. The sheet hides the invite row in create
-     * mode for that reason, so this is the model refusing what the UI should never offer
-     * rather than a second opinion the user can reach.
-     */
-    suspend fun sendInvite(): Boolean {
-        if (!canInvite) return false
-        val email = inviteEmail.trim()
-        reporting {
-            repository.invite(requireNotNull(savedProjectID), email, dateProvider.now())
-        } ?: return false
-        inviteQueuedEmail = email
-        inviteEmail = ""
-        return true
-    }
-
-    /**
      * Saves, creating or updating as appropriate.
      *
      * Returns whether the save happened, so a caller can navigate on success and stay put
@@ -209,16 +163,5 @@ class ProjectEditorModel(
             .joinToString("").uppercase()
         if (initials.length >= 2) return initials
         return words.firstOrNull()?.filter(Char::isLetterOrDigit)?.take(2)?.uppercase().orEmpty()
-    }
-
-    private companion object {
-        /**
-         * The floor for "looks like an email", not RFC 5322.
-         *
-         * One `@`, no whitespace on either side, and a dot after the `@`. The real
-         * acceptance test is the mail bouncing, and a stricter pattern here would only
-         * turn a typo the server would have refused into a field the user cannot leave.
-         */
-        val EMAIL_SHAPE = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
     }
 }

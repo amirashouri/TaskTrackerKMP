@@ -32,6 +32,23 @@ class RoomTeamRepository(
         }
     }
 
+    /**
+     * The member picker's candidate list: the signed-in user plus the fake directory,
+     * filtered by [query], sorted by name.
+     *
+     * The session user is merged in rather than special-cased into a separate row, so a
+     * fresh install — where they are the only real person in the app — still shows a list
+     * the search box can filter. Ordering is [FakeMemberDirectory]'s job and stays
+     * alphabetical across the merge, which means the backend can replace the fake's
+     * `people` with its own list and no caller can tell the swap happened.
+     */
+    override suspend fun searchMembers(query: String): List<User> {
+        val session = sessionCache?.current()
+        val sessionUser = session?.let { fromSession(it, UserID(it.userID)) }
+        val candidates = listOfNotNull(sessionUser) + FakeMemberDirectory.people
+        return FakeMemberDirectory.search(candidates, query)
+    }
+
     private fun fromSession(session: CachedSession, id: UserID): User = User(
         id = id,
         email = session.email,

@@ -208,21 +208,34 @@ class TabIconsGeometryTest {
     }
 
     @Test
-    fun `the icon size scale is a single step`() {
-        // One value today. Asserted anyway, because a second icon size added without a name is
-        // exactly the sort of thing that then gets used inconsistently across the bar.
+    fun `every icon size is a named positive step below the glyph grid`() {
+        // The ramp is [close, tab]: an inline dismiss glyph inside a pill, and a control's
+        // whole glyph. Asserted as an exact ordered set because a size added without being
+        // named here is exactly the sort of thing that then gets used inconsistently — the
+        // property is not "there are sizes", it is "every size was decided on purpose".
         //
         // Compared on `value` rather than with `>` against `Dp.Unspecified`: `Unspecified` is
         // NaN-based, so *every* comparison against it is false and an assertion written that
-        // way fails no matter what the size is. The two real properties are that it is a
-        // positive size, and that it is smaller than the grid the glyphs are drawn on — a
-        // glyph rendered at 24dp in a 49pt bar is the mistake the token exists to prevent.
-        assertEquals(1, ttIconSize.all.size)
-        assertEquals(ttIconSize.tab, ttIconSize.all.single())
-        assertTrue(ttIconSize.tab.value > 0f, "the tab icon must have a positive size")
+        // way fails no matter what the size is. The two real properties are that each size is
+        // positive, and that each is smaller than the grid the glyphs are drawn on — a glyph
+        // rendered at 24dp in a 49pt bar is the mistake the token exists to prevent.
+        assertEquals(
+            listOf(ttIconSize.close, ttIconSize.tab),
+            ttIconSize.all,
+            "the icon size ramp is [close, tab] — if a size was added, name it in this list " +
+                "on purpose rather than growing the ramp silently",
+        )
+        for (size in ttIconSize.all) {
+            assertTrue(size.value > 0f, "icon sizes must be positive, was $size")
+            assertTrue(
+                size.value < 24f,
+                "an icon should be drawn smaller than its 24-unit grid, was $size",
+            )
+        }
         assertTrue(
-            ttIconSize.tab.value < 24f,
-            "the tab icon should be drawn smaller than its 24-unit grid, was ${ttIconSize.tab}",
+            ttIconSize.all.zipWithNext().all { (a, b) -> b.value > a.value },
+            "the size ramp must strictly increase, was ${ttIconSize.all} — evenly or " +
+                "reversed steps read as one measure sampled twice rather than as two roles",
         )
     }
 

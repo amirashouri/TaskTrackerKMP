@@ -23,6 +23,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.UserID
+import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
@@ -108,11 +109,8 @@ fun SprintEditorSheet(
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
     today: LocalDate? = null,
-    /** Who the signed-in user is, for the owner picker's "me" option. See [WorkItemAssigneeRow]. */
-    currentUserID: UserID? = null,
-    currentUserName: String? = null,
-    /** Label for an owner the directory cannot yet name. */
-    otherOwnerLabel: String? = null,
+    /** The directory behind the owner picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
+    searchMembers: suspend (String) -> List<User> = { emptyList() },
 ) {
     TTBottomSheetScaffold(
         visible = visible,
@@ -212,13 +210,11 @@ fun SprintEditorSheet(
                 }
             }
             // The same picker the work item editor's assignee field uses: ownership is an
-            // id, and "unowned / me" is the whole of what the directory can offer today.
+            // id, and the searchable directory is the whole of what the picker offers.
             WorkItemAssigneeRow(
                 assigneeID = ownerID,
-                currentUserID = currentUserID,
-                currentUserName = currentUserName,
-                otherAssigneeLabel = otherOwnerLabel,
                 onAssigneeChanged = onOwnerChanged,
+                searchMembers = searchMembers,
                 title = stringResource(Res.string.sprint_owner_label),
                 testTag = SprintEditorOwnerTag,
             )

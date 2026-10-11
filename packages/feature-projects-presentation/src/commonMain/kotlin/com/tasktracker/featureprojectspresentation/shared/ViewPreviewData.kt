@@ -25,6 +25,7 @@ import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.ProjectSummary
+import com.tasktracker.featureteamsdomain.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
 import kotlin.time.Instant
@@ -114,6 +115,26 @@ object ViewPreviewData {
         previewUserID to "Amir",
         previewGraceID to "Grace",
     )
+
+    /**
+     * The directory a preview's member picker searches, so a preview renders the real
+     * control rather than an empty list.
+     *
+     * Filters [previewUserNames] the same way `FakeMemberDirectory` filters its people —
+     * case-insensitive substring, blank query returns all — so a preview's list has the
+     * shape production's has, under the same port method the host passes.
+     */
+    val previewSearchMembers: suspend (String) -> List<User> = { query ->
+        val normalised = query.trim().lowercase()
+        previewUserNames
+            .filter { (id, name) ->
+                normalised.isEmpty() ||
+                    name.lowercase().contains(normalised) ||
+                    id.stringValue.contains(normalised)
+            }
+            .map { (id, name) -> User(id = id, email = "${name.lowercase()}@example.com", displayName = name) }
+            .sortedBy { it.preferredGreeting.lowercase() }
+    }
 
     private val zone: TimeZone = TimeZone.UTC
 
@@ -625,8 +646,6 @@ private class PreviewRepository(
     }
 
     // A preview never sends an invitation, so there is nothing here to record or refuse.
-    override suspend fun invite(id: ProjectID, email: String, now: Instant) = Unit
-
     override suspend fun createWorkItem(
         projectID: ProjectID,
         title: String,

@@ -242,6 +242,35 @@ object ttActionIcons {
     }
 
     /**
+     * A compact diagonal cross, for dismissing one pill from a selection.
+     *
+     * Drawn to the same 4..20 span and 3-unit tip width as [remove] and [add], so the three
+     * sit together as one family rather than as three sizes of "get rid of this". The size
+     * that matters is the one it is *used* at — [ttIconSize.close], not the 22dp tab grid —
+     * so the proportions are checked at 12dp, where a thicker arm would fill the box.
+     *
+     * Like [add], one twelve-point contour and not two crossing bars: the arms overlap in
+     * the exact centre, and this file's even-odd fill would turn that overlap into a hole.
+     * The centre is the whole glyph here — a cross with a punched-out middle reads as four
+     * arrows pointing away from nothing.
+     */
+    val close: ImageVector = icon("Close") {
+        moveTo(4.0f, 7.0f)
+        lineTo(7.0f, 4.0f)
+        lineTo(12.0f, 9.0f)
+        lineTo(17.0f, 4.0f)
+        lineTo(20.0f, 7.0f)
+        lineTo(15.0f, 12.0f)
+        lineTo(20.0f, 17.0f)
+        lineTo(17.0f, 20.0f)
+        lineTo(12.0f, 15.0f)
+        lineTo(7.0f, 20.0f)
+        lineTo(4.0f, 17.0f)
+        lineTo(9.0f, 12.0f)
+        close()
+    }
+
+    /**
      * A compact plus, for adding one item to a set.
      *
      * The counterpart of [remove], and drawn to sit with it: the same 4..20 span on both axes
@@ -458,7 +487,7 @@ object ttActionIcons {
     }
 
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person)
+    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person)
 }
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */
@@ -475,8 +504,18 @@ object ttIconSize {
      */
     val tab: Dp = 22.dp
 
+    /**
+     * 12dp — an inline dismiss glyph, inside a pill's row.
+     *
+     * The pair to [tab]: that one is a control's whole payload, this one a detail inside
+     * another control, and at 22dp the cross would dominate the pill it dismisses. 12dp
+     * matches the caption text the pill's name is set in, which is what "small enough to
+     * not be the point" means in the rows that draw it.
+     */
+    val close: Dp = 12.dp
+
     /** Increasing, for the same reason as [ttSpacing.ramp]. */
-    val all: List<Dp> = listOf(tab)
+    val all: List<Dp> = listOf(close, tab)
 }
 
 /**
