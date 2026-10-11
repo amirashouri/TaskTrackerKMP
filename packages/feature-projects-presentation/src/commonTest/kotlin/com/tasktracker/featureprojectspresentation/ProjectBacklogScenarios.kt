@@ -24,7 +24,6 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
-import com.tasktracker.featureprojectsdomain.BacklogProjection
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -128,18 +127,6 @@ private fun backlogItems(count: Int = 9): List<WorkItem> {
         )
     }
 }
-
-/**
- * A backlog projection built from the given items, defaulting to the seeded project.
- *
- * Extracted so the two render paths in this file — the old single-list path and the new
- * sectioned path — can share the same fixture without inventing a second copy of the project.
- */
-private fun backlogProjection(items: List<WorkItem>): BacklogProjection =
-    BacklogProjection(
-        project = ViewPreviewData.seededProject,
-        items = items,
-    )
 
 /**
  * A sectioned backlog projection built from the given items.

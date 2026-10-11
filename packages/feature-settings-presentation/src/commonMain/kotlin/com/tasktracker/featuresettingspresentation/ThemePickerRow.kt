@@ -3,7 +3,6 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +27,6 @@ import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttLabel
@@ -39,8 +37,6 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_theme_label
 import org.jetbrains.compose.resources.stringResource
-import androidx.compose.foundation.shape.RoundedCornerShape
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSettingsIcons
 
 const val ThemeDropdownTag = "settings.themeDropdown"

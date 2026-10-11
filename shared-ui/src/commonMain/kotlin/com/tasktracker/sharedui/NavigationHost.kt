@@ -6,7 +6,6 @@ package com.tasktracker.sharedui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.MutableTransitionState
@@ -60,14 +58,9 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassSurface
-import com.tasktracker.designsystem.ttIcon
-import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttOnAccent
-import com.tasktracker.designsystem.ttRadius
-import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText

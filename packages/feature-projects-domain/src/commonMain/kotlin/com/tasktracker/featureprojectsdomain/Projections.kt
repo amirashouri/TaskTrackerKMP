@@ -6,7 +6,6 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemGrouping
 import com.tasktracker.domain.WorkItemStatus
-import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.onDay

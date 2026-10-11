@@ -6,7 +6,6 @@ import com.tasktracker.core.parseUserID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
-import com.tasktracker.featureauthdomain.AuthTokens
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.userdefaults.DefaultsKey

@@ -8,7 +8,6 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.tasktracker.core.randomProjectID
-import com.tasktracker.domain.SprintStatus
 import com.tasktracker.designsystem.ThemeScheme
 import kotlin.time.Instant
 import com.tasktracker.designsystem.ttTheme

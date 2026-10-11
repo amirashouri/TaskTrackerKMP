@@ -1,6 +1,5 @@
 package com.tasktracker.compositionroot
 
-import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.database.OutboxQueue
 import com.tasktracker.database.SessionCache
 import com.tasktracker.database.SyncMetadataStore
@@ -13,11 +12,9 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
-import com.tasktracker.keychain.InMemoryKeychain
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.routing.Router
 import com.tasktracker.sync.SyncCoordinator
-import com.tasktracker.userdefaults.InMemoryPreferences
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse

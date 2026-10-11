@@ -1,6 +1,5 @@
 package com.tasktracker.network
 
-import com.tasktracker.core.AppError
 import com.tasktracker.core.TTLogger
 import com.tasktracker.core.logMessage
 import kotlinx.coroutines.CancellationException

@@ -1,6 +1,5 @@
 package com.tasktracker.designsystem
 
-import androidx.compose.ui.graphics.Color
 import kotlin.test.Test
 import kotlin.test.assertTrue
 

@@ -2,7 +2,6 @@ package com.tasktracker.featureprojectspresentation
 
 import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**

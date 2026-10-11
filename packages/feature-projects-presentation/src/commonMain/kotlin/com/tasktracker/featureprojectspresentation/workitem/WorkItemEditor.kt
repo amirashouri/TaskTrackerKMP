@@ -24,7 +24,6 @@ import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
-import com.tasktracker.designsystem.ttBannerTone
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttCanvas
@@ -622,7 +621,7 @@ private fun WorkItemEditorForm(
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md, Alignment.End),
         ) {
             if (!isFiledAway) {
                 ttGlassButton(

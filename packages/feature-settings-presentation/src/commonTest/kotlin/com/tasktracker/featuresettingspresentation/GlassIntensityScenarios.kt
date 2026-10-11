@@ -1,6 +1,5 @@
 package com.tasktracker.featuresettingspresentation
 
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -13,15 +12,12 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttTheme
-import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import org.jetbrains.compose.resources.getString
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_glass_label
 import com.tasktracker.resources.settings_glass_reduced
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 

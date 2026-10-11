@@ -26,7 +26,6 @@ import platform.CoreFoundation.CFDictionarySetValue
 import platform.CoreFoundation.CFRelease
 import platform.CoreFoundation.CFStringCreateWithCString
 import platform.CoreFoundation.CFStringRef
-import platform.CoreFoundation.CFTypeRef
 import platform.CoreFoundation.kCFBooleanTrue
 import platform.CoreFoundation.kCFStringEncodingUTF8
 import platform.CoreFoundation.kCFTypeDictionaryKeyCallBacks

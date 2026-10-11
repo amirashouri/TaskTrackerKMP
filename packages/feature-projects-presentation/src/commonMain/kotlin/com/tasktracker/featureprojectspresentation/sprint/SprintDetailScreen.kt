@@ -19,22 +19,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.SprintStatus
-import kotlin.time.Instant
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
-import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttError
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ConfirmPopup
-import com.tasktracker.designsystem.TTConfirmPopupTag
-import com.tasktracker.designsystem.TTConfirmPopupCancelTag
-import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ttDateRange
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
@@ -46,7 +39,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.sprintSummary
-import kotlin.time.Duration.Companion.days
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
 import com.tasktracker.resources.sprint_add_task
@@ -65,7 +57,6 @@ import com.tasktracker.resources.sprint_owner_only
 import com.tasktracker.resources.sprint_remove
 import com.tasktracker.resources.sprint_remove_confirm
 import com.tasktracker.resources.sprint_remove_confirm_body
-import com.tasktracker.resources.sprint_reopen
 import com.tasktracker.resources.sprint_view_summary
 import org.jetbrains.compose.resources.stringResource
 

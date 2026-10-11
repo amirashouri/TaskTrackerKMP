@@ -1,6 +1,5 @@
 package com.tasktracker.compositionroot
 
-import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthdomain.identityOrNull
 import com.tasktracker.featureauthdomain.isSignedIn

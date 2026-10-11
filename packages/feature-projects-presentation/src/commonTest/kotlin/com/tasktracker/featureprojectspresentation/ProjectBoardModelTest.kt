@@ -2,7 +2,6 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
-import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange

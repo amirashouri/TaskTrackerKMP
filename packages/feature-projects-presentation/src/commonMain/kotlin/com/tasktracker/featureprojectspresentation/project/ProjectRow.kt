@@ -29,7 +29,6 @@ import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
-import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText

@@ -4,9 +4,7 @@ import com.tasktracker.core.AppError
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlinx.coroutines.test.runTest
 

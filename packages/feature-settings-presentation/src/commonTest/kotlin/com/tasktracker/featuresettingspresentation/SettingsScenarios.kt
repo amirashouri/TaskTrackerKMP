@@ -36,7 +36,6 @@ import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
-import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
 import com.tasktracker.resources.settings_user_details_section
 import kotlin.math.abs

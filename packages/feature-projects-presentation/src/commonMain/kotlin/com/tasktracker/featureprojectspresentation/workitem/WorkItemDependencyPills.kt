@@ -134,9 +134,20 @@ private fun DependencyPill(
     }
 }
 
-@Preview
+@Preview(name = "Dependency pills, dark", showBackground = true, widthDp = 360)
 @Composable
-private fun WorkItemDependencyPillsPreview() = ProjectsPreview(ThemeScheme.Dark) {
+internal fun WorkItemDependencyPillsPreview() = ProjectsPreview(ThemeScheme.Dark) {
+    WorkItemDependencyPills(
+        blockers = ViewPreviewData.workItems.take(3),
+        onOpenBlocker = {},
+        onRemoveBlocker = {},
+        onAddClick = {},
+    )
+}
+
+@Preview(name = "Dependency pills, light", showBackground = true, widthDp = 360)
+@Composable
+internal fun WorkItemDependencyPillsLightPreview() = ProjectsPreview(ThemeScheme.Light) {
     WorkItemDependencyPills(
         blockers = ViewPreviewData.workItems.take(3),
         onOpenBlocker = {},

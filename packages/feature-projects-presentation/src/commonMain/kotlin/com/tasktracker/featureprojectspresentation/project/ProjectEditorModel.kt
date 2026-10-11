@@ -8,7 +8,6 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Project
 import com.tasktracker.featureprojectsdomain.CreateProject
-import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.UpdateProject
 

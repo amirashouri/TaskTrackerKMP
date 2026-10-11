@@ -12,7 +12,6 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
-import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SaveWorkItem
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome

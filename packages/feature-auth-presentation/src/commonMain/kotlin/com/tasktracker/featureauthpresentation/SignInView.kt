@@ -1,7 +1,6 @@
 package com.tasktracker.featureauthpresentation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,7 +37,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.AppMark
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttCanvas

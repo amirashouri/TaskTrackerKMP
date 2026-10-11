@@ -17,7 +17,6 @@ import platform.UIKit.resolvedColorWithTraitCollection
 import platform.UIKit.secondarySystemBackgroundColor
 import platform.UIKit.separatorColor
 import platform.UIKit.systemBackgroundColor
-import platform.UIKit.systemRedColor
 
 /**
  * iOS is the original's home platform, so these are the same lookups `Palette.swift`

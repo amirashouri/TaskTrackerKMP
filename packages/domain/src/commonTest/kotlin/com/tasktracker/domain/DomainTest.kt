@@ -2,10 +2,8 @@ package com.tasktracker.domain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.JSONCoding
-import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
-import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.graphemeClusterCount
 import com.tasktracker.core.parseStatusChangeID

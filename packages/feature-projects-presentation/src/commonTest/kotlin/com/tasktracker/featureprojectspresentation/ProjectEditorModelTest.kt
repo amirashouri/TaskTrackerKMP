@@ -2,8 +2,6 @@ package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
-import com.tasktracker.core.UserID
-import com.tasktracker.featureprojectsdomain.ProjectChange
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test

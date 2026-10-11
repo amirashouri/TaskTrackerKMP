@@ -4,7 +4,6 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItemStatus
-import com.tasktracker.domain.Sprint
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest

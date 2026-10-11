@@ -1,6 +1,5 @@
 package com.tasktracker.featureprojectsdata
 
-import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseProjectID

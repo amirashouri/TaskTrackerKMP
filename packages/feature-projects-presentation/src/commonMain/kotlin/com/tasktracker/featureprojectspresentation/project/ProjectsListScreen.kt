@@ -22,14 +22,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBannerTone
-import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -41,7 +39,6 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
-import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.core.ProjectID
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
@@ -49,7 +46,6 @@ import com.tasktracker.resources.common_delete
 import com.tasktracker.resources.project_archived_notice_counted
 import com.tasktracker.resources.project_deleted_notice
 import com.tasktracker.resources.project_already_archived
-import com.tasktracker.resources.project_archived_notice
 import com.tasktracker.resources.project_new
 import com.tasktracker.resources.project_remove_archive
 import com.tasktracker.resources.project_remove_body_clear

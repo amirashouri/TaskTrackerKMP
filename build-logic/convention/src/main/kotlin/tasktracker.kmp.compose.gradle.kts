@@ -41,6 +41,30 @@ dependencies {
     // all four targets.
     add("commonMainImplementation", libs.compose.uiToolingPreview)
 
+    // The preview *renderer* that the annotation above is only half of. Without it every
+    // preview in the build fails identically in Android Studio's render thread:
+    //
+    //   ClassNotFoundException: androidx.compose.ui.tooling.ComposeViewAdapter
+    //     at android.view.LayoutInflater.createView -> Class.forName
+    //     at com.android.layoutlib.bridge.impl.RenderSessionImpl.inflate
+    //
+    // layoutlib inflates `ComposeViewAdapter` by name, and that class lives in
+    // `androidx.compose.ui:ui-tooling` — `ui-tooling-preview` above carries the annotation
+    // and nothing that renders. The catalog's `org.jetbrains.compose.ui:ui-tooling` android
+    // variant resolves through to the androidx artifact (verified in its .module metadata).
+    //
+    // `androidMainImplementation` deliberately: the renderer is Android-only (layoutlib is
+    // the renderer), so putting it in `commonMain` would fail the iOS compilations, which
+    // have neither the class nor a use for it. Transitive cost is `material3` and
+    // `activity-compose` on the androidMain classpath — inherent to `ComposeViewAdapter`,
+    // which hosts previews in an Activity under a Material theme, and present at runtime
+    // only: the no-Material3 rule is about what the design system *uses*, not what the
+    // preview harness needs on the classpath.
+    add("androidMainImplementation", libs.compose.uiTooling)
+    configurations.findByName("androidRuntimeClasspath")?.let {
+        add("androidRuntimeClasspath", libs.compose.uiTooling)
+    }
+
     // The Compose resources *runtime*, with no `compose.resources` configuration.
     //
     // These are two different things and the difference is the whole point. Configuring the
@@ -169,10 +193,6 @@ val copyComposeResourcesIntoAndroidHostTestAssets by tasks.registering(Copy::cla
     description = "Copies the shared Compose resources into the Android host test's merged " +
         "assets, which the Compose Multiplatform plugin leaves unwired on AGP 9."
 
-    // `preparedResources/commonMain/composeResources` is the root the plugin still produces
-    // for an Android target, and everything below it is already relative to
-    // `composeResources` — so the package name can simply be re-rooted on the way in, which
-    // is what makes the path Compose asks for resolve.
     val resourceOwner = project(":packages:design-system")
     from(
         resourceOwner.layout.buildDirectory.dir(
@@ -183,9 +203,6 @@ val copyComposeResourcesIntoAndroidHostTestAssets by tasks.registering(Copy::cla
     }
     into(layout.buildDirectory.dir("intermediates/assets/androidHostTest/mergeAndroidHostTestAssets"))
 
-    // A plain build-directory path carries no task dependency, so on a clean build this would
-    // copy whatever happened to be there — nothing — and the tests would fail exactly as they
-    // did before, with no indication that a clean build was the cause.
     dependsOn(":packages:design-system:prepareComposeResourcesTaskForCommonMain")
 }
 
@@ -207,4 +224,30 @@ tasks.matching { it.name == "packageAndroidHostTestForUnitTest" }.configureEach 
 
 tasks.matching { it.name == "testAndroidHostTest" }.configureEach {
     dependsOn(copyComposeResourcesIntoAndroidHostTestAssets)
+}
+
+// Automatically wire shared Compose resources into any variant asset merge task (e.g. mergeDebugAssets)
+// so Android Studio Previews can locate strings.commonMain.cvr and other compose resources.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") && it.name != "mergeAndroidHostTestAssets" }.configureEach {
+    val mergeTask = this
+    val variant = name.removePrefix("merge").removeSuffix("Assets")
+    val copyTaskName = "copyComposeResourcesInto${variant}Assets"
+    
+    val copyTask = if (project.tasks.names.contains(copyTaskName)) {
+        project.tasks.named(copyTaskName, Copy::class).get()
+    } else {
+        project.tasks.register<Copy>(copyTaskName) {
+            val resourceOwner = project(":packages:design-system")
+            from(
+                resourceOwner.layout.buildDirectory.dir(
+                    "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources",
+                ),
+            ) {
+                into("composeResources/com.tasktracker.resources")
+            }
+            into(layout.buildDirectory.dir("intermediates/assets/${variant.lowercase()}/$name"))
+            dependsOn(":packages:design-system:prepareComposeResourcesTaskForCommonMain")
+        }.get()
+    }
+    mergeTask.finalizedBy(copyTask)
 }

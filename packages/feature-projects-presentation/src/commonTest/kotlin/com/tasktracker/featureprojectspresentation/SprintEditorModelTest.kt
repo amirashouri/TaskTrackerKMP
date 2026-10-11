@@ -5,11 +5,9 @@ import com.tasktracker.core.TestDateProvider
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.FixedOffsetTimeZone
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.UtcOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

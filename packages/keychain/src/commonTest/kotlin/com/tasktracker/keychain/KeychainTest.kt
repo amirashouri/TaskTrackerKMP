@@ -1,14 +1,11 @@
 package com.tasktracker.keychain
 
-import com.tasktracker.core.WorkItemID
-import com.tasktracker.core.randomProjectID
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 

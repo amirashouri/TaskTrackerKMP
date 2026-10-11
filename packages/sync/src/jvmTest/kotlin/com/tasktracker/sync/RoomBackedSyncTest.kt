@@ -4,7 +4,6 @@ import com.tasktracker.database.NewOutboxEntry
 import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.OutboxQueue
-import com.tasktracker.database.OutboxStatus
 import com.tasktracker.database.RoomOutboxQueue
 import com.tasktracker.database.RoomSyncMetadataStore
 import com.tasktracker.database.TaskTrackerDatabase

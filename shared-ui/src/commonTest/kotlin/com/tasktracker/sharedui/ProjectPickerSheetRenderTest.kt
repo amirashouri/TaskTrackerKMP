@@ -14,7 +14,6 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runComposeUiTest
-import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import com.tasktracker.core.ProjectID
@@ -25,7 +24,6 @@ import com.tasktracker.featureprojectspresentation.PickableProject
 import com.tasktracker.featureprojectspresentation.ProjectPickerSheet
 import com.tasktracker.featureprojectspresentation.ProjectPickerSheetTag
 import kotlin.math.abs
-import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
