@@ -233,14 +233,6 @@ class KtorHttpClient(
     }
 
     /**
-     * The absolute URL for [request].
-     *
-     * Built here rather than left to `takeFrom(baseUrl)` + `appendPathSegments` alone,
-     * because a base URL with a path of its own (`https://host/api`) has to keep it. Each
-     * path segment is encoded separately, so a segment containing a literal `/` is a bug
-     * in the endpoint rather than something that silently becomes a different route.
-     */
-    /**
      * The body content type: the caller's, or JSON.
      *
      * A caller's value is parsed rather than passed through, and a malformed one is
@@ -260,6 +252,14 @@ class KtorHttpClient(
         }
     }
 
+    /**
+     * The absolute URL for [request].
+     *
+     * Built here rather than left to `takeFrom(baseUrl)` + `appendPathSegments` alone,
+     * because a base URL with a path of its own (`https://host/api`) has to keep it. Each
+     * path segment is encoded separately, so a segment containing a literal `/` is a bug
+     * in the endpoint rather than something that silently becomes a different route.
+     */
     private fun urlString(request: HttpRequest): String {
         val builder = URLBuilder(baseUrl)
         val segments = request.path.split('/').filter { it.isNotEmpty() }
