@@ -32,14 +32,19 @@ from supersampling, which is both faster at 1024px and exact at the round caps.
 
 ## The palette is derived from the accent token, not chosen
 
-`TaskTrackerAccent.Light` is `#34537A`. The gradient's two stops are symmetric about
-it: `#40659A` and `#22354F` average to `#314C74`, which is within 3/255 of the accent on
-every channel. So the icon is the brand colour, lifted and deepened, rather than a
-second colour that happens to sit near it.
+`TaskTrackerAccent.Light` is `#34537A`, and it is the ramp's *middle* stop verbatim,
+which is also where the checkmark sits: the mark runs bottom-left to top-right and
+the ramp runs top-left to bottom-right along the other diagonal, so the mark samples
+the mid stop. The ends lift and deepen from it (`#4A72B4` / `#16223A`), giving the
+field the range the Liquid Glass surfaces have.
 
-White on those stops measures 5.92:1 at the lightest point of the ramp and 12.43:1 at
-the darkest, so the checkmark clears the 4.5:1 text bar everywhere it is drawn — see the
-`_contrast_against_white` check below, which fails the build rather than the launch.
+White on the raw stops measures 4.82:1 at the lightest, 7.88:1 at the accent, and
+15.86:1 at the deepest. The raw stops are the *floor*, not the gate: the mark is
+drawn on top of the sheen and the lanes too, and the worst pixel is where the long
+arm crosses the middle lane inside the sheen's reach. `_render` therefore returns
+the lowest white-on-composited-background contrast found anywhere the mark is
+solidly drawn, and `main` fails the run if that number is under 4.5:1 — the same
+text bar, measured where the mark actually is.
 """
 
 import math
@@ -52,21 +57,47 @@ import zlib
 
 CANVAS = 1024
 
-# Symmetric about TaskTrackerAccent.Light (#34537A); see the module docstring.
-GRADIENT_TOP = (0x40, 0x65, 0x9A)
-GRADIENT_BOTTOM = (0x22, 0x35, 0x4F)
+# The ramp is three stops, and the middle one is the accent itself rather than its
+# average: TaskTrackerAccent.Light (#34537A) sits at t=0.5, which is exactly where
+# the checkmark lives — the mark runs bottom-left to top-right, the ramp runs
+# top-left to bottom-right along the other diagonal, so every mark pixel samples the
+# mid stop. The lifted and deepened ends give the field the depth the Liquid Glass
+# surfaces have, which the old two-stop pair (#40659A/#22354F, both within a few
+# points of the accent) could not: they averaged to the brand colour but read as one
+# gloomy navy at launcher size.
+GRADIENT_TOP = (0x4A, 0x72, 0xB4)  # white 4.82:1
+GRADIENT_MID = (0x34, 0x53, 0x7A)  # TaskTrackerAccent.Light; white 7.88:1
+GRADIENT_BOTTOM = (0x16, 0x22, 0x3A)  # white 15.86:1
 
 # The dark-appearance variant. Apple's dark icons are a *darkened* rendering of the
 # same mark, not a second mark: the glyph stays white and the field drops, which is
 # also what Android 13's themed icons do with `ic_launcher_monochrome`.
-DARK_GRADIENT_TOP = (0x23, 0x2F, 0x3F)
-DARK_GRADIENT_BOTTOM = (0x12, 0x18, 0x20)
+DARK_GRADIENT_TOP = (0x1E, 0x2A, 0x3A)
+DARK_GRADIENT_MID = (0x14, 0x1C, 0x28)
+DARK_GRADIENT_BOTTOM = (0x0D, 0x13, 0x20)
+
+# The glass gloss: white, radial, falling linearly to zero at SHEEN_RADIUS. This is
+# the one Liquid Glass element the old flat field was missing. The centre is placed
+# *inside* the 33dp safe circle (its distance from the viewport centre is 30.1dp,
+# and the corner it points at is the corner a highlight belongs in) because a gloss
+# whose peak sits outside the circular mask renders as a crescent, not a light.
+#
+# 0.09 with lanes at 0.15 puts the composited worst case — the mark crossing the
+# middle lane inside the gloss's reach — at 4.75:1. Raising the gloss to 0.12 at the
+# original 0.18 lanes measured 4.29:1 and the run failed its own gate, which is what
+# the gate is for; these two numbers are a pair, and moving either re-measures both.
+SHEEN_CENTRE = (0.33, 0.28)  # fractions of CANVAS, from the top-left
+SHEEN_RADIUS = 0.55  # fraction of CANVAS
+SHEEN_ALPHA = 0.09
+SHEEN_ALPHA_DARK = 0.10
 
 ON_ICON = (255, 255, 255)
 
-# The board lanes behind the check. 18% rather than something stronger on purpose --
-# see `_assert_lanes_stay_behind_the_mark`.
-LANE_ALPHA = 0.18
+# The board lanes behind the check. 0.15 rather than the original 0.18: the sheen
+# shares these rows with the mark, and 0.18 + a 0.09 gloss measured 4.42:1 under the
+# crossing — a fail. 0.15 keeps the gloss at full strength and puts the composited
+# worst case at 4.75:1.
+LANE_ALPHA = 0.15
 
 # --- the composition --------------------------------------------------------------------------
 
@@ -214,12 +245,28 @@ def _stroke_mask(segments, half):
     return mask
 
 
-def _render(top, bottom, lane_mask, check_mask):
-    """Composite the gradient, the lanes and the check, one row at a time.
+def _ramp(t, top, mid, bottom):
+    """The three-stop field colour at anti-diagonal parameter t in [0, 1]."""
+    if t < 0.5:
+        f = t * 2.0
+        a, b = top, mid
+    else:
+        f = (t - 0.5) * 2.0
+        a, b = mid, bottom
+    return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
+
+
+def _render(top, mid, bottom, sheen_alpha, lane_mask, check_mask):
+    """Composite the ramp, the sheen, the lanes and the check, one row at a time.
 
     The lanes are looked up only on the rows that have any, which is 3 bands of 53px
     out of 1024. Without that check the lane lookup runs a million times to find zero
     about ninety-five percent of the time, which is most of this function's cost.
+
+    Returns `(rows, worst_contrast)`: the picture, and the lowest white-on-background
+    contrast found at any pixel the mark covers solidly. That number is the real
+    legibility gate — the mark is drawn on the sheen and the lanes too, so the raw
+    stops alone cannot answer "can the check be read".
     """
     rows = []
     lane_rows = [
@@ -227,31 +274,34 @@ def _render(top, bottom, lane_mask, check_mask):
     ]
 
     inv = 1.0 / (CANVAS - 1)
-    dr = bottom[0] - top[0]
-    dg = bottom[1] - top[1]
-    db = bottom[2] - top[2]
-    # The ramp runs along the anti-diagonal, matching AppMark's `.topLeading` ->
-    # `.bottomTrailing`: t is half of (u + v), not of one axis.
-    step_t = 0.5 * inv
+    sheen_cx = SHEEN_CENTRE[0] * CANVAS
+    sheen_cy = SHEEN_CENTRE[1] * CANVAS
+    sheen_r = SHEEN_RADIUS * CANVAS
+
+    worst = float("inf")
 
     for y in range(CANVAS):
-        t = 0.5 * y * inv
-        gr = top[0] + dr * t
-        gg = top[1] + dg * t
-        gb = top[2] + db * t
         row = bytearray(CANVAS * 3)
         off = y * CANVAS
         on_lane_row = lane_rows[y]
+        dy = y - sheen_cy
+        dy2 = dy * dy
         for x in range(CANVAS):
-            # The gradient is carried in gr/gg/gb and the composite runs on copies.
-            # Compositing into the gradient's own accumulator instead is the obvious
-            # version and it is wrong in a way that only shows up as a picture: the
-            # composites are additive, so a pixel the check painted white raises the
-            # accumulator to white and every pixel to its right inherits that. The mask
-            # is still consulted correctly at every pixel; the colour it produces is
-            # simply not reset. This is why the first lane and the check's leading edge
-            # look right and the right-hand half of those rows is solid white.
-            r, g, b = gr, gg, gb
+            # The ramp is recomputed from t rather than carried in an accumulator:
+            # with three stops the per-pixel step doubles at the mid stop, and an
+            # accumulator that has to notice the crossing is more code than this.
+            t = 0.5 * (x + y) * inv
+            r, g, b = _ramp(t, top, mid, bottom)
+            dx = x - sheen_cx
+            d = math.sqrt(dx * dx + dy2)
+            if d < sheen_r:
+                # Linear falloff, no smoothstep: at 12% peak alpha the knee of a
+                # smoothstep is a difference no launcher will ever show, and linear
+                # is one fewer magic curve when matching the VectorDrawable below.
+                a = sheen_alpha * (1.0 - d / sheen_r)
+                r += (ON_ICON[0] - r) * a
+                g += (ON_ICON[1] - g) * a
+                b += (ON_ICON[2] - b) * a
             if on_lane_row:
                 c = lane_mask[off + x]
                 if c:
@@ -261,6 +311,12 @@ def _render(top, bottom, lane_mask, check_mask):
                     b += (ON_ICON[2] - b) * a
             c = check_mask[off + x]
             if c:
+                # Measure before painting: once the mark is composited the pixel is
+                # white and the question has answered itself.
+                if c == 255:
+                    contrast = _contrast_against_white((int(r + 0.5), int(g + 0.5), int(b + 0.5)))
+                    if contrast < worst:
+                        worst = contrast
                 a = c / 255.0
                 r += (ON_ICON[0] - r) * a
                 g += (ON_ICON[1] - g) * a
@@ -269,11 +325,8 @@ def _render(top, bottom, lane_mask, check_mask):
             row[i] = int(r + 0.5)
             row[i + 1] = int(g + 0.5)
             row[i + 2] = int(b + 0.5)
-            gr += dr * step_t
-            gg += dg * step_t
-            gb += db * step_t
         rows.append(row)
-    return rows
+    return rows, worst
 
 
 def _write_png(path, rows):
@@ -320,29 +373,41 @@ def _contrast_against_white(rgb):
     return 1.05 / (_relative_luminance(rgb) + 0.05)
 
 
-def _assert_legible():
+def _assert_legible(worst_light, worst_dark):
     """Fail the run, not the launch, if the mark cannot be read on its own background.
 
-    The check is drawn on the gradient, so the worst case is the *lightest* stop, not
-    the darkest: a mark that clears 4.5:1 at `#22354F` can still fail at `#40659A`.
-    Both stops are checked so moving one without the other is caught.
+    The numbers that matter are the ones `_render` measured on the *composited*
+    field — ramp plus sheen plus lanes, where the mark actually is — and both
+    appearances are held to the same 4.5:1 bar. The raw stops are checked too, as a
+    floor: a stop that fails on its own would need the sheen's direction to rescue
+    it, and a palette that leans on the sheen is one tuning pass away from illegible.
     """
     for name, stop in (
         ("light ramp top", GRADIENT_TOP),
+        ("light ramp mid", GRADIENT_MID),
         ("light ramp bottom", GRADIENT_BOTTOM),
         ("dark ramp top", DARK_GRADIENT_TOP),
+        ("dark ramp mid", DARK_GRADIENT_MID),
         ("dark ramp bottom", DARK_GRADIENT_BOTTOM),
     ):
         ratio = _contrast_against_white(stop)
         if ratio < 4.5:
             sys.exit("FAIL: white mark is %.2f:1 on the %s, below 4.5:1" % (ratio, name))
         print("  contrast  white on %-16s %5.2f:1" % (name, ratio))
+    for name, worst in (("light", worst_light), ("dark", worst_dark)):
+        if worst < 4.5:
+            sys.exit(
+                "FAIL: composited field under the mark bottoms out at %.2f:1 on the "
+                "%s icon, below 4.5:1" % (worst, name)
+            )
+        print("  contrast  white on %-16s %5.2f:1  (composited, under the mark)"
+              % (name + " field", worst))
 
 
 def _assert_lanes_stay_behind_the_mark():
     """The lanes must not be able to read as a foreground element.
 
-    At 18% on a mid-tone ramp they are a texture, and that is deliberate: at the size a
+    At 15% on a mid-tone ramp they are a texture, and that is deliberate: at the size a
     launcher actually draws an icon, three separate bars in front of a checkmark would
     be the first thing to turn to mush. If this alpha is ever raised past roughly a
     quarter, the design has to be re-measured at 40px rather than trusted.
@@ -366,7 +431,8 @@ def _hex(rgb):
     return "#FF%02X%02X%02X" % rgb
 
 
-def _background_xml(top, bottom):
+def _background_xml(top, mid, bottom):
+    sheen_alpha_byte = int(SHEEN_ALPHA * 255.0 + 0.5)
     return """<?xml version="1.0" encoding="utf-8"?>
 <!-- Generated by tools/generate_app_icon.py. Do not edit by hand. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -384,12 +450,33 @@ def _background_xml(top, bottom):
                 android:endX="108"
                 android:endY="108">
                 <item android:offset="0" android:color="%s" />
+                <item android:offset="0.5" android:color="%s" />
                 <item android:offset="1" android:color="%s" />
             </gradient>
         </aapt:attr>
     </path>
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="%s"
+                android:centerY="%s"
+                android:gradientRadius="%s">
+                <item android:offset="0" android:color="#%02XFFFFFF" />
+                <item android:offset="1" android:color="#00FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>
-""" % (_hex(top), _hex(bottom))
+""" % (
+        _hex(top),
+        _hex(mid),
+        _hex(bottom),
+        _n(SHEEN_CENTRE[0] * ANDROID_VIEWPORT),
+        _n(SHEEN_CENTRE[1] * ANDROID_VIEWPORT),
+        _n(SHEEN_RADIUS * ANDROID_VIEWPORT),
+        sheen_alpha_byte,
+    )
 
 
 def _lane_paths(scale):
@@ -513,7 +600,6 @@ def _preview(rows, cols=62):
 
 
 def main():
-    _assert_legible()
     _assert_lanes_stay_behind_the_mark()
 
     print("composing")
@@ -525,23 +611,26 @@ def main():
     )
     drawable_dir = os.path.join(REPO, "androidApp", "src", "main", "res", "drawable")
 
-    for name, top, bottom in (
-        ("AppIcon.png", GRADIENT_TOP, GRADIENT_BOTTOM),
-        ("AppIcon-Dark.png", DARK_GRADIENT_TOP, DARK_GRADIENT_BOTTOM),
+    worst = {}
+    for name, top, mid, bottom, sheen in (
+        ("AppIcon.png", GRADIENT_TOP, GRADIENT_MID, GRADIENT_BOTTOM, SHEEN_ALPHA),
+        ("AppIcon-Dark.png", DARK_GRADIENT_TOP, DARK_GRADIENT_MID, DARK_GRADIENT_BOTTOM, SHEEN_ALPHA_DARK),
     ):
         path = os.path.join(icon_dir, name)
-        rows = _render(top, bottom, lane_mask, check_mask)
+        rows, worst[name] = _render(top, mid, bottom, sheen, lane_mask, check_mask)
         _write_png(path, rows)
         print("  wrote %s (%d x %d, no alpha)" % (os.path.relpath(path, REPO), CANVAS, CANVAS))
         if name == "AppIcon.png":
             _preview(rows)
+
+    _assert_legible(worst["AppIcon.png"], worst["AppIcon-Dark.png"])
 
     scale = android_scale()
     print()
     print("android scale %.5f dp/px; lane span %.1f dp of the 108dp viewport"
           % (scale, LANE_HALF_LENGTH * 2 * scale))
     for name, body in (
-        ("ic_launcher_background.xml", _background_xml(GRADIENT_TOP, GRADIENT_BOTTOM)),
+        ("ic_launcher_background.xml", _background_xml(GRADIENT_TOP, GRADIENT_MID, GRADIENT_BOTTOM)),
         ("ic_launcher_foreground.xml", _foreground_xml(scale)),
         ("ic_launcher_monochrome.xml", _monochrome_xml(scale)),
     ):

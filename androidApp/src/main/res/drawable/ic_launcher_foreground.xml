@@ -14,19 +14,19 @@
     <path
         android:pathData="M27.31,38.57 L80.69,38.57"
         android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.18"
+        android:strokeAlpha="0.15"
         android:strokeWidth="4.34"
         android:strokeLineCap="round" />
     <path
         android:pathData="M27.31,54 L80.69,54"
         android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.18"
+        android:strokeAlpha="0.15"
         android:strokeWidth="4.34"
         android:strokeLineCap="round" />
     <path
         android:pathData="M27.31,69.43 L80.69,69.43"
         android:strokeColor="#FFFFFFFF"
-        android:strokeAlpha="0.18"
+        android:strokeAlpha="0.15"
         android:strokeWidth="4.34"
         android:strokeLineCap="round" />
     <path
