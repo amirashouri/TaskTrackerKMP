@@ -96,9 +96,6 @@ class FakeProjectRepository : ProjectRepositoryPort {
     /** Written, so a test can assert which use case ran and with what. */
     val writes = mutableListOf<String>()
 
-    /** Queued invitations, as `(project, email)` pairs in call order. */
-    val invites = mutableListOf<Pair<ProjectID, String>>()
-
     /** Every `ProjectChange` that has gone out, whether from a write or a manual [emit]. */
     val emittedChanges = mutableListOf<ProjectChange>()
 
@@ -402,14 +399,6 @@ class FakeProjectRepository : ProjectRepositoryPort {
             storedItems.removeAll { it.projectID == id }
             writes += "deleteProject"
         }
-    }
-
-    override suspend fun invite(id: ProjectID, email: String, now: Instant) {
-        // No [writing] wrapper: an invitation publishes no [ProjectChange], because the
-        // project row does not change — the same honest absence as the real repository.
-        failIfSet()
-        invites += id to email
-        writes += "invite"
     }
 
     override suspend fun createWorkItem(

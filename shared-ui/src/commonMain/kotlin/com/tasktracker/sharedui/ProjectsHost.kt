@@ -165,9 +165,6 @@ fun ProjectsHost(
         }
 
         projectEditorModel?.let { editor ->
-            val sessionUserID by currentUserID.collectAsState()
-            val sessionUserName by currentUserName.collectAsState()
-            val memberNames = rememberMemberNames(editor.memberIDs, environment.teamPort)
             NewProjectSheet(
                 name = editor.name,
                 keyPrefix = editor.keyPrefix,
@@ -179,15 +176,9 @@ fun ProjectsHost(
                 onNameChanged = editor::onNameChanged,
                 onKeyPrefixChanged = editor::onKeyPrefixChanged,
                 onDetailsChanged = editor::onDetailsChanged,
-                currentUserID = sessionUserID,
-                currentUserName = sessionUserName,
-                memberNames = memberNames,
-                inviteEmail = editor.inviteEmail,
-                onInviteEmailChanged = editor::onInviteEmailChanged,
-                onSendInvite = {
-                    scope.launch { editor.sendInvite() }
+                searchMembers = { query ->
+                    environment.teamPort?.searchMembers(query) ?: emptyList()
                 },
-                inviteQueuedEmail = editor.inviteQueuedEmail,
                 errorMessage = editor.errorMessage,
                 onSave = {
                     scope.launch {
@@ -206,31 +197,6 @@ fun ProjectsHost(
         }
 
     }
-}
-
-/**
- * Display names for the editor's selected members, resolved in one batch.
- *
- * Empty when there is no [com.tasktracker.featureteamsdomain.TeamPort] — the sheet then
- * draws raw ids rather than inventing labels — and unknown ids are omitted by
- * `TeamPort.users` itself.
- */
-@Composable
-private fun rememberMemberNames(
-    ids: List<UserID>,
-    teamPort: TeamPort?,
-): Map<UserID, String> {
-    var names by remember(ids, teamPort) { mutableStateOf<Map<UserID, String>>(emptyMap()) }
-    LaunchedEffect(ids, teamPort) {
-        names = if (teamPort == null || ids.isEmpty()) {
-            emptyMap()
-        } else {
-            runCatching { teamPort.users(ids) }
-                .getOrDefault(emptyList())
-                .associate { it.id to it.preferredGreeting }
-        }
-    }
-    return names
 }
 
 /**

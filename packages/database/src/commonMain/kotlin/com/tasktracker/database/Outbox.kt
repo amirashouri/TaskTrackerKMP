@@ -6,16 +6,6 @@ import kotlin.time.Instant
 enum class OutboxOperation(val wireValue: String) {
     Upsert("upsert"),
     Delete("delete"),
-
-    /**
-     * Ask the server to email an invitation to join a project.
-     *
-     * The only operation that mutates no local entity: the invitee is not a member until
-     * they accept and their id lands in `Project.memberIDs`, so the queue row *is* the
-     * whole change. It still names an [OutboxEntity.Project] because the invitation is
-     * scoped to one project and the server needs to know which.
-     */
-    Invite("invite"),
     ;
 
     companion object {

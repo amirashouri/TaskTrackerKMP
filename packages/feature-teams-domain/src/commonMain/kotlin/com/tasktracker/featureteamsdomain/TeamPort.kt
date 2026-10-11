@@ -17,4 +17,15 @@ interface TeamPort {
 
     /** Every profile whose id is in [ids], in the requested order, with unknown ids omitted. */
     suspend fun users(ids: List<UserID>): List<User>
+
+    /**
+     * Members matching [query], for the member picker's search box.
+     *
+     * A blank query returns everyone known; otherwise the match is a case-insensitive
+     * substring on the display name or the email. This is the seam the backend member API
+     * replaces: until it lands, [RoomTeamRepository] answers from a fake directory (see
+     * `FakeMemberDirectory`), so the picker filters a real list through a real method —
+     * only the list's source is provisional.
+     */
+    suspend fun searchMembers(query: String): List<User>
 }

@@ -379,58 +379,6 @@ class RoomProjectRepositoryTest {
         assertTrue(seen.all { it.projectID == project.id })
     }
 
-    // MARK: Inviting
-
-    @Test
-    fun anInvitationQueuesARowThatCarriesTheProjectAndTheAddress() = runTest {
-        val harness = Harness()
-        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
-        val userID = harness.session.signIn()
-
-        harness.repository.invite(project.id, "ada@example.com", Moments.later)
-
-        val queued = harness.queued()
-        assertEquals(2, queued.size, "the create upsert, then the invite")
-        val invite = queued.last()
-        assertEquals("project", invite.entityKind)
-        assertEquals(project.id.stringValue, invite.entityID)
-        assertEquals("invite", invite.operation)
-        assertEquals(Moments.later, invite.createdAt)
-        assertEquals(userID, invite.userID, "an invite is attributed like any other queued change")
-        val payload = JSONCoding.json.decodeFromString(
-            ProjectInvite.serializer(),
-            invite.payload.decodeToString(),
-        )
-        assertEquals(project.id, payload.projectID)
-        assertEquals("ada@example.com", payload.email)
-    }
-
-    @Test
-    fun anInvitationChangesNoEntityRowAndAnnouncesNothing() = runTest {
-        val harness = Harness()
-        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
-        val seen = mutableListOf<ProjectChange>()
-        collecting(harness.bus.changes(), seen)
-
-        harness.repository.invite(project.id, "ada@example.com", Moments.later)
-
-        // The project is byte-for-byte what it was: an invitation is a request to the
-        // server, not a local membership change, and a repository that bumped `updatedAt`
-        // here would reorder every project list for an email that may never be accepted.
-        assertEquals(project, harness.repository.project(project.id))
-        assertTrue(seen.isEmpty(), "nothing on screen depends on an invite, so nothing is announced")
-    }
-
-    @Test
-    fun invitingAMissingProjectIsAStorageFailure() = runTest {
-        val harness = Harness()
-
-        assertFailsWith<AppError.Storage> {
-            harness.repository.invite(randomProjectID(), "ada@example.com", Moments.start)
-        }
-        assertEquals(0, harness.queueDepth())
-    }
-
     // MARK: Creating work items
 
     @Test
