@@ -106,9 +106,9 @@ class KoinResolver private constructor() : Resolver {
         if (!isStarted || klass !in scopes) return null
         return try {
             resolve(klass)
-        } catch (e: DiException.NotStarted) {
+        } catch (_: DiException.NotStarted) {
             null
-        } catch (e: DiException.Unregistered) {
+        } catch (_: DiException.Unregistered) {
             null
         }
     }
