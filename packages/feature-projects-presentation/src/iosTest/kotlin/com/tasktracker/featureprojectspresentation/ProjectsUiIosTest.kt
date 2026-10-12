@@ -146,6 +146,24 @@ class ProjectsUiIosTest {
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
 
     @Test
+    fun aCardWithABlockerNamesIt() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithABlockerNamesIt)
+
+    @Test
+    fun twoBlockersAreBothNamed() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.twoBlockersAreBothNamed)
+
+    @Test
+    fun beyondTwoNamesTwoAndCountsTheRest() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.beyondTwoNamesTwoAndCountsTheRest)
+
+    @Test
+    fun aCardWithNoBlockersDrawsNoDependencyRow() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithNoBlockersDrawsNoDependencyRow)
+
+    @Test
+    fun aBlockerOutsideTheVisibleSetStillNamesItsKey() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.aBlockerOutsideTheVisibleSetStillNamesItsKey)
+
+    @Test
     fun showsTheAssigneeWhenThereIsOne() = runComposeUiTest(block = WorkItemCardScenarios.showsTheAssigneeWhenThereIsOne)
 
     @Test

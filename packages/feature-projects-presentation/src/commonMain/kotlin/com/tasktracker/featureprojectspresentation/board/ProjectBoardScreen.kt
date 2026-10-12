@@ -39,6 +39,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.UserID
+import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.Sprint
@@ -134,6 +135,15 @@ fun ProjectBoardScreen(
      * simply not drawn — the app will not invent a label for a person it cannot name.
      */
     assigneeNames: Map<UserID, String> = emptyMap(),
+    /**
+     * Each card's blockers, resolved to keys, keyed by work-item id.
+     *
+     * A map rather than a per-item callback for the same reason [assigneeNames] is one: the
+     * screen's job is to place what the model resolved, and an id with no entry here draws no
+     * dependency row at all. Missing entries are the normal case, not an error — a card with
+     * no blockers, or a host that has not wired dependencies yet.
+     */
+    blockedByKeys: Map<WorkItemID, List<WorkItemKey>> = emptyMap(),
     /**
      * Whether lane-add is allowed. False while a sprint is InProgress: the column "+" hides.
      * True for Kanban (no sprint) and scheduled sprints.
@@ -260,6 +270,10 @@ fun ProjectBoardScreen(
                         assigneeName = { item ->
                             item.assigneeID?.let { assigneeNames[it] }
                         },
+                        // Resolved by the model against the project's whole item list rather
+                        // than against `projection.items`, because a blocker is frequently not
+                        // on this board — see ProjectBoardModel.blockedByKeys.
+                        blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
                         cardTrailing = { item ->
                             BoardCardActions(
                                 item = item,

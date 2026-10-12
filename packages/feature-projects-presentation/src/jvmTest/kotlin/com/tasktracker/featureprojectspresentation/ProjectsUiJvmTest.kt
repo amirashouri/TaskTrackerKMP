@@ -152,6 +152,24 @@ class ProjectsUiJvmTest {
     fun showsTheDueDateWhenThereIsOne() = runComposeUiTest(block = WorkItemCardScenarios.showsTheDueDateWhenThereIsOne)
 
     @Test
+    fun aCardWithABlockerNamesIt() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithABlockerNamesIt)
+
+    @Test
+    fun twoBlockersAreBothNamed() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.twoBlockersAreBothNamed)
+
+    @Test
+    fun beyondTwoNamesTwoAndCountsTheRest() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.beyondTwoNamesTwoAndCountsTheRest)
+
+    @Test
+    fun aCardWithNoBlockersDrawsNoDependencyRow() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithNoBlockersDrawsNoDependencyRow)
+
+    @Test
+    fun aBlockerOutsideTheVisibleSetStillNamesItsKey() =
+        runComposeUiTest(block = WorkItemCardDependenciesScenarios.aBlockerOutsideTheVisibleSetStillNamesItsKey)
+
+    @Test
     fun omitsTheDueDateWhenThereIsNone() = runComposeUiTest(block = WorkItemCardScenarios.omitsTheDueDateWhenThereIsNone)
 
     @Test

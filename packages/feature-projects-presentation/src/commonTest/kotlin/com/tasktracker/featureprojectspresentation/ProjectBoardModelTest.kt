@@ -309,6 +309,61 @@ class ProjectBoardModelTest {
     }
 
     @Test
+    fun `a card resolves its blockers even when a blocker is not on the board`() = runTest {
+        // The distinction this pins is [ProjectBoardModel.blockedByKeys]'s: the join runs over
+        // the project's *whole* item list, not over the board's filtered cards. A blocker in
+        // another sprint is the common case, not the edge case - teams split sprints and leave
+        // dependencies across the split.
+        //
+        // Were the join made against `projection.items` instead, the blocker below would
+        // silently vanish from the card and the row would under-report. Nothing else about
+        // that failure looks wrong: the card still draws, still names the blocker it can see,
+        // and still counts. So the assertion has to be about the *invisible* blocker's key.
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val now = TestDateProvider().now()
+        val sprint = repository.createSprint(
+            projectID = project.id,
+            name = "Sprint 1",
+            goalStoryPoints = 10,
+            startDate = now - 1.days,
+            endDate = now + 1.days,
+            ownerID = null,
+            now = now,
+        )
+        // Deliberately in no sprint, so the active-sprint filter excludes it from the board.
+        val offBoard = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, sprintID = null)
+        val onBoard = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo, sprintID = sprint.id)
+        val item = testWorkItem(
+            project.id,
+            key = "AP-3",
+            status = WorkItemStatus.Todo,
+            sprintID = sprint.id,
+            blockedByIDs = listOf(offBoard.id, onBoard.id),
+        )
+        repository.seed(offBoard)
+        repository.seed(onBoard)
+        repository.seed(item)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(now))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        // The blocker really is off the board, so this is not a vacuous assertion.
+        assertEquals(
+            listOf("AP-2", "AP-3"),
+            model.projection.items.map { it.key.rawValue },
+            "AP-1 is in no sprint, so the active-sprint filter must have excluded it",
+        )
+        assertEquals(
+            listOf("AP-1", "AP-2"),
+            model.blockedByKeys[item.id]?.map { it.rawValue },
+            "both blockers resolve, including the one the board is not showing",
+        )
+    }
+
+    @Test
     fun `adds are locked while a sprint is in progress`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()

@@ -486,9 +486,83 @@ object ttActionIcons {
         close()
     }
 
+    /**
+     * Two chain links joined by a bar: "this task waits on another".
+     *
+     * ## Why rings and a bar, and not a rotated pair of links
+     *
+     * The recognisable link glyph is two rounded rectangles at 45 degrees, and this grid has
+     * no way to say "at 45 degrees" — [PathBuilder] offers lines, quads and arcs and nothing
+     * that rotates a shape. So the same reading is built from what *is* expressible: two
+     * capsule outlines whose height equals their width are stadiums, which is already the
+     * silhouette of one link, and a bar between them is the chain.
+     *
+     * ## Why the three shapes touch but never overlap — measured, not assumed
+     *
+     * Every glyph in this file is filled with `PathFillType.EvenOdd`, which makes a shape's
+     * crossings a parity test rather than a union — that is how [outlinedRoundRect] cuts its
+     * hole. A bar drawn *over* a ring's stroke therefore cancels it: two crossings inside one
+     * ring leave it even, and the stroke vanishes exactly where the bar crosses.
+     *
+     * That is not a theory. Widening the bar by one unit at each end so it overlapped both
+     * rings punched **two new holes** into the centre line at x=10..11 and x=13..14, erasing
+     * each ring's inner stroke, while `TabIconsGeometryTest` stayed green throughout — its
+     * viewport, node and grid-fill assertions cannot see a parity cancellation. The rendered
+     * centre line went from `##....######....##` to `##....#.##.#....##`. That measurement is
+     * `LinkIconPixelTest`'s, and it is the only reason this glyph's placement rule is stated
+     * this firmly.
+     *
+     * So the three shapes are placed flush instead — the bar starts at the left ring's right
+     * edge ([linkLeft] + [linkSpan]) and ends at the right ring's left edge — which leaves no
+     * parity disturbed and no dependence on how a rasteriser resolves a self-intersection.
+     */
+    val link: ImageVector = icon("Link") {
+        outlinedRoundRect(
+            left = linkLeft,
+            top = linkTop,
+            right = linkLeft + linkSpan,
+            bottom = linkTop + linkSpan,
+            radius = linkSpan / 2f,
+            stroke = linkStroke,
+        )
+        outlinedRoundRect(
+            left = GRID - linkLeft - linkSpan,
+            top = linkTop,
+            right = GRID - linkLeft,
+            bottom = linkTop + linkSpan,
+            radius = linkSpan / 2f,
+            stroke = linkStroke,
+        )
+        solidRoundRect(
+            left = linkLeft + linkSpan,
+            top = linkBarTop,
+            right = GRID - linkLeft - linkSpan,
+            bottom = linkBarTop + linkBarHeight,
+            radius = linkBarHeight / 2f,
+        )
+    }
+
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person)
+    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person, link)
 }
+
+/**
+ * [ttActionIcons.link]'s measurements, on the file's 24-unit grid.
+ *
+ * [linkLeft] and [linkTop] are the 3-unit margin every glyph here respects, so the chain uses
+ * the full width available and sits centred vertically: [linkSpan] is the height as well as
+ * the width of each ring, which is what makes it a capsule, and [linkTop] plus half
+ * [linkSpan] lands on the grid's midpoint (12).
+ */
+private const val linkLeft = 3.0f
+private const val linkTop = 8.0f
+private const val linkSpan = 8.0f
+
+/** The chain's stroke, half the [linkSpan] ring's inner hole radius leaves readable at 22dp. */
+private const val linkStroke = 2.0f
+
+private const val linkBarTop = 10.5f
+private const val linkBarHeight = 3.0f
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */
 @Immutable

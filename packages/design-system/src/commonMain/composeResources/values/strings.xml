@@ -253,6 +253,10 @@
     <string name="work_item_depends_search_placeholder">Search tasks</string>
     <string name="work_item_depends_picker_title">Choose blockers</string>
     <string name="work_item_depends_remove">Remove %1$s</string>
+    <!-- The card's mini dependency row: the "+2" that stands in for blockers it has no room to name. -->
+    <string name="work_item_depends_more">+%1$d</string>
+    <!-- Spoken in place of the visible keys, since a card's row is too terse to read as prose. -->
+    <string name="work_item_depends_card_label">Depends on %1$s</string>
     <string name="work_item_back">Back</string>
 
     <!-- The board, the backlog, and the archive. -->

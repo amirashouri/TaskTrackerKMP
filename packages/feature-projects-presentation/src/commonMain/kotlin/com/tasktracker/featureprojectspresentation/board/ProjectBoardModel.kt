@@ -7,6 +7,7 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintStatus
 import com.tasktracker.domain.WorkItem
@@ -68,7 +69,33 @@ class ProjectBoardModel(
         private set
 
     /** The active sprint for this board, if any. */
-    var activeSprint: Sprint? by mutableStateOf(null)
+    var activeSprint: Sprint? by mutableStateOf<Sprint?>(null)
+        private set
+
+    /**
+     * Every item's blockers, resolved to the keys the cards draw.
+     *
+     * ## Why this is a map rather than a lookup the card performs
+     *
+     * A card is given its keys, the way it is given its assignee's name: the card knows how to
+     * be a card, and resolving ids against the project's item list is the *board's* knowledge.
+     * A card that reached into the list itself would need the list passed to it as well, which
+     * is the same leak in a different shape.
+     *
+     * ## Why it is keyed by id rather than read off the projection
+     *
+     * Because the join is against [rawItems] — the project's **whole** list — and not against
+     * [projection]'s filtered items. That distinction is load-bearing: a blocker is very often
+     * not on the board being looked at. It can be in another sprint, or assigned to someone
+     * else while the My Tasks toggle is on, or filed in a terminal column. Joining against the
+     * visible cards would drop those, and the card's row would then claim a task waits on two
+     * things when it waits on four — silently, and increasingly as filters narrow. The editor
+     * resolves the same relation from the same list, so the two agree by construction.
+     *
+     * Covers every item in [rawItems], not just the visible ones, so toggling a filter cannot
+     * change what a *given* card would resolve if it were still shown.
+     */
+    var blockedByKeys: Map<WorkItemID, List<WorkItemKey>> by mutableStateOf(emptyMap())
         private set
 
     /**
@@ -125,6 +152,11 @@ class ProjectBoardModel(
         activeSprint = sprints.firstOrNull { !it.isFinished && it.isActiveOn(now) }
             ?: sprints.firstOrNull { !it.isFinished }
         addsLocked = activeSprint?.statusAt(now) == SprintStatus.InProgress
+
+        // Resolved from `rawItems` rather than from the projection — see [blockedByKeys].
+        blockedByKeys = rawItems.associate { item ->
+            item.id to dependencyKeysFor(rawItems, item)
+        }
 
         projection = BoardProjection(
             project = project,

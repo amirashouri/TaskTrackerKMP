@@ -38,6 +38,7 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -110,6 +111,12 @@ fun BoardColumnView(
      * is no id or the directory cannot name it. See [WorkItemCard.assigneeName].
      */
     assigneeName: (WorkItem) -> String? = { null },
+    /**
+     * Resolves a card's blockers to the keys it should draw. Defaults to none, so a host that
+     * does not wire dependencies renders exactly what it did before — see
+     * [WorkItemCard.blockedByKeys].
+     */
+    blockedByKeys: (WorkItem) -> List<WorkItemKey> = { emptyList() },
 ) {
     Box(
         modifier = modifier
@@ -163,6 +170,7 @@ fun BoardColumnView(
                         modifier = Modifier.fillMaxWidth(),
                         trailing = { cardTrailing(item) },
                         assigneeName = assigneeName(item),
+                        blockedByKeys = blockedByKeys(item),
                     )
                 }
             }

@@ -31,6 +31,7 @@ import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.time.Instant
@@ -81,6 +82,15 @@ fun WorkItemCard(
      * id on a card is noise rather than a name.
      */
     assigneeName: String? = null,
+    /**
+     * The keys of the tasks this one waits on, resolved by the host.
+     *
+     * Keys rather than ids, and passed rather than looked up, for the same reason as
+     * [assigneeName]: the card names what it can be shown and never prints a bare id.
+     * Empty — the common case — draws no row at all, which is what keeps a card with no
+     * dependencies the same height it was before this feature existed.
+     */
+    blockedByKeys: List<WorkItemKey> = emptyList(),
 ) {
     Column(
         modifier = modifier
@@ -120,6 +130,18 @@ fun WorkItemCard(
         assigneeName?.takeIf { it.isNotBlank() }?.let { assignee ->
             AssigneeLabel(firstName = assigneeFirstName(assignee))
         }
+        // The blockers, as a summary of a relation the editor owns. It sits with the assignee
+        // rather than with the due date for the same reason that one does: both are facts
+        // *about* the task, and the row at the bottom of the card is the one reserved for the
+        // things you can *do* with it.
+        //
+        // Composed unconditionally. [WorkItemCardDependencies] returns early for an empty list,
+        // and a composable that emits nothing is not a child — so the column's `spacedBy` is
+        // not charged a gap for it, which is the same reason the due-date row guards its *own*
+        // condition rather than the card guarding this one. An `if` here was tried and removed:
+        // it was redundant with the callee's guard, and the mutation check that established this
+        // (deleting it left every scenario green) is why the comment claims the weaker thing.
+        WorkItemCardDependencies(blockerKeys = blockedByKeys)
         // The due date and the card's own action, on one row: the date at the leading edge and
         // whatever the surface put in the action slot at the trailing one, so the action stays
         // in the bottom corner whether or not the task has a date.
