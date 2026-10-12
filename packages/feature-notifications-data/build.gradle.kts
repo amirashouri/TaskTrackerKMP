@@ -10,4 +10,5 @@ dependencies {
     commonMainImplementation(project(":packages:feature-notifications-domain"))
     commonMainImplementation(libs.room.runtime)
     commonMainImplementation(libs.kotlinx.coroutines.core)
+    commonMainImplementation(libs.kotlinx.serialization.json)
 }

@@ -7,4 +7,5 @@ dependencies {
     commonMainImplementation(project(":packages:domain"))
     commonMainImplementation(libs.kotlinx.serialization.json)
     commonMainImplementation(libs.kotlinx.coroutines.core)
+    androidMainImplementation(libs.androidx.core.ktx)
 }

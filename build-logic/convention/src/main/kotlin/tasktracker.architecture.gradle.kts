@@ -250,6 +250,9 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
             // because `:packages:feature-settings-data` is not an edge either.
             ":packages:feature-settings-domain",
             ":packages:feature-settings-presentation",
+            // For `NotificationPort`, which the inbox screen reads.
+            ":packages:feature-notifications-domain",
+            ":packages:feature-notifications-presentation",
             // For `UserDefaultsStore`, which the shell reads the appearance and the
             // last-visited project through. Cross-cutting rather than a feature's own data,
             // and the two keys it reads are deliberately device-scoped: sign-out calls
@@ -262,8 +265,15 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
     )
 
 
+    // Self-imports are allowed for module imports check (platform-specific code importing
+    // from commonMain of the same module) but not for graph check (modules don't declare
+    // self-dependencies in build.gradle.kts).
+    val allowedImportsTable: Map<String, Set<String>> = allowedDependenciesTable.mapValues { (key, value) ->
+        value + key
+    }
 
-// --- registration -----------------------------------------------------------
+
+    // --- registration -----------------------------------------------------------
 //
 // The tables above are the architecture. Everything from here on is plumbing, and the
 // plumbing is deliberately thin: the only judgement call is when the graph is read, which
@@ -296,7 +306,7 @@ modules.forEach { module ->
         group = "verification"
         description = "Fails if ${module.path} imports a package owned by a module it may not see."
         sources.from(module.layout.projectDirectory.dir("src"))
-        allowed.set(allowedDependenciesTable[module.path].orEmpty())
+        allowed.set(allowedImportsTable[module.path].orEmpty())
         packageOwners.set(packageOwnersTable)
         modulePath.set(module.path)
         moduleDirectory.set(module.layout.projectDirectory)

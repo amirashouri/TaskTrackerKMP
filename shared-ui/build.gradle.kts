@@ -21,6 +21,10 @@ dependencies {
     // For `TeamPort`, resolved and handed to the projects environment.
     commonMainImplementation(project(":packages:feature-teams-domain"))
 
+    // For `NotificationPort`: the inbox screen asks for the port, and the shell provides it.
+    commonMainImplementation(project(":packages:feature-notifications-domain"))
+    commonMainImplementation(project(":packages:feature-notifications-presentation"))
+
     // For `UserDefaultsStore`: the shell owns the persisted appearance and the last-visited
     // project, because both are properties of the *device* rather than of any feature. The
     // theme key in particular cannot go through the settings port - it has to be applied

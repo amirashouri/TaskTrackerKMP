@@ -149,5 +149,6 @@ class TTLogger internal constructor(private val category: String) {
         val board = TTLogger("board")
         val projects = TTLogger("projects")
         val settings = TTLogger("settings")
+        val notifications = TTLogger("notifications")
     }
 }

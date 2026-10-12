@@ -4,14 +4,22 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.database.NotificationRecord
 import com.tasktracker.database.TaskTrackerDatabase
+import com.tasktracker.featurenotificationsdomain.LocalNotifier
 import com.tasktracker.featurenotificationsdomain.Notification
 import com.tasktracker.featurenotificationsdomain.NotificationKind
 import com.tasktracker.featurenotificationsdomain.NotificationPort
 import com.tasktracker.featurenotificationsdomain.NotificationChange
+import com.tasktracker.featurenotificationsdomain.Trigger
 import com.tasktracker.featurenotificationsdomain.wireValue
+import com.tasktracker.featurenotificationsdomain.createLocalNotifier
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
@@ -20,10 +28,15 @@ import kotlin.time.Instant
  * Writes go through the DAO and announce changes through a [Broadcaster] so
  * the inbox can react without polling. The change signal is cold — one
  * subscriber per collection — which is what [Broadcaster] provides.
+ *
+ * Also schedules local notifications via [LocalNotifier] for immediate user
+ * awareness (mentions, assignments, due dates, status changes).
  */
 class RoomNotificationRepository(
     private val database: TaskTrackerDatabase,
     private val scope: kotlinx.coroutines.CoroutineScope,
+    private val localNotifier: LocalNotifier = createLocalNotifier(null),
+    private val dispatcher: CoroutineDispatcher = Dispatchers.Default
 ) : NotificationPort {
 
     private val changesBus = Broadcaster<NotificationChange>()
@@ -65,7 +78,57 @@ class RoomNotificationRepository(
         )
         database.notificationDao().insert(record)
         announce(userID, NotificationChange.Kind.Notifications)
-        return toDomain(record)
+
+        // Schedule local notification for immediate awareness
+        val notification = toDomain(record)
+        scheduleLocalIfNeeded(notification)
+
+        return notification
+    }
+
+    /**
+     * Schedules a local notification if the kind warrants immediate user awareness.
+     *
+     * Kinds that trigger a local notification:
+     * - MentionedInComment: someone mentioned you
+     * - TaskAssigned: a task was assigned to you
+     * - DueToday: a task is due today (fire 10 minutes before due time)
+     * - StatusChanged: a task you're watching changed status
+     *
+     * Runs on the IO dispatcher to avoid blocking the database transaction.
+     */
+    private fun scheduleLocalIfNeeded(notification: Notification) {
+        scope.launch(dispatcher) {
+            when (notification.kind) {
+                NotificationKind.MentionedInComment,
+                NotificationKind.TaskAssigned,
+                NotificationKind.StatusChanged -> {
+                    // Fire immediately for mentions, assignments, and status changes
+                    localNotifier.schedule(notification, Trigger.In(Duration.ZERO))
+                }
+                NotificationKind.DueToday -> {
+                    // Parse due date from payload and fire 10 minutes before
+                    // Using simple string parsing to avoid kotlinx.serialization API issues
+                    try {
+                        val dueDateMatch = "\"dueDate\"\\s*:\\s*\"([^\"]+)\"".toRegex().find(notification.payload)
+                        dueDateMatch?.groupValues?.get(1)?.let { dueDateStr ->
+                            val dueInstant = Instant.parse(dueDateStr)
+                            val triggerAt = dueInstant - 10.minutes
+                            val now = Clock.System.now()
+                            val trigger = if (triggerAt > now) {
+                                Trigger.At(triggerAt)
+                            } else {
+                                Trigger.In(Duration.ZERO)
+                            }
+                            localNotifier.schedule(notification, trigger)
+                        }
+                    } catch (e: Exception) {
+                        // If parsing fails, fire immediately as fallback
+                        localNotifier.schedule(notification, Trigger.In(Duration.ZERO))
+                    }
+                }
+            }
+        }
     }
 
     override suspend fun setRead(id: NotificationID, isRead: Boolean, now: Instant): Notification {
