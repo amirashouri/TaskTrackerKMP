@@ -1,12 +1,14 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.MentionRules
 import com.tasktracker.domain.Priority
@@ -473,5 +475,108 @@ class AddComment(
         )
         val mentions = MentionRules.extractMentions(trimmed)
         return AddCommentResult.Success(comment, mentions)
+    }
+}
+
+/** Reads one work item's attachments, oldest first. */
+class LoadAttachments(
+    private val repository: ProjectRepositoryPort,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(workItemID: WorkItemID): List<Attachment> =
+        repository.attachments(workItemID)
+}
+
+/**
+ * Result of attaching a file, including the reason for every refusal.
+ *
+ * The refusals carry what the editor needs to say, not just that it must say no: a
+ * "too large" banner that does not name the limit teaches nothing, and a size check
+ * whose message omits the measured size cannot be mutation-tested against the number
+ * the guard actually enforces.
+ */
+sealed interface AttachFileResult {
+    /** The file was stored; the editor shows the row the use case returns. */
+    data class Success(val attachment: Attachment) : AttachFileResult
+
+    /** The pick produced no name — nothing was chosen, or the platform could not say. */
+    data object BlankName : AttachFileResult
+
+    /** The pick produced no bytes. */
+    data object EmptyFile : AttachFileResult
+
+    /** The pick is over the cap the blob store is prepared to hold. */
+    data class TooLarge(val sizeBytes: Long, val limitBytes: Long) : AttachFileResult
+}
+
+/**
+ * Attaches one picked file, after the two rules only this can enforce.
+ *
+ * Both rules live here rather than in the store, for the same reason the comment trim
+ * does: neither needs anything the transaction can see, so a use case is the earliest
+ * shared place every caller passes through. A check in the view would be the second
+ * screen that forgets it; a check in the store would put policy next to persistence.
+ *
+ * **The size cap is a product choice, not a technical limit.** 25 MiB holds a slide deck,
+ * a phone photo burst, or a minutes PDF with room to spare, while keeping the eager
+ * in-memory pick — which the seam's port documents — bounded on every device. A larger
+ * cap arrives with a streaming blob store, not with a larger constant.
+ */
+class AttachFile(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    companion object {
+        /** The largest file the blob store will take, in bytes. */
+        const val MAX_ATTACHMENT_BYTES: Long = 25L * 1024L * 1024L
+    }
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+    ): AttachFileResult {
+        val trimmed = fileName.trim()
+        if (trimmed.isEmpty()) {
+            return AttachFileResult.BlankName
+        }
+        if (bytes.isEmpty()) {
+            return AttachFileResult.EmptyFile
+        }
+        if (bytes.size > MAX_ATTACHMENT_BYTES) {
+            return AttachFileResult.TooLarge(bytes.size.toLong(), MAX_ATTACHMENT_BYTES)
+        }
+        return AttachFileResult.Success(
+            repository.addAttachment(
+                workItemID = workItemID,
+                fileName = trimmed,
+                mimeType = mimeType,
+                bytes = bytes,
+                now = dateProvider.now(),
+            ),
+        )
+    }
+}
+
+/**
+ * Removes one attachment, dropping its row and its blob.
+ *
+ * Thin by design: unlike attaching, removing has no guard the store cannot own itself —
+ * the port is idempotent, so there is no refusal to share between callers. The class
+ * still exists (rather than letting the view call the port) because a second screen
+ * that calls the port directly is how the thread about which writes go through use
+ * cases gets lost.
+ */
+class DeleteAttachment(
+    private val repository: ProjectRepositoryPort,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: AttachmentID) {
+        repository.deleteAttachment(id)
     }
 }

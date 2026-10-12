@@ -1,0 +1,40 @@
+package com.tasktracker.featureprojectsdata
+
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import platform.Foundation.NSData
+import platform.Foundation.NSFileManager
+import platform.Foundation.NSString
+import platform.Foundation.create
+import platform.Foundation.dataWithBytes
+import platform.Foundation.stringByDeletingLastPathComponent
+import platform.Foundation.writeToFile
+
+/**
+ * iOS blob writes through `NSFileManager`.
+ *
+ * Atomic writes so an interrupted write cannot leave a half-blob the row then points
+ * at: a missing file is a `Storage` failure at read time, while a *corrupt* file would
+ * open as damaged content with no error anywhere.
+ */
+@OptIn(ExperimentalForeignApi::class)
+internal actual fun writeBlobFile(path: String, bytes: ByteArray) {
+    val fileManager = NSFileManager.defaultManager
+    val parent = (path as NSString).stringByDeletingLastPathComponent
+    if (parent.isNotEmpty()) {
+        fileManager.createDirectoryAtPath(parent, withIntermediateDirectories = true, attributes = null, error = null)
+    }
+    val data = bytes.usePinned { pinned ->
+        NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong())
+    } ?: throw IllegalStateException("Could not materialise ${bytes.size} bytes for $path.")
+    if (!data.writeToFile(path, atomically = true)) {
+        throw IllegalStateException("Could not write the blob at $path.")
+    }
+}
+
+/** A missing file is not a failure: the write may never have happened, or a previous delete may have won. */
+@OptIn(ExperimentalForeignApi::class)
+internal actual fun deleteBlobFile(path: String) {
+    NSFileManager.defaultManager.removeItemAtPath(path, error = null)
+}

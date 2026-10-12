@@ -1,10 +1,12 @@
 package com.tasktracker.featureprojectsdomain
 
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -362,6 +364,56 @@ interface ProjectRepositoryPort {
         parentID: CommentID?,
         now: Instant,
     ): Comment
+
+    // MARK: Attachments
+
+    /**
+     * One work item's attachments, oldest first.
+     *
+     * Metadata only — the bytes live in the blob store and are not read to answer this.
+     * A listing is what the editor renders; opening a file is a separate, platform-local
+     * act that needs the blob, and conflating the two would make a thread listing depend
+     * on files that may have been cleaned up behind the index.
+     */
+    suspend fun attachments(workItemID: WorkItemID): List<Attachment>
+
+    /**
+     * Stores one file's bytes in the blob store and writes its index row, returning the
+     * stored value.
+     *
+     * **The blob is written before the row and deleted if the row fails.** The two writes
+     * cannot share a transaction — file I/O is not transactional — so the order is chosen
+     * such that the failure mode is an orphaned blob (cleaned up here, invisible to the
+     * user) rather than an index row pointing at a file that does not exist (which would
+     * render a card that can never open). A row without its bytes is useless, so unlike a
+     * comment there is no honest "it will sync later": the write either produces both or
+     * throws.
+     *
+     * **No outbox row**, deliberately: the transport has no blob upload, and queuing
+     * metadata for bytes that cannot travel would hand other devices an index entry they
+     * can never open. See [Attachment]'s KDoc — this is the seam a future blob transport
+     * fills, and until it does, an attachment is device-local like a [StatusChange].
+     *
+     * Confirms the work item exists first, for the same reason [addComment] does.
+     */
+    suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment
+
+    /**
+     * Deletes one attachment's row and its blob, whichever is still there.
+     *
+     * Idempotent on the row — a delete of an already-gone id is a no-op, not an error —
+     * and the blob is removed best-effort after the row commits: a leftover file costs
+     * disk space, while a row whose file survives its own delete renders a card that
+     * cannot open. Like a work item's child tables, the row goes silently; the editor's
+     * own re-read is the announcement.
+     */
+    suspend fun deleteAttachment(id: AttachmentID)
 
     // MARK: Change notifications
 

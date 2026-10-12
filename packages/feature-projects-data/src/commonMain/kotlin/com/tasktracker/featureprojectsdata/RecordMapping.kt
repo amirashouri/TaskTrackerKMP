@@ -2,17 +2,20 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.parseAttachmentID
 import com.tasktracker.core.parseCommentID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseStatusChangeID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
+import com.tasktracker.database.AttachmentRecord
 import com.tasktracker.database.CommentRecord
 import com.tasktracker.database.ProjectRecord
 import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -546,5 +549,46 @@ internal val CommentRecord.domainValue: Comment?
             body = body,
             createdAt = createdAt,
             parentID = parentID?.let { parseCommentID(it) },
+        )
+    }
+
+/**
+ * A new row for [this].
+ *
+ * `sequence` is left at its default so Room assigns it — the same insertion counter the
+ * listing's `createdAt` tie-break depends on, for the reason [CommentRecord.sequence]
+ * gives.
+ */
+internal fun Attachment.toRecord(): AttachmentRecord = AttachmentRecord(
+    id = id.stringValue,
+    workItemID = workItemID.stringValue,
+    fileName = fileName,
+    mimeType = mimeType,
+    sizeBytes = sizeBytes,
+    blobPath = blobPath,
+    createdAt = createdAt,
+)
+
+/**
+ * `null` rather than throwing when a column holds something unreadable.
+ *
+ * A row written by a future build — an id this one cannot parse — costs the reader that
+ * row, not the list, for the reason [CommentRecord.domainValue] gives: a listing with
+ * a gap in it still reads, and one bad row emptying the attachments would be a single
+ * bad row amplified into missing content. The metadata is never rewritten on the way
+ * in or out: an attachment is what was picked.
+ */
+internal val AttachmentRecord.domainValue: Attachment?
+    get() {
+        val attachmentID = parseAttachmentID(id) ?: return null
+        val itemID = parseWorkItemID(workItemID) ?: return null
+        return Attachment(
+            id = attachmentID,
+            workItemID = itemID,
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = sizeBytes,
+            blobPath = blobPath,
+            createdAt = createdAt,
         )
     }

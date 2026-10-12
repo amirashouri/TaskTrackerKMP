@@ -76,6 +76,15 @@ value class CommentID(val rawValue: Uuid) {
     override fun toString(): String = stringValue
 }
 
+/** One file attached to a work item. */
+@Serializable
+@JvmInline
+value class AttachmentID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
 /** One notification in the user's inbox. */
 @Serializable
 @JvmInline
@@ -118,6 +127,9 @@ fun randomStatusChangeID(): StatusChangeID = StatusChangeID(Uuid.random())
 fun randomCommentID(): CommentID = CommentID(Uuid.random())
 
 /** Generates a fresh identifier. */
+fun randomAttachmentID(): AttachmentID = AttachmentID(Uuid.random())
+
+/** Generates a fresh identifier. */
 fun randomNotificationID(): NotificationID = NotificationID(Uuid.random())
 
 /**
@@ -147,6 +159,10 @@ fun parseStatusChangeID(raw: String): StatusChangeID? =
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseCommentID(raw: String): CommentID? =
     runCatching { CommentID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseAttachmentID(raw: String): AttachmentID? =
+    runCatching { AttachmentID(Uuid.parse(raw)) }.getOrNull()
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseNotificationID(raw: String): NotificationID? =

@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
@@ -42,8 +43,11 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectsdomain.PickedFile
+import com.tasktracker.domain.Attachment
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
+
 import com.tasktracker.resources.common_save
 import com.tasktracker.resources.work_item_archive
 import com.tasktracker.resources.work_item_back
@@ -117,6 +121,13 @@ fun WorkItemEditorScreen(
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    // Attachment params: an empty list means this caller does not host a file list — the
+    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
+    // rather than an empty Attachments block under every preview.
+    attachments: List<Attachment> = emptyList(),
+    isAttaching: Boolean = false,
+    onAttachClick: () -> Unit = {},
+    onRemoveAttachment: (AttachmentID) -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -234,6 +245,13 @@ fun WorkItemEditorSheet(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
+    // Attachment params: an empty list means this caller does not host a file list — the
+    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
+    // rather than an empty Attachments block under every preview.
+    attachments: List<Attachment> = emptyList(),
+    isAttaching: Boolean = false,
+    onAttachClick: () -> Unit = {},
+    onRemoveAttachment: (AttachmentID) -> Unit = {},
     /** See [WorkItemEditorForm.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     /** See [WorkItemEditorForm.resolveSelected]. */
@@ -296,6 +314,13 @@ fun WorkItemEditorSheet(
         onCommentReply = onCommentReply,
         onCommentCancelReply = onCommentCancelReply,
         onCommentSubmit = onCommentSubmit,
+        // Attachment params: an empty list means this caller does not host a file list — the
+        // preview-only WorkItemEditorSheet passes nothing and renders no section at all,
+        // rather than an empty Attachments block under every preview.
+        attachments = attachments,
+        isAttaching = isAttaching,
+        onAttachClick = onAttachClick,
+        onRemoveAttachment = onRemoveAttachment,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -383,6 +408,13 @@ private fun ProjectsEditorFullScreen(
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
+    // Attachment params: an empty list means this caller does not host a file list — the
+    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
+    // rather than an empty Attachments block under every preview.
+    attachments: List<Attachment> = emptyList(),
+    isAttaching: Boolean = false,
+    onAttachClick: () -> Unit = {},
+    onRemoveAttachment: (AttachmentID) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -530,6 +562,11 @@ private fun ProjectsEditorFullScreen(
                 )
             }
         }
+        AttachmentList(
+            attachments = attachments,
+            onAttachClick = onAttachClick,
+            onRemove = onRemoveAttachment,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -593,6 +630,13 @@ private fun WorkItemEditorForm(
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
+    // Attachment params: an empty list means this caller does not host a file list — the
+    // preview-only WorkItemEditorForm passes nothing and renders no section at all,
+    // rather than an empty Attachments block under every preview.
+    attachments: List<Attachment> = emptyList(),
+    isAttaching: Boolean = false,
+    onAttachClick: () -> Unit = {},
+    onRemoveAttachment: (AttachmentID) -> Unit = {},
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
@@ -765,6 +809,11 @@ private fun WorkItemEditorForm(
                 )
             }
         }
+        AttachmentList(
+            attachments = attachments,
+            onAttachClick = onAttachClick,
+            onRemove = onRemoveAttachment,
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md, Alignment.End),

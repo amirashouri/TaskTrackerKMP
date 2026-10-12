@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -10,6 +11,7 @@ import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
@@ -18,6 +20,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -95,6 +98,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedComments = mutableListOf<Comment>()
+    private val storedAttachments = mutableListOf<Attachment>()
     private val storedSprints = mutableListOf<Sprint>()
 
     /** Written, so a test can assert which use case ran and with what. */
@@ -532,6 +536,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             projectID = existing.projectID
             storedItems.remove(existing)
             storedComments.removeAll { it.workItemID == id }
+            storedAttachments.removeAll { it.workItemID == id }
             writes += "deleteWorkItem"
         }
     }
@@ -562,6 +567,57 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> = locked {
+        storedAttachments.filter { it.workItemID == workItemID }
+            .sortedWith(compareBy({ it.createdAt }, { it.id.stringValue }))
+            .map { it.copy() }
+    }
+
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment {
+        var projectID: ProjectID? = null
+        return writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID!!) }) {
+            failIfSet()
+            val existing = storedItems.first { it.id == workItemID }
+            projectID = existing.projectID
+            val attachment = Attachment(
+                id = randomAttachmentID(),
+                workItemID = workItemID,
+                fileName = fileName,
+                mimeType = mimeType,
+                sizeBytes = bytes.size.toLong(),
+                blobPath = "",
+                createdAt = now,
+            )
+            storedAttachments += attachment
+            writes += "addAttachment"
+            attachment.copy()
+        }
+    }
+
+    override suspend fun deleteAttachment(id: AttachmentID) {
+        failIfSet()
+        // The not-found case is the port's documented no-op, handled before the write
+        // rather than inside it: `writing` evaluates its change lambda after the block,
+        // and a row that was never there has no project to name.
+        var pending: ProjectChange? = null
+        lock.withLock {
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return
+            val owner = storedAttachments[index].workItemID
+            storedAttachments.removeAt(index)
+            val projectID = storedItems.firstOrNull { it.id == owner }?.projectID
+            writes += "deleteAttachment"
+            pending = ProjectChange(ProjectChange.Kind.WorkItems, projectID)
+        }
+        pending?.let { publish(it) }
+    }
+
     override fun changes(): Flow<ProjectChange> = broadcaster.stream()
 
     // MARK: Test control
@@ -589,6 +645,9 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     /** Adds a sprint directly, without recording a write. */
     suspend fun seed(sprint: Sprint) = locked { storedSprints += sprint }
+
+    /** Adds an attachment directly, without recording a write or a change. */
+    suspend fun seed(attachment: Attachment) = locked { storedAttachments += attachment }
 
     /** How many subscribers the broadcaster currently has. Proves observation stopped. */
     val subscriberCount: Int get() = broadcaster.subscriberCount

@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -14,7 +15,9 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
@@ -61,6 +64,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedComments = mutableListOf<Comment>()
+    private val storedAttachments = mutableListOf<Attachment>()
     private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
@@ -584,6 +588,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             storedItems.removeAt(index)
             storedStatusChanges.removeAll { it.workItemID == id }
             storedComments.removeAll { it.workItemID == id }
+            storedAttachments.removeAll { it.workItemID == id }
             publish(ProjectChange(ProjectChange.Kind.WorkItems, owner))
         }
     }
@@ -610,6 +615,63 @@ class FakeProjectRepository : ProjectRepositoryPort {
             storedComments += comment
             publish(ProjectChange(ProjectChange.Kind.WorkItems, owner.projectID))
             comment
+        }
+    }
+
+    // MARK: Attachments
+
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> {
+        throwIfFailing()
+        return lock.withLock {
+            // Oldest first with insertion order breaking the tie — the comment thread's
+            // total order, which is what a listing that shows files as they arrived needs.
+            storedAttachments.withIndex()
+                .filter { it.value.workItemID == workItemID }
+                .sortedWith(
+                    compareBy<IndexedValue<Attachment>> { it.value.createdAt }
+                        .thenBy { it.index },
+                )
+                .map { it.value }
+        }
+    }
+
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment {
+        throwIfFailing()
+        return lock.withLock {
+            val owner = storedItems.firstOrNull { it.id == workItemID }
+                ?: throw AppError.Validation("That work item no longer exists.")
+            val attachment = Attachment(
+                id = randomAttachmentID(),
+                workItemID = workItemID,
+                fileName = fileName,
+                mimeType = mimeType,
+                sizeBytes = bytes.size.toLong(),
+                blobPath = "",
+                createdAt = now,
+            )
+            storedAttachments += attachment
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, owner.projectID))
+            attachment
+        }
+    }
+
+    override suspend fun deleteAttachment(id: AttachmentID) {
+        throwIfFailing()
+        lock.withLock {
+            // -1 rather than null from `indexOfFirst`, so the guard is a comparison: a
+            // delete of a row that is already gone is the port's documented no-op.
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return@withLock
+            val owner = storedAttachments[index].workItemID
+            storedAttachments.removeAt(index)
+            val projectID = storedItems.firstOrNull { it.id == owner }?.projectID
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
         }
     }
 

@@ -22,6 +22,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.TeamPort
 
@@ -52,6 +53,17 @@ class ProjectEnvironment(
      * nobody; it never crashes a screen.
      */
     val teamPort: TeamPort? = null,
+    /**
+     * The platform file picker, or `null` when the graph supplied none.
+     *
+     * Nullable because a graph can legitimately be built without the picker wired — the
+     * same case [MissingProjectEnvironmentView] covers for projects. A missing picker means
+     * the attach button is still on screen, and its press reaches a null pointer instead of
+     * opening anything; it never crashes. Production graphs always supply one, because the
+     * composition root binds it in [com.tasktracker.compositionroot.AppGraph] from the
+     * platform host; a test graph supplies a fake.
+     */
+    val filePicker: FilePicker? = null,
 )
 
 /**

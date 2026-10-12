@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.JSONCoding
@@ -10,6 +11,7 @@ import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.parseUserID
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
@@ -26,6 +28,7 @@ import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -40,6 +43,7 @@ import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import kotlinx.coroutines.flow.Flow
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -112,6 +116,15 @@ class RoomProjectRepository(
      * clock and no reason to name it.
      */
     private val dateProvider: DateProvider = SystemDateProvider(),
+    /**
+     * Where attachment bytes live.
+     *
+     * Injected rather than constructed, for the same reason [dateProvider] is: a test
+     * must be able to aim the store at a directory it owns (or at memory) instead of the
+     * device's support folder. Defaulted to the production store, because a caller wiring
+     * production has one real location and no reason to name it.
+     */
+    private val blobStore: AttachmentBlobStore = FileBlobStore(),
 ) : ProjectRepositoryPort {
 
     override fun changes(): Flow<ProjectChange> = changeBus.changes()
@@ -278,6 +291,10 @@ class RoomProjectRepository(
     override suspend fun deleteProject(id: ProjectID) {
         val stamp = currentUserStamp()
 
+        // Blob paths collect here because files cannot die inside the transaction —
+        // same discipline as `deleteWorkItem`, one level up.
+        val orphanedBlobs = mutableListOf<String>()
+
         inTransaction(database) {
             val project = readProject(id)
             for (item in database.workItemDao().byProject(id.stringValue)) {
@@ -287,8 +304,16 @@ class RoomProjectRepository(
                 // in one transaction beats a denormalised column every future write
                 // would have to keep honest.
                 database.commentDao().deleteByWorkItem(item.id)
+                // Attachments follow the same two-query pattern for the same reason —
+                // the table deliberately carries no project column either — plus one
+                // more: the blobs cannot die in the transaction. Their paths collect on
+                // the project's orphan list and the files go after the commit.
+                val blobPaths = database.attachmentDao().byWorkItem(item.id)
+                    .map { it.blobPath }
+                database.attachmentDao().deleteByWorkItem(item.id)
                 database.workItemDao().deleteByID(item.id)
                 enqueueDelete(OutboxEntity.WorkItem, item.id, stamp, item.updatedAt)
+                orphanedBlobs.addAll(blobPaths)
             }
             // Sprints go before the project, and for the same reason the items do: queueing
             // only the project would leave the server holding sprints for a project nothing
@@ -303,6 +328,7 @@ class RoomProjectRepository(
             database.projectDao().deleteByID(id.stringValue)
             enqueueDelete(OutboxEntity.Project, id.stringValue, stamp, project.updatedAt)
         }
+        orphanedBlobs.forEach { safeDeleteBlob(it) }
         changeBus.announceProjectDeletion(id)
     }
 
@@ -798,11 +824,10 @@ class RoomProjectRepository(
 
     override suspend fun deleteWorkItem(id: WorkItemID) {
         val stamp = currentUserStamp()
-
         // The owner is read inside the transaction, because afterwards the record is gone and
         // there is nothing left to ask which project this belonged to — and an announcement
         // that cannot name its project cannot wake a board.
-        val owner = inTransaction(database) {
+        val outcome = inTransaction(database) {
             val item = readWorkItem(id)
             database.statusChangeDao().deleteByWorkItem(id.stringValue)
             // Comments go with the item for the same reason the history does: a leftover
@@ -811,10 +836,21 @@ class RoomProjectRepository(
             // on write — but a delete of the whole item is already announced by the item's
             // own delete row, so the thread goes silently, local first.
             database.commentDao().deleteByWorkItem(id.stringValue)
+            // Attachments follow the thread's silent-row rule, with the thread's
+            // impossibility on top: rows cannot go without their blobs (else a listing
+            // points at files that do not exist), and blobs cannot be deleted in the
+            // transaction. So the paths are collected inside, the rows drop inside, and
+            // the files go after the commit — a crash between the two leaves orphan blobs,
+            // which cost disk, never correctness.
+            val blobPaths = database.attachmentDao().byWorkItem(id.stringValue)
+                .map { it.blobPath }
+            database.attachmentDao().deleteByWorkItem(id.stringValue)
             database.workItemDao().deleteByID(id.stringValue)
             enqueueDelete(OutboxEntity.WorkItem, id.stringValue, stamp, item.updatedAt)
-            item.projectID
+            Pair(item.projectID, blobPaths)
         }
+        val (owner, orphanedBlobs) = outcome
+        orphanedBlobs.forEach { safeDeleteBlob(it) }
         changeBus.announceWorkItems(owner)
     }
 
@@ -850,6 +886,90 @@ class RoomProjectRepository(
         // this that can silently strand a second open editor.
         changeBus.announceWorkItems(owner)
         return comment
+    }
+
+    // MARK: Attachments
+
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> =
+        inTransaction(database) {
+            database.attachmentDao().byWorkItem(workItemID.stringValue)
+                .mapNotNull { it.domainValue }
+        }
+
+    /**
+     * Writes the blob first, then the row — the reverse order would index a file that may
+     * never be written.
+     *
+     * The two writes cannot share the transaction, and the blob cannot be written inside
+     * it either (file I/O is not transactional), so the failure mode is an orphaned blob
+     * if the row write loses the race afterwards. The catch owns that half: a stored
+     * file whose row never landed is deleted before the error surfaces, so an exception
+     * here always means "nothing was stored", the same guarantee the transaction gives
+     * the other writes in this class.
+     */
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment {
+        // Existence is proven before the blob lands. A file stored for an item the
+        // store then reports as missing would need deleting from the same catch that
+        // guards the row — proving first keeps the catch to one job.
+        val owner = inTransaction(database) {
+            readWorkItem(workItemID).projectID
+        }
+
+        val attachment = Attachment(
+            id = randomAttachmentID(),
+            workItemID = workItemID,
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = bytes.size.toLong(),
+            blobPath = "",
+            createdAt = now,
+        )
+        val relativeName = blobStore.write(attachment.id, bytes)
+
+        return try {
+            inTransaction(database) {
+                database.attachmentDao().insert(attachment.copy(blobPath = relativeName).toRecord())
+            }
+            // Announced as a work-item change, the comment-write choice again: an open
+            // editor re-reads the attachments it is showing, and a board re-reads a card
+            // whose data did not change — cheap. An unannounced attach would strand a
+            // second open editor the same way an unannounced comment does.
+            changeBus.announceWorkItems(owner)
+            attachment.copy(blobPath = relativeName)
+        } catch (failure: Throwable) {
+            if (failure is CancellationException) throw failure
+            safeDeleteBlob(relativeName)
+            throw failure
+        }
+    }
+
+    override suspend fun deleteAttachment(id: AttachmentID) {
+        val blobPath = inTransaction(database) {
+            val row = database.attachmentDao().byID(id.stringValue) ?: return@inTransaction null
+            database.attachmentDao().deleteByID(id.stringValue)
+            row.blobPath
+        } ?: return
+        safeDeleteBlob(blobPath)
+    }
+
+    /**
+     * Removes a blob outside the transaction, never throwing.
+     *
+     * Blob deletion is always best-effort-after-commit: file I/O is not transactional, so
+     * it cannot happen inside [inTransaction], and a failed row write must roll back while
+     * a failed file delete must not. A leftover file costs disk space; a thrown delete
+     * would cost the operation its result. No cancellation concern: neither this block
+     * nor the store suspends, so there is no suspension point at which a `CancellationException`
+     * could arrive to be swallowed.
+     */
+    private fun safeDeleteBlob(relativeName: String) {
+        runCatching { blobStore.delete(relativeName) }
     }
 
     // MARK: Seeding

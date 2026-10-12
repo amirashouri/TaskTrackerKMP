@@ -33,6 +33,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
+import com.tasktracker.core.AttachmentID
+import com.tasktracker.core.randomAttachmentID
+import com.tasktracker.domain.Attachment
 
 /**
  * Fixtures for previews, and a [ProjectRepositoryPort] small enough to stand in for a store.
@@ -315,6 +318,44 @@ object ViewPreviewData {
             parentID = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0002"),
         ),
     )
+    /**
+     * Three files, sizes spanning the formatter's units so the preview exercises all of
+     * them at once: a sub-KB text file, a mid-KB photo, and a multi-MB report.
+     *
+     * Preview fixtures only. The ids are fixed for the same reason [previewComments]'
+     * are: a preview that re-rolled its ids on every open could not be compared against
+     * a screenshot, which is most of what a preview is for.
+     */
+    val previewAttachments: List<Attachment> = listOf(
+        Attachment(
+            id = AttachmentID("dddddddd-dddd-4ddd-8ddd-dddddddd0001"),
+            workItemID = workItems.first().id,
+            fileName = "crash-report.txt",
+            mimeType = "text/plain",
+            sizeBytes = 2_412L,
+            blobPath = "dddddddd-dddd-4ddd-8ddd-dddddddd0001.blob",
+            createdAt = instant,
+        ),
+        Attachment(
+            id = AttachmentID("dddddddd-dddd-4ddd-8ddd-dddddddd0002"),
+            workItemID = workItems.first().id,
+            fileName = "screenshot-locked.png",
+            mimeType = "image/png",
+            sizeBytes = 184_320L,
+            blobPath = "dddddddd-dddd-4ddd-8ddd-dddddddd0002.blob",
+            createdAt = instant + 4.minutes,
+        ),
+        Attachment(
+            id = AttachmentID("dddddddd-dddd-4ddd-8ddd-dddddddd0003"),
+            workItemID = workItems.first().id,
+            fileName = "sync-qa-report.pdf",
+            mimeType = "application/pdf",
+            sizeBytes = 7_340_032L,
+            blobPath = "dddddddd-dddd-4ddd-8ddd-dddddddd0003.blob",
+            createdAt = instant + 6.minutes,
+        ),
+    )
+
 
     /** Author labels for [previewComments], straight from the shared name fixture. */
     val previewCommentAuthorNames: Map<UserID, String> = previewUserNames
@@ -539,6 +580,44 @@ private class PreviewRepository(
         )
         storedComments += comment
         return comment
+    }
+
+
+    // MARK: Attachments
+
+    private val storedAttachments = mutableListOf<Attachment>()
+
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> =
+        storedAttachments.filter { it.workItemID == workItemID }.map { it.copy() }
+
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment {
+        val attachment = Attachment(
+            id = randomAttachmentID(),
+            workItemID = workItemID,
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = bytes.size.toLong(),
+            blobPath = "",
+            createdAt = now,
+        )
+        storedAttachments += attachment
+        // A new row announces a work-item change: every open editor re-reads the rows it
+        // holds, and the board watches the work-item kind so a card with a file is never
+        // left behind a card without one.
+        broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems))
+        return attachment
+    }
+
+    override suspend fun deleteAttachment(id: AttachmentID) {
+        val index = storedAttachments.indexOfFirst { it.id == id } ?: return
+        storedAttachments.removeAt(index)
+        broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems))
     }
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = false

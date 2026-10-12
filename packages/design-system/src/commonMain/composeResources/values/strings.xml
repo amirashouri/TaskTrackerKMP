@@ -178,6 +178,15 @@
     <string name="comment_reply">Reply</string>
     <string name="comment_cancel_reply">Cancel reply</string>
     <string name="comment_replying_to">Replying to %1$s</string>
+    <!--
+      Attachments. The size formats are the point of this group: an unformatted byte
+      count ("50397184 B") is unreadable and a second answer to the same question, so the
+      app formats at the call site ("48 MB") and these strings carry only the labels.
+    -->
+    <string name="attachment_section_label">Attachments</string>
+    <string name="attachment_empty">No attachments yet</string>
+    <string name="attachment_add">Attach file</string>
+    <string name="attachment_remove">Remove</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>
