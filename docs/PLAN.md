@@ -93,12 +93,14 @@ Desktop is the closest parallel to the iOS shell: same `commonMain` screen tree,
 Compose tree. The Android shell is the counter-example — it is a full AGP application
 module, not a source set inside a library — and Desktop does not need to copy that shape.
 
-- [ ] **4.1 Adopt the source-set shape** · P0 · Decision recorded —
+- [x] **4.1 Adopt the source-set shape** · P0 · Decision recorded on `feat/desktop-entry` —
   Desktop goes in `shared-ui/src/jvmMain/`, the same shape iOS already uses for its entry
   point (`shared-ui/src/iosMain/MainViewController.kt`). No new Gradle module, no new
   row in `packageOwnersTable` or `allowedLibraryTable`, no new framework/binaries block.
   The decision point is not shape-choice but *commitment to this shape*: it is recorded
   here and in `Project.md` so a later change is a deliberate reversal, not a silent drift.
+  Validated by 4.2 + 4.3 compiling under `:shared-ui:compileJvmMain` with
+  `:shared-ui:jvmTest` still green.
 - [ ] **4.2 Put `compose.desktop.currentOs` on the app classpath, not only the test classpath** · P0 ·
   `build-logic/convention/src/main/kotlin/tasktracker.kmp.compose.gradle.kts` —
   Compose Desktop is already on the classpath for `jvmTest` (`compose.desktop.currentOs`);

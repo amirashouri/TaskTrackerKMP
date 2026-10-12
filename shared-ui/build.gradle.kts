@@ -65,6 +65,17 @@ dependencies {
     // imports `LocalNavigationEventDispatcherOwner` to hand the handler a
     // dispatcher owner. Same library-edge reasoning as the line above.
     commonMainImplementation(libs.navigationevent.compose)
+
+    // The Desktop app classpath. `compose.desktop.currentOs` is already on the
+    // `jvmTest` classpath; the Desktop *app* classpath is the one that does not have
+    // it yet. Added here (not re-added only to `jvmTest`) so the entry point in
+    // `jvmMain` compiles against the Desktop runtime, and so the existing JVM test
+    // path is not the only place this dependency ever gets exercised.
+    //
+    // A library edge, so `allowedLibraryTable` and `packageOwnersTable` are
+    // untouched: `verifyArchitectureGraph` filters `ProjectDependency`, and neither
+    // it nor `verifyModuleImports` reads a `libs.` coordinate.
+    jvmMainImplementation(compose.desktop.currentOs)
 }
 
 // The single framework the SwiftUI Liquid Glass shell links against. iOS entry
