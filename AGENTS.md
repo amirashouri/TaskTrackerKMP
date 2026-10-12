@@ -152,6 +152,57 @@ When multiple agent instances operate simultaneously across separate branches or
 * **DI Graph Splitting:** When modifying the dependency graph in `:composition-root` or the convention tables in `tasktracker.architecture.gradle.kts`, keep declarations organized cleanly within unique feature blocks. Do not interleave dependency links, or the text-based git merge tools will produce unresolvable structural conflicts.
 
 
+## Task workflow: branch, push, PR, review, merge
+Every task is one branch and one pull request. That is the only path a change takes to
+`main`; task work is never committed directly to `main`.
+
+**1. One task, one `feat/` branch.** Before touching a file, cut a branch from a fresh `main`:
+
+```bash
+git fetch origin
+git switch main && git pull --ff-only
+git switch -c feat/<kebab-case-task-slug>
+```
+
+A second task starts its own branch — never stack unrelated tasks in one PR. The
+Stale-Base Trap above still applies before you plan.
+
+**2. Do the task on that branch**, under the phase protocol and the four rules.
+
+**3. Push when — and only when — it is done.** "Done" means the validation command is green:
+
+```bash
+./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+```
+
+```bash
+git push -u origin feat/<kebab-case-task-slug>
+```
+
+**4. Open the PR against `main`.**
+
+```bash
+gh pr create --base main --title "<what the task did>" --body "<what changed, and which command verified it>"
+```
+
+**5. Review the PR before any merge.** Read your own diff as a stranger's: `gh pr diff <number>`.
+The review confirms that only files inside the approved plan changed, there is no drive-by
+cleanup, behavior changes ship with tests, and the validation command is green on the PR.
+Run the `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) against any test this
+task adds. A review that was not run is not an approval.
+
+**6. Merge only once the review approves.** If the review is clean and the PR is green:
+
+```bash
+gh pr merge <number> --merge --delete-branch
+```
+
+If the review finds a defect, fix it on the same branch, push, and re-review — a red or
+unreviewed PR is never merged. When the user asked to be the approver, wait for their
+explicit approval; your own review passing is not their approval.
+
+## Four rules
+These exist because each one has already cost real time here.
 ## Four rules
 These exist because each one has already cost real time here.
 

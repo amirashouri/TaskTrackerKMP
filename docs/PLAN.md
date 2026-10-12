@@ -93,86 +93,83 @@ Desktop is the closest parallel to the iOS shell: same `commonMain` screen tree,
 Compose tree. The Android shell is the counter-example — it is a full AGP application
 module, not a source set inside a library — and Desktop does not need to copy that shape.
 
-- [ ] **4.1 Choose the shape: module vs source set** · P0 · Decision — A new
-  `:desktopApp` Gradle module (Android-parallel: a thin shell above `:composition-root`
-  and `:shared-ui`, like `:androidApp`) **or** a `jvmMain` source set inside
-  `:shared-ui` (iOS-parallel: a `main()` entry point next to `iosMain`/`androidMain`,
-  like `MainViewController.kt`). The module shape keeps Desktop's run task, any
-  manifest-ish concerns, and its entry point out of `shared-ui`; the source-set shape
-  keeps one fewer module and mirrors how iOS already owns its entry point. The two shapes
-  diverge on whether `verifyArchitectureGraph` needs a new `:desktopApp` row and whether
-  `shared-ui/build.gradle.kts` gains a `jvm` framework/binaries block. Shot-cut: pick the
-  shape before any code is written, because the other files read differently depending on
-  it.
-- [ ] **4.2 Declare the Desktop target and its source sets** · P0 ·
-  `build-logic/convention/src/main/kotlin/tasktracker.kmp.library.gradle.kts` +
-  `gradle/libs.versions.toml` — Add the Desktop target to the convention plugin (or to a
-  new `:desktopApp` build file if 4.1 picks the module shape). Compose Desktop is already
-  on the classpath for `jvmTest` (`compose.desktop.currentOs`); the Desktop target needs
-  it on the app classpath instead, plus a `main` entry. Confirm the Compose Multiplatform
-  1.12.1 desktop coordinates resolve for the chosen target and that `jvmToolchain(25)`
-  still applies. This is the task that makes `./gradlew :desktopApp:compileJvmMain` (or
-  the source-set equivalent) exist.
+- [ ] **4.1 Adopt the source-set shape** · P0 · Decision recorded —
+  Desktop goes in `shared-ui/src/jvmMain/`, the same shape iOS already uses for its entry
+  point (`shared-ui/src/iosMain/MainViewController.kt`). No new Gradle module, no new
+  row in `packageOwnersTable` or `allowedLibraryTable`, no new framework/binaries block.
+  The decision point is not shape-choice but *commitment to this shape*: it is recorded
+  here and in `Project.md` so a later change is a deliberate reversal, not a silent drift.
+- [ ] **4.2 Put `compose.desktop.currentOs` on the app classpath, not only the test classpath** · P0 ·
+  `build-logic/convention/src/main/kotlin/tasktracker.kmp.compose.gradle.kts` —
+  Compose Desktop is already on the classpath for `jvmTest` (`compose.desktop.currentOs`);
+  the Desktop *app* classpath is the one that does not have it yet. Move or duplicate the
+  dependency onto the source set that renders the app (the `jvmMain`-side classpath that
+  the Desktop entry point compiles against), without dropping it from `jvmTest`. Confirm
+  the Compose Multiplatform 1.12.1 desktop coordinates resolve and that the existing
+  `jvmTest` path still compiles afterwards.
 - [ ] **4.3 Add the Desktop entry point** · P0 ·
-  `shared-ui/src/jvmMain/.../DesktopMain.kt` (or `:desktopApp`'s own `main`) — A
-  `main()` that builds the graph (`AppGraph.start()`), opens a Compose `Window`, and
-  renders `TaskTrackerApp` inside it. Model it on `MainViewController.kt`: the graph is
-  owned once in process scope, the entry point takes no arguments from the platform side,
-  and the file contributes only the window and the graph — no Desktop-specific navigation
-  or state. This is the file that makes Desktop render the existing screen tree; nothing
-  in `commonMain` changes for it.
-- [ ] **4.4 Wire the architecture tables for the chosen shape** · P0 ·
-  `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` — If 4.1
-  picks the module shape, add `:desktopApp` to `packageOwnersTable` and
-  `allowedLibraryTable` (same edges as `:androidApp`: `:composition-root`, `:shared-ui`,
-  `:packages:di`). If 4.1 picks the source-set shape, confirm no table change is needed
-  and record that confirmation here. Either way, run
-  `verifyArchitectureGraph` + `verifyModuleImports` after the edit and before anything
-  else, because the tables are the gate.
+  `shared-ui/src/jvmMain/kotlin/com/tasktracker/sharedui/DesktopMain.kt` — A `main()`
+  that builds the graph (`AppGraph.start()`), opens a Compose `Window`, and renders
+  `TaskTrackerApp` inside it. Model it on `MainViewController.kt`: the graph is owned once
+  in process scope, the entry point takes no arguments from the platform side, and the file
+  contributes only the window and the graph — no Desktop-specific navigation or state.
+  This is the file that makes Desktop render the existing screen tree; nothing in
+  `commonMain` changes for it.
+- [ ] **4.4 Confirm the architecture tables need no edit for the source-set shape** · P0 ·
+  `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` +
+  `settings.gradle.kts` — No new module is added, so no new row in
+  `packageOwnersTable` or `allowedLibraryTable` is required. Confirm that by running
+  `verifyArchitectureGraph` + `verifyModuleImports` after 4.2 and 4.3, not before, because
+  the confirmation is only meaningful once the `jvmMain` source set and its entry point
+  exist. Record the confirmation (or the actual failure) in this task's comment rather than
+  leaving it implied.
 - [ ] **4.5 Add a `run` task for Desktop** · P1 ·
-  The Desktop build file (module or source-set shape) — A Gradle task that launches the
-  Desktop app: depends on the Desktop compile/link task and runs the `main` class with the
-  right classpath. This is the Desktop equivalent of `:androidApp:installDebug` and of
-  Xcode's build-and-run; without it Desktop exists in Gradle but not as something a
-  developer can launch. Name it so it is discoverable (`runDesktop` or per-module
-  `:desktopApp:run`) and so it does not collide with the existing `jvmTest` path.
-- [ ] **4.6 Decide Desktop persistence and implement any new actuals** · P1 ·
-  `packages/keychain` + `packages/user-defaults`, `jvmMain` actuals — The JVM target's
-  keychain and user-defaults actuals are in-memory today (test-host stubs). A Desktop app
-  that signs in and restarts loses its session unless Desktop gets real persistence for at
-  least one of them. Decide which seams Desktop gets real backends for (file-based
-  preferences, a JVM keychain backend, both, or neither and Desktop inherits the stubs),
-  and implement the corresponding `jvmMain` actuals. This is also where any new Desktop-
-  only seam lives if one turns out to be needed (window icon, tray, anything that does not
-  exist on the other two platforms).
-- [ ] **4.7 Confirm Compose resources and strings work on Desktop** · P1 ·
+  `shared-ui/build.gradle.kts` — A Gradle `run` task (or `JavaExec`) that launches
+  `DesktopMain.main()`, depends on the `jvmMain` compile output, and uses the classpath
+  that includes the Desktop runtime. This is the Desktop equivalent of
+  `:androidApp:installDebug` and of Xcode's build-and-run; without it Desktop exists in
+  Gradle but not as something a developer can launch. Name it so a developer can find it
+  (`runDesktop` or `:shared-ui:run`-style) and so it does not collide with the existing
+  `jvmTest` path.
+- [ ] **4.6 Decide Desktop persistence and implement any new `jvmMain` actuals** · P1 ·
+  `packages:keychain` + `packages:user-defaults`, `shared-ui/src/jvmMain/` or the
+  owning module's `jvmMain/` — The JVM target's keychain and user-defaults actuals are
+  in-memory today (test-host stubs). A Desktop app that signs in and restarts loses its
+  session unless Desktop gets real persistence for at least one of them. Decide which seams
+  Desktop gets real backends for (file-based preferences, a JVM keychain backend, both, or
+  neither and Desktop inherits the stubs), and implement the corresponding `jvmMain`
+  actuals in the module that owns each seam. This is also where any new Desktop-only seam
+  lives if one turns out to be needed (window icon, tray, anything the other two platforms
+  do not have).
+- [ ] **4.7 Confirm Compose resources and strings render on Desktop** · P1 ·
   Verification — `:packages:design-system` already owns `compose.resources` and already
-  generates `Res`/`stringResource` for all CMP targets including Desktop. Run the Desktop
-  target (or the Desktop test host) and confirm the shell renders strings from
-  `composeResources` rather than falling back to raw strings, and that no new resource
-  home is needed. If a Desktop-launch icon or window asset is wanted, decide its location
-  here; if not, record that Desktop reuses the existing compose resources with no new asset
-  work.
+  generates `Res`/`stringResource` for all CMP targets including Desktop. Launch the Desktop
+  app (or run the Desktop test host) and confirm the shell renders strings from
+  `composeResources` rather than falling back to raw strings, and that no new resource home
+  is needed. If a Desktop-launch icon or window asset is wanted, decide its location here;
+  if not, record that Desktop reuses the existing compose resources with no new asset work.
 - [ ] **4.8 Add Desktop to the test-host picture** · P1 ·
   `Project.md` test-host table + any new Desktop test entry points — Document Desktop as a
-  test host in the table. The existing `commonTest` scenarios and pixel tests already run
-  on a JVM target and Desktop is a JVM target, so the regression is: does Desktop pass the
-  same suites the JVM host does? Decide whether Desktop is its own column (with its own
-  entry-point class, like `HostedGraphScenariosTest`) or folds into the existing JVM
-  column. If Desktop exposes any new `expect`/`actual` that the JVM test host did not cover,
-  add the matching test before this task is done.
-- [ ] **4.9 Run the decision command on the Desktop target and reconcile** · P1 ·
-  Verification — Run the decision command from `Project.md` (or the Desktop equivalent) and
-  confirm Desktop is green at the module level before this section is marked done. If any
-  of the pre-existing failures behave differently on Desktop than on the JVM host, note the
-  difference here rather than silently folding it into the existing numbers.
+  test host in the table. The existing `commonTest` scenarios and pixel tests already run on
+  a JVM target and Desktop is a JVM target, so the question is whether Desktop passes the
+  same suites the JVM host does. Decide whether Desktop is its own column (with its own
+  entry-point class, like `HostedGraphScenariosTest`) or folds into the existing JVM column;
+  the source-set shape does not by itself force either choice. If Desktop exposes any new
+  `expect`/`actual` that the JVM test host did not cover, add the matching test before this
+  task is done.
+- [ ] **4.9 Run the decision command with the Desktop target in the picture and reconcile** · P1 ·
+  Verification — Run the decision command from `Project.md` (or the Desktop-equivalent
+  subset) after 4.2–4.7 and confirm `shared-ui` and the modules it touches are green at the
+  module level before this section is marked done. If any pre-existing failure behaves
+  differently on Desktop than on the JVM host, note the difference here rather than silently
+  folding it into the existing numbers.
 
 ---
 
 ### 4.0 Implementation order (Desktop)
 
-1. **P0**: 4.1 → 4.2 → 4.3 → 4.4 — shape, target, entry point, tables. Nothing renders
-   until the entry point exists and the tables allow it.
+1. **P0**: 4.1 → 4.2 → 4.3 → 4.4 — shape committed (source set), target, entry point,
+   tables. Nothing renders until the entry point exists and the tables allow it.
 2. **P1**: 4.5 → 4.6 → 4.7 — run task, persistence decision, resources confirmation.
    After this the app launches and keeps its state across restarts (or deliberately does
    not).
