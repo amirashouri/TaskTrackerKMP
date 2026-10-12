@@ -89,3 +89,21 @@ kotlin {
         }
     }
 }
+
+// The Desktop run task. The Desktop entry point exists in `jvmMain`, but without
+// this task Gradle knows how to compile it and not how to launch it. This is the
+// Desktop equivalent of `:androidApp:installDebug` and of Xcode's build-and-run:
+// one task, one launchable window, no manual classpath wiring.
+//
+// Implementation: a plain `JavaExec`. The plan left the choice open between this
+// and Compose's own utility, and `JavaExec` is the one that does not depend on a
+// Compose Gradle plugin utility landing in the right form for this build — it
+// points directly at the `jvmMain` runtime classpath the entry point already
+// compiles against.
+tasks.register<JavaExec>("runDesktop") {
+    group = "run"
+    description = "Launches the Compose Desktop shell (shared-ui jvmMain DesktopMainKt)"
+    mainClass.set("com.tasktracker.sharedui.DesktopMainKt")
+    classpath = sourceSets.named("jvmMain").get().runtimeClasspath
+    standardInput = System.`in`
+}
