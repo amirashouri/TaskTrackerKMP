@@ -132,18 +132,25 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1525 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1493 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **1188 tests, 33 failed** — all layout/raster, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1531 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1494 tests, 12 failed** (same 12) |
+| Android host | `testAndroidHostTest` | Robolectric; **1238 tests, 33 failed** — all layout/raster, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
-2026-10-12 from a run with the JVM `test-results` trees deleted first, so the figures are one
-run's output rather than an accumulation of earlier ones: the JVM figure rose from the
-previously recorded 1469, and the iOS figure from 1444, because tests landed on `main` after
-those measurements. The 7 tests this section's Desktop work added are in the JVM figure only
-(they live in `:packages:user-defaults`'s `jvmTest`, which no other host compiles), so the iOS
-total is unchanged by them. `commonTest` holds
+2026-10-12 from a run with the `test-results` trees deleted first, so the figures are one run's
+output rather than an accumulation of earlier ones. All three rose: the JVM figure from the
+previously recorded 1469, iOS from 1444, and the Android host from 1188, because tests landed
+on `main` after those measurements.
+
+The Desktop work added 13 tests, and where they land is worth knowing when the counts move:
+7 in `:packages:user-defaults`'s `jvmTest` and 5 in `:packages:keychain`'s `jvmTest` are
+**JVM-only**, because the backends they cover exist only on that target; the 1 resource test is
+per-host (a scenario body plus a `jvmTest`, an `iosTest` and an `androidHostTest` entry point),
+so it moves all three totals. `:packages:keychain`'s 3 keychain round-trip tests are **opt-in** — they write to the real
+login keychain, so they run only under `TASKTRACKER_KEYCHAIN_INTEGRATION=1`, and they register
+as passes in a default run without having run. That run is the one that matters for the JNA
+binding; the default suite says nothing about it. `commonTest` holds
 **1729** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
 counted per host.
 
