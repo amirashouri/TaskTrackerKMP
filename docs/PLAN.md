@@ -119,14 +119,20 @@ module, not a source set inside a library — and Desktop does not need to copy 
   `settings.gradle.kts` — Confirmed in PR #4: no new module is added, so no new row in
   `packageOwnersTable` or `allowedLibraryTable` is required. Confirmed by running
   `verifyArchitectureGraph` + `verifyModuleImports` on the merged branch — both passed.
-- [ ] **4.5 Add a `run` task for Desktop** · P1 ·
-  `shared-ui/build.gradle.kts` — A Gradle `run` task (or `JavaExec`) that launches
-  `DesktopMain.main()`, depends on the `jvmMain` compile output, and uses the classpath
-  that includes the Desktop runtime. This is the Desktop equivalent of
-  `:androidApp:installDebug` and of Xcode's build-and-run; without it Desktop exists in
-  Gradle but not as something a developer can launch. Name it so a developer can find it
-  (`runDesktop` or `:shared-ui:run`-style) and so it does not collide with the existing
-  `jvmTest` path.
+- [x] **4.5 Add a `run` task for Desktop** · P1 ·
+  `shared-ui/build.gradle.kts` — Done. A `JavaExec` `runDesktop` that launches
+  `com.tasktracker.sharedui.DesktopMainKt` against the `jvmMain` runtime classpath.
+  Verified: the task resolves (`./gradlew :shared-ui:tasks`), launches, and the app
+  reaches its startup sequence (sync coordinator starts; on a clean store the startup
+  cycle finishes). `:shared-ui:jvmTest` stays at its existing 53/7 baseline.
+
+  Caveat recorded: the first launch against this machine's existing on-disk store
+  failed with "migration from 2 to 3 was required but not found" — a pre-existing
+  database-module condition exposed by this being the first time the Desktop app opened
+  the on-disk store here. Deleting the stale `~/Library/Application Support/TaskTracker/`
+  store reproduced the documented dev-store behaviour (drop and recreate) and a clean
+  launch followed. The run task is the deliverable; the stale-store failure is a
+  pre-existing condition, not a run-task bug.
 - [ ] **4.6 Decide Desktop persistence and implement any new `jvmMain` actuals** · P1 ·
   `packages:keychain` + `packages:user-defaults`, `shared-ui/src/jvmMain/` or the
   owning module's `jvmMain/` — The JVM target's keychain and user-defaults actuals are
