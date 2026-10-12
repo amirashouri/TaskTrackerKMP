@@ -2,15 +2,18 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.parseCommentID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseStatusChangeID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
+import com.tasktracker.database.CommentRecord
 import com.tasktracker.database.ProjectRecord
 import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
@@ -503,5 +506,45 @@ internal val StatusChangeRecord.domainValue: StatusChange?
             to = destination,
             changedAt = changedAt,
             changedBy = changedByUserID?.let { parseUserID(it) },
+        )
+    }
+
+/**
+ * A new row for [this].
+ *
+ * `sequence` is left at its default so Room assigns it — the insertion counter the
+ * thread's `createdAt` tie-break depends on, for the reason
+ * [StatusChangeRecord.sequence] gives.
+ */
+internal fun Comment.toRecord(): CommentRecord = CommentRecord(
+    id = id.stringValue,
+    workItemID = workItemID.stringValue,
+    authorID = authorID.stringValue,
+    body = body,
+    createdAt = createdAt,
+    parentID = parentID?.stringValue,
+)
+
+/**
+ * `null` rather than throwing when a column holds something unreadable.
+ *
+ * A row written by a future build — an id this one cannot parse — costs the reader that
+ * row, not the thread, for the reason [StatusChangeRecord.domainValue] gives: a thread
+ * with a gap in it still reads, and one bad row emptying the conversation would be a
+ * single bad row amplified into missing content. The body is never rewritten on the way
+ * in or out: a comment is what was typed.
+ */
+internal val CommentRecord.domainValue: Comment?
+    get() {
+        val commentID = parseCommentID(id) ?: return null
+        val itemID = parseWorkItemID(workItemID) ?: return null
+        val author = parseUserID(authorID) ?: return null
+        return Comment(
+            id = commentID,
+            workItemID = itemID,
+            authorID = author,
+            body = body,
+            createdAt = createdAt,
+            parentID = parentID?.let { parseCommentID(it) },
         )
     }

@@ -3,18 +3,22 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectsdomain.AddComment
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.ExpandRecurrence
+import com.tasktracker.featureprojectsdomain.LoadComments
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SaveWorkItem
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
@@ -77,6 +81,71 @@ class WorkItemEditorModel(
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
     private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
     private val expandRecurrence = ExpandRecurrence(repository, dateProvider)
+
+    private val loadComments = LoadComments(repository)
+    private val postComment = AddComment(repository, dateProvider)
+
+    // MARK: Comments
+
+    /**
+     * The thread as this device holds it, oldest first.
+     *
+     * Loaded once per model (the host calls [refreshComments] when the editor opens) and
+     * appended to after each [submitComment] — the write returns the stored comment, so
+     * the view updates from the value it just created rather than re-reading the store.
+     * A second device's comment arrives through the change announcement, which the host
+     * turns into another [refreshComments].
+     */
+    var comments by mutableStateOf<List<Comment>>(emptyList())
+        private set
+
+    /** The composer's draft, and the comment a send would reply to. */
+    var commentDraft by mutableStateOf("")
+        private set
+
+    var commentReplyTo by mutableStateOf<CommentID?>(null)
+        private set
+
+    fun onCommentDraftChanged(value: String) {
+        commentDraft = value
+    }
+
+    fun onCommentReply(parentID: CommentID) {
+        commentReplyTo = parentID
+    }
+
+    fun onCommentCancelReply() {
+        commentReplyTo = null
+    }
+
+    /**
+     * Reloads the thread — after open, and after a change announcement from elsewhere.
+     *
+     * A no-op while creating: there is no id yet, and a comment cannot be filed against a
+     * work item that does not exist.
+     */
+    suspend fun refreshComments() {
+        val id = existing?.id ?: return
+        comments = reporting { loadComments(id) } ?: comments
+    }
+
+    /**
+     * Posts the draft as [currentUserID], clearing the composer only on success.
+     *
+     * A refusal — blank body, reply to a comment that is gone — lands in the shared
+     * [errorMessage] banner via [reporting] and leaves both the draft and the reply
+     * target alone, so the text is never thrown away by a failed send.
+     */
+    suspend fun submitComment() {
+        val author = currentUserID ?: return
+        val id = existing?.id ?: return
+        val posted = reporting {
+            postComment(workItemID = id, authorID = author, body = commentDraft, parentID = commentReplyTo)
+        } ?: return
+        comments = comments + posted
+        commentDraft = ""
+        commentReplyTo = null
+    }
 
     private val original: Draft? = existing?.let { Draft.of(it) }
 

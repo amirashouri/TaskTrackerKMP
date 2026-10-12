@@ -6,11 +6,15 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomUserID
+import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.projects
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -1264,5 +1268,130 @@ class RoomSprintRepositoryTest {
         )
 
         assertEquals(0, updated.goalStoryPoints)
+    }
+
+    // MARK: Comments
+
+    @Test
+    fun anAddedCommentIsStoredWithItsBodyAndParent() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val author = randomUserID()
+
+        // Whitespace is the *use case's* rule to strip; the store holds what it is given.
+        // A trim here would erase the very difference the pair of tests exists to pin.
+        val root = harness.repository.addComment(item.id, author, "  As typed  ", null, Moments.start)
+        val reply = harness.repository.addComment(item.id, author, "Answer", root.id, Moments.later)
+
+        val thread = harness.repository.comments(item.id)
+        assertEquals(listOf(root.id, reply.id), thread.map { it.id })
+        assertEquals("  As typed  ", thread[0].body, "the store stores the body as given")
+        assertEquals(root.id, thread[1].parentID)
+        assertEquals(author, thread[0].authorID)
+    }
+
+    @Test
+    fun anAddedCommentQueuesOneCommentRowCarryingTheCommentItself() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val author = randomUserID()
+
+        val comment = harness.repository.addComment(item.id, author, "Queued", null, Moments.start)
+
+        // Filtered rather than compared against the whole queue: the project and item this
+        // test set up are queued too, and the comment rows are the subject.
+        val commentRows = harness.queued().filter { it.entityKind == "comment" }
+        assertEquals(1, commentRows.size)
+        assertEquals("upsert", commentRows[0].operation)
+        assertEquals(comment.id.stringValue, commentRows[0].entityID)
+        val payload = JSONCoding.json.decodeFromString(Comment.serializer(), commentRows[0].payload.decodeToString())
+        assertEquals(comment, payload, "the payload is the domain value, not the record")
+    }
+
+    @Test
+    fun addingACommentAnnouncesTheWorkItemsOfItsProject() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.repository.addComment(item.id, randomUserID(), "Announced", null, Moments.start)
+
+        assertEquals(
+            listOf(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID)),
+            seen,
+            "an open editor re-reads the thread only if the announcement names its project",
+        )
+    }
+
+    @Test
+    fun commentsComeBackOldestFirstWithTheTieBrokenByInsertion() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val author = randomUserID()
+
+        val first = harness.repository.addComment(item.id, author, "First", null, Moments.start)
+        val second = harness.repository.addComment(item.id, author, "Second", null, Moments.start)
+        val third = harness.repository.addComment(item.id, author, "Third", null, Moments.later)
+
+        assertEquals(
+            listOf(first.id, second.id, third.id),
+            harness.repository.comments(item.id).map { it.id },
+            "two comments in one clock tick must not be able to swap places between reads",
+        )
+    }
+
+    @Test
+    fun addingACommentToAWorkItemThatIsGoneIsRefusedWithoutAQueueRow() = runTest {
+        // No foreign key enforces this — the package rule rules those out — so the read
+        // inside the transaction is the only thing standing between a dangling thread and
+        // a row nothing would ever clean up.
+        val harness = Harness()
+        val commentRowsBefore = harness.queued().count { it.entityKind == "comment" }
+
+        assertFailsWith<AppError> {
+            harness.repository.addComment(randomWorkItemID(), randomUserID(), "Orphan", null, Moments.start)
+        }
+
+        assertEquals(
+            commentRowsBefore,
+            harness.queued().count { it.entityKind == "comment" },
+            "nothing exists to attach the thread to, so nothing may be queued",
+        )
+    }
+
+    @Test
+    fun deletingAWorkItemTakesItsCommentsWithoutQueueingARowForEach() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        harness.repository.addComment(item.id, randomUserID(), "Doomed", null, Moments.start)
+
+        harness.repository.deleteWorkItem(item.id)
+
+        assertEquals(emptyList(), harness.repository.comments(item.id))
+        assertEquals(
+            0,
+            harness.queued().count { it.entityKind == "comment" && it.operation == "delete" },
+            "the item's own delete row is all the server needs; a row per comment would be a second, redundant answer",
+        )
+    }
+
+    @Test
+    fun deletingAProjectTakesTheCommentsOfItsItems() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        harness.repository.addComment(item.id, randomUserID(), "Goes too", null, Moments.start)
+
+        harness.repository.deleteProject(item.projectID)
+
+        assertEquals(emptyList(), harness.repository.comments(item.id))
+    }
+
+    /** A project with one item — the arrangement every comment test in this file needs. */
+    private suspend fun anItem(harness: Harness): WorkItem {
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        return harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+        )
     }
 }

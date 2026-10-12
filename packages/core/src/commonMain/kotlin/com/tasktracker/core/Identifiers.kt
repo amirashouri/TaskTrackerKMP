@@ -67,6 +67,15 @@ value class StatusChangeID(val rawValue: Uuid) {
     override fun toString(): String = stringValue
 }
 
+/** One comment in a work item's thread. */
+@Serializable
+@JvmInline
+value class CommentID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
 /**
  * A stable, human-readable key in the Jira style (`TT-142`), derived server-side
  * and cached locally so a work item rendered offline still shows a sensible key.
@@ -96,6 +105,9 @@ fun randomSprintID(): SprintID = SprintID(Uuid.random())
 /** Generates a fresh identifier. */
 fun randomStatusChangeID(): StatusChangeID = StatusChangeID(Uuid.random())
 
+/** Generates a fresh identifier. */
+fun randomCommentID(): CommentID = CommentID(Uuid.random())
+
 /**
  * Parses an identifier from its wire string, or returns `null` if malformed.
  *
@@ -119,3 +131,7 @@ fun parseSprintID(raw: String): SprintID? = runCatching { SprintID(Uuid.parse(ra
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseStatusChangeID(raw: String): StatusChangeID? =
     runCatching { StatusChangeID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseCommentID(raw: String): CommentID? =
+    runCatching { CommentID(Uuid.parse(raw)) }.getOrNull()

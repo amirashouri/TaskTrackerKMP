@@ -2,14 +2,17 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
 import com.tasktracker.core.Broadcaster
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomWorkItemID
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -28,6 +31,7 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.featureteamsdomain.User
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 
 /**
@@ -268,6 +272,53 @@ object ViewPreviewData {
         add(item("GE-1", secondProject.id, "Rename the colour tokens", status = WorkItemStatus.Todo))
     }
 
+    // MARK: Comments
+
+    /**
+     * A four-comment thread on `TT-1`: two top-level comments, a reply under the first,
+     * and a reply under *that* — so a preview exercises the recursive indent, not just
+     * the flat case.
+     *
+     * Fixed ids and instants because previews render the same shape every time they are
+     * opened; the timestamps are one `instant` plus minutes so ordering reads the same on
+     * every host without depending on a clock.
+     */
+    val previewComments: List<Comment> = listOf(
+        Comment(
+            id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0001"),
+            workItemID = workItems.first().id,
+            authorID = previewGraceID,
+            body = "The queue drops the second retry when the tab loses focus — seen twice on iOS.",
+            createdAt = instant,
+        ),
+        Comment(
+            id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0002"),
+            workItemID = workItems.first().id,
+            authorID = previewUserID,
+            body = "Reproduced. It is the cancellation path, not the retry counter.",
+            createdAt = instant + 3.minutes,
+            parentID = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0001"),
+        ),
+        Comment(
+            id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0003"),
+            workItemID = workItems.first().id,
+            authorID = previewUserID,
+            body = "Filed a follow-up; this card can stay in backlog until the fix lands.",
+            createdAt = instant + 7.minutes,
+        ),
+        Comment(
+            id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0004"),
+            workItemID = workItems.first().id,
+            authorID = previewGraceID,
+            body = "Agreed — and the fix should land before the release notes do.",
+            createdAt = instant + 9.minutes,
+            parentID = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0002"),
+        ),
+    )
+
+    /** Author labels for [previewComments], straight from the shared name fixture. */
+    val previewCommentAuthorNames: Map<UserID, String> = previewUserNames
+
     // MARK: Sprints
 
     /**
@@ -439,6 +490,7 @@ private class PreviewRepository(
     // same reason.
     private val storedSprints = sprints.map { it.copy() }.toMutableList()
     private val storedStatusChanges = mutableListOf<StatusChange>()
+    private val storedComments = mutableListOf<Comment>()
     private val broadcaster = Broadcaster<ProjectChange>()
 
     override suspend fun projects(includeArchived: Boolean): List<Project> =
@@ -462,6 +514,32 @@ private class PreviewRepository(
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
         storedStatusChanges.filter { it.workItemID == workItemID }
+
+    // Real storage, like `storedSprints`: a preview that adds a comment should see it,
+    // and an empty thread would make the comment section render as its empty state in
+    // every preview whether or not the preview asked for content.
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> =
+        storedComments.filter { it.workItemID == workItemID }
+            .sortedWith(compareBy({ it.createdAt }, { it.id.stringValue }))
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment {
+        val comment = Comment(
+            id = randomCommentID(),
+            workItemID = workItemID,
+            authorID = authorID,
+            body = body,
+            createdAt = now,
+            parentID = parentID,
+        )
+        storedComments += comment
+        return comment
+    }
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = false
 
@@ -641,7 +719,9 @@ private class PreviewRepository(
 
     override suspend fun deleteProject(id: ProjectID) {
         storedProjects.removeAll { it.id == id }
+        val itemIDs = storedItems.filter { it.projectID == id }.map { it.id }
         storedItems.removeAll { it.projectID == id }
+        storedComments.removeAll { it.workItemID in itemIDs }
         broadcaster.send(ProjectChange(ProjectChange.Kind.Projects, id))
     }
 
@@ -735,6 +815,7 @@ private class PreviewRepository(
     override suspend fun deleteWorkItem(id: WorkItemID) {
         val item = storedItems.first { it.id == id }
         storedItems.removeAll { it.id == id }
+        storedComments.removeAll { it.workItemID == id }
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
     }
 

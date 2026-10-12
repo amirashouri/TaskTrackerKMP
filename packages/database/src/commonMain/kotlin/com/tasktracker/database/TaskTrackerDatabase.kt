@@ -75,8 +75,12 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         WorkItemRecord::class,
         StatusChangeRecord::class,
         SprintRecord::class,
+        CommentRecord::class,
     ],
-    version = 1,
+    // 2: the comments table. Bumped rather than left at 1 so an existing dev store is
+    // dropped and recreated by [open]'s destructive fallback instead of failing schema
+    // validation on a missing table — see the class KDoc on when the reset story ends.
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -94,6 +98,8 @@ abstract class TaskTrackerDatabase : RoomDatabase() {
     abstract fun statusChangeDao(): StatusChangeDao
 
     abstract fun sprintDao(): SprintDao
+
+    abstract fun commentDao(): CommentDao
 
     companion object {
         /**

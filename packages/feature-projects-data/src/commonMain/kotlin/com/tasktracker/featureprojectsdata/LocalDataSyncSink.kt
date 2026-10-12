@@ -8,6 +8,7 @@ import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.inTransaction
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
@@ -91,6 +92,15 @@ class LocalDataSyncSink(
             OutboxEntity.Sprint -> {
                 val owner = applySprint(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = owner))
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
+            }
+
+            // Announced as a work-item change, matching the local write's choice in
+            // `RoomProjectRepository.addComment`: the open editor re-reads its thread, and
+            // `null` — an unscoped announcement — is the documented case for "the project
+            // cannot be named" (a comment arriving before its work item does).
+            OutboxEntity.Comment -> {
+                val owner = applyComment(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
             }
         }
@@ -189,6 +199,11 @@ class LocalDataSyncSink(
                 val existing = database.workItemDao().byID(id) ?: return@inTransaction null
                 val projectID = parseProjectID(existing.projectID)
                 database.statusChangeDao().deleteByWorkItem(id)
+                // The thread goes with the item on a pull-delete for the reason the
+                // history does — a leftover row is unreachable and would reattach to a
+                // future work item issued the same id. The local path deletes them the
+                // same way; both halves of the cascade have to stay in step.
+                database.commentDao().deleteByWorkItem(id)
                 database.workItemDao().deleteByID(id)
                 projectID
             }
@@ -214,6 +229,46 @@ class LocalDataSyncSink(
         }
         return item.projectID
     }
+
+    /**
+     * Applies one comment, server-wins, without ever touching the outbox (class KDoc).
+     *
+     * **Insert-only when the row is already here**, which is the idempotency an
+     * interrupted cycle demands: re-delivering the page it could not finish writes the
+     * same comment twice otherwise. And because no edit use case exists yet, "already
+     * here" cannot mean "stale copy of an edited body" — there is nothing to overwrite.
+     * When editing lands, this becomes an `apply(comment)` merge, not before.
+     *
+     * @return the owning project, read from the comment's work item; `null` when the item
+     *   is not here (a comment pulled before its item) or the id is unreadable — announced
+     *   unscoped rather than not at all, per [ProjectChange]'s KDoc. The comment itself is
+     *   still stored in every case: dropping content because its *context* is missing is
+     *   how a thread ends up full of holes.
+     */
+    private suspend fun applyComment(change: RemoteChange): ProjectID? {
+        if (change.operation == OutboxOperation.Delete) {
+            val id = change.entityID
+            val workItemID = inTransaction(database) {
+                val existing = database.commentDao().byID(id) ?: return@inTransaction null
+                database.commentDao().deleteByID(id)
+                existing.workItemID
+            } ?: return null
+            return projectOwning(workItemID)
+        }
+
+        val comment = decode(Comment.serializer(), change.payload, change.entity)
+        inTransaction(database) {
+            if (database.commentDao().byID(comment.id.stringValue) == null) {
+                database.commentDao().insert(comment.toRecord())
+            }
+        }
+        return projectOwning(comment.workItemID.stringValue)
+    }
+
+    /** The project a row's work item belongs to, or `null` when the item is not here. */
+    private suspend fun projectOwning(workItemID: String): ProjectID? =
+        database.workItemDao().byID(workItemID)
+            ?.let { parseProjectID(it.projectID) }
 
     /**
      * Throwing here aborts the page and leaves the cursor where it was, so a payload this

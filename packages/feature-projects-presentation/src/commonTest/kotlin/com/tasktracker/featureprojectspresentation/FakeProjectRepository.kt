@@ -9,6 +9,8 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
+import com.tasktracker.core.CommentID
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
@@ -16,6 +18,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -91,6 +94,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedProjects = mutableListOf<Project>()
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
+    private val storedComments = mutableListOf<Comment>()
     private val storedSprints = mutableListOf<Sprint>()
 
     /** Written, so a test can assert which use case ran and with what. */
@@ -317,6 +321,16 @@ class FakeProjectRepository : ProjectRepositoryPort {
             )
     }
 
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> = locked {
+        // Oldest first; the id tiebreak is this fake's stand-in for the real store's
+        // insertion-order tiebreak — deterministic, which is what a fake owes a test.
+        storedComments.filter { it.workItemID == workItemID }
+            .sortedWith(
+                compareBy<Comment> { it.createdAt }
+                    .thenBy { it.id.stringValue },
+            )
+    }
+
     // MARK: Writes
 
     override suspend fun seedSampleDataIfNeeded(): Boolean {
@@ -395,8 +409,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun deleteProject(id: ProjectID) {
         writing({ ProjectChange(ProjectChange.Kind.Projects, id) }) {
             failIfSet()
+            val itemIDs = storedItems.filter { it.projectID == id }.map { it.id }
             storedProjects.removeAll { it.id == id }
             storedItems.removeAll { it.projectID == id }
+            storedComments.removeAll { it.workItemID in itemIDs }
             writes += "deleteProject"
         }
     }
@@ -515,7 +531,34 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val existing = storedItems.first { it.id == id }
             projectID = existing.projectID
             storedItems.remove(existing)
+            storedComments.removeAll { it.workItemID == id }
             writes += "deleteWorkItem"
+        }
+    }
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment {
+        var projectID: ProjectID? = null
+        return writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID!!) }) {
+            failIfSet()
+            val existing = storedItems.first { it.id == workItemID }
+            projectID = existing.projectID
+            val comment = Comment(
+                id = randomCommentID(),
+                workItemID = workItemID,
+                authorID = authorID,
+                body = body,
+                createdAt = now,
+                parentID = parentID,
+            )
+            storedComments += comment
+            writes += "addComment"
+            comment.copy()
         }
     }
 

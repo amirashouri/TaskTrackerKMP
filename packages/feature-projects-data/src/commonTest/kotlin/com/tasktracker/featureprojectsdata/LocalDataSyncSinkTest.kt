@@ -1,12 +1,16 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.JSONCoding
+import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
@@ -514,6 +518,84 @@ class LocalDataSyncSinkTest {
         assertEquals(sprint, harness.repository.sprint(sprint.id))
     }
 
+    // MARK: Comments
+
+    @Test
+    fun aPulledCommentIsInsertedWhenItIsNotHereAndNothingIsQueued() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val comment = aComment(item.id)
+        val depth = harness.queueDepth()
+
+        harness.sink.apply(upsert(OutboxEntity.Comment, comment))
+
+        assertEquals(listOf(comment), harness.repository.comments(item.id))
+        assertEquals(depth, harness.queueDepth(), "a pull must never queue what it applied")
+    }
+
+    @Test
+    fun applyingTheSamePulledCommentTwiceDoesNotDuplicateIt() = runTest {
+        // A comment is immutable and the cursor re-delivers pages, so the upsert path
+        // inserts only when the row is absent — a second delivery must be a no-op, not a
+        // second row under the same unique id.
+        val harness = Harness()
+        val item = anItem(harness)
+        val comment = aComment(item.id)
+        val depth = harness.queueDepth()
+        val change = upsert(OutboxEntity.Comment, comment)
+
+        harness.sink.apply(change)
+        harness.sink.apply(change)
+
+        assertEquals(listOf(comment), harness.repository.comments(item.id))
+        assertEquals(depth, harness.queueDepth())
+    }
+
+    @Test
+    fun aPulledCommentAnnouncesTheWorkItemsOfTheProjectThatOwnsItsItem() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val comment = aComment(item.id)
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.sink.apply(upsert(OutboxEntity.Comment, comment))
+
+        assertEquals(listOf(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID)), seen)
+    }
+
+    @Test
+    fun aPulledCommentWhoseWorkItemIsNotHereYetLandsAndNamesNoProject() = runTest {
+        // The server orders its pages, not our schema: a comment can arrive ahead of the
+        // card it belongs to. No foreign key refuses it (the package rule rules those out),
+        // so the row lands and the announcement stays unscoped — `null` is the documented
+        // case for "the project cannot be named".
+        val harness = Harness()
+        val comment = aComment(randomWorkItemID())
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.sink.apply(upsert(OutboxEntity.Comment, comment))
+
+        assertEquals(listOf(comment), harness.repository.comments(comment.workItemID))
+        assertEquals(listOf(ProjectChange(ProjectChange.Kind.WorkItems, null)), seen)
+    }
+
+    @Test
+    fun aPulledCommentDeleteRemovesTheRowAndSucceedsWhenRepeated() = runTest {
+        val harness = Harness()
+        val item = anItem(harness)
+        val comment = aComment(item.id)
+        harness.sink.apply(upsert(OutboxEntity.Comment, comment))
+        val depth = harness.queueDepth()
+
+        harness.sink.apply(delete(OutboxEntity.Comment, comment.id.stringValue))
+        harness.sink.apply(delete(OutboxEntity.Comment, comment.id.stringValue))
+
+        assertEquals(emptyList(), harness.repository.comments(item.id))
+        assertEquals(depth, harness.queueDepth(), "a re-delivered delete must not queue anything either")
+    }
+
     // MARK: Helpers
 
     private fun upsert(entity: OutboxEntity, value: Any): RemoteChange =
@@ -549,6 +631,7 @@ class LocalDataSyncSinkTest {
         is Project -> value.id.stringValue
         is Sprint -> value.id.stringValue
         is WorkItem -> value.id.stringValue
+        is Comment -> value.id.stringValue
         else -> error("not a projects payload: $value")
     }
 
@@ -556,7 +639,26 @@ class LocalDataSyncSinkTest {
         is Project -> JSONCoding.json.encodeToString(Project.serializer(), value).encodeToByteArray()
         is Sprint -> JSONCoding.json.encodeToString(Sprint.serializer(), value).encodeToByteArray()
         is WorkItem -> JSONCoding.json.encodeToString(WorkItem.serializer(), value).encodeToByteArray()
+        is Comment -> JSONCoding.json.encodeToString(Comment.serializer(), value).encodeToByteArray()
         else -> error("not a projects payload: $value")
+    }
+
+    /** A comment with every field the sink reads set to something unlike its default. */
+    private fun aComment(workItemID: WorkItemID): Comment = Comment(
+        id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0001"),
+        workItemID = workItemID,
+        authorID = adaUserID,
+        body = "Every column non-default.",
+        createdAt = Moments.start,
+        parentID = CommentID("dddddddd-dddd-4ddd-8ddd-dddddddd0002"),
+    )
+
+    /** A project with one item — the arrangement every comment test above needs. */
+    private suspend fun anItem(harness: Harness): WorkItem {
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        return harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+        )
     }
 
     /** Everything the sink could have written, as one comparable value. */

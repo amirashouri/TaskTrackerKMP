@@ -132,13 +132,13 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1450 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1425 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **854 tests, 17 failed** — all layout, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1469 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1444 tests, 12 failed** (same 12) |
+| Android host | `testAndroidHostTest` | Robolectric; **1188 tests, 33 failed** — all layout/raster, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. `commonTest` holds
-**1710** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
+**1729** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
 counted per host.
 
 The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`),
@@ -152,12 +152,15 @@ The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-project
 the working tree's uncommitted work, so neither the recurrence feature nor the user-directory
 work caused them. See `docs/DECISIONS.md`, measurement lore.
 
-The 17 on the Android host are all Compose layout failures, not behaviour: Robolectric's default
-viewport is far smaller, so content inside a `LazyColumn` or a `horizontalScroll` row exists but
-is not displayed. 7 are in `:packages:feature-settings-presentation`, 7 in `:shared-ui`, 3 in
-`:packages:feature-projects-presentation`. That rises from 5 to 17 only because two modules had
-stopped executing at all — they failed their `commonTest` *compilation* on a stale `ttTheme`
-call, which is fixed.
+The 33 on the Android host are Compose layout and rasterisation failures, not behaviour:
+Robolectric's default viewport is far smaller, so content inside a `LazyColumn` or a
+`horizontalScroll` row exists but is not displayed, and its rasteriser disagrees with the
+other two hosts on the pixel gates. 14 are in `:packages:design-system` (the `DateField*` and
+`StoryPoints` contrast/raster gates), 8 in `:packages:feature-settings-presentation`,
+3 in `:packages:feature-projects-presentation`, and 8 in `:shared-ui`. Measured 2026-10-12:
+the `:shared-ui` eight were re-run with the comments feature's editor wiring reverted and the
+identical set failed, so none of the 33 belongs to that feature. The rise from the previously
+recorded 854/17 is tests that landed on `main` after that measurement, not new breakage.
 
 A test that renders Compose and reads pixels must call `thisHostRasterisesText()` — an `expect` in
 `:packages:design-system`'s `commonTest` with actuals in `jvmTest`, `iosTest`, `androidHostTest`.

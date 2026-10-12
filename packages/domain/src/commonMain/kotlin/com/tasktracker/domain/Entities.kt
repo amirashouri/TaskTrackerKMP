@@ -1,11 +1,13 @@
 package com.tasktracker.domain
 
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.StatusChangeID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
@@ -675,3 +677,32 @@ data class StatusChange(
      */
     val altersStatus: Boolean get() = from != to
 }
+
+/**
+ * One comment in a work item's thread.
+ *
+ * A value with a threading link, not a tree: [parentID] names the comment being replied to,
+ * and the thread is grouped by the reader rather than stored nested — so a reply can be
+ * written before this device has seen its parent (another device's comment pulled out of
+ * order), and deleting a comment never has to decide what happens to its subtree.
+ *
+ * **Unlike [StatusChange], comments do touch the outbox.** A status move is a device-local
+ * fact about who dragged a card; a comment is the collaboration itself, and a comment that
+ * never reaches the other members is not a comment. So every local write queues an upsert,
+ * and the pull side inserts incoming comments without re-queueing them (pull isolation).
+ *
+ * The author is non-null, unlike [StatusChange.changedBy]. A comment nobody can attribute
+ * is worthless in a thread — "who said this" is the question the view answers — so the
+ * composer only offers to send when a session is known rather than writing a blank author.
+ */
+@Serializable
+data class Comment(
+    val id: CommentID = randomCommentID(),
+    val workItemID: WorkItemID,
+    val authorID: UserID,
+    /** The text as stored: trimmed by the use case, never rewritten afterwards. */
+    val body: String,
+    val createdAt: Instant,
+    /** The comment being replied to, or `null` for a top-level comment. */
+    val parentID: CommentID? = null,
+)
