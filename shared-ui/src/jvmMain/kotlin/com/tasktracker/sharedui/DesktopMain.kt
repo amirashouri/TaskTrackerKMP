@@ -27,14 +27,35 @@ import com.tasktracker.di.Resolver
  * wrong dependency direction. The graph is owned in Kotlin, exactly as
  * `TaskTrackerApplication` owns it on Android and `IosGraph` owns it on iOS.
  */
-fun main() {
-    isDesktopApp = true
+fun main() = startDesktopProcess {
     val resolver = DesktopGraph.resolver
     application {
         Window(onCloseRequest = ::exitApplication) {
             DesktopContent(resolver = resolver)
         }
     }
+}
+
+/**
+ * Marks this process as the Desktop app, and only then opens the shell.
+ *
+ * The order is the contract, not a style choice. The shell's graph builds every store when
+ * it is started, and both JVM storage seams pick their backend from [isDesktopApp] at
+ * construction time — `platformPreferences()` returns the file-backed backend only once the
+ * flag is set, and the JVM `systemKeychain()` likewise hands out the in-memory stub while it
+ * is clear. Dropping the assignment, or opening the shell first, leaves a Desktop app that
+ * holds its session and its appearance in memory alone and loses both on every restart, with
+ * nothing on screen to say so.
+ *
+ * Extracted from `main` because that decision has to be reachable from a test. `main` opens a
+ * window and blocks until it closes, so nothing in the suite could enter the sequence that
+ * decides whether Desktop persists anything; `DesktopEntryPointJvmTest` asserts the flag is
+ * already set at the moment the shell is opened, which fails both when the assignment is
+ * deleted and when the two steps are swapped.
+ */
+internal fun startDesktopProcess(openShell: () -> Unit) {
+    isDesktopApp = true
+    openShell()
 }
 
 /**
