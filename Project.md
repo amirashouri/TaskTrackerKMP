@@ -132,12 +132,18 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1469 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1444 tests, 12 failed** (same 12) |
+| JVM | `jvmTest` | fast feedback; run this — **1525 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1493 tests, 12 failed** (same 12) |
 | Android host | `testAndroidHostTest` | Robolectric; **1188 tests, 33 failed** — all layout/raster, documented below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
-(`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. `commonTest` holds
+(`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
+2026-10-12 from a run with the JVM `test-results` trees deleted first, so the figures are one
+run's output rather than an accumulation of earlier ones: the JVM figure rose from the
+previously recorded 1469, and the iOS figure from 1444, because tests landed on `main` after
+those measurements. The 7 tests this section's Desktop work added are in the JVM figure only
+(they live in `:packages:user-defaults`'s `jvmTest`, which no other host compiles), so the iOS
+total is unchanged by them. `commonTest` holds
 **1729** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
 counted per host.
 

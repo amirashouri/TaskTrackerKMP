@@ -133,7 +133,7 @@ module, not a source set inside a library — and Desktop does not need to copy 
   store reproduced the documented dev-store behaviour (drop and recreate) and a clean
   launch followed. The run task is the deliverable; the stale-store failure is a
   pre-existing condition, not a run-task bug.
-- [ ] **4.6 Decide Desktop persistence and implement any new `jvmMain` actuals** · P1 ·
+- [x] **4.6 Decide Desktop persistence and implement any new `jvmMain` actuals** · P1 ·
   `packages:keychain` + `packages:user-defaults`, `shared-ui/src/jvmMain/` or the
   owning module's `jvmMain/` — The JVM target's keychain and user-defaults actuals are
   in-memory today (test-host stubs). A Desktop app that signs in and restarts loses its
@@ -143,6 +143,42 @@ module, not a source set inside a library — and Desktop does not need to copy 
   actuals in the module that owns each seam. This is also where any new Desktop-only seam
   lives if one turns out to be needed (window icon, tray, anything the other two platforms
   do not have).
+
+  **Decision: preferences yes (a file), keychain no (stays the in-memory stub).** The two
+  seams are not symmetric and treating them as one is the mistake this task was written to
+  avoid. `:packages:user-defaults` holds non-sensitive, device-scoped values — the
+  appearance scheme and the last-visited project — and both are properties of the *machine*,
+  so a restart must not lose them and an unencrypted file is the right store. Credentials
+  are the opposite: the JVM has no system keychain, and a file is exactly what
+  `PreferencesBackend`'s own doc says must never hold a token, so Desktop keeps
+  `InMemoryKeychain`. Consequence, recorded rather than glossed: **a Desktop restart still
+  does not restore a session** — the user signs in again — while the appearance and the
+  last-visited project now survive. Making the session survive Desktop would mean a JVM
+  keychain backend (an encrypted file or an OS keystore), which is its own decision.
+
+  Implemented:
+  - `packages/user-defaults/src/jvmMain/…/FilePropertiesBackend.kt` (new) — a
+    `Properties`-backed backend over one file, with the app-support directory resolved in
+    this module rather than borrowed from `:packages:database`, because `user-defaults`
+    sits below `database` in `allowedLibraryTable` and cannot depend on it.
+  - `packages/user-defaults/src/jvmMain/…/JvmPropertiesBackend.kt` — `platformPreferences()`
+    now routes on the new process flag: file-backed on Desktop, in-memory on the JVM test
+    host, so a test that writes a preference still leaves nothing behind.
+  - `packages/core/src/jvmMain/…/DesktopAppMarker.kt` — the `isDesktopApp` flag. It was
+    sitting untracked; this commits it.
+  - `shared-ui/src/jvmMain/…/DesktopMain.kt` — sets the flag before `application {}`, and
+    the two imports that named `com.tasktracker.database` (`isDesktopApp`, and a
+    `preferencesFilePath` that never existed) are gone. `shared-ui` does not depend on
+    `:packages:database` and the architecture table says it should not; the shell now reads
+    the path through `:packages:user-defaults`, which it already had.
+
+  Verified: 7 new tests in `:packages:user-defaults`'s `jvmTest`, all mutation-checked —
+  reverting the write path turns 4 red, pointing the router at the in-memory backend turns 1
+  red, renaming the preferences file turns 1 red, and making an absent file throw turns 1
+  red. `:packages:user-defaults:jvmTest` 26/26 green; `verifyArchitectureGraph` and
+  `verifyModuleImports` green with no new edge; `:androidApp:compileDebugKotlin` green.
+  `:shared-ui:jvmTest` unchanged at its 53/7 baseline, and all 12 JVM failures were
+  reproduced at `HEAD` in a stashed clean tree, so none of them belongs to this work.
 - [ ] **4.7 Confirm Compose resources and strings render on Desktop** · P1 ·
   Verification — `:packages:design-system` already owns `compose.resources` and already
   generates `Res`/`stringResource` for all CMP targets including Desktop. Launch the Desktop
