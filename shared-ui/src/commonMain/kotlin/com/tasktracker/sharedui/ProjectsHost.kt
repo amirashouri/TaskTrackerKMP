@@ -176,8 +176,15 @@ fun ProjectsHost(
                 onNameChanged = editor::onNameChanged,
                 onKeyPrefixChanged = editor::onKeyPrefixChanged,
                 onDetailsChanged = editor::onDetailsChanged,
+                // The project editor's picker is NOT scoped to the project's members — it is the control
+                // that edits that membership, so scoping it would make every new member
+                // unreachable. `assignableMembersFor` belongs to the pickers that consume
+                // membership, not the one that writes it.
                 searchMembers = { query ->
                     environment.teamPort?.searchMembers(query) ?: emptyList()
+                },
+                resolveSelected = { ids ->
+                    environment.teamPort?.users(ids) ?: emptyList()
                 },
                 errorMessage = editor.errorMessage,
                 onSave = {

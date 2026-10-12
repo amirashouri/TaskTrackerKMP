@@ -111,6 +111,11 @@ fun SprintEditorSheet(
     today: LocalDate? = null,
     /** The directory behind the owner picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /** Resolves the selected owner, unfiltered; see [MemberPicker.resolveSelected]. */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
 ) {
     TTBottomSheetScaffold(
         visible = visible,
@@ -215,6 +220,7 @@ fun SprintEditorSheet(
                 assigneeID = ownerID,
                 onAssigneeChanged = onOwnerChanged,
                 searchMembers = searchMembers,
+            resolveSelected = resolveSelected,
                 title = stringResource(Res.string.sprint_owner_label),
                 testTag = SprintEditorOwnerTag,
             )

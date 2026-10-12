@@ -113,6 +113,21 @@ internal fun MemberPicker(
     placeholder: String = "",
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     /**
+     * Resolves the *selected* ids to profiles, for the pills above the field.
+     *
+     * Deliberately separate from [searchMembers]: that one may be scoped to the current
+     * project's members, and a selection that predates a membership change has to render
+     * anyway. Hosts should pass the directory's unfiltered id lookup here — see
+     * [com.tasktracker.featureteamsdomain.TeamPort.users].
+     *
+     * Defaults to searching the directory with a blank query, which is the unfiltered listing
+     * and therefore correct wherever [searchMembers] is *not* scoped.
+     */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
+    /**
      * The root test tag, and the prefix for every tag this picker draws beneath it.
      *
      * The root carries [tagPrefix] verbatim rather than a wrapped form of it, because the
@@ -139,14 +154,19 @@ internal fun MemberPicker(
 
     // The pills need names, and the call sites only hold IDs and the search seam — so the
     // picker resolves them itself, once per selection change rather than per keystroke.
-    // `searchMembers("")` is the directory listing (the fake returns everyone; a real
-    // backend can grow a `getUsers(ids)` seam later without this UI changing).
-    LaunchedEffect(selectedIDs) {
+    //
+    // Through [resolveSelected], not through [searchMembers], and the difference is the whole
+    // point of this seam. `searchMembers` is now *filtered* to the current project's members
+    // (see `assignableMembersFor`), so a task assigned last month to someone who has since
+    // left the project would resolve to nothing and its pill would silently vanish — the field
+    // would read Unassigned while the saved model still held an assignee, which is the app
+    // lying about data it has. Resolution by id is not filtered, so the pill survives and the
+    // user can see who it is actually assigned to, then reassign or clear it deliberately.
+    LaunchedEffect(selectedIDs, resolveSelected) {
         selectedUsers = if (selectedIDs.isEmpty()) {
             emptyList()
         } else {
-            val directory = searchMembers("")
-            selectedIDs.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+            resolveSelected(selectedIDs)
         }
     }
 

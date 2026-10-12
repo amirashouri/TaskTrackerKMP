@@ -72,6 +72,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.TeamPort
+import com.tasktracker.featureprojectspresentation.assignableMembersFor
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
@@ -1037,8 +1038,17 @@ private fun SprintsDestination(
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
             searchMembers = { query ->
-                environment.teamPort?.searchMembers(query) ?: emptyList()
+                // 1.6: a sprint's owner may only be one of this project's members. The
+                // directory knows nothing about projects, so the intersection is applied here,
+                // where the project and the directory are both to hand.
+                assignableMembersFor(
+                    project = currentProject,
+                    directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
+                )
             },
+            // Unfiltered by design: see MemberPicker.resolveSelected. The owner a sprint already
+            // has must keep its name even if that person has since left the project.
+            resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
             onSave = {
                 scope.launch {
                     isEditorBusy = true
@@ -1112,6 +1122,12 @@ private fun SprintDetailDestination(
     }
 
     val ownerName = rememberUserName(detail.sprint.ownerID, environment.teamPort)
+
+    // The project, read for 1.6's member filter — the same read `SprintsDestination` makes, and
+    // for the same reason: only the host holds both the project and the directory.
+    val currentProject by produceState<Project?>(initialValue = null, projectID, environment) {
+        value = runCatching { environment.repository.project(projectID) }.getOrNull()
+    }
 
     // The editor over this sprint, opened by the card's edit button. Declared before the
     // screen because the screen's [SprintDetailScreen.onEdit] is what sets it.
@@ -1201,8 +1217,17 @@ private fun SprintDetailDestination(
             onEndDateChanged = editor::onEndDateChanged,
             onOwnerChanged = editor::onOwnerChanged,
             searchMembers = { query ->
-                environment.teamPort?.searchMembers(query) ?: emptyList()
+                // 1.6: a sprint's owner may only be one of this project's members. The
+                // directory knows nothing about projects, so the intersection is applied here,
+                // where the project and the directory are both to hand.
+                assignableMembersFor(
+                    project = currentProject,
+                    directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
+                )
             },
+            // Unfiltered by design: see MemberPicker.resolveSelected. The owner a sprint already
+            // has must keep its name even if that person has since left the project.
+            resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
             onSave = {
                 scope.launch {
                     isEditorBusy = true
@@ -1334,6 +1359,15 @@ private fun WorkItemEditorDestination(
         value = runCatching { repository.workItems(projectID) }.getOrDefault(emptyList())
     }
 
+    // The project itself, read for the same reason the sprint editor reads it: 1.6 scopes the
+    // assignee picker to this project's members, and only the host holds both the project and
+    // the directory. `null` until it answers, which `assignableMembersFor` treats as
+    // "unscoped" — so the picker shows everyone for a frame and narrows, rather than showing
+    // nobody and widening.
+    val currentProject by produceState<Project?>(initialValue = null, projectID, repository) {
+        value = runCatching { repository.project(projectID) }.getOrNull()
+    }
+
     // Resolved here rather than on the model: the model is a draft and must not re-read the
     // store, and an id whose task has since been deleted simply drops out of the row.
     val blockers = model.blockedByIDs.mapNotNull { id -> projectItems.firstOrNull { it.id == id } }
@@ -1433,6 +1467,19 @@ private fun WorkItemEditorDestination(
             )
         },
         onRemoveBlocker = model::removeBlockedBy,
+        // 1.6: an assignee may only be one of this project's members. `currentProject` is null
+        // until its read answers, which `assignableMembersFor` reads as "unscoped" — so the
+        // picker briefly offers everyone and then narrows, rather than offering nobody.
+        searchMembers = { query ->
+            assignableMembersFor(
+                project = currentProject,
+                directory = teamPort?.searchMembers(query) ?: emptyList(),
+            )
+        },
+        // Unfiltered by design: see MemberPicker.resolveSelected. A task assigned to someone
+        // who has since left the project must still show who it is assigned to, rather than
+        // reading Unassigned while the saved model still holds an assignee.
+        resolveSelected = { ids -> teamPort?.users(ids) ?: emptyList() },
         // Seeded from the draft so a reopen shows what is already there rather than an empty
         // selection — the sheet is a picker over a list the form already holds.
         onAddBlockerClick = {

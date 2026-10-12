@@ -33,7 +33,7 @@ for teams. Every team feature below depends on this being real.
 - [x] **1.3 Notification inbox** · P1 · New `feature-notifications` (domain/data/presentation) + new `AppTab` or pushed screen — A lightweight inbox: rows for "mentioned in a comment", "task assigned to you", "due today", "status changed on your task". Stored in Room with an `isRead` flag and cleared on sign-out. The "My Tasks" filter and this inbox are the two ways a person learns about their work.
 - [x] **1.4 Local notifications / reminders** · P1 · New `expect/actual` platform seam (`NotificationCenter` on iOS, `AlarmManager` on Android) + `feature-notifications-domain` scheduling port — A `LocalNotifier` port that the data layer calls when a notification row is inserted: "this task is due in 10 minutes", "you were mentioned". Uses the existing `PushNotification`/platform-bridge pattern. This is also the mechanism reminders (2.2) use.
 - [x] **1.5 Task dependency visualization** · P2 · `feature-projects-presentation` (board card + a new dependency subview in the editor) — `blockedByIDs` already exists but is invisible outside the editor. Render a mini "depends on" / "blocked by" list on the card and in the editor sheet. Does **not** add new persistence — it reuses the existing field.
-- [ ] **1.6 Project-level "assignable members" filter** · P2 · `feature-projects-presentation` (project picker / board header) — On a project's board, the "My Tasks" toggle and the member list should show only this project's members, read from the directory in 0.1.
+- [x] **1.6 Project-level "assignable members" filter** · P2 · `feature-projects-presentation` (project picker / board header) — On a project's board, the "My Tasks" toggle and the member list should show only this project's members, read from the directory in 0.1.
 - [ ] **1.7 Role-based project permissions** · P3 · `domain/Project` (new `role` field per member) + `ProjectRepositoryPort` + use-case guards — Add `UserRole` (Admin, Member, Viewer, Guest) to project membership. Gate `setArchived`, `deleteProject`, and member management behind Admin. The port is the enforcement point so the UI can't bypass it.
 - [ ] **1.8 Activity feed / project timeline** · P2 · `feature-projects-domain` (projection) + `feature-projects-presentation` — Aggregate `StatusChange` rows across a project into a single timeline view, newest first. Today the history exists per-task in the editor; this is a project-level roll-up.
 
@@ -77,3 +77,119 @@ for teams. Every team feature below depends on this being real.
 - **Sync outbox stays the write rule**: writes return the value produced; local writes enqueue an outbox row; a pull never enqueues. New write use cases (comments, recurrence expansion, member invites) follow the existing `inTransaction` + outbox pattern in `feature-projects-data` / the new `feature-teams-data`.
 - **KMP constraint**: platform seams (`LocalNotifier`, theme auto-mode, file picker) go through `expect/actual` with `jvm`, `androidMain`, and `iosMain` actuals, per the convention plugin.
 - **Testing**: model-level rules (recurrence parsing, mention parsing, search matching) are unit-tested in `commonTest`; UI tests follow the scenario-object + per-host-entry-point split documented in `Project.md`.
+
+---
+
+## 4. Desktop target (JVM app)
+
+Today the JVM target (`jvm()`) is a test host only: it runs `commonTest` fast on the
+developer's machine and that is the whole of its job. Compose Desktop — the same Compose
+Multiplatform runtime, on a `Window` instead of an `Activity` or a `UIViewController` —
+is not wired. Adding it turns the JVM target from "test feedback loop" into a fourth
+shippable shell, alongside Android, iOS, and (eventually) the JVM tests.
+
+Desktop is the closest parallel to the iOS shell: same `commonMain` screen tree, same
+`AppGraph`, same thin platform entry point that owns the graph and hands it to a hosted
+Compose tree. The Android shell is the counter-example — it is a full AGP application
+module, not a source set inside a library — and Desktop does not need to copy that shape.
+
+- [ ] **4.1 Choose the shape: module vs source set** · P0 · Decision — A new
+  `:desktopApp` Gradle module (Android-parallel: a thin shell above `:composition-root`
+  and `:shared-ui`, like `:androidApp`) **or** a `jvmMain` source set inside
+  `:shared-ui` (iOS-parallel: a `main()` entry point next to `iosMain`/`androidMain`,
+  like `MainViewController.kt`). The module shape keeps Desktop's run task, any
+  manifest-ish concerns, and its entry point out of `shared-ui`; the source-set shape
+  keeps one fewer module and mirrors how iOS already owns its entry point. The two shapes
+  diverge on whether `verifyArchitectureGraph` needs a new `:desktopApp` row and whether
+  `shared-ui/build.gradle.kts` gains a `jvm` framework/binaries block. Shot-cut: pick the
+  shape before any code is written, because the other files read differently depending on
+  it.
+- [ ] **4.2 Declare the Desktop target and its source sets** · P0 ·
+  `build-logic/convention/src/main/kotlin/tasktracker.kmp.library.gradle.kts` +
+  `gradle/libs.versions.toml` — Add the Desktop target to the convention plugin (or to a
+  new `:desktopApp` build file if 4.1 picks the module shape). Compose Desktop is already
+  on the classpath for `jvmTest` (`compose.desktop.currentOs`); the Desktop target needs
+  it on the app classpath instead, plus a `main` entry. Confirm the Compose Multiplatform
+  1.12.1 desktop coordinates resolve for the chosen target and that `jvmToolchain(25)`
+  still applies. This is the task that makes `./gradlew :desktopApp:compileJvmMain` (or
+  the source-set equivalent) exist.
+- [ ] **4.3 Add the Desktop entry point** · P0 ·
+  `shared-ui/src/jvmMain/.../DesktopMain.kt` (or `:desktopApp`'s own `main`) — A
+  `main()` that builds the graph (`AppGraph.start()`), opens a Compose `Window`, and
+  renders `TaskTrackerApp` inside it. Model it on `MainViewController.kt`: the graph is
+  owned once in process scope, the entry point takes no arguments from the platform side,
+  and the file contributes only the window and the graph — no Desktop-specific navigation
+  or state. This is the file that makes Desktop render the existing screen tree; nothing
+  in `commonMain` changes for it.
+- [ ] **4.4 Wire the architecture tables for the chosen shape** · P0 ·
+  `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` — If 4.1
+  picks the module shape, add `:desktopApp` to `packageOwnersTable` and
+  `allowedLibraryTable` (same edges as `:androidApp`: `:composition-root`, `:shared-ui`,
+  `:packages:di`). If 4.1 picks the source-set shape, confirm no table change is needed
+  and record that confirmation here. Either way, run
+  `verifyArchitectureGraph` + `verifyModuleImports` after the edit and before anything
+  else, because the tables are the gate.
+- [ ] **4.5 Add a `run` task for Desktop** · P1 ·
+  The Desktop build file (module or source-set shape) — A Gradle task that launches the
+  Desktop app: depends on the Desktop compile/link task and runs the `main` class with the
+  right classpath. This is the Desktop equivalent of `:androidApp:installDebug` and of
+  Xcode's build-and-run; without it Desktop exists in Gradle but not as something a
+  developer can launch. Name it so it is discoverable (`runDesktop` or per-module
+  `:desktopApp:run`) and so it does not collide with the existing `jvmTest` path.
+- [ ] **4.6 Decide Desktop persistence and implement any new actuals** · P1 ·
+  `packages/keychain` + `packages/user-defaults`, `jvmMain` actuals — The JVM target's
+  keychain and user-defaults actuals are in-memory today (test-host stubs). A Desktop app
+  that signs in and restarts loses its session unless Desktop gets real persistence for at
+  least one of them. Decide which seams Desktop gets real backends for (file-based
+  preferences, a JVM keychain backend, both, or neither and Desktop inherits the stubs),
+  and implement the corresponding `jvmMain` actuals. This is also where any new Desktop-
+  only seam lives if one turns out to be needed (window icon, tray, anything that does not
+  exist on the other two platforms).
+- [ ] **4.7 Confirm Compose resources and strings work on Desktop** · P1 ·
+  Verification — `:packages:design-system` already owns `compose.resources` and already
+  generates `Res`/`stringResource` for all CMP targets including Desktop. Run the Desktop
+  target (or the Desktop test host) and confirm the shell renders strings from
+  `composeResources` rather than falling back to raw strings, and that no new resource
+  home is needed. If a Desktop-launch icon or window asset is wanted, decide its location
+  here; if not, record that Desktop reuses the existing compose resources with no new asset
+  work.
+- [ ] **4.8 Add Desktop to the test-host picture** · P1 ·
+  `Project.md` test-host table + any new Desktop test entry points — Document Desktop as a
+  test host in the table. The existing `commonTest` scenarios and pixel tests already run
+  on a JVM target and Desktop is a JVM target, so the regression is: does Desktop pass the
+  same suites the JVM host does? Decide whether Desktop is its own column (with its own
+  entry-point class, like `HostedGraphScenariosTest`) or folds into the existing JVM
+  column. If Desktop exposes any new `expect`/`actual` that the JVM test host did not cover,
+  add the matching test before this task is done.
+- [ ] **4.9 Run the decision command on the Desktop target and reconcile** · P1 ·
+  Verification — Run the decision command from `Project.md` (or the Desktop equivalent) and
+  confirm Desktop is green at the module level before this section is marked done. If any
+  of the pre-existing failures behave differently on Desktop than on the JVM host, note the
+  difference here rather than silently folding it into the existing numbers.
+
+---
+
+### 4.0 Implementation order (Desktop)
+
+1. **P0**: 4.1 → 4.2 → 4.3 → 4.4 — shape, target, entry point, tables. Nothing renders
+   until the entry point exists and the tables allow it.
+2. **P1**: 4.5 → 4.6 → 4.7 — run task, persistence decision, resources confirmation.
+   After this the app launches and keeps its state across restarts (or deliberately does
+   not).
+3. **P1**: 4.8 → 4.9 — test-host documentation and the decision-command reconciliation.
+   Last, because it measures the work above.
+
+### 4.0 Notes on fit
+
+- **Clean architecture is preserved**: Desktop is a shell, not a feature. It sits above
+  `:composition-root` and `:shared-ui`, same as the other two shells, and never reaches
+  into a data module directly.
+- **No `commonMain` changes required**: the existing screen tree, models, and use cases
+  render on Desktop through the same `TaskTrackerApp` the other shells render. Desktop work
+  is confined to the entry point, the target declaration, and any JVM-only actuals.
+- **Persistence is the one real product decision**: whether Desktop inherits the in-memory
+  test-host stubs or gets real file-based storage is a product choice, not a build detail,
+  and it determines whether a signed-in Desktop user survives a restart.
+- **Testing**: Desktop reuses the existing Compose UI test infrastructure (it is a JVM
+  target with `ui-test` + skiko already on the classpath); the new work is documenting it
+  as a host and adding any entry points the host split requires.

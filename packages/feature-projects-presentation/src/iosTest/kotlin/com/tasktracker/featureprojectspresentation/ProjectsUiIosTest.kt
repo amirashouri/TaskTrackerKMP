@@ -146,6 +146,18 @@ class ProjectsUiIosTest {
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
 
     @Test
+    fun onlyMembersAreOffered() =
+        runComposeUiTest(block = MemberPickerMembershipScenarios.onlyMembersAreOffered)
+
+    @Test
+    fun aNonMemberMatchingTheQueryBetterIsStillNotOffered() =
+        runComposeUiTest(block = MemberPickerMembershipScenarios.aNonMemberMatchingTheQueryBetterIsStillNotOffered)
+
+    @Test
+    fun anAssigneeWhoLeftTheProjectStillRendersTheirPill() =
+        runComposeUiTest(block = MemberPickerMembershipScenarios.anAssigneeWhoLeftTheProjectStillRendersTheirPill)
+
+    @Test
     fun aCardWithABlockerNamesIt() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithABlockerNamesIt)
 
     @Test

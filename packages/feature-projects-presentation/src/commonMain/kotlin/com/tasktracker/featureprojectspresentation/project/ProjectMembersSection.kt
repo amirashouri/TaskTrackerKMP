@@ -32,8 +32,20 @@ internal fun ProjectMembersSection(
     selectedMemberIDs: List<UserID>,
     onMemberIDsChanged: (List<UserID>) -> Unit,
     modifier: Modifier = Modifier,
-    /** The directory behind the field; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
+    /**
+     * The directory behind the field.
+     *
+     * Never scoped to this project's own members — this *is* the control that edits that
+     * membership, so filtering it to its current value would make every new member
+     * unreachable. [assignableMembersFor] is for the pickers that consume membership, not the
+     * one that writes it.
+     */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /** Resolves the selected members, unfiltered; see [MemberPicker.resolveSelected]. */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
 ) {
     MemberPicker(
         title = stringResource(Res.string.project_members_label),
@@ -43,6 +55,7 @@ internal fun ProjectMembersSection(
         multiSelect = true,
         placeholder = stringResource(Res.string.member_picker_search),
         searchMembers = searchMembers,
+        resolveSelected = resolveSelected,
         tagPrefix = ProjectMembersSectionTag,
     )
 }

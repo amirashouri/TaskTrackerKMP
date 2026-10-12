@@ -37,6 +37,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Comment
+import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
@@ -233,6 +234,13 @@ fun WorkItemEditorSheet(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
+    /** See [WorkItemEditorForm.searchMembers]. */
+    searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /** See [WorkItemEditorForm.resolveSelected]. */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
 ) {
     val editTitle = if (isCreating) {
         stringResource(Res.string.work_item_editor_new_title)
@@ -288,6 +296,8 @@ fun WorkItemEditorSheet(
         onCommentReply = onCommentReply,
         onCommentCancelReply = onCommentCancelReply,
         onCommentSubmit = onCommentSubmit,
+        searchMembers = searchMembers,
+        resolveSelected = resolveSelected,
         modifier = modifier
             .fillMaxSize()
             .testTag(WorkItemEditorFullScreenTag),
@@ -354,6 +364,25 @@ private fun ProjectsEditorFullScreen(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
+    /**
+     * The directory behind the assignee picker, scoped to this project's members.
+     *
+     * 1.6: an assignee may only be someone the project has as a member, and the scoping is the
+     * host's because only the host holds both the project and the directory — see
+     * [assignableMembersFor].
+     */
+    searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /**
+     * Resolves the current assignee, **unfiltered**.
+     *
+     * The counterpart to [searchMembers], and the reason a task assigned to a former member
+     * still shows who it is assigned to instead of reading Unassigned. See
+     * [MemberPicker.resolveSelected].
+     */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
 ) {
     Column(
         modifier = modifier
@@ -452,6 +481,8 @@ private fun ProjectsEditorFullScreen(
         WorkItemAssigneeRow(
             assigneeID = assigneeID,
             onAssigneeChanged = onAssigneeChanged,
+            searchMembers = searchMembers,
+            resolveSelected = resolveSelected,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

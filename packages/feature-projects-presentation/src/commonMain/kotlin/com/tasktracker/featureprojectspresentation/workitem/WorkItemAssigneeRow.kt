@@ -39,6 +39,15 @@ fun WorkItemAssigneeRow(
     modifier: Modifier = Modifier,
     /** The directory search behind the field; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /**
+     * Resolves the selected id to a profile, unfiltered — see [MemberPicker.resolveSelected].
+     * Defaults to the blank-query directory listing, which is correct wherever
+     * [searchMembers] is not scoped to a project's members.
+     */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
     title: String = stringResource(Res.string.work_item_assignee_label),
     testTag: String = WorkItemAssigneePickerTag,
 ) {
@@ -51,6 +60,7 @@ fun WorkItemAssigneeRow(
         clearLabel = stringResource(Res.string.work_item_assignee_unassigned),
         placeholder = stringResource(Res.string.member_picker_search),
         searchMembers = searchMembers,
+        resolveSelected = resolveSelected,
         tagPrefix = testTag,
     )
 }

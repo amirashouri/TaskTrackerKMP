@@ -91,6 +91,16 @@ fun NewProjectSheet(
     onMemberIDsChanged: (List<UserID>) -> Unit = {},
     /** The directory behind the member picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
+    /**
+     * Resolves the selected members, unfiltered.
+     *
+     * A new project has no members yet, so this seam cannot be scoped to anything — see
+     * [ProjectMembersSection], which is the same decision for the same reason.
+     */
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
     errorMessage: String? = null,
 ) {
     TTBottomSheetScaffold(
@@ -137,6 +147,7 @@ fun NewProjectSheet(
             selectedMemberIDs = selectedMemberIDs,
             onMemberIDsChanged = onMemberIDsChanged,
             searchMembers = searchMembers,
+            resolveSelected = resolveSelected,
         )
         if (errorMessage != null) {
             ttText(
