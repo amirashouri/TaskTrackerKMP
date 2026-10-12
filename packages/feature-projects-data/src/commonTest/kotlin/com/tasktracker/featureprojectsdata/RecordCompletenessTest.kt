@@ -1,11 +1,14 @@
 package com.tasktracker.featureprojectsdata
 
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomUserID
+import com.tasktracker.database.CommentRecord
 import com.tasktracker.database.ProjectRecord
 import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItemStatus
@@ -145,6 +148,27 @@ class RecordCompletenessTest {
         // named above: it is a storage-assigned insertion counter, and a value invented here
         // would be overwritten by Room's autoincrement on insert. That is the whole reason it
         // exists — see `StatusChangeRecord.sequence`.
+        assertEquals(0L, record.sequence)
+    }
+
+    @Test
+    fun writingACommentNamesEveryColumnItOwnsAndLeavesTheSequenceToTheDatabase() {
+        val comment = aComment()
+
+        val expected = CommentRecord(
+            id = "cccccccc-cccc-4ccc-8ccc-cccccccc0001",
+            workItemID = "22222222-2222-4222-8222-222222222222",
+            authorID = adaUserID.stringValue,
+            body = "Every column non-default.",
+            createdAt = Moments.start,
+            parentID = "dddddddd-dddd-4ddd-8ddd-dddddddd0002",
+        )
+
+        val record = comment.toRecord()
+
+        assertEquals(expected, record)
+        // The same one column as the history table: `sequence` is storage-assigned, and a
+        // value invented here would be overwritten by the autoincrement on insert.
         assertEquals(0L, record.sequence)
     }
 
@@ -403,6 +427,20 @@ class RecordCompletenessTest {
         assertEquals(null, loose.domainValue?.sprintID)
     }
 
+    @Test
+    fun readingACommentBackReproducesEveryColumn() {
+        val record = CommentRecord(
+            id = "cccccccc-cccc-4ccc-8ccc-cccccccc0001",
+            workItemID = "22222222-2222-4222-8222-222222222222",
+            authorID = adaUserID.stringValue,
+            body = "Every column non-default.",
+            createdAt = Moments.start,
+            parentID = "dddddddd-dddd-4ddd-8ddd-dddddddd0002",
+        )
+
+        assertEquals(aComment(), record.domainValue)
+    }
+
     // MARK: The keys
 
     @Test
@@ -436,9 +474,22 @@ class RecordCompletenessTest {
     // constructor call that omits a parameter does not compile — so the enumeration is the
     // compiler's, it runs on every target, and it cannot be stale. A reflective version would
     // have been a *report* of the same fact that could be out of date, rather than a build
-    // failure. The eight project columns, eighteen work-item columns, twelve sprint columns
-    // and eight status-change columns are all here; `sequence` is the one column with no
+    // failure. The eight project columns, eighteen work-item columns, twelve sprint columns, eight status-change columns
+    // and six comment columns are all here; `sequence` is the one column with no
     // domain counterpart, and it is the one that is not named in an expected record.
+
+    /**
+     * A reply rather than a top-level comment, so the fixture cannot leave `parentID` at
+     * its default — the column a flat, never-replying fixture would silently drop.
+     */
+    private fun aComment(): Comment = Comment(
+        id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0001"),
+        workItemID = aWorkItem().id,
+        authorID = adaUserID,
+        body = "Every column non-default.",
+        createdAt = Moments.start,
+        parentID = CommentID("dddddddd-dddd-4ddd-8ddd-dddddddd0002"),
+    )
 
     private fun aChange(): StatusChange = StatusChange(
         workItemID = aWorkItem().id,

@@ -1,11 +1,13 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -383,6 +385,63 @@ class ExpandRecurrence(
             storyPoints = current.storyPoints,
             blockedByIDs = current.blockedByIDs,
             recurrence = rule,
+            now = dateProvider.now(),
+        )
+    }
+}
+
+/** Reads one work item's comment thread, oldest first. */
+class LoadComments(
+    private val repository: ProjectRepositoryPort,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(workItemID: WorkItemID): List<Comment> =
+        repository.comments(workItemID)
+}
+
+/**
+ * Posts one comment — top-level or a reply — after the two rules only this can enforce.
+ *
+ * Both rules live here rather than in the store, deliberately: neither needs to see
+ * anything the transaction can see (unlike the sprint-overlap rule, which does, and is
+ * therefore enforced in the port), so a use case is the earliest shared place every
+ * caller passes through. A check in the view would be the second screen that forgets it.
+ *
+ * **The blank refusal and the trim are one rule, not two.** A body of `"   "` is empty
+ * after normalisation, so the refusal is on the normalised value — otherwise whitespace
+ * would sail past the check and store a comment that renders as nothing.
+ *
+ * **A reply must name a comment that is still in the thread.** An orphaned reply is a
+ * sentence addressing nobody, and the two reads racing a delete across devices is a real
+ * window — so the parent is checked against the thread as this device holds it, and a
+ * reply to a deleted comment is refused with a message that says so rather than stored
+ * pointing at nothing.
+ */
+class AddComment(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID? = null,
+    ): Comment {
+        val body = body.trim()
+        if (body.isEmpty()) {
+            throw AppError.Validation("A comment cannot be empty.")
+        }
+        if (parentID != null && repository.comments(workItemID).none { it.id == parentID }) {
+            throw AppError.Validation("The comment being replied to no longer exists.")
+        }
+        return repository.addComment(
+            workItemID = workItemID,
+            authorID = authorID,
+            body = body,
+            parentID = parentID,
             now = dateProvider.now(),
         )
     }

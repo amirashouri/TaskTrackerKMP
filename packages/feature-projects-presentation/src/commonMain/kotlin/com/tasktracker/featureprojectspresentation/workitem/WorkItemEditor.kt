@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
@@ -35,6 +36,7 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
@@ -220,6 +222,17 @@ fun WorkItemEditorSheet(
     onOpenBlocker: (WorkItemID) -> Unit = {},
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
+    // Thread params: `comments == null` means "this caller does not host a thread" —
+    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
+    // all, rather than an empty Comments block under every preview.
+    comments: List<Comment>? = null,
+    commentAuthorNames: Map<UserID, String> = emptyMap(),
+    commentDraft: String = "",
+    onCommentDraftChanged: (String) -> Unit = {},
+    commentReplyTo: CommentID? = null,
+    onCommentReply: (CommentID) -> Unit = {},
+    onCommentCancelReply: () -> Unit = {},
+    onCommentSubmit: () -> Unit = {},
 ) {
     val editTitle = if (isCreating) {
         stringResource(Res.string.work_item_editor_new_title)
@@ -267,6 +280,14 @@ fun WorkItemEditorSheet(
         onOpenBlocker = onOpenBlocker,
         onRemoveBlocker = onRemoveBlocker,
         onAddBlockerClick = onAddBlockerClick,
+        comments = comments,
+        commentAuthorNames = commentAuthorNames,
+        commentDraft = commentDraft,
+        onCommentDraftChanged = onCommentDraftChanged,
+        commentReplyTo = commentReplyTo,
+        onCommentReply = onCommentReply,
+        onCommentCancelReply = onCommentCancelReply,
+        onCommentSubmit = onCommentSubmit,
         modifier = modifier
             .fillMaxSize()
             .testTag(WorkItemEditorFullScreenTag),
@@ -322,6 +343,17 @@ private fun ProjectsEditorFullScreen(
     onOpenBlocker: (WorkItemID) -> Unit = {},
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
+    // Thread params: `comments == null` means "this caller does not host a thread" —
+    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
+    // all, rather than an empty Comments block under every preview.
+    comments: List<Comment>? = null,
+    commentAuthorNames: Map<UserID, String> = emptyMap(),
+    commentDraft: String = "",
+    onCommentDraftChanged: (String) -> Unit = {},
+    commentReplyTo: CommentID? = null,
+    onCommentReply: (CommentID) -> Unit = {},
+    onCommentCancelReply: () -> Unit = {},
+    onCommentSubmit: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -452,6 +484,21 @@ private fun ProjectsEditorFullScreen(
             onRemoveBlocker = onRemoveBlocker,
             onAddClick = onAddBlockerClick,
         )
+        comments?.let { thread ->
+            if (!isCreating) {
+                CommentThread(
+                    comments = thread,
+                    authorNames = commentAuthorNames,
+                    canComment = currentUserID != null,
+                    draft = commentDraft,
+                    replyTo = commentReplyTo,
+                    onDraftChanged = onCommentDraftChanged,
+                    onReply = onCommentReply,
+                    onCancelReply = onCommentCancelReply,
+                    onSubmit = onCommentSubmit,
+                )
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -536,6 +583,17 @@ private fun WorkItemEditorForm(
      * thrown away, so it needs a distinct gesture that pops exactly one level.
      */
     onBack: (() -> Unit)? = null,
+    // Thread params: `comments == null` means "this caller does not host a thread" —
+    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
+    // all, rather than an empty Comments block under every preview.
+    comments: List<Comment>? = null,
+    commentAuthorNames: Map<UserID, String> = emptyMap(),
+    commentDraft: String = "",
+    onCommentDraftChanged: (String) -> Unit = {},
+    commentReplyTo: CommentID? = null,
+    onCommentReply: (CommentID) -> Unit = {},
+    onCommentCancelReply: () -> Unit = {},
+    onCommentSubmit: () -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -661,6 +719,21 @@ private fun WorkItemEditorForm(
             onRemoveBlocker = onRemoveBlocker,
             onAddClick = onAddBlockerClick,
         )
+        comments?.let { thread ->
+            if (!isCreating) {
+                CommentThread(
+                    comments = thread,
+                    authorNames = commentAuthorNames,
+                    canComment = currentUserID != null,
+                    draft = commentDraft,
+                    replyTo = commentReplyTo,
+                    onDraftChanged = onCommentDraftChanged,
+                    onReply = onCommentReply,
+                    onCancelReply = onCommentCancelReply,
+                    onSubmit = onCommentSubmit,
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md, Alignment.End),

@@ -1,5 +1,6 @@
 package com.tasktracker.featureprojectspresentation
 
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
@@ -9,6 +10,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -51,6 +53,16 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
     override suspend fun isEmpty(): Boolean = boom()
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> = boom()
+
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> = boom()
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment = boom()
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = boom()
 

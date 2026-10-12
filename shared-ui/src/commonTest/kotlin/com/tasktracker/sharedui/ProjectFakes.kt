@@ -1,11 +1,14 @@
 package com.tasktracker.sharedui
 
 import com.tasktracker.core.Broadcaster
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -223,6 +226,29 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
         unused("statusChanges")
+
+    // Reachable from the shell: opening the work-item editor loads the thread, so an
+    // `unused(...)` here would make every editor scenario fail on read. Empty — a shell
+    // test seeds through `addComment` if it needs content.
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> = emptyList()
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment = locked {
+        writes += "addComment"
+        Comment(
+            id = randomCommentID(),
+            workItemID = workItemID,
+            authorID = authorID,
+            body = body,
+            createdAt = now,
+            parentID = parentID,
+        )
+    }
 
     override suspend fun sprints(projectID: ProjectID): List<Sprint> = locked {
         // Open first, then by start date — the order the real port documents as part of its

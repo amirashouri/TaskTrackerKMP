@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
@@ -9,6 +10,7 @@ import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.parseUserID
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
@@ -24,6 +26,7 @@ import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
@@ -176,6 +179,12 @@ class RoomProjectRepository(
                 .mapNotNull { it.domainValue }
         }
 
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> =
+        inTransaction(database) {
+            database.commentDao().byWorkItem(workItemID.stringValue)
+                .mapNotNull { it.domainValue }
+        }
+
     // MARK: Project writes
 
     override suspend fun createProject(
@@ -273,6 +282,11 @@ class RoomProjectRepository(
             val project = readProject(id)
             for (item in database.workItemDao().byProject(id.stringValue)) {
                 database.statusChangeDao().deleteByWorkItem(item.id)
+                // Per-item rather than `deleteByProject`, because the comments table
+                // carries no project column — see [CommentRecord]'s KDoc. Two queries
+                // in one transaction beats a denormalised column every future write
+                // would have to keep honest.
+                database.commentDao().deleteByWorkItem(item.id)
                 database.workItemDao().deleteByID(item.id)
                 enqueueDelete(OutboxEntity.WorkItem, item.id, stamp, item.updatedAt)
             }
@@ -791,11 +805,51 @@ class RoomProjectRepository(
         val owner = inTransaction(database) {
             val item = readWorkItem(id)
             database.statusChangeDao().deleteByWorkItem(id.stringValue)
+            // Comments go with the item for the same reason the history does: a leftover
+            // thread is unreachable and would reattach itself to whatever work item is
+            // issued the same id next. Unlike history, comments *do* queue an outbox row
+            // on write — but a delete of the whole item is already announced by the item's
+            // own delete row, so the thread goes silently, local first.
+            database.commentDao().deleteByWorkItem(id.stringValue)
             database.workItemDao().deleteByID(id.stringValue)
             enqueueDelete(OutboxEntity.WorkItem, id.stringValue, stamp, item.updatedAt)
             item.projectID
         }
         changeBus.announceWorkItems(owner)
+    }
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment {
+        val stamp = currentUserStamp()
+        val comment = Comment(
+            id = randomCommentID(),
+            workItemID = workItemID,
+            authorID = authorID,
+            body = body,
+            createdAt = now,
+            parentID = parentID,
+        )
+
+        // The work item is read first — it proves the item exists and yields the project
+        // to announce, both before any comment row is written.
+        val owner = inTransaction(database) {
+            val item = readWorkItem(workItemID)
+            database.commentDao().insert(comment.toRecord())
+            enqueueComment(comment, stamp, now)
+            item.projectID
+        }
+        // Announced as a work-item change because that is the kind a subscriber can act
+        // on: an open editor re-reads the thread it is showing, and a board re-reads a card
+        // whose data did not change — cheap, and one new enum value on `ProjectChange.Kind`
+        // away from being narrowed later. An unannounced comment write is the version of
+        // this that can silently strand a second open editor.
+        changeBus.announceWorkItems(owner)
+        return comment
     }
 
     // MARK: Seeding
@@ -1099,6 +1153,29 @@ class RoomProjectRepository(
                 id = newOutboxID(OutboxEntity.WorkItem, item.id.stringValue, OutboxOperation.Upsert),
                 entity = OutboxEntity.WorkItem,
                 entityID = item.id.stringValue,
+                operation = OutboxOperation.Upsert,
+                payload = payload.encodeToByteArray(),
+                createdAt = now,
+                userID = userID,
+            ).toRecord(),
+        )
+    }
+
+    /**
+     * As [enqueueProject].
+     *
+     * The payload is the **domain** `Comment`, for the protocol reason [enqueueSprint]
+     * gives: a column on [com.tasktracker.database.CommentRecord] must not be a wire
+     * change. The server is told the field is `parentID`, which is what the domain calls
+     * it — and the right way round.
+     */
+    private suspend fun enqueueComment(comment: Comment, userID: String?, now: Instant) {
+        val payload = JSONCoding.json.encodeToString(Comment.serializer(), comment)
+        database.outboxDao().insert(
+            NewOutboxEntry(
+                id = newOutboxID(OutboxEntity.Comment, comment.id.stringValue, OutboxOperation.Upsert),
+                entity = OutboxEntity.Comment,
+                entityID = comment.id.stringValue,
                 operation = OutboxOperation.Upsert,
                 payload = payload.encodeToByteArray(),
                 createdAt = now,

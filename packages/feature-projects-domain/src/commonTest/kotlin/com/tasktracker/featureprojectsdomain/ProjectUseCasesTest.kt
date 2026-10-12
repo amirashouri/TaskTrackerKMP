@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
@@ -539,5 +540,99 @@ class ProjectUseCasesTest {
         val remove = RemoveProject(repository, TestDateProvider(now))
 
         assertFailsWith<AppError> { remove(randomProjectID()) }
+    }
+
+    // MARK: AddComment
+
+    @Test
+    fun `a comment is stored with its body trimmed and its author`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+
+        val posted = post(workItemID = item.id, authorID = author, body = "  Looks right to me  ")
+
+        assertEquals("Looks right to me", posted.body, "the use case owns the trim, not the store")
+        assertEquals(author, posted.authorID)
+        assertEquals(
+            listOf(posted.id),
+            repository.comments(item.id).map { it.id },
+            "the thread must hold exactly what the use case returned",
+        )
+    }
+
+    @Test
+    fun `a blank comment is refused before the store is touched`() = runTest {
+        // The refusal is on the *normalised* body: a check on the raw input would let
+        // whitespace through as a comment that renders as nothing.
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+        val changesBefore = repository.publishedChanges().size
+
+        assertFailsWith<AppError> { post(workItemID = item.id, authorID = author, body = "   ") }
+
+        assertEquals(emptyList(), repository.comments(item.id))
+        assertEquals(
+            changesBefore,
+            repository.publishedChanges().size,
+            "a refused comment must not announce one either",
+        )
+    }
+
+    @Test
+    fun `a reply to a comment that is not in the thread is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+
+        assertFailsWith<AppError> {
+            post(workItemID = item.id, authorID = author, body = "Replying to nothing", parentID = randomCommentID())
+        }
+
+        assertEquals(
+            emptyList(),
+            repository.comments(item.id),
+            "an orphaned reply addresses nobody, so it must not be stored",
+        )
+    }
+
+    @Test
+    fun `a reply to a comment in the thread is stored under it`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+
+        val root = post(workItemID = item.id, authorID = author, body = "Root")
+        val reply = post(workItemID = item.id, authorID = author, body = "Answer", parentID = root.id)
+
+        assertEquals(root.id, reply.parentID)
+        assertEquals(
+            listOf(root.id, reply.id),
+            repository.comments(item.id).map { it.id },
+            "the reply lands after its parent in the thread it belongs to",
+        )
+    }
+
+    // MARK: LoadComments
+
+    @Test
+    fun `a load failure reaches the caller rather than an empty thread`() = runTest {
+        // An empty list would be read as "no comments yet" by the editor, which is exactly
+        // what a broken store must never claim to be.
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        repository.failure = AppError.Storage("disk is on fire")
+
+        assertFailsWith<AppError> { LoadComments(repository)(item.id) }
     }
 }

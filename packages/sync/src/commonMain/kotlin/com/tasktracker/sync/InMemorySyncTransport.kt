@@ -124,7 +124,11 @@ private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     // entities. A sprint exists only to group work items, and every change to one is only
     // interesting next to the cards in it — so `workItems` is the stream a subscriber
     // watching that project is already reading.
-    OutboxEntity.WorkItem, OutboxEntity.Sprint -> SyncScope.WorkItems
+    // Comments ride `workItems` for exactly the reason sprints do: a thread exists only
+    // under a card, and a subscriber watching the project is already reading that stream.
+    // A dedicated stream would be a wire change and a new user-facing sync switch — see
+    // the sprint note above; neither belongs in the phase that adds a table.
+    OutboxEntity.WorkItem, OutboxEntity.Sprint, OutboxEntity.Comment -> SyncScope.WorkItems
 }
 
 private fun OutboxEntry.toRemoteChange(): RemoteChange = RemoteChange(

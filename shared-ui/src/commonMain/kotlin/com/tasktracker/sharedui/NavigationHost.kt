@@ -1311,6 +1311,10 @@ private fun WorkItemEditorDestination(
         )
     }
 
+    // The thread loads as soon as the model exists. A create has no id yet, and the use
+    // case no-ops there, so one effect covers both routes.
+    LaunchedEffect(model) { model.refreshComments() }
+
     // Tracked here rather than on the model because the model has no in-flight flag, and an
     // editor without one answers a double tap with two writes. Named rather than defaulted at
     // the call site so the omission is visible: adding a flag is a model change.
@@ -1343,6 +1347,13 @@ private fun WorkItemEditorDestination(
     // An assignee the directory cannot name shows as its id in the picker's third option —
     // the selection stays visible, and the id is the only honest label left.
     val otherAssigneeLabel = rememberUserName(model.assigneeID, teamPort)
+
+    // Author labels for the thread, resolved through the same directory as the assignee
+    // row; an id that appears after a send re-keys the remembered map and re-resolves.
+    val commentAuthorNames = rememberAssigneeNames(
+        ids = model.comments.map { it.authorID }.distinct(),
+        teamPort = teamPort,
+    )
 
     WorkItemEditorSheet(
         title = model.title,
@@ -1427,6 +1438,18 @@ private fun WorkItemEditorDestination(
         onAddBlockerClick = {
             pickerSelectedIDs = model.blockedByIDs.toSet()
             isPickerVisible = true
+        },
+        // A create renders no thread at all — `null` rather than an empty list, so the
+        // section does not flash an empty Comments block above the save row on a new item.
+        comments = if (model.isCreating) null else model.comments,
+        commentAuthorNames = commentAuthorNames,
+        commentDraft = model.commentDraft,
+        onCommentDraftChanged = model::onCommentDraftChanged,
+        commentReplyTo = model.commentReplyTo,
+        onCommentReply = model::onCommentReply,
+        onCommentCancelReply = model::onCommentCancelReply,
+        onCommentSubmit = {
+            scope.launch { model.submitComment() }
         },
         onDismissRequest = {
             if (!isBusy) {

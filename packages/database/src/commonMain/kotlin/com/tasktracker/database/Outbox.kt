@@ -32,6 +32,14 @@ enum class OutboxEntity(val wireValue: String) {
      * between `workItem` and `project`, and changing either is a protocol change.
      */
     Sprint("sprint"),
+    /**
+     * A comment, queued like any other entity.
+     *
+     * Unlike a status change — which is device-local and never queued — a comment is the
+     * collaboration itself: one that stays on the device that wrote it is worthless to
+     * every other member.
+     */
+    Comment("comment"),
     ;
 
     companion object {

@@ -170,6 +170,14 @@
     <string name="project_member_add_me">Add %1$s</string>
     <string name="member_picker_search">Search members</string>
     <string name="member_picker_remove">Remove %1$s</string>
+    <string name="comment_section_label">Comments</string>
+    <string name="comment_empty">No comments yet</string>
+    <string name="comment_composer_title">Comment</string>
+    <string name="comment_composer_hint">Add a comment…</string>
+    <string name="comment_send">Send</string>
+    <string name="comment_reply">Reply</string>
+    <string name="comment_cancel_reply">Cancel reply</string>
+    <string name="comment_replying_to">Replying to %1$s</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>

@@ -1,9 +1,11 @@
 package com.tasktracker.featureprojectsdomain
 
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
@@ -74,6 +76,24 @@ interface ProjectRepositoryPort {
      * one that has never been moved.
      */
     suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange>
+
+    /**
+     * One work item's comment thread, oldest first, replies carrying [Comment.parentID]
+     * rather than being nested by the store.
+     *
+     * Oldest first — the opposite of [statusChanges], and for the mirror reason: a history
+     * reads as a stack of recent events (newest on top), a conversation reads the way it
+     * happened (the first comment where a reader starts). Grouping replies under parents is
+     * the view's job; the order within the thread is the contract here.
+     *
+     * "Oldest" is `createdAt` with the insertion order breaking a tie, for the same reason
+     * the status history breaks it: both timestamps are epoch milliseconds, so two comments
+     * inside one clock tick are the normal case in a fast reply, and a sort on the instant
+     * alone would hand them back in whichever order SQLite felt like.
+     *
+     * Empty for a comment-less item — the normal case, not an error.
+     */
+    suspend fun comments(workItemID: WorkItemID): List<Comment>
 
     /**
      * A project's sprints, unfinished ones first and then by start date.
@@ -315,6 +335,33 @@ interface ProjectRepositoryPort {
     ): WorkItem
 
     suspend fun deleteWorkItem(id: WorkItemID)
+
+    // MARK: Comments
+
+    /**
+     * Stores one comment on [workItemID] and queues its outbox row **in the same
+     * transaction**, returning the stored value.
+     *
+     * The transaction is the whole rule from this port's KDoc applied to a new entity: the
+     * comment write and its queued upsert commit together or not at all — a comment saved
+     * with nothing queued to push it is exactly the disagreement the outbox exists to
+     * prevent. `enqueue` therefore runs inside the caller's transaction, not in its own.
+     *
+     * Confirms the work item exists first, so a stale editor — or a second device having
+     * deleted it — produces a clear "no longer exists" rather than a bare storage failure
+     * from an id nothing references. That read also yields the project to announce.
+     *
+     * [body] is stored as given: trimming and the blank refusal belong to the
+     * [com.tasktracker.featureprojectsdomain.AddComment] use case, where every caller
+     * shares one rule instead of each remembering its own.
+     */
+    suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment
 
     // MARK: Change notifications
 

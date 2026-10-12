@@ -13,6 +13,9 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.core.CommentID
+import com.tasktracker.core.randomCommentID
+import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -57,6 +60,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedProjects = mutableListOf<Project>()
     private val storedItems = mutableListOf<WorkItem>()
     private val storedStatusChanges = mutableListOf<StatusChange>()
+    private val storedComments = mutableListOf<Comment>()
     private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
@@ -125,6 +129,21 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 .sortedWith(
                     compareByDescending<IndexedValue<StatusChange>> { it.value.changedAt }
                         .thenByDescending { it.index },
+                )
+                .map { it.value }
+        }
+    }
+
+    override suspend fun comments(workItemID: WorkItemID): List<Comment> {
+        throwIfFailing()
+        return lock.withLock {
+            // Oldest first, insertion order breaking the tie — the same total-order
+            // argument as `statusChanges`, reversed, for the reason the port gives.
+            storedComments.withIndex()
+                .filter { it.value.workItemID == workItemID }
+                .sortedWith(
+                    compareBy<IndexedValue<Comment>> { it.value.createdAt }
+                        .thenBy { it.index },
                 )
                 .map { it.value }
         }
@@ -406,9 +425,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
         throwIfFailing()
         lock.withLock {
             if (storedProjects.none { it.id == id }) throw AppError.Validation("No such project.")
+            val itemIDs = storedItems.filter { it.projectID == id }.map { it.id }
             storedProjects.removeAll { it.id == id }
             storedItems.removeAll { it.projectID == id }
             storedStatusChanges.removeAll { it.projectID == id }
+            storedComments.removeAll { it.workItemID in itemIDs }
             publish(ProjectChange(ProjectChange.Kind.Projects, id))
         }
     }
@@ -562,7 +583,33 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val owner = storedItems[index].projectID
             storedItems.removeAt(index)
             storedStatusChanges.removeAll { it.workItemID == id }
+            storedComments.removeAll { it.workItemID == id }
             publish(ProjectChange(ProjectChange.Kind.WorkItems, owner))
+        }
+    }
+
+    override suspend fun addComment(
+        workItemID: WorkItemID,
+        authorID: UserID,
+        body: String,
+        parentID: CommentID?,
+        now: Instant,
+    ): Comment {
+        throwIfFailing()
+        return lock.withLock {
+            val owner = storedItems.firstOrNull { it.id == workItemID }
+                ?: throw AppError.Validation("That work item no longer exists.")
+            val comment = Comment(
+                id = randomCommentID(),
+                workItemID = workItemID,
+                authorID = authorID,
+                body = body,
+                createdAt = now,
+                parentID = parentID,
+            )
+            storedComments += comment
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, owner.projectID))
+            comment
         }
     }
 
