@@ -93,38 +93,32 @@ Desktop is the closest parallel to the iOS shell: same `commonMain` screen tree,
 Compose tree. The Android shell is the counter-example — it is a full AGP application
 module, not a source set inside a library — and Desktop does not need to copy that shape.
 
-- [x] **4.1 Adopt the source-set shape** · P0 · Decision recorded on `feat/desktop-entry` —
+- [x] **4.1 Adopt the source-set shape** · P0 · Decision recorded in PR #4 —
   Desktop goes in `shared-ui/src/jvmMain/`, the same shape iOS already uses for its entry
   point (`shared-ui/src/iosMain/MainViewController.kt`). No new Gradle module, no new
   row in `packageOwnersTable` or `allowedLibraryTable`, no new framework/binaries block.
-  The decision point is not shape-choice but *commitment to this shape*: it is recorded
-  here and in `Project.md` so a later change is a deliberate reversal, not a silent drift.
+  The decision point is not shape-choice but *commitment to this shape*: recorded here
+  and in `Project.md` so a later change is a deliberate reversal, not a silent drift.
   Validated by 4.2 + 4.3 compiling under `:shared-ui:compileJvmMain` with
-  `:shared-ui:jvmTest` still green.
-- [ ] **4.2 Put `compose.desktop.currentOs` on the app classpath, not only the test classpath** · P0 ·
-  `build-logic/convention/src/main/kotlin/tasktracker.kmp.compose.gradle.kts` —
-  Compose Desktop is already on the classpath for `jvmTest` (`compose.desktop.currentOs`);
-  the Desktop *app* classpath is the one that does not have it yet. Move or duplicate the
-  dependency onto the source set that renders the app (the `jvmMain`-side classpath that
-  the Desktop entry point compiles against), without dropping it from `jvmTest`. Confirm
-  the Compose Multiplatform 1.12.1 desktop coordinates resolve and that the existing
-  `jvmTest` path still compiles afterwards.
-- [ ] **4.3 Add the Desktop entry point** · P0 ·
-  `shared-ui/src/jvmMain/kotlin/com/tasktracker/sharedui/DesktopMain.kt` — A `main()`
-  that builds the graph (`AppGraph.start()`), opens a Compose `Window`, and renders
-  `TaskTrackerApp` inside it. Model it on `MainViewController.kt`: the graph is owned once
-  in process scope, the entry point takes no arguments from the platform side, and the file
-  contributes only the window and the graph — no Desktop-specific navigation or state.
-  This is the file that makes Desktop render the existing screen tree; nothing in
-  `commonMain` changes for it.
-- [ ] **4.4 Confirm the architecture tables need no edit for the source-set shape** · P0 ·
+  `:shared-ui:jvmTest` still at its existing 53/7 baseline.
+- [x] **4.2 Put `compose.desktop.currentOs` on the app classpath, not only the test classpath** · P0 ·
+  `shared-ui/build.gradle.kts` — Done in PR #4. Compose Desktop is already on the
+  `jvmTest` classpath; this adds it to the Desktop *app* classpath via
+  `jvmMainImplementation(compose.desktop.currentOs)`, without dropping it from
+  `jvmTest`. Confirmed the Compose Multiplatform 1.12.1 desktop coordinates resolve
+  and that `:shared-ui:compileJvmMain` and `:shared-ui:jvmTest` both still compile.
+- [x] **4.3 Add the Desktop entry point** · P0 ·
+  `shared-ui/src/jvmMain/kotlin/com/tasktracker/sharedui/DesktopMain.kt` — Done in
+  PR #4. `main() = application { Window(onCloseRequest = ::exitApplication) { ... } }`,
+  graph owned once in `DesktopGraph`, content renders `TaskTrackerApp`. Modeled on
+  `MainViewController.kt`: the graph is owned once in process scope, the entry point
+  takes no arguments from the platform side, and the file contributes only the window
+  and the graph. Nothing in `commonMain` changed for it.
+- [x] **4.4 Confirm the architecture tables need no edit for the source-set shape** · P0 ·
   `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` +
-  `settings.gradle.kts` — No new module is added, so no new row in
-  `packageOwnersTable` or `allowedLibraryTable` is required. Confirm that by running
-  `verifyArchitectureGraph` + `verifyModuleImports` after 4.2 and 4.3, not before, because
-  the confirmation is only meaningful once the `jvmMain` source set and its entry point
-  exist. Record the confirmation (or the actual failure) in this task's comment rather than
-  leaving it implied.
+  `settings.gradle.kts` — Confirmed in PR #4: no new module is added, so no new row in
+  `packageOwnersTable` or `allowedLibraryTable` is required. Confirmed by running
+  `verifyArchitectureGraph` + `verifyModuleImports` on the merged branch — both passed.
 - [ ] **4.5 Add a `run` task for Desktop** · P1 ·
   `shared-ui/build.gradle.kts` — A Gradle `run` task (or `JavaExec`) that launches
   `DesktopMain.main()`, depends on the `jvmMain` compile output, and uses the classpath
