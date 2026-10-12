@@ -144,17 +144,21 @@ module, not a source set inside a library — and Desktop does not need to copy 
   lives if one turns out to be needed (window icon, tray, anything the other two platforms
   do not have).
 
-  **Decision: preferences yes (a file), keychain no (stays the in-memory stub).** The two
-  seams are not symmetric and treating them as one is the mistake this task was written to
-  avoid. `:packages:user-defaults` holds non-sensitive, device-scoped values — the
+  **Decision: both seams get real backends, and they are not the same kind of store.** The
+  two seams are not symmetric and treating them as one is the mistake this task was written
+  to avoid. `:packages:user-defaults` holds non-sensitive, device-scoped values — the
   appearance scheme and the last-visited project — and both are properties of the *machine*,
-  so a restart must not lose them and an unencrypted file is the right store. Credentials
-  are the opposite: the JVM has no system keychain, and a file is exactly what
-  `PreferencesBackend`'s own doc says must never hold a token, so Desktop keeps
-  `InMemoryKeychain`. Consequence, recorded rather than glossed: **a Desktop restart still
-  does not restore a session** — the user signs in again — while the appearance and the
-  last-visited project now survive. Making the session survive Desktop would mean a JVM
-  keychain backend (an encrypted file or an OS keystore), which is its own decision.
+  so a restart must not lose them and an unencrypted file is the right store. Credentials are
+  the opposite: a file is exactly what `PreferencesBackend`'s own doc says must never hold a
+  token, so they get an OS-backed store instead.
+
+  Amended mid-task, recorded because the first answer was wrong in an instructive way. The
+  first pass shipped preferences only and left the keychain on `InMemoryKeychain`, on the
+  reasoning that the JVM has no system keychain. That reasoning was true of the *JDK*, not of
+  the platform: macOS has had `Security.framework` all along, and it is reachable from the
+  JVM through JNA. With only the preferences half done, **a Desktop restart still did not
+  restore a session** — the user signed in again on every launch. That is now fixed, so the
+  session survives a Desktop restart on macOS.
 
   Implemented:
   - `packages/user-defaults/src/jvmMain/…/FilePropertiesBackend.kt` (new) — a
@@ -171,6 +175,19 @@ module, not a source set inside a library — and Desktop does not need to copy 
     `preferencesFilePath` that never existed) are gone. `shared-ui` does not depend on
     `:packages:database` and the architecture table says it should not; the shell now reads
     the path through `:packages:user-defaults`, which it already had.
+  - `packages/keychain/src/jvmMain/…/MacOsSecurity.kt` (new) — the JNA bindings to
+    `CoreFoundation` and `Security`: the four `SecItem*` calls, the `CFDictionary` helpers and
+    the pointer ownership rules. The `kSec*` and `kCFBoolean*` constants are read out of the
+    framework's exported globals rather than recreated by name, so a wrong symbol fails loudly
+    instead of producing a query that matches nothing.
+  - `packages/keychain/src/jvmMain/…/MacOsKeychain.kt` (new) — `KeychainAccess` over one
+    `kSecClassGenericPassword` item per key, add-then-update on a duplicate, and a namespace
+    wipe scoped to our own service.
+  - `packages/keychain/src/jvmMain/…/PlatformKeychain.jvm.kt` — routes: the JVM test host and
+    any non-macOS Desktop process keep `InMemoryKeychain`, and the non-macOS case says so in
+    the log rather than pretending to store something. macOS Desktop gets `MacOsKeychain`.
+  - `gradle/libs.versions.toml` + `packages/keychain/build.gradle.kts` — JNA, a `jvmMain`-only
+    library edge, so neither architecture table is touched.
 
   Verified: 7 new tests in `:packages:user-defaults`'s `jvmTest`, all mutation-checked —
   reverting the write path turns 4 red, pointing the router at the in-memory backend turns 1
@@ -179,13 +196,56 @@ module, not a source set inside a library — and Desktop does not need to copy 
   `verifyModuleImports` green with no new edge; `:androidApp:compileDebugKotlin` green.
   `:shared-ui:jvmTest` unchanged at its 53/7 baseline, and all 12 JVM failures were
   reproduced at `HEAD` in a stashed clean tree, so none of them belongs to this work.
-- [ ] **4.7 Confirm Compose resources and strings render on Desktop** · P1 ·
+
+  Verified, keychain half: 5 new tests in `:packages:keychain`'s `jvmTest`. Two assert the
+  routing and are mutation-checked — removing the test-host guard turns one red, and it names
+  the actual type it got. Three exercise the real keychain against a unique
+  `kSecAttrService` and are **opt-in**, because writing to a developer's login keychain is
+  not something a default `jvmTest` should do:
+
+      TASKTRACKER_KEYCHAIN_INTEGRATION=1 ./gradlew :packages:keychain:jvmTest
+
+  That run found a real defect, which is the reason it exists: `SecItemDelete` treats an
+  unspecified `kSecMatchLimit` as *one*, the same default `SecItemCopyMatching` has, so the
+  first version of `removeAll` deleted a single item, returned `errSecSuccess`, and left the
+  refresh token in the keychain. A sign-out that silently keeps a refresh token is the exact
+  failure `KeychainStore.removeAll` is written to prevent. Measured with two items under one
+  service: `removeAll` left one behind; with `kSecMatchLimit = kSecMatchLimitAll` it removes
+  both. The fix is commented with that measurement, and the test fails without it.
+- [x] **4.7 Confirm Compose resources and strings render on Desktop** · P1 ·
   Verification — `:packages:design-system` already owns `compose.resources` and already
   generates `Res`/`stringResource` for all CMP targets including Desktop. Launch the Desktop
   app (or run the Desktop test host) and confirm the shell renders strings from
   `composeResources` rather than falling back to raw strings, and that no new resource home
   is needed. If a Desktop-launch icon or window asset is wanted, decide its location here;
   if not, record that Desktop reuses the existing compose resources with no new asset work.
+
+  **Confirmed, no new resource home.** The generator emits the `Res` class once, into
+  `com/tasktracker/resources/Res.kt`, and assembles resources per target — `jvmMain` and
+  `jvmTest` both appear under `build/generated/compose/resourceGenerator/assembledResources/`,
+  so the Desktop target is a first-class consumer and not a target that has to borrow
+  Android's copy. `:shared-ui`'s Desktop entry renders the same `TaskTrackerApp` as the other
+  two shells, which is where the Desktop resources are actually exercised.
+
+  The gap was verification, not wiring: **nothing in the suite named an expected string**, so
+  a host that resolved every resource to the wrong value stayed green — the shell scenarios
+  only fail on a missing bundle incidentally, when `stringResource` throws. Added
+  `packages/design-system/src/commonTest/…/ResourceStringsTest.kt`, which asserts three
+  resolved values through `getString`: `app_name` (a `translatable="false"` identity string),
+  `settings_title` (an ordinary label) and `status_in_review` (a status word). One value would
+  not be enough — a single accessor still passes if the generated properties are crossed.
+
+  Asserted structurally rather than by rendering, per the `AGENTS.md` rule: the property is
+  "the resource layer resolves on this target", which is readable without a frame, and a
+  rendered assertion would additionally be at the mercy of the Android host's viewport for no
+  gain. Mutation-checked by editing `strings.xml` itself (`settings_title` → `SettingsMUTATED`),
+  which turns the test red and prints both values, then reverted.
+
+  **Window icon: no new asset, and nothing to decide yet.** The Desktop target has a
+  `runDesktop` `JavaExec` and no packaging task — there is no `nativeDistributions` block, so
+  no `.app` bundle is produced and therefore no icon file is consumed. Choosing an icon is a
+  packaging decision and belongs with packaging; recording "no new asset work" here is
+  accurate rather than a deferral.
 - [ ] **4.8 Add Desktop to the test-host picture** · P1 ·
   `Project.md` test-host table + any new Desktop test entry points — Document Desktop as a
   test host in the table. The existing `commonTest` scenarios and pixel tests already run on

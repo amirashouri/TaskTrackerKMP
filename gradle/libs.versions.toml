@@ -30,6 +30,13 @@ koin = "4.2.2"
 # 1.12.1 asks for.
 navigationevent = "1.1.0"
 
+# JNA, for `:packages:keychain`'s macOS actual only. `Security.framework` is a C API and
+# the JDK has no binding to it, so real OS-keychain storage on Desktop is unreachable
+# without either a native call or shelling out to `/usr/bin/security`. This is a
+# JVM-only library edge: `verifyArchitectureGraph` filters `ProjectDependency`, and
+# neither it nor `verifyModuleImports` reads a `libs.` coordinate, so no table changes.
+jna = "5.17.0"
+
 coroutines = "1.11.0"
 serialization = "1.11.0"
 datetime = "0.8.0"
@@ -115,6 +122,9 @@ androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+
+# --- Native interop ---
+jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 # --- Plugin markers, so convention plugins can alias them ---
 android-gradlePlugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
