@@ -937,3 +937,96 @@ class SprintGoalTest {
         )
     }
 }
+
+class MentionRulesTest {
+
+    @Test
+    fun `extractMentions finds username mentions`() {
+        val mentions = MentionRules.extractMentions("Hello @alice, how are you?")
+        assertEquals(1, mentions.size)
+        val mention = mentions.first() as MentionRules.Mention.ByUsername
+        assertEquals("@alice", mention.raw)
+        assertEquals("alice", mention.username)
+        assertEquals(6, mention.start)
+        assertEquals(12, mention.end)
+    }
+
+    @Test
+    fun `extractMentions finds UserID mentions`() {
+        val mentions = MentionRules.extractMentions("Hey @<12345678-1234-1234-1234-123456789012>, check this")
+        assertEquals(1, mentions.size)
+        val mention = mentions.first() as MentionRules.Mention.ByUserID
+        assertEquals("@<12345678-1234-1234-1234-123456789012>", mention.raw)
+        assertEquals(UserID("12345678-1234-1234-1234-123456789012"), mention.userID)
+        assertEquals(4, mention.start)
+        assertEquals(43, mention.end)
+    }
+
+    @Test
+    fun `extractMentions finds multiple mentions of both types`() {
+        val mentions = MentionRules.extractMentions("@alice and @<87654321-4321-4321-4321-210987654321> please review")
+        assertEquals(2, mentions.size)
+        val first = mentions[0] as MentionRules.Mention.ByUsername
+        assertEquals("alice", first.username)
+        val second = mentions[1] as MentionRules.Mention.ByUserID
+        assertEquals(UserID("87654321-4321-4321-4321-210987654321"), second.userID)
+    }
+
+    @Test
+    fun `extractMentions returns empty for text without mentions`() {
+        assertEquals(emptyList(), MentionRules.extractMentions("No mentions here"))
+    }
+
+    @Test
+    fun `extractMentions handles trailing punctuation`() {
+        val mentions = MentionRules.extractMentions("Thanks @alice! See @<11111111-2222-3333-4444-555555555555>.")
+        assertEquals(2, mentions.size)
+        assertEquals("alice", (mentions[0] as MentionRules.Mention.ByUsername).username)
+        assertEquals(UserID("11111111-2222-3333-4444-555555555555"), (mentions[1] as MentionRules.Mention.ByUserID).userID)
+    }
+
+    @Test
+    fun `extractMentions handles mid-word at symbol`() {
+        // email-like strings should not be treated as mentions
+        val mentions = MentionRules.extractMentions("Contact alice@example.com for help")
+        assertEquals(emptyList(), mentions)
+    }
+
+    @Test
+    fun `extractMentions handles username with dots and hyphens`() {
+        val mentions = MentionRules.extractMentions("Hey @alice.smith and @bob-jones")
+        assertEquals(2, mentions.size)
+        assertEquals("alice.smith", (mentions[0] as MentionRules.Mention.ByUsername).username)
+        assertEquals("bob-jones", (mentions[1] as MentionRules.Mention.ByUsername).username)
+    }
+
+    @Test
+    fun `extractMentions handles mention at start of text`() {
+        val mentions = MentionRules.extractMentions("@alice this is a test")
+        assertEquals(1, mentions.size)
+        assertEquals(0, mentions[0].start)
+    }
+
+    @Test
+    fun `extractMentions handles mention at end of text`() {
+        val mentions = MentionRules.extractMentions("Hello @alice")
+        assertEquals(1, mentions.size)
+        assertEquals(6, mentions[0].start)
+        assertEquals(12, mentions[0].end)
+    }
+
+    @Test
+    fun `extractUserIDMentions filters only UserID mentions`() {
+        val mentions = MentionRules.extractUserIDMentions("@alice and @<12345678-1234-1234-1234-123456789012> and @bob")
+        assertEquals(1, mentions.size)
+        assertEquals(UserID("12345678-1234-1234-1234-123456789012"), mentions[0].userID)
+    }
+
+    @Test
+    fun `extractUsernameMentions filters only username mentions`() {
+        val mentions = MentionRules.extractUsernameMentions("@alice and @<12345678-1234-1234-1234-123456789012> and @bob")
+        assertEquals(2, mentions.size)
+        assertEquals("alice", mentions[0].username)
+        assertEquals("bob", mentions[1].username)
+    }
+}

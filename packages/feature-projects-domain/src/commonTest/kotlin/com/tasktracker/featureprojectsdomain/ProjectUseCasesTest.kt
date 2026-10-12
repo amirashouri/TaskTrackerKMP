@@ -6,6 +6,7 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomWorkItemID
+import com.tasktracker.domain.MentionRules
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.test.runTest
@@ -30,6 +31,83 @@ import kotlin.time.Instant
 class ProjectUseCasesTest {
 
     private val now = Instant.fromEpochSeconds(1_700_000_000)
+
+    // MARK: MentionRules
+
+    @Test
+    fun `extractMentions finds username mentions`() = runTest {
+        val mentions = MentionRules.extractMentions("Hello @alice, how are you?")
+        assertEquals(1, mentions.size)
+        val mention = mentions.first() as MentionRules.Mention.ByUsername
+        assertEquals("@alice", mention.raw)
+        assertEquals("alice", mention.username)
+        assertEquals(6, mention.start)
+        assertEquals(12, mention.end)
+    }
+
+    @Test
+    fun `extractMentions finds UserID mentions`() = runTest {
+        val mentions = MentionRules.extractMentions("Hey @<12345678-1234-1234-1234-123456789012>, check this")
+        assertEquals(1, mentions.size)
+        val mention = mentions.first() as MentionRules.Mention.ByUserID
+        assertEquals("@<12345678-1234-1234-1234-123456789012>", mention.raw)
+        assertEquals(UserID("12345678-1234-1234-1234-123456789012"), mention.userID)
+        assertEquals(4, mention.start)
+        assertEquals(43, mention.end)
+    }
+
+    @Test
+    fun `extractMentions finds multiple mentions of both types`() = runTest {
+        val mentions = MentionRules.extractMentions("@alice and @<87654321-4321-4321-4321-210987654321> please review")
+        assertEquals(2, mentions.size)
+        val first = mentions[0] as MentionRules.Mention.ByUsername
+        assertEquals("alice", first.username)
+        val second = mentions[1] as MentionRules.Mention.ByUserID
+        assertEquals(UserID("87654321-4321-4321-4321-210987654321"), second.userID)
+    }
+
+    @Test
+    fun `extractMentions returns empty for text without mentions`() = runTest {
+        assertEquals(emptyList(), MentionRules.extractMentions("No mentions here"))
+    }
+
+    @Test
+    fun `extractMentions handles trailing punctuation`() = runTest {
+        val mentions = MentionRules.extractMentions("Thanks @alice! See @<11111111-2222-3333-4444-555555555555>.")
+        assertEquals(2, mentions.size)
+        assertEquals("alice", (mentions[0] as MentionRules.Mention.ByUsername).username)
+        assertEquals(UserID("11111111-2222-3333-4444-555555555555"), (mentions[1] as MentionRules.Mention.ByUserID).userID)
+    }
+
+    @Test
+    fun `extractMentions handles mid-word at symbol`() = runTest {
+        // email-like strings should not be treated as mentions
+        val mentions = MentionRules.extractMentions("Contact alice@example.com for help")
+        assertEquals(emptyList(), mentions)
+    }
+
+    @Test
+    fun `extractMentions handles username with dots and hyphens`() = runTest {
+        val mentions = MentionRules.extractMentions("Hey @alice.smith and @bob-jones")
+        assertEquals(2, mentions.size)
+        assertEquals("alice.smith", (mentions[0] as MentionRules.Mention.ByUsername).username)
+        assertEquals("bob-jones", (mentions[1] as MentionRules.Mention.ByUsername).username)
+    }
+
+    @Test
+    fun `extractMentions handles mention at start of text`() = runTest {
+        val mentions = MentionRules.extractMentions("@alice this is a test")
+        assertEquals(1, mentions.size)
+        assertEquals(0, mentions[0].start)
+    }
+
+    @Test
+    fun `extractMentions handles mention at end of text`() = runTest {
+        val mentions = MentionRules.extractMentions("Hello @alice")
+        assertEquals(1, mentions.size)
+        assertEquals(6, mentions[0].start)
+        assertEquals(12, mentions[0].end)
+    }
 
     // MARK: CreateProject
 
@@ -552,8 +630,10 @@ class ProjectUseCasesTest {
         val author = UserID("77777777-7777-4777-8777-777777777777")
         val post = AddComment(repository, TestDateProvider(now))
 
-        val posted = post(workItemID = item.id, authorID = author, body = "  Looks right to me  ")
+        val result = post(workItemID = item.id, authorID = author, body = "  Looks right to me  ")
 
+        val success = assertIs<AddCommentResult.Success>(result)
+        val posted = success.comment
         assertEquals("Looks right to me", posted.body, "the use case owns the trim, not the store")
         assertEquals(author, posted.authorID)
         assertEquals(
@@ -561,6 +641,38 @@ class ProjectUseCasesTest {
             repository.comments(item.id).map { it.id },
             "the thread must hold exactly what the use case returned",
         )
+    }
+
+    @Test
+    fun `a comment with mentions returns them in the result`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+
+        val result = post(workItemID = item.id, authorID = author, body = "Hey @alice and @<12345678-1234-1234-1234-123456789012>, please review")
+
+        val success = assertIs<AddCommentResult.Success>(result)
+        assertEquals(2, success.mentions.size)
+        val mention1 = success.mentions[0] as MentionRules.Mention.ByUsername
+        assertEquals("alice", mention1.username)
+        val mention2 = success.mentions[1] as MentionRules.Mention.ByUserID
+        assertEquals(UserID("12345678-1234-1234-1234-123456789012"), mention2.userID)
+    }
+
+    @Test
+    fun `a comment without mentions returns empty mention list`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id)
+        val author = UserID("77777777-7777-4777-8777-777777777777")
+        val post = AddComment(repository, TestDateProvider(now))
+
+        val result = post(workItemID = item.id, authorID = author, body = "No mentions here")
+
+        val success = assertIs<AddCommentResult.Success>(result)
+        assertEquals(emptyList(), success.mentions)
     }
 
     @Test
@@ -574,8 +686,9 @@ class ProjectUseCasesTest {
         val post = AddComment(repository, TestDateProvider(now))
         val changesBefore = repository.publishedChanges().size
 
-        assertFailsWith<AppError> { post(workItemID = item.id, authorID = author, body = "   ") }
+        val result = post(workItemID = item.id, authorID = author, body = "   ")
 
+        assertIs<AddCommentResult.EmptyBody>(result)
         assertEquals(emptyList(), repository.comments(item.id))
         assertEquals(
             changesBefore,
@@ -592,9 +705,9 @@ class ProjectUseCasesTest {
         val author = UserID("77777777-7777-4777-8777-777777777777")
         val post = AddComment(repository, TestDateProvider(now))
 
-        assertFailsWith<AppError> {
-            post(workItemID = item.id, authorID = author, body = "Replying to nothing", parentID = randomCommentID())
-        }
+        val result = post(workItemID = item.id, authorID = author, body = "Replying to nothing", parentID = randomCommentID())
+
+        assertIs<AddCommentResult.ParentNotFound>(result)
 
         assertEquals(
             emptyList(),
@@ -611,8 +724,10 @@ class ProjectUseCasesTest {
         val author = UserID("77777777-7777-4777-8777-777777777777")
         val post = AddComment(repository, TestDateProvider(now))
 
-        val root = post(workItemID = item.id, authorID = author, body = "Root")
-        val reply = post(workItemID = item.id, authorID = author, body = "Answer", parentID = root.id)
+        val rootResult = post(workItemID = item.id, authorID = author, body = "Root")
+        val root = assertIs<AddCommentResult.Success>(rootResult).comment
+        val replyResult = post(workItemID = item.id, authorID = author, body = "Answer", parentID = root.id)
+        val reply = assertIs<AddCommentResult.Success>(replyResult).comment
 
         assertEquals(root.id, reply.parentID)
         assertEquals(

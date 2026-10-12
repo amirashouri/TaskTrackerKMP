@@ -8,6 +8,7 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.MentionRules
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -401,6 +402,28 @@ class LoadComments(
 }
 
 /**
+ * Result of posting a comment, including any mentions parsed from the body.
+ *
+ * The mention parsing runs in the use case so both the editor (for highlighting)
+ * and the sync sink (for notification delivery) share the same rule from
+ * [MentionRules]. This avoids a second screen forgetting the rule, and keeps the
+ * store agnostic to what a "mention" means.
+ */
+sealed interface AddCommentResult {
+    /** Comment was created successfully with the given mentions. */
+    data class Success(
+        val comment: Comment,
+        val mentions: List<MentionRules.Mention>,
+    ) : AddCommentResult
+
+    /** The comment body was empty after trimming. */
+    data object EmptyBody : AddCommentResult
+
+    /** The parent comment being replied to no longer exists. */
+    data object ParentNotFound : AddCommentResult
+}
+
+/**
  * Posts one comment — top-level or a reply — after the two rules only this can enforce.
  *
  * Both rules live here rather than in the store, deliberately: neither needs to see
@@ -417,6 +440,10 @@ class LoadComments(
  * window — so the parent is checked against the thread as this device holds it, and a
  * reply to a deleted comment is refused with a message that says so rather than stored
  * pointing at nothing.
+ *
+ * **Mentions are parsed from the trimmed body** using [MentionRules.extractMentions].
+ * The result carries both the created comment and the list of mentions so callers can
+ * highlight them in the editor or deliver notifications (see 1.3) without re-parsing.
  */
 class AddComment(
     private val repository: ProjectRepositoryPort,
@@ -429,20 +456,22 @@ class AddComment(
         authorID: UserID,
         body: String,
         parentID: CommentID? = null,
-    ): Comment {
-        val body = body.trim()
-        if (body.isEmpty()) {
-            throw AppError.Validation("A comment cannot be empty.")
+    ): AddCommentResult {
+        val trimmed = body.trim()
+        if (trimmed.isEmpty()) {
+            return AddCommentResult.EmptyBody
         }
         if (parentID != null && repository.comments(workItemID).none { it.id == parentID }) {
-            throw AppError.Validation("The comment being replied to no longer exists.")
+            return AddCommentResult.ParentNotFound
         }
-        return repository.addComment(
+        val comment = repository.addComment(
             workItemID = workItemID,
             authorID = authorID,
-            body = body,
+            body = trimmed,
             parentID = parentID,
             now = dateProvider.now(),
         )
+        val mentions = MentionRules.extractMentions(trimmed)
+        return AddCommentResult.Success(comment, mentions)
     }
 }

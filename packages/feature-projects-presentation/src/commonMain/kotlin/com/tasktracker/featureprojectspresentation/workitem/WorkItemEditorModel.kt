@@ -16,6 +16,7 @@ import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AddComment
+import com.tasktracker.featureprojectsdomain.AddCommentResult
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.ExpandRecurrence
 import com.tasktracker.featureprojectsdomain.LoadComments
@@ -135,14 +136,18 @@ class WorkItemEditorModel(
      * A refusal — blank body, reply to a comment that is gone — lands in the shared
      * [errorMessage] banner via [reporting] and leaves both the draft and the reply
      * target alone, so the text is never thrown away by a failed send.
+     *
+     * Mentions are parsed in the use case and available in [AddCommentResult.Success.mentions]
+     * for the editor to highlight or for the sync sink to deliver notifications (see 1.3).
      */
     suspend fun submitComment() {
         val author = currentUserID ?: return
         val id = existing?.id ?: return
-        val posted = reporting {
+        val result = reporting {
             postComment(workItemID = id, authorID = author, body = commentDraft, parentID = commentReplyTo)
         } ?: return
-        comments = comments + posted
+        val success = result as? AddCommentResult.Success ?: return
+        comments = comments + success.comment
         commentDraft = ""
         commentReplyTo = null
     }
