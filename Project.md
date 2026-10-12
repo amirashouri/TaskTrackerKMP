@@ -132,20 +132,24 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1531 tests, 12 failed** (pre-existing) |
+| JVM | `jvmTest` | fast feedback; run this — **1534 tests, 12 failed** (pre-existing) |
 | iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1494 tests, 12 failed** (same 12) |
 | Android host | `testAndroidHostTest` | Robolectric; **1238 tests, 33 failed** — all layout/raster, documented below |
+| Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
 2026-10-12 from a run with the `test-results` trees deleted first, so the figures are one run's
 output rather than an accumulation of earlier ones. All three rose: the JVM figure from the
 previously recorded 1469, iOS from 1444, and the Android host from 1188, because tests landed
-on `main` after those measurements.
+on `main` after those measurements. The JVM figure has since moved to **1534** for the 3
+entry-point tests below; iOS stays 1494 and the Android host stays 1238, because those tests
+are `jvmTest`-only and nothing the Android host compiles changed.
 
-The Desktop work added 13 tests, and where they land is worth knowing when the counts move:
-7 in `:packages:user-defaults`'s `jvmTest` and 5 in `:packages:keychain`'s `jvmTest` are
-**JVM-only**, because the backends they cover exist only on that target; the 1 resource test is
+The Desktop work added 16 tests, and where they land is worth knowing when the counts move:
+7 in `:packages:user-defaults`'s `jvmTest`, 5 in `:packages:keychain`'s `jvmTest` and 3 in
+`:shared-ui`'s `jvmTest` are **JVM-only**, because the backends and the entry point they cover
+exist only on that target; the 1 resource test is
 per-host (a scenario body plus a `jvmTest`, an `iosTest` and an `androidHostTest` entry point),
 so it moves all three totals. `:packages:keychain`'s 3 keychain round-trip tests are **opt-in** — they write to the real
 login keychain, so they run only under `TASKTRACKER_KEYCHAIN_INTEGRATION=1`, and they register
@@ -153,6 +157,24 @@ as passes in a default run without having run. That run is the one that matters 
 binding; the default suite says nothing about it. `commonTest` holds
 **1729** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
 counted per host.
+
+### Desktop is not a fourth test host
+
+Desktop and the JVM test host are one Gradle target and one set of source sets: the app is
+`shared-ui/src/jvmMain` and its code is tested by `shared-ui/src/jvmTest`, which is the `jvm`
+target's test source set. So there is no Desktop twin of `iosSimulatorArm64Test` to run — a fourth
+column would execute the same tasks over the same code and report the same numbers twice — and
+`:shared-ui:runDesktop` is a launch task (`JavaExec`), not an assertion.
+
+What the Desktop *app* does differently from the test host is a single flag.
+`startDesktopProcess` marks the process as the Desktop app before the shell opens, and both JVM
+storage seams choose their backend from that flag when they construct it; on the test host the
+flag stays clear, so no scenario writes to the developer's real preferences file or login
+keychain. Deleting the assignment used to leave the suite byte-identical while the shipped app
+kept its session and its appearance in memory alone — the same shape as the `CachedProfile` gap
+above, and the reason `DesktopEntryPointJvmTest` (3 tests, `jvmTest`) enters the seam and asserts
+the flag is already set at the moment the shell opens, and that the preferences router therefore
+hands the shell the file-backed backend rather than the test host's stub.
 
 The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-projects-data`),
 `theLongAccentCaptionWrapsInsteadOfClipping` + `theUserDetailsSectionIsOnThePage`

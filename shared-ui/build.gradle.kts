@@ -90,6 +90,19 @@ kotlin {
     }
 }
 
+// Compose Hot Reload — and with it Android Studio's auto-generated "shared-ui"
+// run configuration — launches `hotRunJvm`, not `runDesktop` below. That task
+// resolves its entry point from (highest first) `--mainClass`/`-PmainClass`,
+// then `-Dcompose.mainClass`, then this `application` block; with none set it
+// aborts with "Missing 'mainClass' property". Naming the entry point here, in
+// the one place the Compose Gradle plugin reads it, is what makes the AS Run
+// button (and `./gradlew :shared-ui:hotRunJvm`) work at all.
+compose.desktop {
+    application {
+        mainClass = "com.tasktracker.sharedui.DesktopMainKt"
+    }
+}
+
 // The Desktop run task. The Desktop entry point exists in `jvmMain`, but without
 // this task Gradle knows how to compile it and not how to launch it. This is the
 // Desktop equivalent of `:androidApp:installDebug` and of Xcode's build-and-run:

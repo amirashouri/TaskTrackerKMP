@@ -66,15 +66,16 @@ not report it as a regression you caused — check whether it was already failin
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **green** (1531 tests, 12 failed — the pre-existing set listed below) |
-| iOS simulator | `iosSimulatorArm64Test` | **green** (1494 tests, 12 failed — the same 12) |
+| JVM | `jvmTest` | **1534 tests, 12 failed** — the pre-existing set listed below, and the only thing the run exits red on |
+| iOS simulator | `iosSimulatorArm64Test` | **1494 tests, 12 failed** — the same 12 |
 | Android host | `testAndroidHostTest` | **red** — 1238 tests, 33 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 8, feature-projects-presentation 3, shared-ui 8) |
+| Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a host** — Desktop *is* the `jvm` target, so the JVM row above is its suite; `Project.md` → Tests has the note and the one Desktop-only behaviour's test |
 
 The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.
 
 `:shared-ui` was also uncompilable until recently — `ShellPreferences.currentUserName` was a
 non-suspend `val` whose getter called the `suspend` `UserDefaultsStore.value(DefaultsKey)`. It is
-now a `StateFlow` refreshed when the router root becomes `Main`, so the module compiles and its 53
+now a `StateFlow` refreshed when the router root becomes `Main`, so the module compiles and its 56
 JVM / 51 iOS tests run; see the finished port log (`docs/PORT-LOG.md` Phases 20/24) for the
 full history. There is a known **coverage gap**: no
 scenario seeds a `CachedProfile` and asserts the board filter, so deleting the refresh call leaves

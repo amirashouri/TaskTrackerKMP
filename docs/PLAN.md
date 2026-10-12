@@ -246,7 +246,7 @@ module, not a source set inside a library — and Desktop does not need to copy 
   no `.app` bundle is produced and therefore no icon file is consumed. Choosing an icon is a
   packaging decision and belongs with packaging; recording "no new asset work" here is
   accurate rather than a deferral.
-- [ ] **4.8 Add Desktop to the test-host picture** · P1 ·
+- [x] **4.8 Add Desktop to the test-host picture** · P1 ·
   `Project.md` test-host table + any new Desktop test entry points — Document Desktop as a
   test host in the table. The existing `commonTest` scenarios and pixel tests already run on
   a JVM target and Desktop is a JVM target, so the question is whether Desktop passes the
@@ -255,12 +255,83 @@ module, not a source set inside a library — and Desktop does not need to copy 
   the source-set shape does not by itself force either choice. If Desktop exposes any new
   `expect`/`actual` that the JVM test host did not cover, add the matching test before this
   task is done.
-- [ ] **4.9 Run the decision command with the Desktop target in the picture and reconcile** · P1 ·
+
+  **Decision: Desktop folds into the JVM column, and inspecting the target is what settles
+  it.** `shared-ui/src/jvmMain` (the app) and `shared-ui/src/jvmTest` (its tests) compile to the
+  same `jvm` target and the same source sets, so `jvmTest` *is* the Desktop app's suite. A
+  Desktop column would run the same tasks over the same code and report the same numbers
+  twice, and `:shared-ui:runDesktop` is a `JavaExec` launch rather than an assertion. Recorded
+  in `Project.md` → Tests as a row that says so plus a note under it, and in the `AGENTS.md`
+  host table. No new `expect`/`actual`: Desktop adds none, so there was no host implementation
+  to add and the atomicity rule had nothing to bind.
+
+  **The gap it found.** Desktop exposes no new seam, but it does hold one Desktop-only
+  behaviour and nothing asserted it. `DesktopMain`'s `main` set `isDesktopApp = true`, and that
+  line is the entire difference between the app and the test host: both JVM storage seams pick
+  their backend from the flag when they construct it. Deleting it left the suite
+  byte-identical while the app silently went back to in-memory preferences and the in-memory
+  keychain — a signature that no restart survives. Same shape as the `CachedProfile` gap, and
+  exactly the class of claim 4.7 found unasserted for resources; it was also unreachable,
+  because `main` opens a window and blocks until it closes.
+
+  Fixed by extracting `startDesktopProcess(openShell)`, which marks the process and *only then*
+  opens the shell — the order is the contract rather than a style choice, because the shell's
+  `AppGraph.start()` constructs every store — plus
+  `shared-ui/src/jvmTest/…/DesktopEntryPointJvmTest.kt` (3 tests) which enters it. The three
+  assert: the flag is already set at the instant the shell opens; the preferences router
+  therefore hands the shell `FilePropertiesBackend` rather than the test host's
+  `JvmPropertiesBackend`; and the test host still gets the in-memory stub, which is the half a
+  leaked flag would break (and the half that protects the shared scenarios from writing to the
+  developer's real files). They read the type only — `FilePropertiesBackend` loads per call and
+  its constructor touches nothing — so no real preferences file is opened or written.
+
+  Mutation-checked three ways: deleting the assignment turns **two** red, and swapping the two
+  statements turns the same two red. Deleting the flag's restoration in the test helper turns
+  tests red as well — the helper's own check catches the first test that leaks and the stub
+  test's entry assertion catches a leak from before it, so a leak is red in every method order.
+  Each message names the flag and the value it actually saw. The keychain half
+  of the same decision needs no test here — `:shared-ui` has no edge to `:packages:keychain`
+  (the architecture table says it should not) and that routing is already held by
+  `MacOsKeychainTest`'s flag flip in the module that owns it. The three tests are `jvmTest`-only
+  because the code under test is `jvmMain`, so the `commonTest`-body-per-host rule does not
+  apply: there is nothing to run on the other two hosts.
+- [x] **4.9 Run the decision command with the Desktop target in the picture and reconcile** · P1 ·
   Verification — Run the decision command from `Project.md` (or the Desktop-equivalent
   subset) after 4.2–4.7 and confirm `shared-ui` and the modules it touches are green at the
   module level before this section is marked done. If any pre-existing failure behaves
   differently on Desktop than on the JVM host, note the difference here rather than silently
   folding it into the existing numbers.
+
+  **Measured, one run, nothing restored from cache.**
+
+  ```bash
+  ./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports \
+            :androidApp:compileDebugKotlin --continue --rerun-tasks
+  ```
+
+  The `test-results` trees were deleted first and the run forced, so the figures are that run's
+  output: 524 actionable tasks, **524 executed, 0 from cache**, 0 compile errors. JVM **1534 tests,
+  12 failed**; iOS simulator **1494 tests, 12 failed** — the same documented 12 on both hosts,
+  and none of them new. `verifyArchitectureGraph` passed, all 27 `verifyModuleImports`
+  tasks passed, `:androidApp:compileDebugKotlin` passed. The JVM figure is the pre-4.8 1531 plus
+  the 3 entry-point tests; iOS is unchanged because those tests are `jvmTest`-only.
+
+  Two things worth carrying:
+  - **The run exits non-zero, and only on the pre-existing 12.** `--continue` is not optional:
+    without it Gradle stops after the first failing test task and the verification tasks never
+    run at all, so a red exit status here says nothing about the architecture checks either
+    way. Run it with the flag and read the task lines.
+  - **No pre-existing failure behaves differently on Desktop than on the JVM host, because they
+    are the same host** — that is what 4.8 decided. The shell's code is compiled and exercised
+    by `jvmTest` itself; what differs at runtime is the storage wiring, and that is held by
+    4.8's test rather than by anything the decision command can observe.
+
+  The Android-host row is **not** re-measured and stays at 1238 tests / 33 failures: nothing it
+  compiles changed (`DesktopMain.kt` is `jvmMain`, and the new test is `jvmTest`-only), which
+  `:androidApp:compileDebugKotlin` passing in this same run supports. That is reasoning rather
+  than a measurement, and it is recorded here as such.
+
+  With that, section 4 is complete: 4.1–4.9 all landed.
 
 ---
 
