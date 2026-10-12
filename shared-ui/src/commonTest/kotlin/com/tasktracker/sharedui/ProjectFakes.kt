@@ -1,13 +1,16 @@
 package com.tasktracker.sharedui
 
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -77,6 +80,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
     // other sprint writes (`createSprint`, `finishSprint`, …) stay `unused` because no shell
     // scenario drives those forms yet, and still fail loudly when one tries.
     private val storedSprints = mutableListOf<Sprint>()
+
+    // Attachments are needed by the WorkItemEditorDestination in NavigationHost, which loads
+    // them when the editor opens. A fake that threw would make every editor scenario fail on
+    // read.
+    private val storedAttachments = mutableListOf<Attachment>()
 
     /** Seeds a sprint directly, the way [seed] does for a project. */
     fun seedSprint(sprint: Sprint) {
@@ -248,6 +256,44 @@ class FakeProjectRepository : ProjectRepositoryPort {
             createdAt = now,
             parentID = parentID,
         )
+    }
+
+    // MARK: Attachments
+
+    // Reachable from the shell: opening the work-item editor loads the attachments, so an
+    // `unused(...)` here would make every editor scenario fail on read. Empty — a shell
+    // test seeds through `seed(attachment: Attachment)` if it needs content.
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> = locked {
+        storedAttachments.filter { it.workItemID == workItemID }.map { it.copy() }
+    }
+
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment = locked {
+        writes += "addAttachment"
+        val attachment = Attachment(
+            id = randomAttachmentID(),
+            workItemID = workItemID,
+            fileName = fileName,
+            mimeType = mimeType,
+            sizeBytes = bytes.size.toLong(),
+            blobPath = "",
+            createdAt = now,
+        )
+        storedAttachments += attachment
+        attachment.copy()
+    }
+
+    override suspend fun deleteAttachment(id: AttachmentID) = locked {
+        val index = storedAttachments.indexOfFirst { it.id == id }
+        if (index >= 0) {
+            storedAttachments.removeAt(index)
+            writes += "deleteAttachment"
+        }
     }
 
     override suspend fun sprints(projectID: ProjectID): List<Sprint> = locked {

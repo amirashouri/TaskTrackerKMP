@@ -73,6 +73,7 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.assignableMembersFor
+import com.tasktracker.featureprojectspresentation.currentProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
@@ -1316,6 +1317,7 @@ private fun WorkItemEditorDestination(
     // id that arrives mid-edit must relabel rather than leave a stale name on the row.
     val currentUserID by preferences.currentUserID.collectAsState()
     val currentUserName by preferences.currentUserName.collectAsState()
+    val filePicker = currentProjectEnvironment?.filePicker
     val model = remember(
         projectID,
         workItemID,
@@ -1336,9 +1338,12 @@ private fun WorkItemEditorDestination(
         )
     }
 
-    // The thread loads as soon as the model exists. A create has no id yet, and the use
-    // case no-ops there, so one effect covers both routes.
-    LaunchedEffect(model) { model.refreshComments() }
+    // The thread and the attachments load as soon as the model exists. A create has no
+    // id yet, and both use cases no-op there, so one effect covers both routes.
+    LaunchedEffect(model) {
+        model.refreshComments()
+        model.refreshAttachments()
+    }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
     // editor without one answers a double tap with two writes. Named rather than defaulted at
@@ -1497,6 +1502,30 @@ private fun WorkItemEditorDestination(
         onCommentCancelReply = model::onCommentCancelReply,
         onCommentSubmit = {
             scope.launch { model.submitComment() }
+        },
+        // The attachments section. `attachments` is the model's list, appended to after
+        // each attach — the write returns the stored row, so the view updates from the
+        // value it just created rather than re-reading the store.
+        attachments = model.attachments,
+        isAttaching = model.isAttaching,
+        onAttachClick = {
+            // The picker belongs to the environment, not the screen: the graph owns the
+            // platform host (an activity-result registration on Android, a document
+            // picker on iOS), and the screen tree has no platform-specific object to hand
+            // a factory — which is why `LocalContext` does not exist in Compose
+            // Multiplatform 1.12.1's common code and why this seam lives in the
+            // composition root. The `isAttaching` guard is the double-tap answer: a
+            // second launch while one is in flight would pair the second pick with the
+            // first pick's file, and the model has no other in-flight flag.
+            val picker = filePicker
+            if (picker != null && !model.isAttaching) {
+                scope.launch {
+                    picker.pick()?.let { picked -> model.attachFile(picked) }
+                }
+            }
+        },
+        onRemoveAttachment = { id ->
+            scope.launch { model.removeAttachment(id) }
         },
         onDismissRequest = {
             if (!isBusy) {

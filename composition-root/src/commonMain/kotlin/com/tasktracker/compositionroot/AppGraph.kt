@@ -23,6 +23,8 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.LocalDataSyncSink
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
+import com.tasktracker.featureprojectsdomain.FilePicker
+import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
@@ -158,6 +160,17 @@ object AppGraph {
         //
         // Not started here — see [startLoops].
         app<NetworkMonitor> { NetworkMonitor.forHost(platforms.host) }
+
+        // The platform's file picker. Where it is registered matters: the graph outlives
+        // every activity, and an activity-result registration belongs to an Activity, so the
+        // picker is built once per graph from the platform host, and it flows to the
+        // presentation layer through [com.tasktracker.featureprojectspresentation.project
+        // .ProjectEnvironment.filePicker]. Composing the picker in the presentation layer
+        // would either force a `LocalContext` (which Compose Multiplatform 1.12.1 does not
+        // provide outside androidMain) or push the host object through every caller. One
+        // resolved instance, flowing through the environment, is the only shape where a
+        // test can substitute a fake without touching the screen tree.
+        app<FilePicker> { createFilePicker(platforms.host) }
     }
 
     /**

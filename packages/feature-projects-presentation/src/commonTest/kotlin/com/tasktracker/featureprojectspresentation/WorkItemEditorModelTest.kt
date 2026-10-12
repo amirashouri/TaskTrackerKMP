@@ -3,9 +3,13 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomAttachmentID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectsdomain.AttachFile
+import com.tasktracker.featureprojectsdomain.PickedFile
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -719,6 +723,172 @@ class WorkItemEditorModelTest {
             repository.workItems(project.id).size,
             "the save itself landed; only the next instance is missing",
         )
+    }
+
+    // MARK: Attachments
+
+    /**
+     * The attach flow's happy path: the picker's file lands in the store and the model's
+     * list grows by exactly the row the write returned. Asserting on the store as well
+     * as the list is what separates "the view was told" from "it is saved".
+     */
+    @Test
+    fun `attaching a file appends the stored attachment`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.attachFile(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1, 2)),
+        )
+
+        assertEquals(1, model.attachments.size)
+        assertEquals("report.txt", model.attachments.single().fileName)
+        assertEquals(1, repository.attachments(item.id).size)
+        assertEquals(model.attachments.single(), repository.attachments(item.id).single())
+        assertNull(model.errorMessage, "a successful attach leaves the banner clear")
+    }
+
+    @Test
+    fun `a blank-name refusal lands in the error banner and stores nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.attachFile(
+            PickedFile(fileName = "   ", mimeType = "text/plain", bytes = byteArrayOf(1)),
+        )
+
+        assertTrue(model.attachments.isEmpty(), "a refusal must not grow the list")
+        assertTrue(
+            repository.attachments(item.id).isEmpty(),
+            "a refusal must not reach the store",
+        )
+        assertNotNull(
+            model.errorMessage,
+            "a refusal the user watched must be on the banner, not swallowed",
+        )
+    }
+
+    @Test
+    fun `an empty-file refusal lands in the banner and stores nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.attachFile(
+            PickedFile(fileName = "empty.txt", mimeType = "text/plain", bytes = byteArrayOf()),
+        )
+
+        assertTrue(model.attachments.isEmpty())
+        assertTrue(repository.attachments(item.id).isEmpty())
+        assertNotNull(model.errorMessage)
+    }
+
+    /**
+     * The TooLarge banner names the measured size and the limit, because a "too large"
+     * with no numbers is a message the user cannot act on, and a size whose text the
+     * scenario asserts on byte-exactly is a measurement that fails when the cap moves.
+     */
+    @Test
+    fun `a too-large refusal names the measured size and the limit on the banner`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        val model = editing(item, repository)
+        val overCap = ByteArray((AttachFile.MAX_ATTACHMENT_BYTES + 1L).toInt())
+
+        model.attachFile(
+            PickedFile(fileName = "huge.bin", mimeType = "application/octet-stream", bytes = overCap),
+        )
+
+        assertTrue(model.attachments.isEmpty())
+        assertTrue(repository.attachments(item.id).isEmpty())
+        assertTrue(
+            model.errorMessage?.contains("25.0 MB") == true,
+            "the banner must name the limit, in the same words the list shows a size in",
+        )
+    }
+
+    @Test
+    fun `refreshing loads the attachments the store holds`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        repository.seed(
+            Attachment(
+                id = randomAttachmentID(),
+                workItemID = item.id,
+                fileName = "crash-report.txt",
+                mimeType = "text/plain",
+                sizeBytes = 42L,
+                blobPath = "crash-report.blob",
+                createdAt = Instant.fromEpochSeconds(1_700_000_000),
+            ),
+        )
+        val model = editing(item, repository)
+
+        model.refreshAttachments()
+
+        assertEquals(1, model.attachments.size)
+        assertEquals("crash-report.txt", model.attachments.single().fileName)
+    }
+
+    /**
+     * The remove flow drops the row only when the store agreed. A model that dropped
+     * first and the store that failed afterwards is the desync this ordering avoids.
+     */
+    @Test
+    fun `removing an attachment drops it from the model and the store`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        val model = editing(item, repository)
+        model.attachFile(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1)),
+        )
+        val stored = model.attachments.single()
+
+        model.removeAttachment(stored.id)
+
+        assertTrue(model.attachments.isEmpty())
+        assertTrue(repository.attachments(item.id).isEmpty())
+    }
+
+    /**
+     * A create has no id yet, and a file cannot be filed against a work item that does
+     * not exist, so every attachment call on a create model is a no-op rather than a
+     * crash or a stray write.
+     */
+    @Test
+    fun `attachment calls on a create model are no-ops`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = newItem(repository)
+
+        model.attachFile(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1)),
+        )
+        model.refreshAttachments()
+        model.removeAttachment(randomAttachmentID())
+
+        assertTrue(model.attachments.isEmpty())
+        assertTrue(repository.writes.isEmpty(), "a create must not write attachments")
+        assertNull(model.errorMessage)
     }
 
     // MARK: Helpers

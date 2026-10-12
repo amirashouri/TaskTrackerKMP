@@ -1,10 +1,12 @@
 package com.tasktracker.featureprojectspresentation
 
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -63,6 +65,18 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         parentID: CommentID?,
         now: Instant,
     ): Comment = boom()
+
+    override suspend fun attachments(workItemID: WorkItemID): List<Attachment> = boom()
+
+    override suspend fun addAttachment(
+        workItemID: WorkItemID,
+        fileName: String,
+        mimeType: String?,
+        bytes: ByteArray,
+        now: Instant,
+    ): Attachment = boom()
+
+    override suspend fun deleteAttachment(id: AttachmentID): Unit = boom()
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = boom()
 

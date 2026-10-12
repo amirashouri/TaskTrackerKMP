@@ -1,5 +1,6 @@
 package com.tasktracker.domain
 
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -7,6 +8,7 @@ import com.tasktracker.core.StatusChangeID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
@@ -705,4 +707,42 @@ data class Comment(
     val createdAt: Instant,
     /** The comment being replied to, or `null` for a top-level comment. */
     val parentID: CommentID? = null,
+)
+
+/**
+ * One file attached to a work item.
+ *
+ * The bytes are **not** here and never will be: a row is the index, the blob store
+ * (`feature-projects-data`) holds the file itself under the app's support directory.
+ * Keeping the bytes out of the entity is what lets a thread listing render, a delete
+ * cascade, and a future sync transport all work on the metadata alone.
+ *
+ * ## Device-local in this slice, and the row says so honestly
+ *
+ * Like [StatusChange], an attachment is not queued to the outbox — the transport has
+ * no blob upload and inventing one would promise sync that cannot happen. The row is
+ * local truth: [blobPath] names a file on *this* device, and a pulled row from a
+ * future server would carry a blob reference this device must fetch before it can
+ * open anything. That is the seam the sync transport will fill; nothing here pretends
+ * it is already filled.
+ *
+ * A comment about attribution applies here too, inverted: an attachment without its
+ * bytes is useless, so the attach path refuses to store a row whose blob write failed,
+ * rather than indexing a file that is not there.
+ */
+@Serializable
+data class Attachment(
+    val id: AttachmentID = randomAttachmentID(),
+    val workItemID: WorkItemID,
+    /** The name the file was picked under, shown to the user; never used as a path. */
+    val fileName: String,
+    /** Best-effort, from the picker; `null` when the platform could not say. */
+    val mimeType: String?,
+    val sizeBytes: Long,
+    /**
+     * Path of the stored blob, relative to the attachments root — never absolute, so a
+     * store relocated between installs or machines stays readable.
+     */
+    val blobPath: String,
+    val createdAt: Instant,
 )

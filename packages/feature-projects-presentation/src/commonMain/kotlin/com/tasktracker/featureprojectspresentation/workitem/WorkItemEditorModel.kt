@@ -3,6 +3,8 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
@@ -10,6 +12,7 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
@@ -18,8 +21,13 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AddComment
 import com.tasktracker.featureprojectsdomain.AddCommentResult
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
+import com.tasktracker.featureprojectsdomain.AttachFile
+import com.tasktracker.featureprojectsdomain.AttachFileResult
+import com.tasktracker.featureprojectsdomain.DeleteAttachment
 import com.tasktracker.featureprojectsdomain.ExpandRecurrence
+import com.tasktracker.featureprojectsdomain.LoadAttachments
 import com.tasktracker.featureprojectsdomain.LoadComments
+import com.tasktracker.featureprojectsdomain.PickedFile
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SaveWorkItem
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
@@ -85,6 +93,9 @@ class WorkItemEditorModel(
 
     private val loadComments = LoadComments(repository)
     private val postComment = AddComment(repository, dateProvider)
+    private val loadAttachments = LoadAttachments(repository)
+    private val storeAttachment = AttachFile(repository, dateProvider)
+    private val dropAttachment = DeleteAttachment(repository)
 
     // MARK: Comments
 
@@ -150,6 +161,87 @@ class WorkItemEditorModel(
         comments = comments + success.comment
         commentDraft = ""
         commentReplyTo = null
+    }
+
+    // MARK: Attachments
+
+    /**
+     * The files as this device holds them, oldest first.
+     *
+     * Loaded once per model (the host calls [refreshAttachments] when the editor opens)
+     * and appended to after each [attachFile] — the write returns the stored attachment,
+     * so the view updates from the value it just created rather than re-reading the
+     * store. A file is bigger than a comment and reading the store again would mean
+     * touching rows for blobs, which is exactly what the listing does not do — so the
+     * append matters more here than in the thread.
+     */
+    var attachments by mutableStateOf<List<Attachment>>(emptyList())
+        private set
+
+    /** Whether an attach is in flight — the model has no other in-flight flag. */
+    var isAttaching by mutableStateOf(false)
+        private set
+
+    /**
+     * Reloads the files — after open, and after a change announcement from elsewhere.
+     *
+     * A no-op while creating, for the same reason comments are: there is no id yet, and
+     * a file cannot be filed against a work item that does not exist.
+     */
+    suspend fun refreshAttachments() {
+        val id = existing?.id ?: return
+        attachments = reporting { loadAttachments(id) } ?: attachments
+    }
+
+    /**
+     * Stores one picked file with the use case's result handling the refusals.
+     *
+     * A refusal — blank name, empty file, over the cap — lands in the shared
+     * [errorMessage] banner via [onFailure] rather than silently, deliberately unlike
+     * [submitComment]'s quiet return: an attach attempt always comes from an explicit
+     * button press the user watched fail, and swallowing it would teach that the button
+     * does nothing. The banner names the measured size and the limit, so a TooLarge the
+     * user can read about is one they can fix on their next pick.
+     */
+    suspend fun attachFile(picked: PickedFile) {
+        val id = existing?.id ?: return
+        isAttaching = true
+        val result = reporting {
+            storeAttachment(
+                workItemID = id,
+                fileName = picked.fileName,
+                mimeType = picked.mimeType,
+                bytes = picked.bytes,
+            )
+        }
+        isAttaching = false
+        when (result) {
+            null -> Unit
+            is AttachFileResult.Success -> attachments = attachments + result.attachment
+            AttachFileResult.BlankName ->
+                onFailure(AppError.Validation("The picked file has no name to file it under."))
+            AttachFileResult.EmptyFile ->
+                onFailure(AppError.Validation("The picked file is empty — nothing was stored."))
+            is AttachFileResult.TooLarge -> onFailure(
+                AppError.Validation(
+                    "The file is ${formatAttachmentSize(result.sizeBytes)}; " +
+                        "the limit is ${formatAttachmentSize(result.limitBytes)}.",
+                ),
+            )
+        }
+    }
+
+    /**
+     * Removes one file, dropping it from the list only if the store agreed.
+     *
+     * The row is removed optimistically-but-verified — the local list follows the use
+     * case's return rather than appending first — because a removal that failed in the
+     * store while the view already dropped the row is the exact desync the comments'
+     * append-only flow avoids having by never needing it.
+     */
+    suspend fun removeAttachment(id: AttachmentID) {
+        reporting { dropAttachment(id) } ?: return
+        attachments = attachments.filterNot { it.id == id }
     }
 
     private val original: Draft? = existing?.let { Draft.of(it) }

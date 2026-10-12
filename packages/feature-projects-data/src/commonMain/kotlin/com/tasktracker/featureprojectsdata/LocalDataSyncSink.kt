@@ -204,6 +204,14 @@ class LocalDataSyncSink(
                 // future work item issued the same id. The local path deletes them the
                 // same way; both halves of the cascade have to stay in step.
                 database.commentDao().deleteByWorkItem(id)
+                // Attachments follow the thread for the same reason — an orphan row would
+                // render in a listing whose item is gone. Their blobs do NOT follow here:
+                // this class has no blob store to hand the files to, and wiring one for
+                // rows that are already unreachable would give every pull deletion
+                // side-effects it cannot see. A crashed local write never orphaned anything
+                // (the write path owns its cleanup); a pulled delete can orphan blobs,
+                // which cost disk, never correctness.
+                database.attachmentDao().deleteByWorkItem(id)
                 database.workItemDao().deleteByID(id)
                 projectID
             }
