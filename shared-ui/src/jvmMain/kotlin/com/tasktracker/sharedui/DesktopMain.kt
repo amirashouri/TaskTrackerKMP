@@ -3,6 +3,7 @@ package com.tasktracker.sharedui
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import com.tasktracker.core.isDesktopApp
 import com.tasktracker.compositionroot.AppGraph
 import com.tasktracker.di.Resolver
 
@@ -26,12 +27,27 @@ import com.tasktracker.di.Resolver
  * wrong dependency direction. The graph is owned in Kotlin, exactly as
  * `TaskTrackerApplication` owns it on Android and `IosGraph` owns it on iOS.
  */
-fun main() = application {
+fun main() {
+    isDesktopApp = true
     val resolver = DesktopGraph.resolver
-    Window(onCloseRequest = ::exitApplication) {
-        DesktopContent(resolver = resolver)
+    application {
+        Window(onCloseRequest = ::exitApplication) {
+            DesktopContent(resolver = resolver)
+        }
     }
 }
+
+/**
+ * The preferences file the Desktop app owns.
+ *
+ * Exists so the Desktop shell can open the same file the preferences backend writes
+ * without reaching across the architecture boundary into `:packages:database`.
+ * `user-defaults` already depends on `core` only and owns this path locally for exactly
+ * that reason; the shell reads the path here so the run task / desktop launcher can point
+ * at it without adding a new module edge.
+ */
+public val preferencesFilePath: String
+    get() = com.tasktracker.userdefaults.preferencesFile().path
 
 @Composable
 private fun DesktopContent(resolver: Resolver) {
