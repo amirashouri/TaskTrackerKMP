@@ -76,6 +76,15 @@ value class CommentID(val rawValue: Uuid) {
     override fun toString(): String = stringValue
 }
 
+/** One notification in the user's inbox. */
+@Serializable
+@JvmInline
+value class NotificationID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
 /**
  * A stable, human-readable key in the Jira style (`TT-142`), derived server-side
  * and cached locally so a work item rendered offline still shows a sensible key.
@@ -108,6 +117,9 @@ fun randomStatusChangeID(): StatusChangeID = StatusChangeID(Uuid.random())
 /** Generates a fresh identifier. */
 fun randomCommentID(): CommentID = CommentID(Uuid.random())
 
+/** Generates a fresh identifier. */
+fun randomNotificationID(): NotificationID = NotificationID(Uuid.random())
+
 /**
  * Parses an identifier from its wire string, or returns `null` if malformed.
  *
@@ -135,3 +147,7 @@ fun parseStatusChangeID(raw: String): StatusChangeID? =
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseCommentID(raw: String): CommentID? =
     runCatching { CommentID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseNotificationID(raw: String): NotificationID? =
+    runCatching { NotificationID(Uuid.parse(raw)) }.getOrNull()

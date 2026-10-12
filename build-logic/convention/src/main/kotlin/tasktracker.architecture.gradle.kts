@@ -52,6 +52,9 @@ val packageOwnersTable: Map<String, String> = mapOf(
     "com.tasktracker.featuresettingspresentation" to ":packages:feature-settings-presentation",
     "com.tasktracker.featureteamsdomain" to ":packages:feature-teams-domain",
     "com.tasktracker.featureteamsdata" to ":packages:feature-teams-data",
+    "com.tasktracker.featurenotificationsdomain" to ":packages:feature-notifications-domain",
+    "com.tasktracker.featurenotificationsdata" to ":packages:feature-notifications-data",
+    "com.tasktracker.featurenotificationspresentation" to ":packages:feature-notifications-presentation",
     "com.tasktracker.compositionroot" to ":composition-root",
     "com.tasktracker.sharedui" to ":shared-ui",
 )
@@ -180,6 +183,27 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:core",
         ":packages:database",
         ":packages:feature-teams-domain",
+    ),
+
+    // Notifications inbox: domain, data, and presentation.
+    // Domain depends only on core and domain.
+    // Data depends on core, domain, database, sync, and its domain.
+    // Presentation depends on core, domain, design-system, routing, di, and its domain.
+    ":packages:feature-notifications-domain" to setOf(":packages:core", ":packages:domain"),
+    ":packages:feature-notifications-data" to setOf(
+        ":packages:core",
+        ":packages:domain",
+        ":packages:database",
+        ":packages:sync",
+        ":packages:feature-notifications-domain",
+    ),
+    ":packages:feature-notifications-presentation" to setOf(
+        ":packages:core",
+        ":packages:domain",
+        ":packages:design-system",
+        ":packages:routing",
+        ":packages:di",
+        ":packages:feature-notifications-domain",
     ),
 )
 

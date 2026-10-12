@@ -24,4 +24,7 @@ dependencies {
     commonMainImplementation(project(":packages:feature-settings-presentation"))
     commonMainImplementation(project(":packages:feature-teams-domain"))
     commonMainImplementation(project(":packages:feature-teams-data"))
+    commonMainImplementation(project(":packages:feature-notifications-domain"))
+    commonMainImplementation(project(":packages:feature-notifications-data"))
+    commonMainImplementation(project(":packages:feature-notifications-presentation"))
 }
