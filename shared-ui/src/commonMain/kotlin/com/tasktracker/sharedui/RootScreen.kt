@@ -30,6 +30,7 @@ import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
+import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentView
@@ -144,7 +145,12 @@ fun RootScreen(
         if (repository == null || clock == null) {
             null
         } else {
-            ProjectEnvironment(repository, clock, resolver.getOrNull(TeamPort::class))
+            ProjectEnvironment(
+                repository,
+                clock,
+                resolver.getOrNull(TeamPort::class),
+                resolver.getOrNull(FilePicker::class),
+            )
         }
     }
 
