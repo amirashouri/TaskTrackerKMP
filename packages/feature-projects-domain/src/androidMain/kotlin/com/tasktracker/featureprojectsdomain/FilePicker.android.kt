@@ -9,9 +9,7 @@ import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tasktracker.core.AppError
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 /**
@@ -23,7 +21,7 @@ import kotlin.coroutines.resume
  * host), and an activity-result registration belongs to an Activity — the Application
  * cannot receive one. So the picker registers lifecycle callbacks once and remembers the
  * resumed activity, which is the same technique a `Application.ActivityLifecycleCallbacks`
- *-based navigator uses. The alternative — threading the Activity into the graph — would
+ * -based navigator uses. The alternative — threading the Activity into the graph — would
  * make the graph hold a reference to an object the system can destroy and recreate at
  * any moment; a remembered *current* activity degrades to "no activity right now"
  * instead of crashing against a dead one.
@@ -44,63 +42,45 @@ private class AndroidFilePicker(
     private val application: Application,
 ) : FilePicker {
 
-    // Use a weak reference to avoid leaks; the activity is kept alive by the system
-    // while it's on screen, and cleared when destroyed.
-    private var currentActivityRef: java.lang.ref.WeakReference<ComponentActivity>? = null
-
-    /** Gets the current activity if it's still alive. */
-    private fun getCurrentActivity(): ComponentActivity? = currentActivityRef?.get()
+    // Strong reference to the current activity. Cleared only on destroy.
+    // The system keeps the activity alive while it's on screen, so this is safe.
+    @Volatile
+    private var currentActivity: ComponentActivity? = null
 
     /**
-     * Sets the current activity from a lifecycle callback.
-     * Uses a weak reference so we don't prevent the activity from being GC'd.
+     * Synchronously checks for an available activity.
+     * First checks the cached reference, then waits for lifecycle callbacks.
      */
-    private fun setCurrentActivity(activity: Activity) {
-        currentActivityRef = java.lang.ref.WeakReference(activity as? ComponentActivity)
-    }
+    private suspend fun getActivityOrWait(timeoutMs: Long = 5000): ComponentActivity? {
+        // Fast path: check immediately
+        val cached = currentActivity
+        if (cached != null) return cached
 
-    /**
-     * Waits up to [timeoutMs] for an activity to become available.
-     * Returns the current activity if one is already set, or waits for the
-     * lifecycle callback to fire.
-     */
-    private suspend fun waitForActivity(timeoutMs: Long = 3000): ComponentActivity? {
-        val existing = getCurrentActivity()
-        if (existing != null) return existing
-        return withTimeoutOrNull(timeoutMs) {
-            while (getCurrentActivity() == null) {
-                delay(50)
+        // Wait for lifecycle callback to populate the reference
+        return kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            while (currentActivity == null) {
+                kotlinx.coroutines.delay(50)
             }
-            getCurrentActivity()
+            currentActivity
         }
     }
 
-    /**
-     * Fallback: tries to find a valid activity through the window manager.
-     * This handles edge cases where lifecycle callbacks didn't fire in time.
-     */
-    private fun tryGetActivityFromWindow(): ComponentActivity? {
-        // We can't easily enumerate windows from a non-UI context, but we can try
-        // to get the current activity from the application's current window focus.
-        // This is a best-effort fallback.
-        return null
-    }
-
     init {
+        // Register lifecycle callbacks to track the current activity
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
                 // Capture as early as possible - created fires before started/resumed
-                setCurrentActivity(activity)
+                currentActivity = activity as? ComponentActivity
             }
 
             override fun onActivityStarted(activity: Activity) {
                 // Also capture on start, in case created already fired before registration
-                setCurrentActivity(activity)
+                currentActivity = activity as? ComponentActivity
             }
 
             override fun onActivityResumed(activity: Activity) {
                 // Keep updating to the most recently resumed activity
-                setCurrentActivity(activity)
+                currentActivity = activity as? ComponentActivity
             }
 
             override fun onActivityPaused(activity: Activity) = Unit
@@ -113,18 +93,15 @@ private class AndroidFilePicker(
 
             override fun onActivityDestroyed(activity: Activity) {
                 // Only clear if it's our activity - don't clear another activity's reference
-                if (getCurrentActivity() === activity) {
-                    currentActivityRef = null
+                if (currentActivity === activity) {
+                    currentActivity = null
                 }
             }
         })
     }
 
     override suspend fun pick(): PickedFile? {
-        // Wait briefly for an activity to become available, in case the picker is
-        // invoked before the first activity has resumed (e.g. during cold start).
-        val activity = waitForActivity()
-            ?: tryGetActivityFromWindow()
+        val activity = getActivityOrWait()
             ?: throw AppError.Unknown("No activity is in the foreground to present the file picker from.")
 
         val contract = ActivityResultContracts.OpenDocument()
