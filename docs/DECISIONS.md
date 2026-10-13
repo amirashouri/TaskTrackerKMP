@@ -25,6 +25,26 @@ how to work here lives in `AGENTS.md`.
 - **A composable does not tag its own container; the caller does.** `testTag`
   overwrites rather than merges, so a self-tag plus a caller tag means one of them is in
   no semantics tree at all — invisible to every test that does not use it.
+- **The shell's layout is chosen by width, never by platform.** `ShellLayoutClass` is
+  derived from the `Dp` the shell was offered, and nothing anywhere branches on the
+  platform to decide a layout. `isDesktopApp` already exists and is the tempting source;
+  it answers which *process* this is, not how much *room* it has, so a Desktop window
+  dragged to 700dp would be handed a two-pane layout that does not fit while a 1024dp
+  tablet was handed the phone one. The bug is already measured in this repo:
+  `TTGlassTabBar`'s KDoc records a 540px bar rendered in a 1024px window, because the
+  bar's geometry was derived from a segment width that assumed a phone.
+  One threshold, at `ShellExpandedMinimumWidth` = 840dp, pinned by an exact-value test.
+  Material's medium class at 600dp is rejected rather than overlooked: between 600 and
+  840 a side rail plus a single pane costs horizontal room and buys nothing, because the
+  second pane that would spend it is the thing the class is gating — and a third class
+  would make "which chrome" and "how many panes" two answers to one question.
+  The class is read with `BoxWithConstraints` in `commonMain`, **not** an
+  `expect`/`actual` size class: that needs three actuals, and the JVM test host has no
+  real window for the `jvm` one to read, so it would need a test-only override anyway —
+  while `ShellScenarios.setUpShell(width = …)` already supplies the width on all three
+  hosts. `LocalShellLayoutClass` defaults to `Compact` for the reason
+  `LocalTabBarScrollUnderInset` defaults to `0.dp`: a screen rendered outside the shell
+  lays out exactly as it did before any of this existed.
 
 ## Sync and storage invariants
 

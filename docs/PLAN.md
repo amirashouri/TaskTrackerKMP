@@ -552,10 +552,12 @@ platform check anywhere.
   machine, not of the session, so it must not be wiped by `UserDefaultsStore.removeAll` on
   sign-out.
 
-- [ ] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md`,
-  `docs/DECISIONS.md` — Run the decision command and reconcile the totals, then record the
-  new structural decision ("the shell's layout is chosen by width, not by platform") in
-  `DECISIONS.md` and the test-host consequence in `Project.md` and `AGENTS.md`.
+- [ ] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md` — Run
+  the decision command and reconcile the totals, then record the test-host consequence in
+  `Project.md` and `AGENTS.md`. The structural decision itself — "the shell's layout is
+  chosen by width, never by platform" — is **already in `DECISIONS.md`**, recorded in 5.1's
+  change rather than here: a decision written down two tasks after it is made is a decision
+  that has already had two chances to drift.
 
   The consequence to state precisely: Desktop is **still** not a fourth test host — 4.8
   settled that and nothing here changes it — but it now has a *layout dimension* the JVM
