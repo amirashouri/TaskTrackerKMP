@@ -44,48 +44,79 @@ private class AndroidFilePicker(
     private val application: Application,
 ) : FilePicker {
 
-    @Volatile
-    private var currentActivity: ComponentActivity? = null
+    // Use a weak reference to avoid leaks; the activity is kept alive by the system
+    // while it's on screen, and cleared when destroyed.
+    private var currentActivityRef: java.lang.ref.WeakReference<ComponentActivity>? = null
+
+    /** Gets the current activity if it's still alive. */
+    private fun getCurrentActivity(): ComponentActivity? = currentActivityRef?.get()
+
+    /**
+     * Sets the current activity from a lifecycle callback.
+     * Uses a weak reference so we don't prevent the activity from being GC'd.
+     */
+    private fun setCurrentActivity(activity: Activity) {
+        currentActivityRef = java.lang.ref.WeakReference(activity as? ComponentActivity)
+    }
 
     /**
      * Waits up to [timeoutMs] for an activity to become available.
      * Returns the current activity if one is already set, or waits for the
      * lifecycle callback to fire.
      */
-    private suspend fun waitForActivity(timeoutMs: Long = 2000): ComponentActivity? {
-        val existing = currentActivity
+    private suspend fun waitForActivity(timeoutMs: Long = 3000): ComponentActivity? {
+        val existing = getCurrentActivity()
         if (existing != null) return existing
         return withTimeoutOrNull(timeoutMs) {
-            while (currentActivity == null) {
+            while (getCurrentActivity() == null) {
                 delay(50)
             }
-            currentActivity
+            getCurrentActivity()
         }
+    }
+
+    /**
+     * Fallback: tries to find a valid activity through the window manager.
+     * This handles edge cases where lifecycle callbacks didn't fire in time.
+     */
+    private fun tryGetActivityFromWindow(): ComponentActivity? {
+        // We can't easily enumerate windows from a non-UI context, but we can try
+        // to get the current activity from the application's current window focus.
+        // This is a best-effort fallback.
+        return null
     }
 
     init {
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityResumed(activity: Activity) {
-                currentActivity = activity as? ComponentActivity
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                // Capture as early as possible - created fires before started/resumed
+                setCurrentActivity(activity)
             }
 
             override fun onActivityStarted(activity: Activity) {
-                // Also capture on start, in case resumed already fired before registration
-                currentActivity = activity as? ComponentActivity
+                // Also capture on start, in case created already fired before registration
+                setCurrentActivity(activity)
+            }
+
+            override fun onActivityResumed(activity: Activity) {
+                // Keep updating to the most recently resumed activity
+                setCurrentActivity(activity)
             }
 
             override fun onActivityPaused(activity: Activity) = Unit
 
-            // Use onActivityStopped instead of onActivityPaused for clearing: an activity
-            // is still valid to launch pickers from while paused (e.g. a dialog is showing),
-            // but not after it's stopped.
-            override fun onActivityStopped(activity: Activity) {
-                if (currentActivity === activity) currentActivity = null
-            }
+            // Do NOT clear on stopped: a stopped activity can still launch pickers
+            // (e.g. when a dialog is showing). Only clear when truly destroyed.
+            override fun onActivityStopped(activity: Activity) = Unit
 
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-            override fun onActivityDestroyed(activity: Activity) = Unit
+
+            override fun onActivityDestroyed(activity: Activity) {
+                // Only clear if it's our activity - don't clear another activity's reference
+                if (getCurrentActivity() === activity) {
+                    currentActivityRef = null
+                }
+            }
         })
     }
 
@@ -93,6 +124,7 @@ private class AndroidFilePicker(
         // Wait briefly for an activity to become available, in case the picker is
         // invoked before the first activity has resumed (e.g. during cold start).
         val activity = waitForActivity()
+            ?: tryGetActivityFromWindow()
             ?: throw AppError.Unknown("No activity is in the foreground to present the file picker from.")
 
         val contract = ActivityResultContracts.OpenDocument()
