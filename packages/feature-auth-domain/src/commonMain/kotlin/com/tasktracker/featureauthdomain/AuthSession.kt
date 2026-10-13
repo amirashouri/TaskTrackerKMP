@@ -143,6 +143,20 @@ interface AuthRemotePort {
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun refresh(refreshToken: String): AuthTokens
+
+    /**
+     * Asks the server to revoke a refresh token's family, ending the session server-side.
+     *
+     * The client clears its local state regardless of whether this call succeeds — the
+     * device is the authority on whether the user is signed in on this device — but
+     * calling the server prevents a stolen refresh token from being used after sign-out.
+     * A failure (e.g. the server is unreachable) is acceptable: the token will expire on
+     * its own, and the local wipe is immediate.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun signOut(refreshToken: String) {
+        // Default: no-op. HttpAuthRemote overrides to call the server.
+    }
 }
 
 /**

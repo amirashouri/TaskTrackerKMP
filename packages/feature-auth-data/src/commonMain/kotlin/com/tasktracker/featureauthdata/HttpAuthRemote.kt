@@ -72,6 +72,20 @@ private class RefreshEndpoint(private val payload: RefreshRequestBody) : Endpoin
 }
 
 /**
+ * Sign-out revokes the refresh token family server-side. The server is the authority on
+ * whether a token is still live, so calling this prevents a stolen token from being used
+ * after the user has signed out. The endpoint is idempotent: the server returns `204`
+ * whether the token was valid or not.
+ */
+private class SignOutEndpoint(private val payload: RefreshRequestBody) : Endpoint {
+    override val path: String = "/v1/auth/signout"
+    override val method: HttpMethod = HttpMethod.Post
+    override val body: ByteArray? = jsonBody(payload)
+    override val requiresAuth: Boolean = false
+    override val isIdempotent: Boolean? = true
+}
+
+/**
  * The token envelope the server answers with.
  *
  * [userID], [email] and [displayName] are optional and are decoded but then dropped: a
@@ -122,4 +136,12 @@ class HttpAuthRemote(private val client: HttpClient) : AuthRemotePort {
             RefreshEndpoint(RefreshRequestBody(refreshToken = refreshToken)).request,
             decoding = AuthTokenResponse.serializer(),
         ).tokens()
+
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun signOut(refreshToken: String) {
+        // The server returns 204 No Content; the raw send discards the empty body.
+        client.send(
+            SignOutEndpoint(RefreshRequestBody(refreshToken = refreshToken)).request,
+        )
+    }
 }

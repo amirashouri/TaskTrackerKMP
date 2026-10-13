@@ -103,6 +103,14 @@ class AuthRepository(
 
     @Throws(AppError::class, CancellationException::class)
     override suspend fun signOut() {
+        // Ask the server to revoke the refresh token family first, so a stolen token
+        // cannot be replayed after the user has signed out. A network failure is
+        // acceptable: the token will expire on its own, and the local wipe is immediate
+        // and unconditional below.
+        val refreshToken = vault.storedRefreshToken()
+        if (refreshToken != null) {
+            runCatching { remote.signOut(refreshToken) }
+        }
         vault.clear()
         defaults.remove(DefaultsKey.CachedProfile)
         defaults.remove(DefaultsKey.CachedUserEmail)

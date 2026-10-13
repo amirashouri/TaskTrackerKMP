@@ -169,6 +169,16 @@ class TokenVault(
     suspend fun storedAccessToken(): String? = currentAccessToken()
 
     /**
+     * The refresh token already on the device, without refreshing or validating it.
+     *
+     * Read so sign-out can pass it to the server, which revokes the token family and
+     * prevents the session from being resumed by anyone who gains access to the device
+     * after sign-out.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun storedRefreshToken(): String? = currentRefreshToken()?.takeIf { it.isNotEmpty() }
+
+    /**
      * Forgets everything. Does not publish: callers decide whether this is a sign-out or an
      * incidental clear, and a wipe triggered by a `403` is not the same event as a tap.
      */
