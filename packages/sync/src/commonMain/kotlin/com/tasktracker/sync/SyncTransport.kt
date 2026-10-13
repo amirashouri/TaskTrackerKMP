@@ -94,6 +94,16 @@ data class PullPage(
      * stores and returns it without interpreting it. */
     val nextCursor: String?,
     val hasMore: Boolean,
+    /**
+     * The server has dropped changes this cursor had not yet read, so [changes] is a partial
+     * view of the gap rather than a contiguous run. The cursor is no longer a position in a
+     * log that still exists, and applying this page would advance past changes that are gone
+     * for good — so the engine must start over from the beginning of what survives.
+     *
+     * Defaults to `false` because the server omits the field when there is nothing to
+     * resync, and because a server old enough not to know it is also saying the same thing.
+     */
+    val resyncRequired: Boolean = false,
 ) {
     companion object {
         val empty: PullPage = PullPage(changes = emptyList(), nextCursor = null, hasMore = false)

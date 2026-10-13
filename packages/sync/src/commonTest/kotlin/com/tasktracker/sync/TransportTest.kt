@@ -70,6 +70,11 @@ class HttpSyncTransportTest {
         assertEquals("change-1", change["id"]!!.jsonPrimitive.content)
         assertEquals("project", change["entity"]!!.jsonPrimitive.content)
         assertEquals("delete", change["operation"]!!.jsonPrimitive.content)
+        // The server's spelling, not Kotlin's. Go decodes JSON keys case-insensitively, so the
+        // push direction worked either way — which is exactly why the mismatch survived until
+        // the pull direction was checked, and only that direction decodes exactly.
+        assertEquals("change-1", change["entityId"]!!.jsonPrimitive.content)
+        assertNull(change["entityID"])
         // Payloads go over the wire as readable JSON, not base64: correct either way, but
         // unreadable in a server log is a cost paid by whoever debugs it at 2am.
         assertEquals("""{"title":"task"}""", change["payload"]!!.jsonPrimitive.content)
@@ -166,7 +171,7 @@ class HttpSyncTransportTest {
         val client = StubHttpClient(
             body(
                 """
-                {"changes":[{"entity":"workItem","entityID":"task-9","operation":"upsert",
+                {"changes":[{"entity":"workItem","entityId":"task-9","operation":"upsert",
                 "payload":"{\"title\":\"from server\"}","version":"v3"}],
                 "nextCursor":"c2","hasMore":true}
                 """.trimIndent(),
@@ -194,7 +199,7 @@ class HttpSyncTransportTest {
         // `sprint` stopped being one when the sprint work added it.
         val client = StubHttpClient(
             body(
-                """{"changes":[{"entity":"milestone","entityID":"m-1","operation":"upsert","payload":"{}"}],"hasMore":false}""",
+                """{"changes":[{"entity":"milestone","entityId":"m-1","operation":"upsert","payload":"{}"}],"hasMore":false}""",
             ),
         )
         val transport = HttpSyncTransport(client)
@@ -208,7 +213,7 @@ class HttpSyncTransportTest {
     @Test
     fun `a change naming an operation this build does not know is a decoding error`() = runTest {
         val client = StubHttpClient(
-            body("""{"changes":[{"entity":"workItem","entityID":"t-1","operation":"teleport","payload":"{}"}],"hasMore":false}"""),
+            body("""{"changes":[{"entity":"workItem","entityId":"t-1","operation":"teleport","payload":"{}"}],"hasMore":false}"""),
         )
         val transport = HttpSyncTransport(client)
 
@@ -226,6 +231,33 @@ class HttpSyncTransportTest {
         assertFailsWith<AppError.Decoding> {
             transport.pull(SyncScope.WorkItems, cursor = null, limit = 10)
         }
+    }
+
+    @Test
+    fun `a page asking for a resync says so rather than failing to decode`() = runTest {
+        // The server sends this with `omitempty`, so it only ever arrives when it is true —
+        // and it arrives on exactly the page the client must not fall over on. Leaving the
+        // field undeclared turned "your cursor is too old" into a decoding error.
+        val client = StubHttpClient(
+            body("""{"changes":[],"hasMore":true,"resyncRequired":true}"""),
+        )
+        val transport = HttpSyncTransport(client)
+
+        val page = transport.pull(SyncScope.WorkItems, cursor = "stale", limit = 10)
+
+        assertTrue(page.resyncRequired)
+    }
+
+    @Test
+    fun `a page that says nothing about a resync is not one`() = runTest {
+        // Absent means false: the field is omitted when it is false, and a server that
+        // predates it is saying the same thing.
+        val client = StubHttpClient(body("""{"changes":[],"hasMore":false}"""))
+        val transport = HttpSyncTransport(client)
+
+        val page = transport.pull(SyncScope.WorkItems, cursor = null, limit = 10)
+
+        assertTrue(!page.resyncRequired)
     }
 
     @Test

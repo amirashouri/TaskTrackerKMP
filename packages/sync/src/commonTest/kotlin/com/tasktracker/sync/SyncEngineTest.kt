@@ -459,6 +459,67 @@ class SyncEngineTest {
     }
 
     @Test
+    fun `a resync throws the stale cursor away and re-reads from the start`() = runTest {
+        // The server pruned changes this cursor had not read, so the page it just sent is a
+        // partial view of the gap. Applying that page and advancing would skip what is gone
+        // for good and still report a clean sync — the one outcome worse than a failure.
+        val sink = RecordingSink()
+        val metadata = InMemorySyncMetadataStore()
+        metadata.markSynced(SyncScope.WorkItems.wireValue, "c7", kotlin.time.Instant.fromEpochSeconds(1))
+        val transport = StubSyncTransport()
+        transport.setPages(
+            listOf(
+                PullPage(changes = emptyList(), nextCursor = null, hasMore = true, resyncRequired = true),
+                PullPage(listOf(remoteChange("task-1")), nextCursor = "c1", hasMore = false),
+            ),
+            scope = SyncScope.WorkItems,
+        )
+
+        val report = engine(
+            metadata = metadata,
+            transport = transport,
+            sinks = mapOf(OutboxEntity.WorkItem to sink),
+            scopes = listOf(SyncScope.WorkItems),
+        ).run()
+
+        val pulls = transport.pullRequests.filter { it.scope == SyncScope.WorkItems }
+        assertEquals("c7", pulls.first().cursor)
+        // The retry drops the cursor rather than continuing from it, which is the whole point.
+        assertNull(pulls[1].cursor)
+        // The page that carried the resync flag was not applied; the surviving log was read
+        // from the start instead.
+        assertEquals(listOf("task-1"), sink.appliedIDs)
+        assertEquals("c1", metadata.metadata(SyncScope.WorkItems.wireValue)?.cursor)
+        assertTrue(report.isSuccess)
+    }
+
+    @Test
+    fun `a resync asked for twice in one cycle fails instead of looping`() = runTest {
+        // Two in one cycle means the server is pruning faster than this client can read.
+        // Looping would not converge, and reporting success would claim data arrived that did
+        // not — so the scope fails loudly and the next cycle tries again.
+        val metadata = InMemorySyncMetadataStore()
+        metadata.markSynced(SyncScope.WorkItems.wireValue, "c7", kotlin.time.Instant.fromEpochSeconds(1))
+        val transport = StubSyncTransport()
+        transport.setPages(
+            listOf(
+                PullPage(changes = emptyList(), nextCursor = null, hasMore = true, resyncRequired = true),
+                PullPage(changes = emptyList(), nextCursor = null, hasMore = true, resyncRequired = true),
+            ),
+            scope = SyncScope.WorkItems,
+        )
+
+        val report = engine(
+            metadata = metadata,
+            transport = transport,
+            sinks = mapOf(OutboxEntity.WorkItem to RecordingSink()),
+            scopes = listOf(SyncScope.WorkItems),
+        ).run()
+
+        assertTrue(report.failures.any { it.message.contains("resync") })
+    }
+
+    @Test
     fun `paging stops when the server says there is nothing more`() = runTest {
         val sink = RecordingSink()
         val transport = StubSyncTransport()
