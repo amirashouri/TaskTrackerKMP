@@ -9,7 +9,9 @@ import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tasktracker.core.AppError
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 /**
@@ -45,26 +47,52 @@ private class AndroidFilePicker(
     @Volatile
     private var currentActivity: ComponentActivity? = null
 
+    /**
+     * Waits up to [timeoutMs] for an activity to become available.
+     * Returns the current activity if one is already set, or waits for the
+     * lifecycle callback to fire.
+     */
+    private suspend fun waitForActivity(timeoutMs: Long = 2000): ComponentActivity? {
+        val existing = currentActivity
+        if (existing != null) return existing
+        return withTimeoutOrNull(timeoutMs) {
+            while (currentActivity == null) {
+                delay(50)
+            }
+            currentActivity
+        }
+    }
+
     init {
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
                 currentActivity = activity as? ComponentActivity
             }
 
-            override fun onActivityPaused(activity: Activity) {
+            override fun onActivityStarted(activity: Activity) {
+                // Also capture on start, in case resumed already fired before registration
+                currentActivity = activity as? ComponentActivity
+            }
+
+            override fun onActivityPaused(activity: Activity) = Unit
+
+            // Use onActivityStopped instead of onActivityPaused for clearing: an activity
+            // is still valid to launch pickers from while paused (e.g. a dialog is showing),
+            // but not after it's stopped.
+            override fun onActivityStopped(activity: Activity) {
                 if (currentActivity === activity) currentActivity = null
             }
 
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-            override fun onActivityStarted(activity: Activity) = Unit
-            override fun onActivityStopped(activity: Activity) = Unit
             override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
             override fun onActivityDestroyed(activity: Activity) = Unit
         })
     }
 
     override suspend fun pick(): PickedFile? {
-        val activity = currentActivity
+        // Wait briefly for an activity to become available, in case the picker is
+        // invoked before the first activity has resumed (e.g. during cold start).
+        val activity = waitForActivity()
             ?: throw AppError.Unknown("No activity is in the foreground to present the file picker from.")
 
         val contract = ActivityResultContracts.OpenDocument()
