@@ -10,6 +10,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import com.tasktracker.core.AppError
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.lang.ref.WeakReference
 import kotlin.coroutines.resume
 
 /**
@@ -35,69 +36,140 @@ actual fun createFilePicker(host: Any?): FilePicker {
             "Android needs an application Context to pick files. " +
                 "Pass one to FilePicker creation.",
         )
+    AndroidActivityTracker.register(application)
     return AndroidFilePicker(application)
+}
+
+private object AndroidActivityTracker {
+    @Volatile
+    private var currentActivityRef: WeakReference<ComponentActivity>? = null
+
+    @Volatile
+    private var isRegistered = false
+
+    val currentActivity: ComponentActivity?
+        get() = currentActivityRef?.get()
+
+    fun updateActivity(activity: Activity?) {
+        val componentActivity = activity as? ComponentActivity
+        if (componentActivity != null) {
+            currentActivityRef = WeakReference(componentActivity)
+        }
+    }
+
+    fun clearActivity(activity: Activity) {
+        if (currentActivityRef?.get() === activity) {
+            currentActivityRef = null
+        }
+    }
+
+    fun register(application: Application) {
+        if (isRegistered) return
+        synchronized(this) {
+            if (isRegistered) return
+            application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
+                override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
+                    updateActivity(activity)
+                }
+
+                override fun onActivityStarted(activity: Activity) {
+                    updateActivity(activity)
+                }
+
+                override fun onActivityResumed(activity: Activity) {
+                    updateActivity(activity)
+                }
+
+                override fun onActivityPaused(activity: Activity) = Unit
+
+                // Do NOT clear on stopped: a stopped activity can still launch pickers
+                // (e.g. when a dialog is showing). Only clear when truly destroyed.
+                override fun onActivityStopped(activity: Activity) = Unit
+
+                override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+                override fun onActivityDestroyed(activity: Activity) {
+                    clearActivity(activity)
+                }
+            })
+            isRegistered = true
+        }
+    }
+
+    /**
+     * Fallback lookup via ActivityThread reflection for when the tracker was registered
+     * after the foreground activity had already been resumed.
+     */
+    fun findResumedActivityViaReflection(): ComponentActivity? {
+        return try {
+            val activityThreadClass = Class.forName("android.app.ActivityThread")
+            val activityThreadMethod = activityThreadClass.getMethod("currentActivityThread")
+            val activityThread = activityThreadMethod.invoke(null) ?: return null
+            val activitiesField = activityThreadClass.getDeclaredField("mActivities").apply { isAccessible = true }
+            val activities = activitiesField.get(activityThread) as? Map<*, *> ?: return null
+
+            var fallbackActivity: ComponentActivity? = null
+            for (record in activities.values) {
+                if (record == null) continue
+                val recordClass = record.javaClass
+                val activityField = recordClass.getDeclaredField("activity").apply { isAccessible = true }
+                val activity = activityField.get(record) as? ComponentActivity ?: continue
+
+                val pausedField = try {
+                    recordClass.getDeclaredField("paused").apply { isAccessible = true }
+                } catch (_: Throwable) {
+                    null
+                }
+                val isPaused = pausedField?.getBoolean(record) ?: true
+                if (!isPaused) {
+                    updateActivity(activity)
+                    return activity
+                }
+                fallbackActivity = activity
+            }
+            if (fallbackActivity != null) {
+                updateActivity(fallbackActivity)
+            }
+            fallbackActivity
+        } catch (_: Throwable) {
+            null
+        }
+    }
 }
 
 private class AndroidFilePicker(
     private val application: Application,
 ) : FilePicker {
 
-    // Strong reference to the current activity. Cleared only on destroy.
-    // The system keeps the activity alive while it's on screen, so this is safe.
-    @Volatile
-    private var currentActivity: ComponentActivity? = null
+    init {
+        AndroidActivityTracker.register(application)
+    }
 
     /**
      * Synchronously checks for an available activity.
-     * First checks the cached reference, then waits for lifecycle callbacks.
+     * First checks the cached reference from lifecycle callbacks or reflection,
+     * then polls for an activity reference if not yet available.
      */
     private suspend fun getActivityOrWait(timeoutMs: Long = 5000): ComponentActivity? {
-        // Fast path: check immediately
-        val cached = currentActivity
-        if (cached != null) return cached
+        // Fast path: check immediately via lifecycle tracker
+        val tracked = AndroidActivityTracker.currentActivity
+        if (tracked != null) return tracked
 
-        // Wait for lifecycle callback to populate the reference
+        // Fallback path: reflection lookup from ActivityThread
+        val reflectionActivity = AndroidActivityTracker.findResumedActivityViaReflection()
+        if (reflectionActivity != null) return reflectionActivity
+
+        // Wait for lifecycle callback or reflection to populate the reference
         return kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
-            while (currentActivity == null) {
+            while (true) {
+                val current = AndroidActivityTracker.currentActivity
+                    ?: AndroidActivityTracker.findResumedActivityViaReflection()
+                if (current != null) return@withTimeoutOrNull current
                 kotlinx.coroutines.delay(50)
             }
-            currentActivity
+            @Suppress("UNREACHABLE_CODE")
+            null
         }
-    }
-
-    init {
-        // Register lifecycle callbacks to track the current activity
-        application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-                // Capture as early as possible - created fires before started/resumed
-                currentActivity = activity as? ComponentActivity
-            }
-
-            override fun onActivityStarted(activity: Activity) {
-                // Also capture on start, in case created already fired before registration
-                currentActivity = activity as? ComponentActivity
-            }
-
-            override fun onActivityResumed(activity: Activity) {
-                // Keep updating to the most recently resumed activity
-                currentActivity = activity as? ComponentActivity
-            }
-
-            override fun onActivityPaused(activity: Activity) = Unit
-
-            // Do NOT clear on stopped: a stopped activity can still launch pickers
-            // (e.g. when a dialog is showing). Only clear when truly destroyed.
-            override fun onActivityStopped(activity: Activity) = Unit
-
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
-
-            override fun onActivityDestroyed(activity: Activity) {
-                // Only clear if it's our activity - don't clear another activity's reference
-                if (currentActivity === activity) {
-                    currentActivity = null
-                }
-            }
-        })
     }
 
     override suspend fun pick(): PickedFile? {
