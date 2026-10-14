@@ -654,6 +654,23 @@ platform check anywhere.
   above the first icon and 109dp below the last**. The icon-to-caption gap is unchanged;
   `spacedBy` with an alignment still spaces its children by that gap.
 
+  **The lens's travel position is now asserted, which was the last unasserted claim in this
+  section.** `selected` and the lens are two independent things: the first is set by `RailCell`'s
+  `semantics { selected = … }`, the second by the animated `segmentHeight * selectedIndex` that
+  positions it. Pinning that travel to `0f` parks the lens permanently on the first destination —
+  an indicator marking the wrong thing on every other destination, with the selection semantics
+  still perfectly correct — and the whole suite stayed green. `exactlyOneRailDestinationIsMarkedSelected`
+  now measures the lens before and after a tap: it must *move*, and it must end up on the
+  destination that is selected. Two assertions because they fail differently — a lens that never
+  moves and a lens that falls off the end both satisfy "it moved", and only the containment catches
+  the second. Measured after `waitForIdle`, so the spring has settled and the reading is the final
+  position rather than a frame of the animation.
+
+  **Still unasserted:** the vertical centring of each destination. Removing it leaves the build
+  green. Closing it needs a tag on a cell's *content* rather than its clickable area, which widens
+  the production surface — recorded rather than done, because a tag added for a test is a tag the
+  next rename misses.
+
   **Three of the four entry points were missing `@Test` for four runs, and nothing said so.**
   They were inserted after `fiveTabsFitAtPhoneWidth`, which pushed the `@Test` that belonged to
   the *next* entry above the first new method and left the four with none. The suite stayed at
