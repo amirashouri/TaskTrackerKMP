@@ -359,3 +359,408 @@ module, not a source set inside a library — and Desktop does not need to copy 
 - **Testing**: Desktop reuses the existing Compose UI test infrastructure (it is a JVM
   target with `ui-test` + skiko already on the classpath); the new work is documenting it
   as a host and adding any entry points the host split requires.
+
+---
+
+## 5. A layout that fits a desktop window
+
+Section 4 made Desktop *launch*. It did not make it *fit*: the shell is laid out for a
+phone and renders exactly that way in a 1440×900 window. This section is the layout half.
+
+The case for it is structural rather than a matter of taste. Every navigation decision in
+the shell is one of three mobile shapes, and each has a canonical wide counterpart it
+cannot become by being stretched:
+
+- **The bottom tab bar** is a floating glass capsule anchored `Alignment.BottomCenter`,
+  sized by `fillMaxWidth`, with the lens's segment width derived as `maxWidth / tabs.size`.
+  At 390dp that is five segments of 78dp. At 1440dp it is five segments of 288dp — a
+  capsule a metre wide with the tabs marooned inside it, and a lens that crosses a third
+  of the window on every switch. `TTGlassTabBar`'s own KDoc already records this failure
+  measured once: "the first render of this measured a 540px bar in a 1024px window".
+- **Navigation is single-pane.** `NavigationHost` renders the top of the active tab's
+  stack and nothing else, filling the window. The Sprints tab's `SprintList` →
+  `SprintDetail` is a list-detail pair being shown one at a time, which on a wide window
+  is half a window spent on nothing plus a navigation step that did not need to happen.
+- **Every modal is a bottom sheet.** `WorkItemEditorDestination` is an `AnimatedVisibility`
+  sliding in from the bottom edge at `fillMaxSize`, and `TTBottomSheetScaffold` anchors its
+  surface at `Alignment.BottomCenter` with a `slideInVertically`. On a phone that is the
+  thumb-reachable gesture. On a desktop it is a full-height panel arriving from off-screen
+  — and the `LocalTabBarScrollUnderInset` it pads by exists only to clear a bar the
+  desktop window does not have.
+
+**This is a layout, not a port.** No screen, model, use case, port or entity changes, and
+`commonMain` stays the single screen tree all three shells render. What changes is which
+chrome the shell draws around that tree and how many panes it draws it in.
+
+**The one invariant every task below inherits.** The layout is chosen from the **width it
+is offered**, never from which platform is running. `isDesktopApp` already exists in
+`:packages:core` and is the obvious thing to branch on, and it is the wrong question: it
+answers "which process am I", not "how much room do I have". A desktop window dragged to
+700dp wide would then be handed a two-pane layout that does not fit, and a tablet at
+1024dp would be handed the phone one. A width-derived answer gets both right and needs no
+platform check anywhere.
+
+- [x] **5.1 A width-derived layout class, and no new `expect`** · P0 · new
+  `shared-ui/src/commonMain/…/ShellLayoutClass.kt`, `…/ShellLayout.kt`, and
+  `shared-ui/src/commonTest/…/ShellLayoutClassTest.kt` — A pure
+  `ShellLayoutClass.Compact | Expanded` with a named threshold and a `forWidth(Dp)`
+  factory; a `LocalShellLayoutClass` defaulting to `Compact`; and a `ShellLayout`
+  composable that reads `BoxWithConstraints.maxWidth` once and provides the class to
+  everything below it. `RootScreen` wraps the `RootDestination.Main` branch in it.
+
+  **Decision: `BoxWithConstraints` in `commonMain`, not a `WindowSizeClass`
+  `expect`/`actual`.** The rejected alternative is the library-shaped one: an `expect`
+  returning a size class, with a `jvmMain` actual reading the Compose Desktop window, an
+  `iosMain` actual reading the `UIViewController`, and an `androidMain` actual reading the
+  `Activity`. It buys nothing here and costs three actuals. `BoxWithConstraints` reports
+  the width the shell was *actually offered*, which on every host is the same number the
+  real window produces, and it is already proven in this codebase — `TTGlassTabBar` uses
+  it for the lens. Decisively, the JVM test host has no real window at all, so an
+  `expect/actual` would need a test-only override to be drivable, whereas the width
+  arrives through the existing `ShellScenarios.setUpShell(width: Dp?)` hook with no new
+  seam. `DECISIONS.md` already carries the rule that every `expect` needs a `jvm` actual;
+  this task adds no `expect` to satisfy it.
+
+  **Decision: one threshold, at 840dp.** Material's three-way split puts a medium class at
+  600dp, and the middle class is rejected deliberately rather than overlooked: between 600
+  and 840 a side rail plus a single pane costs horizontal room and gains nothing, because
+  there is no second pane to spend it on. One threshold also keeps "which chrome" and "how
+  many panes" from becoming two answers that can disagree — the failure mode `RootScreen`'s
+  KDoc already rejects for the session root.
+
+  `ShellLayout` is placed **below the splash gate**, around the signed-in area rather than
+  around the whole root. `BoxWithConstraints` is a `SubcomposeLayout`, and `RootScreen`
+  documents at length why nothing may add a measure pass ahead of the splash handoff: a
+  board's models must not be built behind a splash that has not finished drawing. The
+  sign-in tree and the splash have no use for a layout class, so they do not get one.
+
+  Tests are pure functions — no composition, no pixels, so no per-host entry points and
+  they run as plain `@Test`s on all three hosts. The boundary is asserted on both sides
+  (`839.dp` and `840.dp`, plus `839.5.dp` to pin `>=` against `>`), `Dp.Infinity` is
+  asserted Expanded because an unbounded parent genuinely produces it, and the threshold
+  itself is pinned to its exact value so a later change to it is deliberate.
+
+  **Closed by this run, and the commit message was wrong about its own verification.** The
+  5.1 commit states the build "still cannot run in this sandbox" and that verification was
+  done by invoking the Kotlin compiler out of the Gradle cache by hand. That is not true of
+  this machine: with `JAVA_HOME` pointed at the Android Studio JBR and `org.gradle.java.home`
+  set in `gradle.properties`, the whole decision command runs in under a minute.
+  `ShellLayoutClassTest` is 9/9 on both hosts through Gradle, and the mutation ritual stands —
+  flipping `>=` to `>` turns `the threshold width itself is expanded` red, and moving the
+  threshold to 800dp turns three red including the pin.
+
+  **The gap this task admitted is now closed.** 5.1 noted that nothing asserted `ShellLayout`
+  actually reads `maxWidth` and provides the class — the two-line body was compile-checked and
+  not behaviour-checked. 5.3's scenarios close it from both sides: `aWideShellDrawsTheRailAndNoBar`
+  can only pass if a 1200dp shell reached `Expanded`, and `aNarrowShellDrawsTheBarAndNoRail`
+  only if a 390dp shell reached `Compact`. Neither is a fact about `forWidth`.
+
+- [x] **5.2 `TTGlassNavigationRail`, the vertical sibling of the tab bar** · P0 ·
+  `:packages:design-system` new `…/NavigationRail.kt` + its tests — One glass surface
+  running down the leading edge, one travelling lens, icon over label per destination,
+  `Role.Tab` and `selected` semantics, the same `ttSelectionLabelInk` for both caption
+  states. Same split as the bar: the *component* lives in the design system, and the
+  shell owns the threshold, the edge padding and the test tag.
+
+  Every rule `TTGlassTabBar` documents is inherited rather than re-derived, and the three
+  that matter are inherited because they were each a real defect: one glass surface for
+  the whole rail and never one per destination (there is no `GlassEffectContainer` on
+  these platforms to merge neighbours); the lens is a plain wash and a rim drawn with
+  `drawBehind` and is **not** `ttGlassSurface`, because a second ramp inside the first
+  stacks two borders; and the lens **resizes rather than scales**, because a
+  `graphicsLayer` scale on the JVM renderer darkened the surface behind it by ~0.14 of
+  relative luminance, which is the entire alpha of the lens's own wash.
+
+  What is genuinely new and needs its own measurement is the vertical geometry: the
+  segment height is `maxHeight / destinations.size`, and unlike the bar's width a rail's
+  height is **not** offered — it is the sum of its content. The bar's KDoc records the
+  exact bug this invites ("a 768pt-tall wrapper with the tabs parked dead centre at
+  y=363"); the rail has the same trap in the other axis, and its lens travel is derived
+  from a segment height that has to come from the row of cells rather than from the rail.
+
+  Tests: the geometry and the ink derivation are structural and belong in `commonTest`
+  beside `TabLensCornerTest` and `TabLensContrastTest`; the silhouette, the hairline and
+  the glass edge are pixel properties, and `AGENTS.md` says those are measured on **both**
+  rasterising hosts.
+
+  **Landed. No new token, which is the one decision here worth reading.** The plan as written
+  proposed a `ttSpacing.navigationRailWidth`, and it is not in the tree. Two reasons. A rail's
+  width is not offered — like its height it is the sum of its content, the widest caption plus
+  the padding — so there is no number to put in a token, and `design-system/AGENTS.md` requires
+  a new token to *"document the visual measurement that justifies any non-obvious value"*.
+  Picking one and writing the justification afterwards is the inversion rule 4 exists to
+  prevent. The consequence is that `Spacing.kt` and `SpacingScaleTest.kt` are untouched; an
+  off-ramp value would have had to be added to that test's explicit `offRamp` enumeration, which
+  was never in the plan.
+
+  **The segment height is read from a `matchParentSize` `BoxWithConstraints` on the cell column**,
+  as the plan says it must be, and both lens dimensions come from there rather than from the
+  rail's own box. `BoxWithConstraints` reports its *incoming* constraints, not its resolved size,
+  so a rail wrapping its content reports an unbounded width and a segment derived from it would
+  be `Infinity / 5`. The bar gets away with reading `maxWidth` for its segment because
+  `fillMaxWidth` resolves the width before it is measured; a rail has no equivalent.
+
+  **`lensStretch` became `internal` rather than being copied.** One word in `TabBar.kt`. The
+  alternative was twenty duplicated lines in `NavigationRail.kt` and two private functions with
+  the same name and signature in one package.
+
+  **Both stretch tokens swap axis, and that is deliberate.** `TAB_LENS_WIDEN` and
+  `TAB_LENS_SQUASH` describe the lens's behaviour along its *travel*, not along the screen. On
+  the bar the travel is horizontal so the lens widens along x; here it grows along y and draws
+  in from the sides. One pair of numbers for one material beats inventing a second pair that
+  measures the same effect.
+
+  **Measured, on both hosts, and they agree to the byte.** `NavigationRailPixelTest` diffs two
+  rails with the lens on different destinations and everything else blank. Clipped, the lens's
+  worst corner reads `#02` on light and `#00` on dark — below the `#03` noise floor, so a
+  correct lens contributes nothing to its own footprint. With the clip removed the same corner
+  reads **`#20` (0.125)** on dark, against the bar's `#21`, and the test turns red. The JVM and
+  the iOS simulator report identical values in both states, which is the one thing this
+  component's other measurements do not: the captions differ between rasterisers by most of a
+  point of contrast, because a glyph stroke's coverage is a rasteriser's business, while this is
+  a hard-edged rectangle overdrawing its own silhouette.
+
+  **Two test failures of the test, both caught by the mutation ritual and both worth recording.**
+  The first version of the centring scenario asserted only that the lens's centre fell *inside*
+  its destination's slice, and it passed against a mutation that dropped the half-segment
+  centring outright. The arithmetic says why: at 55dp per segment the lens is 49dp tall, so the
+  centre may sit a quarter of a segment either side of the middle — roughly 27dp of slack on
+  each side. A containment check over a shape that nearly fills the thing containing it is not a
+  check. It now asserts exact equality, which is available because at rest the lens is shorter
+  than its segment by construction and the clamp cannot engage. The second was a whole axis: the
+  rewritten test added the lens inset to the *y* coordinate and failed every index by exactly
+  3.0dp, because the travel axis is y and the inset belongs on x. The component was right and
+  the test was wrong.
+
+  **The lens window is the rail, not a destination cell.** The bar windows on the selected tab's
+  cell; a rail's lens spans the rail's full width while a cell is only as wide as its own
+  caption, so windowing on a cell would clip the shape under measurement.
+
+- [x] **5.3 The shell picks its chrome from the width** · P0 · `shared-ui/…/NavigationHost.kt` —
+  Under `Compact`, today's bottom `TabBar` and today's inset accounting, byte for byte.
+  Under `Expanded`, `TTGlassNavigationRail` on the leading edge with the content beside
+  it, and the bar is not composed at all.
+
+  The load-bearing half is the inset, not the branch. `tabBarInset` is measured from the
+  bar's height and published as `LocalTabBarScrollUnderInset`, which every scrolling list
+  pads its last row by and which `TTBottomSheetScaffold` reads to keep its action row out
+  from under the bar. Under `Expanded` there is no bar, so the inset must be `0.dp` — and
+  that is already the local's default, which is why the rail branch simply does not set
+  it rather than setting it to zero. Reusing the default is the point: a second spelling
+  of "there is no bar" is a second thing to keep true.
+
+  `TabBar`'s `WindowInsets.ime` keyboard guard and its `navigationBarsPadding()` are
+  mobile concerns that become no-ops on a desktop window; they are left alone rather than
+  made conditional, because they are already correct at zero and a branch that says so is
+  a branch that has to be re-verified on the phone.
+
+  New scenarios in `ShellScenarios`, driven by the existing `width` parameter: a narrow
+  shell draws the bar and no rail; a wide shell draws the rail and no bar; a wide shell
+  publishes a zero scroll-under inset; the rail marks exactly one destination selected.
+  The three existing bar-geometry scenarios (`theTabBarFloatsAboveTheBottomEdge`,
+  `theTabBarIsWiderThanItsTabs`, `fiveTabsFitAtPhoneWidth`) must keep passing unchanged —
+  they are the evidence that the compact path was not disturbed.
+
+  **Landed, and the branch is `when (LocalShellLayoutClass.current)` with the expanded arm
+  not touching `tabBarInset`.** Reusing the `0.dp` default of `LocalTabBarScrollUnderInset`
+  rather than writing a zero is the plan's own point and it survives: there is no second
+  spelling of "there is no bar" in the tree.
+
+  **The rail's width is measured and fed back as the content box's leading inset**, by the same
+  `onSizeChanged` idiom the bar already uses for `tabBarInset`. It has to be measured rather than
+  known for the same reason 5.2 dropped the width token: a rail is as wide as its widest caption.
+  Under `Compact` the value is written by nobody, stays `0.dp`, and the padding is a no-op —
+  which is why the compact path is unchanged rather than unchanged-in-effect.
+
+  **The load-bearing change was in the test helper, and it is a finding rather than a chore.**
+  `setUpShell`'s `width` defaulted to `null`, meaning "whatever viewport this host gives the
+  root". That was invisible while the shell drew the same chrome at every width, and it stopped
+  being true the moment the chrome started following the width: the JVM host renders into a
+  window comfortably past 840dp, so twelve scenarios that never stated a width silently became
+  expanded-shell scenarios and began failing on a `shell.tabs` tag that was no longer composed.
+  The shell was right and the scenarios were underspecified. The default is now `PHONE_WIDTH`, so
+  a scenario that does not say what width it is about gets the width these scenarios are about.
+  A scenario that wants the wide layout passes `DESKTOP_WIDTH` — 1200dp rather than something
+  just over the threshold, so a moved threshold cannot silently keep these passing.
+
+  **Four scenarios, four mutations, all caught.** Removing the content padding turns
+  `theRailIsALeadingColumnRatherThanAStretchedOne` red; making the chrome ignore the layout class
+  turns three red; removing `semantics { selected }` from the rail cells turns
+  `exactlyOneRailDestinationIsMarkedSelected` red; and the three existing bar-geometry scenarios
+  pass unchanged throughout. The content-besides-the-rail assertion reads the projects list's
+  left edge rather than the content box's, because the box carrying the padding is anonymous — a
+  node inside it is the only thing that can show whether the padding reached the pixels. It reads
+  the *list* and not the board's columns because the landing tab has no open project and draws no
+  columns, and it reads a full-bleed screen because a centred card would clear the rail for
+  reasons that have nothing to do with the inset.
+
+  **The three wide-width scenarios cannot run on the Android host, and the host is the reason.**
+  `setUpShell` expresses a width as a `Box(Modifier.width(…))` around the app, and a fixed width
+  is a *request*: the box is measured against its parent's constraints, so a host with a narrower
+  viewport silently clamps it. Robolectric's default viewport clamps 1200dp to something well under
+  the 840dp threshold, so the shell correctly draws the phone chrome there, the rail is absent, and
+  all three scenarios failed for a reason that has nothing to do with the rail. `shellHonouredRequestedWidth`
+  measures the shell it actually got, prints when it was clamped, and skips. A desktop window is
+  not a configuration the Android host has, which makes this an inability to express the case
+  rather than a failure of it — the same bargain `thisHostRasterisesText` makes, for the same
+  reason, and recorded in `AGENTS.md` rather than left to be found. The fourth scenario,
+  `aNarrowShellDrawsTheBarAndNoRail`, passes on all three hosts and is the one that guards the
+  compact path on the Android host.
+
+  **The rail is full-height, and its glyphs share one axis; both were defects found by looking at
+  it.** The first rail wrapped its destinations and sat at `Alignment.CenterStart`, which measured
+  216dp of a 768dp window — a glass capsule a quarter of the window's height floating in the middle
+  of the left edge, which reads as a floating capsule rather than as navigation. It now fills the
+  height it is offered, anchored to the top, floating by `tabBarEdgeInset` at each end so it is
+  not full-bleed either.
+
+  The cells share that height with `weight(1f)`, which is load-bearing rather than cosmetic and is
+  the rail's **only** height owner: the lens's segment is `maxHeight / destinations.size`, so cells
+  that did not divide the height equally would put the travelling lens in the wrong place on a
+  tall window. Two `fillMaxHeight` calls were carried while this was built and both were
+  **provably redundant** — mutating either left every measurement in the suite identical, because
+  the weighted cells had already taken the height — so both were deleted. A modifier that looks
+  like the source of a value and is not costs exactly what it cost here.
+
+  **The misaligned glyphs were a real defect, not a tuning problem.** Cells are as wide as their
+  own captions and the captions differ — `"Board"` is far narrower than `"Projects"` — so with
+  every cell placed at the leading edge, each glyph sat at *its own* caption's centre and the five
+  icons were visibly out of line. `horizontalAlignment = CenterHorizontally` on the column fixes
+  it, because centring each cell puts every cell's midpoint on one shared axis, and a cell centres
+  its own glyph on its own midpoint. Giving every cell the same width would work too but needs a
+  width to give them, and the widest caption is a typography measurement the design system cannot
+  know — the same finding that kept a rail-width token out of the tree. Measured after the fix,
+  the five destination centre lines run **48.5..49.0dp, a spread of 0.5dp**, which is the caption
+  widths' own sub-pixel rounding; before it they were tens of dp apart.
+
+  **Two further defects, both found by looking at the running app rather than by a test.** The lens
+  overran the destination it was marking, and the first destination sat hard against the rail's top
+  edge while the last had most of a tall cell empty beneath it.
+
+  The lens overrun is a consequence of the full-height rail. A rail's segment is a fifth of the
+  rail's height — **146dp measured**, against about 49dp on the bar — so the lens's 10% stretch
+  takes it from 140dp to **154dp, eight points taller than its own cell**. Its *top* edge still
+  landed correctly, which is the edge a bounds check looks at, and its bottom edge crossed into the
+  next destination. `railLensHeight` now caps the growth at the segment: the settle is kept across
+  the cross axis, where the lens draws in, and given up only along the travel, where a tall cell
+  has nothing to spare. It is a pure function rather than an assertion on the animation because at
+  rest the stretch is zero and the lens fits with room to spare — **a rendered measurement cannot
+  see the clamp at all**, and the first attempt, which drove the test clock one frame into the
+  settle, did not catch it either.
+
+  The spacing asymmetry was `Arrangement.spacedBy(gap)` packing to the top: correct while a cell was
+  exactly as tall as its content, silently wrong the moment cells were weighted. Each destination
+  now centres in its cell, which makes the two ends symmetric — measured before the fix, **5dp
+  above the first icon and 109dp below the last**. The icon-to-caption gap is unchanged;
+  `spacedBy` with an alignment still spaces its children by that gap.
+
+  **Three of the four entry points were missing `@Test` for four runs, and nothing said so.**
+  They were inserted after `fiveTabsFitAtPhoneWidth`, which pushed the `@Test` that belonged to
+  the *next* entry above the first new method and left the four with none. The suite stayed at
+  47 tests and green, three mutation checks came back with no output at all, and the only reason
+  it surfaced is that a mutation which should have turned a test red did not. A test that does
+  not run is indistinguishable from a test that passes; this file's own coverage-gap notes are
+  about assertions that are *present and wrong*, and this was the blunter version.
+
+  **The planned "a wide shell publishes a zero scroll-under inset" scenario is not written, and
+  the reason is a property of every consumer rather than of this change.** All six readers of
+  `LocalTabBarScrollUnderInset` spend it as scroll *range* — `contentPadding` on a lazy list, or
+  bottom padding on a scrolling form — and not one of them as a viewport inset. A local published
+  as scroll range is invisible to bounds: removing it shortens a scroll, and the only way to read
+  that back is to scroll to the end of a list, which is what `theLastRowOfEachListScrollsClearOfTheTabBar`
+  does — one of the twelve pre-existing failures. Asserting the zero that way would duplicate a
+  red scenario rather than add coverage. The structural precondition it rests on *is* asserted,
+  from both sides: no bar is composed at a wide width, and nothing writes the inset.
+
+- [ ] **5.4 Two panes for the Sprints tab** · P1 · `shared-ui/…/NavigationHost.kt`,
+  `shared-ui/…/SprintPanes.kt` — Under `Expanded`, the Sprints tab draws
+  `SprintList` and `SprintDetail` side by side and the detail pane follows the selection
+  rather than replacing the list.
+
+  **The router is not duplicated.** The detail pane renders
+  `navigation.pathFor(AppTab.Sprints).lastOrNull()` — the same expression the single-pane
+  path renders — so a tap, a deep link and a restored stack all land on the same screen
+  and differ only in *where* it is drawn. The rejected alternative is a second piece of
+  state holding "the selected sprint", and it is rejected for the reason `RootScreen`
+  already gives about the session root: two answers to one question is how a selection
+  ends up applied to the list pane and not to the detail, or the other way round.
+
+  **Projects and Backlog are deliberately out of scope, and this is a finding rather than
+  a deferral.** The app contains exactly one list-detail pair. The Projects tab's root is
+  the projects list and its "detail" — the board — is a *different tab*, so a two-pane
+  Projects would be drawing two panes belonging to two tabs and would need a second
+  notion of "the project under the cursor" to reconcile them. The Backlog tab's
+  Backlog/Archived/Kanban are sections of one screen, not pushes. `SprintDetail`'s
+  selection is the only pair where the second pane is already a route in the same stack,
+  which is what makes it the one that can be widened without new state.
+
+  Also asserted: selecting a different sprint in the list changes the detail pane without
+  changing the tab's path length, which is the assertion that would fail if the pane were
+  implemented as a push.
+
+- [ ] **5.5 Modals present as windows, not as sheets from the bottom edge** · P1 ·
+  `:packages:design-system` `…/BottomSheetScaffold.kt` + `shared-ui/…/NavigationHost.kt` —
+  Under `Expanded`, `TTBottomSheetScaffold` centres its surface with a scale-and-fade
+  rather than anchoring it at `Alignment.BottomCenter` and sliding it in vertically, and
+  the `WorkItemEditor` overlay does the same instead of `slideInVertically` at
+  `fillMaxSize`.
+
+  Two pieces of bookkeeping are coupled to the vertical slide and must not be re-entered.
+  `NavigationHost`'s `dismissingEditors` list plus `EDITOR_EXIT_MS` exists to keep a
+  dismissed editor composed until its slide finishes; a window that fades has no slide to
+  finish, so the delay is a frame of dead time and the list is state nobody reads. The
+  other is the sheet's `LocalTabBarScrollUnderInset` padding, which 5.3 makes zero under
+  `Expanded` and which is therefore already correct — but it is correct for a *different
+  reason* on each side, and that is worth a comment rather than a coincidence.
+
+  `filingAwayInTheEditorClosesTheSheet` and `tappingASprintTaskRowOpensTheEditor` are two
+  of the twelve documented pre-existing failures. This task must not be credited with them
+  and must not fix them; the new scenarios run at an expanded width and are separate.
+
+- [ ] **5.6 Give the Desktop window a size, a title, and a memory** · P2 ·
+  `shared-ui/src/jvmMain/…/DesktopMain.kt` + `:packages:user-defaults` — `Window` currently
+  takes no size and no title, so the app opens at the platform default and a desktop layout
+  is not reachable by hand without dragging. Set a default window size that is above 5.1's
+  threshold and a title from the resource bundle, and decide whether the size persists
+  across launches through the file-backed preferences backend 4.6 already built.
+
+  `WindowState` is `jvmMain`-only, so this stays inside the entry point and touches no
+  `commonMain` — the same containment 4.6's storage work had. If the size does persist, the
+  key belongs in `:packages:user-defaults` beside the appearance and the last-visited
+  project, for the reason that file already records: the window size is a property of the
+  machine, not of the session, so it must not be wiped by `UserDefaultsStore.removeAll` on
+  sign-out.
+
+- [ ] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md` — Run
+  the decision command and reconcile the totals, then record the test-host consequence in
+  `Project.md` and `AGENTS.md`. The structural decision itself — "the shell's layout is
+  chosen by width, never by platform" — is **already in `DECISIONS.md`**, recorded in 5.1's
+  change rather than here: a decision written down two tasks after it is made is a decision
+  that has already had two chances to drift.
+
+  The consequence to state precisely: Desktop is **still** not a fourth test host — 4.8
+  settled that and nothing here changes it — but it now has a *layout dimension* the JVM
+  host can drive, through `setUpShell(width = …)`. That is a new capability of an existing
+  host rather than a new host, and the tables should say so rather than growing a column.
+  Every new scenario is per-host (a `commonTest` body with three entry points), so all
+  three totals move, unlike the JVM-only tests 4.6 and 4.8 added.
+
+### 5.0 Implementation order (desktop layout)
+
+1. **P0**: 5.1 → 5.2 → 5.3 — the class, the component, the branch. Nothing changes on a
+   phone until 5.3, and 5.3 is where the regression risk is.
+2. **P1**: 5.4 → 5.5 — the two things a wide window actually buys: a second pane and a
+   modal that does not arrive from off-screen.
+3. **P2/P1**: 5.6 → 5.7 — the window a human can resize, then the measurement.
+
+### 5.0 Notes on fit
+
+- **No `commonMain` screen changes.** 5.1–5.5 change the shell and the design system, both
+  of which are already shared by all three shells. No feature module, no entity, no port,
+  no architecture-table row.
+- **`Compact` is the unchanged path.** Every branch added here leaves today's behaviour as
+  the fallback, and the fallback is what the three existing bar-geometry scenarios pin. A
+  change that alters a phone must turn one of them red.
+- **The threshold is a decision, not a constant.** It is pinned by an exact-value test for
+  the reason `AGENTS.md` gives about numbers a test already holds: moving it should be a
+  deliberate edit that a reader can see in a diff.

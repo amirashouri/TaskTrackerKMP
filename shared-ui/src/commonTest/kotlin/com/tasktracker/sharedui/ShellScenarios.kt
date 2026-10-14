@@ -23,7 +23,11 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isSelected
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import com.tasktracker.designsystem.NavigationRailLensTag
+import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -70,6 +74,7 @@ import com.tasktracker.featureprojectspresentation.WorkItemCardTag
 import com.tasktracker.featureprojectspresentation.WorkItemFileAwayTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
+import com.tasktracker.designsystem.NavigationRailLensTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
@@ -148,6 +153,21 @@ object ShellScenarios {
      * signed-in shell up outside the scenario list. That test renders the bar to a PNG, and it
      * needs exactly the same graph this does — reimplementing the wiring in a second place
      * would mean a screenshot of a shell that is not the shell.
+     *
+     * ## [width] defaults to the phone, and that is a change of meaning
+     *
+     * It used to default to `null`, which meant "whatever viewport this host happens to give the
+     * root". That was invisible while the shell drew the same chrome at every width, and it stopped
+     * being true the moment the shell chose its chrome from the width it was offered: the JVM host
+     * renders into a window comfortably past the 840dp threshold, so every scenario that did not
+     * state a width silently became an expanded-shell scenario and twelve of them began failing
+     * on a `shell.tabs` tag that was no longer composed.
+     *
+     * The shell was right and the scenarios were underspecified. A scenario that asserts phone
+     * behaviour and says nothing about the width was relying on the host's window as an
+     * environment detail, and the fix is to make the default the width these scenarios are about
+     * rather than to widen the threshold until the accident stops happening. A scenario that
+     * wants the wide layout says so — see [aWideShellDrawsTheRailAndNoBar].
      */
     internal suspend fun ComposeUiTest.setUpShell(
         session: ScriptedSession,
@@ -157,7 +177,7 @@ object ShellScenarios {
         settings: SettingsPort? = null,
         preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         splashHold: Long = 0L,
-        width: Dp? = null,
+        width: Dp? = PHONE_WIDTH,
         navigationEventOwner: NavigationEventDispatcherOwner? = null,
     ): FakeResolver {
         val resolver = if (omitProjects) {
@@ -1614,6 +1634,394 @@ object ShellScenarios {
     private const val PHONE_TAB_COUNT = 5
 
     /**
+     * A desktop window, as a fixed number rather than a device's.
+     *
+     * 1000dp rather than something just over [ShellExpandedMinimumWidth], for the same reason
+     * [PHONE_WIDTH] is 390 and not 391: a width written against the threshold would keep passing
+     * if the threshold moved, which is the one change these scenarios must not absorb silently.
+     *
+     * It is 1000 rather than 1200 because **a scenario can only test a width its host can
+     * actually express**. A fixed width is clamped by its parent's constraints and the JVM host's
+     * viewport is 1024dp, so asking it for 1200 produced a shell narrower than requested — either
+     * a skip, or worse, a scenario asserting against a window it did not get. 1000dp is
+     * comfortably on the far side of the threshold and inside what the JVM, the iOS simulator and
+     * a real desktop window can all lay out. The Android host's viewport is far narrower and
+     * skips, which is correct rather than a gap: a desktop window is not a configuration it has.
+     */
+    private val DESKTOP_WIDTH = 1000.dp
+
+    /**
+     * A phone draws the bar and no rail.
+     *
+     * The compact path is the one that had to stay unchanged, so it is asserted directly rather
+     * than inferred from the expanded scenarios. [TabBarTag] absent under a wide window and
+     * present under a narrow one is the same fact read from both sides.
+     */
+    val aNarrowShellDrawsTheBarAndNoRail: suspend ComposeUiTest.() -> Unit = {
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = PHONE_WIDTH)
+        waitForIdle()
+
+        onNodeWithTag(TabBarTag).assertExists(
+            "at ${PHONE_WIDTH.value}dp the shell should still be drawing the tab bar",
+        )
+        assertNothingTagged(
+            NavigationRailTag,
+            "at ${PHONE_WIDTH.value}dp the shell drew a navigation rail as well as the bar, so " +
+                "the same destinations are reachable twice and the compact path has changed",
+        )
+    }
+
+    /**
+     * A wide window draws the rail and no bar.
+     *
+     * "No bar" is the half worth reading. A rail drawn *beside* a still-present bar is the obvious
+     * wrong version of this feature and it looks plausible in a screenshot: the app would have
+     * eight destinations, and the bar would be the five-segment capsule the section exists to
+     * replace.
+     */
+    val aWideShellDrawsTheRailAndNoBar: suspend ComposeUiTest.() -> Unit = {
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
+        waitForIdle()
+
+        if (desktopWidthIsExpressible(DESKTOP_WIDTH)) {
+            onNodeWithTag(NavigationRailTag).assertExists(
+                "at ${DESKTOP_WIDTH.value}dp, which is past the " +
+                    "${ShellExpandedMinimumWidth.value}dp threshold, the shell should be drawing " +
+                    "a navigation rail",
+            )
+            assertNothingTagged(
+                TabBarTag,
+                "at ${DESKTOP_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
+                    "rail. The bar is the shape this section exists to replace: five segments of " +
+                    "${DESKTOP_WIDTH.value / 5}dp each, with the tabs marooned inside them",
+            )
+        }
+    }
+
+    /**
+     * The rail is a leading column that wraps its destinations, not a stretched or bottom-anchored
+     * one.
+     *
+     * Three separate assertions because the failure has three shapes, and each is the transpose
+     * of a defect [TTGlassTabBar] already records for the other axis. A rail that filled the
+     * window's height would give five destinations a fifth of a tall column each (the "768pt-tall
+     * wrapper with the tabs parked dead centre" in the bar's KDoc, rotated). A rail that spanned
+     * the window's width would be the bar again. A rail anchored to the bottom edge would be a
+     * bar stood on end.
+     *
+     * The leading-edge inset is read from [ttSpacing.tabBarEdgeInset] rather than written as a
+     * number, because the shell owns that inset and a copy of it in this file is a second thing
+     * to keep true — the same reasoning the tab bar's own KDoc gives for not restating the
+     * edge inset it does not own.
+     */
+    val theRailIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = rail@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@rail
+
+        val rail = onNodeWithTag(NavigationRailTag).getBoundsInRoot()
+        val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        // Subtracted rather than read off `DpRect.height`, which this file does not use anywhere:
+        // both existing bounds helpers here compute a dimension from its two edges, and a third
+        // spelling would be a second thing to keep true.
+        val railHeight = rail.bottom.value - rail.top.value
+        val shellHeight = shell.bottom.value - shell.top.value
+
+        assertEquals(
+            ttSpacing.tabBarEdgeInset.value,
+            rail.left.value - shell.left.value,
+            "the rail starts ${rail.left.value - shell.left.value}dp inside a shell whose own " +
+                "leading edge sits at ${shell.left.value}dp, and it should start at the shell's " +
+                "edge inset of ${ttSpacing.tabBarEdgeInset.value}dp with nothing between them. " +
+                "Measured against the shell rather than an absolute zero, because where the shell " +
+                "sits in the window is the host's business and not this scenario's",
+        )
+        assertTrue(
+            railHeight > 0f && railHeight < shellHeight,
+            "the rail measured ${railHeight}dp in a ${shellHeight}dp shell, so it is either empty " +
+                "or filling the window",
+        )
+
+        // It is a full-height leading column, anchored to the top.
+        //
+        // This used to assert the opposite — a rail *shorter* than the window and centred in it —
+        // on the argument that stretching five destinations over a tall window spaces them too far
+        // apart. Measured, that rail was 216dp of a 768dp window: a glass capsule a quarter of the
+        // window's height, floating in the middle of the left edge, which reads as a floating
+        // capsule rather than as navigation. A desktop sidebar runs the full height from the top,
+        // so the assertion is that now, and the trailing space belongs below the destinations.
+        assertEquals(
+            ttSpacing.tabBarEdgeInset.value,
+            rail.top.value - shell.top.value,
+            "the rail starts ${rail.top.value - shell.top.value}dp below the shell's top edge, and " +
+                "it should start at the shell's own edge inset of " +
+                "${ttSpacing.tabBarEdgeInset.value}dp. It runs from the top rather than floating " +
+                "in the middle — a desktop sidebar begins at the top — but it still floats by " +
+                "that inset, the same rule the tab bar follows on its own axis",
+        )
+        assertTrue(
+            rail.right.value < shell.right.value,
+            "the rail runs to ${rail.right.value}dp in a shell that ends at ${shell.right.value}dp, " +
+                "so it is spanning the window rather than sitting on its leading edge",
+        )
+
+        // It fills the window's height less that inset at each end, rather than being a short
+        // capsule floating in the middle of the left edge.
+        //
+        // This used to assert the opposite — a rail *shorter* than the window and centred in it —
+        // on the argument that stretching five destinations over a tall window spaces them too far
+        // apart. Measured, that rail was 216dp of a 768dp window, which reads as a floating
+        // capsule rather than as navigation.
+        assertEquals(
+            0f,
+            rail.bottom.value - (shell.bottom.value - ttSpacing.tabBarEdgeInset.value),
+            "the rail stops ${rail.bottom.value - shell.bottom.value}dp from the shell's bottom " +
+                "edge and should stop at ${-ttSpacing.tabBarEdgeInset.value}dp, mirroring the " +
+                "inset it starts with. Running full-bleed to the bottom would be a slab rather " +
+                "than a floating surface",
+        )
+
+        // Its destinations share the height equally, which is what the lens's segment is derived
+        // from: `maxHeight / destinations.size`. Cells that did not divide it evenly would put the
+        // lens in the wrong place on a tall window, and this is the composed half of a rule the
+        // pure geometry test cannot see — that test supplies the height, so it cannot tell whether
+        // the component supplies the right one.
+        //
+        // The band's leading half-point is the rail's own vertical glass padding, which is inside
+        // the tagged box but outside the cells.
+        val firstCell = onNodeWithTag(
+            NavigationRailButtonTag(AppTab.Projects),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        val cellHeight = firstCell.bottom.value - firstCell.top.value
+        assertEquals(
+            cellHeight * PHONE_TAB_COUNT,
+            railHeight - ttSpacing.hairlineInset.value * 2,
+            cellHeight * QUARTER,
+            "the rail's ${railHeight}dp should be $PHONE_TAB_COUNT destinations of $cellHeight dp " +
+                "plus ${ttSpacing.hairlineInset.value * 2}dp of its own vertical padding. Cells " +
+                "that do not share the height equally put the lens's segment — the rail's height " +
+                "divided by the destination count — in the wrong place",
+        )
+
+        // The lens marks its cell and never overruns it.
+        //
+        // This is the assertion that would have caught the overhang. A rail segment is a fifth of
+        // the rail's height, so at 736dp the cells are 146dp and the lens's 10% stretch takes it
+        // from 140dp to 154dp. Its *top* edge still landed on the right destination, which is the
+        // edge a bounds check is most likely to look at, and its bottom edge crossed into the next
+        // cell — a selection indicator visibly bigger than the thing it indicated. The lens is
+        // clamped to its segment for that reason, and this is what holds the clamp.
+        val lens = onNodeWithTag(NavigationRailLensTag).getBoundsInRoot()
+        val landingCell = onNodeWithTag(
+            NavigationRailButtonTag(AppTab.Projects),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        val lensHeightMeasured = lens.bottom.value - lens.top.value
+        val cellHeightMeasured = landingCell.bottom.value - landingCell.top.value
+        assertTrue(
+            lensHeightMeasured <= cellHeightMeasured,
+            "the lens is ${lensHeightMeasured}dp tall over a ${cellHeightMeasured}dp cell, so it " +
+                "is taller than the destination it is marking and crosses into the next one. Its " +
+                "top edge sits at ${lens.top.value} against the cell's ${landingCell.top.value}, " +
+                "which is why this reads as correct until you look at the bottom edge",
+        )
+        assertTrue(
+            lens.top.value >= landingCell.top.value - ONE_POINT &&
+                lens.bottom.value <= landingCell.bottom.value + ONE_POINT,
+            "the lens occupies ${lens.top.value}..${lens.bottom.value}dp and its cell " +
+                "${landingCell.top.value}..${landingCell.bottom.value}dp, so it is not contained " +
+                "by the destination it is marking",
+        )
+
+        // Every glyph on one axis. The cells are as wide as their own captions and the captions
+        // differ — "Board" is far narrower than "Projects" — so this is the property that says
+        // they are *centred* on the column's centre line rather than each hugging the leading
+        // edge, which drew "Board" visibly outboard of "Projects".
+        //
+        // Measured spread across the five destinations is **0.5dp**, which is the caption widths'
+        // own sub-pixel rounding rather than a real offset. Before the column was centred the same
+        // measurement spread the destinations across the rail's full width — tens of dp, because
+        // each glyph sat at its own caption's position instead of on a shared axis.
+        val centres = AppTab.entries.map { tab ->
+            onNodeWithTag(NavigationRailButtonTag(tab), useUnmergedTree = true)
+                .getBoundsInRoot()
+                .let { (it.left.value + it.right.value) / 2f }
+        }
+        val spread = centres.max() - centres.min()
+        assertTrue(
+            spread <= ONE_POINT,
+            "the destinations' centre lines run ${centres.min()}..${centres.max()} — a spread of " +
+                "${spread}dp: ${centres.joinToString { "${it}" }}. Every glyph and caption is " +
+                "centred on the column's centre line, so a caption wider than its neighbours " +
+                "must not drag its glyph outboard of theirs. A point is sub-pixel rounding; the " +
+                "defect this guards was tens of points wide",
+        )
+        assertTrue(
+            railHeight > 0f && railHeight < shellHeight,
+            "the rail measured ${railHeight}dp in a ${shellHeight}dp shell, so it is either empty " +
+                "or filling the window outright. It should fill the window less one edge inset " +
+                "at each end",
+        )
+
+        // It carries every destination, not only the selected ones. `selectedRailDestinations`
+        // filters on `selected`, so a cell that stopped composing would leave that list reading
+        // `listOf(AppTab.Projects)` and the selection scenario would pass over a rail with one
+        // destination on it. The bar has `fiveTabsFitAtPhoneWidth` for this; the rail needed the
+        // equivalent and did not have one.
+        assertEquals(
+            PHONE_TAB_COUNT,
+            AppTab.entries.count {
+                onAllNodesWithTag(NavigationRailButtonTag(it)).fetchSemanticsNodes().isNotEmpty()
+            },
+            "the rail should carry all $PHONE_TAB_COUNT destinations, one " +
+                "NavigationRailButtonTag each. A cell that stopped composing is invisible to the " +
+                "selection scenarios, which only ever look at the selected one",
+        )
+
+        // And the content starts *beside* it rather than running underneath. Read on a real
+        // screen rather than on the content box, because the box that carries the padding is
+        // anonymous: a node inside it is the only thing that can show whether the padding reached
+        // the pixels.
+        //
+        // The projects list is used because it fills the content area edge to edge on the landing
+        // tab. A screen whose content sits well inside its own margins — a centred card, a row
+        // with its own gutter — would keep passing with the padding removed, because its left edge
+        // would clear the rail's for reasons that have nothing to do with the inset. That is not a
+        // hypothetical: the board's columns cannot be used at all here, because the landing tab
+        // has no open project and draws none.
+        val list = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
+        assertTrue(
+            list.left.value >= rail.right.value,
+            "the projects list starts at ${list.left.value}dp while the rail runs to " +
+                "${rail.right.value}dp, so the content is running *under* the rail. The rail's " +
+                "width is measured and fed back as the content box's leading inset; if that " +
+                "measurement is not reaching the padding, every screen is drawn under the rail",
+        )
+    }
+
+    /**
+     * Asserts that nothing in the tree carries [tag].
+     *
+     * A counted assertion rather than `assertDoesNotExist()`, because that takes no message in
+     * this version of `ui-test`, and "the rail should not be here at 390dp" is exactly the kind of
+     * failure whose explanation belongs next to the assertion. Counting also says *how many* were
+     * found, so drawing the rail twice is as visible as drawing it once.
+     */
+    private fun ComposeUiTest.assertNothingTagged(tag: String, why: String) {
+        assertEquals(0, onAllNodesWithTag(tag).fetchSemanticsNodes().size, why)
+    }
+
+    /**
+     * Whether this host can build the wide shell these desktop-layout scenarios are about.
+     *
+     * ## It is declared per host, not measured, and two mutations is why
+     *
+     * The obvious implementation measures — "did the shell get the width I asked for?" — and it is
+     * wrong twice over, both times found by mutation rather than by reading.
+     *
+     * Asking the *shell* reads the absence of the thing under test as evidence about the
+     * environment: if the shell stopped filling the box it is given, the guard reports "this host
+     * cannot do wide shells", and all three scenarios stop asserting while still reporting green —
+     * on the two hosts that are supposed to guard them.
+     *
+     * Asking the *composition root* is no better, and was found the same way: with the width hook
+     * mutated to hand out 400dp, `onRoot()` reported 400dp and the scenarios skipped. The root
+     * tracks the constrained composition, not the window, so it is not a viewport either. Nothing
+     * reachable from inside a composition reports what the host *could* have given.
+     *
+     * So the capability is **declared**, per host, exactly as `thisHostRasterisesText` declares
+     * whether a host can rasterise a frame. A declared capability cannot be moved by a change to
+     * the code under test, which is the one property the measured version lacked.
+     *
+     * The skip is reported as a **pass**, not a skip, and it prints — `kotlin.test` has no portable
+     * skip. It is recorded in `AGENTS.md` under the Android host rather than left to be found.
+     */
+    private fun ComposeUiTest.desktopWidthIsExpressible(requested: Dp): Boolean {
+        if (thisHostExpressesDesktopWidth()) return true
+        println(
+            "skipped: this host cannot lay out a shell wider than the " +
+                "${ShellExpandedMinimumWidth.value}dp expanded threshold, so the " +
+                "${requested.value}dp shell these scenarios are about cannot be built here. A " +
+                "fixed width is a request rather than a guarantee — it is clamped by its parent's " +
+                "constraints — so asserting on a shell this host could not build would be " +
+                "asserting nothing. A desktop window is not a configuration the Android host has",
+        )
+        return false
+    }
+
+    /**
+     * Slack for the rail-height equality, as a fraction of one destination cell.
+     *
+     * A rail is a `Column` of cells, so its height is the sum of theirs, but the sum and the
+     * first cell's own measured height are read separately and their text metrics belong to the
+     * rasteriser. A quarter of a cell covers that with room to spare while a rail collapsed to a
+     * single destination is off by eighty per cent, so the band cannot hide the failure it is for.
+     */
+    private const val QUARTER = 0.25f
+
+    /**
+     * A point of slack, in dp, for measurements comparing two laid-out nodes.
+     *
+     * Half a point is the destinations' measured centre-line spread, which is the caption widths'
+     * own sub-pixel rounding. The defects these guard — glyphs out of line, a lens overrunning its
+     * cell — were tens of points wide, so a point separates the two by two orders of magnitude
+     * rather than by a rounding argument.
+     */
+    private const val ONE_POINT = 1f
+
+    /**
+     * Exactly one destination on the rail says it is the current one, and it follows the route.
+     *
+     * [selectedTabs] reads the bar's tags, so this reads the rail's. The same reasoning applies
+     * and the same failure is guarded: a `selected` that is never set is invisible to every other
+     * assertion in this file, because the rail still navigates and the screens still change.
+     *
+     * Read in the tree rather than from the router, and compared as a list so that "two are
+     * selected" fails as loudly as "none is" — a count-only assertion would accept a rail that lit
+     * the wrong single destination.
+     */
+    val exactlyOneRailDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = selected@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@selected
+
+        assertEquals(
+            listOf(AppTab.Projects),
+            selectedRailDestinations(),
+            "expected the landing destination to be the selected one",
+        )
+
+        onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(AppTab.Settings),
+            selectedRailDestinations(),
+            "after tapping Settings on the rail the selection did not follow the route, so the " +
+                "rail's lens and its `selected` property are both describing a stale destination",
+        )
+    }
+
+    /**
+     * Which destinations the semantics tree is currently claiming as selected, in [AppTab] order.
+     *
+     * [selectedTabs] for the bar; this is the rail's tag space, and the two are read separately so
+     * that a shell which drew *both* cannot pass one by answering from the other's nodes.
+     */
+    private fun ComposeUiTest.selectedRailDestinations(): List<AppTab> =
+        AppTab.entries
+            .filter { tab ->
+                onAllNodes(
+                    hasTestTag(NavigationRailButtonTag(tab)) and isSelected(),
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
+
+
+
+    /**
      * Every destination is named in the bar, and exactly one of them says it is the current one.
      *
      * Selection is carried by three independent things — tint, label weight, and this
@@ -2155,3 +2563,18 @@ object ShellScenarios {
         AppTab.Settings -> getString(Res.string.tab_settings)
     }
 }
+
+/**
+ * Whether this host can lay out a shell wider than [ShellExpandedMinimumWidth].
+ *
+ * True on the JVM and the iOS simulator, whose viewports carry a 1000dp shell comfortably. False
+ * on the Android host, whose viewport is 320dp — which is not a defect to fix but a phone, and a
+ * desktop window is not a configuration it has. See
+ * [ShellScenarios.desktopWidthIsExpressible]'s note for why this is declared per host rather than
+ * measured, which cost two mutation runs to establish.
+ *
+ * Top level because `expect` cannot be a member, and beside [ShellScenarios] rather than inside
+ * it so the actuals are three one-line files next to the host entry points — the shape
+ * `thisHostRasterisesText` uses in `:packages:design-system`.
+ */
+internal expect fun thisHostExpressesDesktopWidth(): Boolean

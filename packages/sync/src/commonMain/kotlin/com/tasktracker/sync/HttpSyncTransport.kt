@@ -9,6 +9,7 @@ import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpQueryItem
 import com.tasktracker.network.HttpRequest
 import com.tasktracker.network.jsonBody
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -42,7 +43,10 @@ class HttpSyncTransport(
         data class Change(
             val id: String,
             val entity: String,
-            val entityID: String,
+            // Sent in the server's spelling, so both directions agree on one name. The server
+            // would have accepted either — Go matches JSON keys case-insensitively — and that
+            // is precisely why the pull direction went unnoticed for so long.
+            @SerialName("entityId") val entityID: String,
             val operation: String,
             val payload: String,
         )
@@ -80,11 +84,22 @@ class HttpSyncTransport(
         // guessing `false` would silently end the pull with pages still unread. A missing
         // field is a decoding error, which is the honest reading.
         val hasMore: Boolean,
+        // This one *does* default, and the asymmetry is deliberate. The server sends it with
+        // `omitempty`, so absent means "false" rather than "unstated" — and a server old
+        // enough not to know the field is also saying there is nothing to resync. Leaving it
+        // undeclared is not an option: `ignoreUnknownKeys` is off, so the field would fail
+        // decoding on exactly the page that needs a resync, which is the one moment the
+        // client must not fall over.
+        val resyncRequired: Boolean = false,
     ) {
         @Serializable
         data class Change(
             val entity: String,
-            val entityID: String,
+            // The server spells this `entityId`, not `entityID`. Go decodes JSON keys
+            // case-insensitively so the push direction worked by accident, but decoding is
+            // exact on this side and `ignoreUnknownKeys` is off — so an unannotated
+            // `entityID` fails the whole page, on the pull path, for every change.
+            @SerialName("entityId") val entityID: String,
             val operation: String,
             val payload: String,
             val version: String? = null,
@@ -166,7 +181,12 @@ class HttpSyncTransport(
                 version = change.version,
             )
         }
-        return PullPage(changes = changes, nextCursor = response.nextCursor, hasMore = response.hasMore)
+        return PullPage(
+            changes = changes,
+            nextCursor = response.nextCursor,
+            hasMore = response.hasMore,
+            resyncRequired = response.resyncRequired,
+        )
     }
 
     // MARK: - Mapping

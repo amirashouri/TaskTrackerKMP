@@ -215,7 +215,7 @@ fun <Tab> TTGlassTabBar(
  * chain. See the guard in here for why the guard is needed at all.
  */
 @Composable
-private fun lensStretch(selectedIndex: Int): Float {
+internal fun lensStretch(selectedIndex: Int): Float {
     // Starts at rest, not at the peak. The peak is only *entered* by a selection change, and
     // the effect below is what enters it. Initialising to 1f instead left the lens permanently
     // 10% wide and 6% short on first composition — and, because `LaunchedEffect` does not run

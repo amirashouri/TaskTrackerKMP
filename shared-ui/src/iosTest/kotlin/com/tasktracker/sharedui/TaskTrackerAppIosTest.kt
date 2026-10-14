@@ -55,6 +55,24 @@ class TaskTrackerAppIosTest {
     fun theTabBarIsWiderThanItsTabs() = runComposeUiTest(block = ShellScenarios.theTabBarIsWiderThanItsTabs)
     @Test
     fun fiveTabsFitAtPhoneWidth() = runComposeUiTest(block = ShellScenarios.fiveTabsFitAtPhoneWidth)
+
+    @Test
+    fun aNarrowShellDrawsTheBarAndNoRail() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheBarAndNoRail)
+
+    @Test
+    fun aWideShellDrawsTheRailAndNoBar() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheRailAndNoBar)
+
+    @Test
+    fun theRailIsALeadingColumnRatherThanAStretchedOne() =
+        runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
+
+    @Test
+    fun exactlyOneRailDestinationIsMarkedSelected() =
+        runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
+
+
     @Test
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)
     @Test
@@ -112,3 +130,12 @@ class TaskTrackerAppIosTest {
     @Test
     fun forcedOfflineSurvivesTheSessionEnding() = runComposeUiTest(block = ShellScenarios.forcedOfflineSurvivesTheSessionEnding)
 }
+
+/**
+ * The iOS simulator carries a 1000dp shell, so the wide-layout scenarios run here.
+ *
+ * Worth having on this host specifically: it is the rasteriser that disagrees with the JVM on
+ * glyph coverage, so a wide shell is checked where a small glyph's stroke is drawn least
+ * completely.
+ */
+internal actual fun thisHostExpressesDesktopWidth(): Boolean = true

@@ -132,19 +132,42 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1534 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1494 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **1238 tests, 33 failed** — all layout/raster, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1571 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1531 tests, 12 failed** (same 12) |
+| Android host | `testAndroidHostTest` | Robolectric; **1275 tests, 34 failed** — all layout/raster, documented below |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
-2026-10-12 from a run with the `test-results` trees deleted first, so the figures are one run's
-output rather than an accumulation of earlier ones. All three rose: the JVM figure from the
-previously recorded 1469, iOS from 1444, and the Android host from 1188, because tests landed
-on `main` after those measurements. The JVM figure has since moved to **1534** for the 3
-entry-point tests below; iOS stays 1494 and the Android host stays 1238, because those tests
-are `jvmTest`-only and nothing the Android host compiles changed.
+2026-10-14 from `--rerun-tasks` (523 tasks, all executed, nothing from cache), so the figures
+are one run's output rather than an accumulation of earlier ones.
+
+**Every one of the three figures above was stale before this run, in the same direction.** The
+recorded 1534 / 1494 / 1238 had drifted from 1571 / 1531 / 1275 — JVM +37, iOS +37, Android +37.
+None of that was section 5: the desktop-layout work accounts for exactly **+10 per host**
+(6 in `:packages:design-system`'s `commonTest`, 4 in `:shared-ui`'s), and the remaining +27 came
+from the sync-transport work that landed on this branch first. The Android host's *failure* count
+did not move at all: `HEAD` measures 1265 tests / 34 failed and this branch measures 1275 / 34,
+so all ten new tests pass there and the nine `shared-ui` failures are the same nine either way
+(verified by re-running with `setUpShell`'s width default reverted, which produces an identical
+list). A count that is wrong in the same direction on three hosts at once is a baseline that
+stopped being re-measured, not thirty-seven tests that appeared quietly.
+
+### Desktop now has a *layout* dimension the JVM host can drive
+
+Section 5 did not add a test host. It added the ability to ask the shell for a width, and
+`ShellScenarios.setUpShell(width = …)` already had the hook — what changed is that the shell's
+chrome now follows it. `aNarrowShellDrawsTheBarAndNoRail`, `aWideShellDrawsTheRailAndNoBar`,
+`theRailIsALeadingColumnRatherThanAStretchedOne` and `exactlyOneRailDestinationIsMarkedSelected`
+are `commonTest` bodies with three entry points each, so all three totals move.
+
+**One width and one consequence worth carrying.** `setUpShell`'s `width` now defaults to
+`PHONE_WIDTH` rather than `null`. It used to mean "whatever viewport this host gives the root",
+which was invisible while the shell drew one chrome at every width and became twelve failing
+scenarios the moment it did not. The Android host is the other half of that: a fixed width is a
+request, clamped by the parent's constraints, and Robolectric clamps 1200dp below the expanded
+threshold, so the three wide-width scenarios skip there (they print, and register as passes) while
+the JVM and iOS hosts run them.
 
 The Desktop work added 16 tests, and where they land is worth knowing when the counts move:
 7 in `:packages:user-defaults`'s `jvmTest`, 5 in `:packages:keychain`'s `jvmTest` and 3 in

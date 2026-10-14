@@ -259,13 +259,20 @@ fun RootScreen(
                                 SignInView(onAuthenticated = {})
                             }
 
-                            RootDestination.Main -> ProvideAuthSession(session) {
-                                SignedInArea(
-                                    environment = environment,
-                                    settings = settings,
-                                    preferences = preferences,
-                                    router = router,
-                                )
+                            // The layout class is read here, around the *signed-in* half only.
+                            // Not at the root: `ShellLayout` is a `SubcomposeLayout`, and this
+                            // file's note on the splash gate is why nothing may add a measure
+                            // pass ahead of the handoff. The splash and the sign-in form have
+                            // no opinion about how much room they have, so they are outside it.
+                            RootDestination.Main -> ShellLayout {
+                                ProvideAuthSession(session) {
+                                    SignedInArea(
+                                        environment = environment,
+                                        settings = settings,
+                                        preferences = preferences,
+                                        router = router,
+                                    )
+                                }
                             }
                         }
                     }

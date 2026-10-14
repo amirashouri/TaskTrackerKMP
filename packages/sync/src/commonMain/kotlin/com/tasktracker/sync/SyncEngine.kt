@@ -414,6 +414,9 @@ class SyncEngine(
             return report.withFailure(SyncStage.Pull(scope), describe(error))
         }
         var cursor = stored?.cursor
+        // Set once a resync has been started, so a server that keeps asking cannot spin this
+        // loop until the page ceiling runs out and report a clean sync having applied nothing.
+        var resyncing = false
 
         for (page in 0 until configuration.pullPageCeiling) {
             val page_ = try {
@@ -424,6 +427,26 @@ class SyncEngine(
                 val signOut = (error as? AppError)?.requiresSignOut == true
                 return report.copy(requiresSignOut = report.requiresSignOut || signOut)
                     .withFailure(SyncStage.Pull(scope), describe(error))
+            }
+
+            // The cursor names a position the server has pruned away, so this page is a
+            // partial view of the gap. Applying it and advancing the cursor would skip the
+            // changes that are gone for good and still look like a clean sync. Throw the
+            // cursor away and read the surviving log from the start instead — the sinks are
+            // idempotent, so re-delivering a change already applied is harmless.
+            if (page_.resyncRequired) {
+                if (resyncing) {
+                    // Asking twice in one cycle means the server is pruning faster than this
+                    // client can read. Looping would not converge, and reporting success
+                    // would be a lie about data the app never received.
+                    return report.withFailure(
+                        SyncStage.Pull(scope),
+                        "The server asked for a resync again before this scope could catch up.",
+                    )
+                }
+                resyncing = true
+                cursor = null
+                continue
             }
 
             if (page_.changes.isEmpty()) return report

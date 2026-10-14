@@ -88,6 +88,24 @@ class TaskTrackerAppAndroidHostTest {
     fun theTabBarIsWiderThanItsTabs() = runComposeUiTest(block = ShellScenarios.theTabBarIsWiderThanItsTabs)
     @Test
     fun fiveTabsFitAtPhoneWidth() = runComposeUiTest(block = ShellScenarios.fiveTabsFitAtPhoneWidth)
+
+    @Test
+    fun aNarrowShellDrawsTheBarAndNoRail() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheBarAndNoRail)
+
+    @Test
+    fun aWideShellDrawsTheRailAndNoBar() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheRailAndNoBar)
+
+    @Test
+    fun theRailIsALeadingColumnRatherThanAStretchedOne() =
+        runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
+
+    @Test
+    fun exactlyOneRailDestinationIsMarkedSelected() =
+        runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
+
+
     @Test
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)
     @Test
@@ -155,3 +173,17 @@ class TaskTrackerAppAndroidHostTest {
     @Test
     fun forcedOfflineSurvivesTheSessionEnding() = runComposeUiTest(block = ShellScenarios.forcedOfflineSurvivesTheSessionEnding)
 }
+
+/**
+ * The Android host cannot, so the wide-layout scenarios skip here.
+ *
+ * Robolectric's viewport is 320dp, and a fixed width is clamped by its parent's constraints, so a
+ * 1000dp shell is laid out at 320dp — comfortably under the expanded threshold, where the shell
+ * correctly draws the phone chrome. Asserting there would assert nothing; failing there would be
+ * blaming the host for a phone.
+ *
+ * This is the same bargain `thisHostRasterisesText` makes in `:packages:design-system`, for the
+ * same reason, and it is recorded in `AGENTS.md` because `kotlin.test` has no portable skip and
+ * the host records the return as a *pass*.
+ */
+internal actual fun thisHostExpressesDesktopWidth(): Boolean = false

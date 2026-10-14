@@ -57,6 +57,24 @@ class TaskTrackerAppJvmTest {
     fun theTabBarIsWiderThanItsTabs() = runComposeUiTest(block = ShellScenarios.theTabBarIsWiderThanItsTabs)
     @Test
     fun fiveTabsFitAtPhoneWidth() = runComposeUiTest(block = ShellScenarios.fiveTabsFitAtPhoneWidth)
+
+    @Test
+    fun aNarrowShellDrawsTheBarAndNoRail() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheBarAndNoRail)
+
+    @Test
+    fun aWideShellDrawsTheRailAndNoBar() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheRailAndNoBar)
+
+    @Test
+    fun theRailIsALeadingColumnRatherThanAStretchedOne() =
+        runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
+
+    @Test
+    fun exactlyOneRailDestinationIsMarkedSelected() =
+        runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
+
+
     @Test
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)
     @Test
@@ -114,3 +132,12 @@ class TaskTrackerAppJvmTest {
     @Test
     fun forcedOfflineSurvivesTheSessionEnding() = runComposeUiTest(block = ShellScenarios.forcedOfflineSurvivesTheSessionEnding)
 }
+
+/**
+ * The JVM host carries a 1000dp shell, so the wide-layout scenarios run here.
+ *
+ * This host is also the Desktop app's own suite — `:shared-ui`'s `jvmTest` *is* the Desktop test
+ * host — so "the rail exists at desktop widths" is asserted on the same host that runs the
+ * Desktop app, which is the only arrangement in which that claim is worth anything.
+ */
+internal actual fun thisHostExpressesDesktopWidth(): Boolean = true
