@@ -102,6 +102,18 @@ class TaskTrackerAppAndroidHostTest {
         runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
 
     @Test
+    fun aWideShellDrawsTheSprintListAndDetailSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheSprintListAndDetailSideBySide)
+
+    @Test
+    fun aNarrowShellReplacesTheSprintListWithTheDetail() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellReplacesTheSprintListWithTheDetail)
+
+    @Test
+    fun choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack() =
+        runComposeUiTest(block = ShellScenarios.choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack)
+
+    @Test
     fun exactlyOneRailDestinationIsMarkedSelected() =
         runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
 

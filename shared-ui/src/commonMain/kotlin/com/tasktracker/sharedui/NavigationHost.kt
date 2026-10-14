@@ -160,6 +160,11 @@ fun NavigationHost(
 
     val tab = navigation.selectedTab
 
+    // Read once, used twice: the chrome below and the pane arrangement further down ask the same
+    // question, and two reads of the same local is two chances for them to disagree about what
+    // layout this shell is in.
+    val layoutClass = LocalShellLayoutClass.current
+
     // Editors that have been dismissed but are still playing their exit transition.
     // Kept composed until the animation finishes so the exit can be seen.
     val dismissingEditors = remember { mutableStateListOf<AppRoute.WorkItemEditor>() }
@@ -270,7 +275,10 @@ fun NavigationHost(
                     },
                 )
 
-                if (backgroundPushed == null) {
+                // The tab's root and whatever is pushed onto it, as two values rather than two
+                // call sites, because there are now three arrangements and writing a ten-argument
+                // call three times is three places for the wiring to drift apart.
+                val tabRoot: @Composable () -> Unit = {
                     TabRoot(
                         tab = tab,
                         router = router,
@@ -280,9 +288,14 @@ fun NavigationHost(
                         themeScheme = themeScheme,
                         scope = scope,
                     )
-                } else {
+                }
+                val pushedPane: @Composable () -> Unit = {
+                    // `backgroundPushed` is non-null on every path that reaches this lambda. It is
+                    // read through `requireNotNull` rather than captured as a nullable parameter
+                    // so that a second answer to "is there a pushed route" does not exist for a
+                    // reader to keep in step with the branch below.
                     PushedRoute(
-                        route = backgroundPushed,
+                        route = requireNotNull(backgroundPushed),
                         tab = tab,
                         router = router,
                         environment = environment,
@@ -291,6 +304,32 @@ fun NavigationHost(
                         themeScheme = themeScheme,
                         scope = scope,
                     )
+                }
+
+                // Which of the three arrangements. Read off the layout class, never off the
+                // platform — see `ShellLayoutClass` for why — and off the tab, because the
+                // Sprints list-detail pair is the only one in the app whose second pane is already
+                // a route in the same stack, which is what lets it be widened without new state.
+                //
+                // `Projects` is excluded deliberately and that is a finding rather than a
+                // deferral: its root is the projects list and its "detail" — the board — is a
+                // *different tab*, so a two-pane Projects would be drawing two panes belonging to
+                // two tabs and would need a second notion of "the project under the cursor" to
+                // reconcile them. Backlog's three sections are one screen, not pushes.
+                //
+                // Nothing here is animated and nothing is remembered. The panes are the same two
+                // composables the single-pane path renders, so a tap, a deep link and a restored
+                // stack all land on the same screen and differ only in where it is drawn — and
+                // `BackHandler` above is untouched, because popping the route removes the detail
+                // pane and the list goes back to full width, which is the right answer in both
+                // arrangements.
+                when {
+                    backgroundPushed == null -> tabRoot()
+
+                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Sprints ->
+                        SprintTwoPanes(listPane = tabRoot, detailPane = pushedPane)
+
+                    else -> pushedPane()
                 }
 
                 // Render all editors in the path with proper enter/exit animations.
@@ -368,7 +407,7 @@ fun NavigationHost(
             // exactly as they are rather than made conditional. They are already correct at zero
             // on a desktop window, and a branch that says so is a branch that has to be
             // re-verified on the phone.
-            when (LocalShellLayoutClass.current) {
+            when (layoutClass) {
                 ShellLayoutClass.Compact -> TabBar(
                     selected = tab,
                     onSelect = router::selectTab,

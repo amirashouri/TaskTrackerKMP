@@ -31,6 +31,8 @@ import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
@@ -79,6 +81,7 @@ import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
 import com.tasktracker.featureprojectspresentation.SprintDetailReopenTag
+import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
 import com.tasktracker.featureprojectspresentation.SprintListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
 import com.tasktracker.featureprojectspresentation.SprintPickerRowTag
@@ -1970,6 +1973,221 @@ object ShellScenarios {
      * rather than by a rounding argument.
      */
     private const val ONE_POINT = 1f
+
+    /**
+     * A wide window shows the sprint list and the sprint detail side by side.
+     *
+     * Asserted on *geometry*, not on presence. Both panes existing is satisfied by the detail
+     * being drawn on top of the list, which is the single-pane layout with the list left composed
+     * underneath it — a real and easy mistake here, because the two are the same two composables
+     * and the only thing that changed is where they are placed. `list.right < detail.left` is the
+     * claim that they are actually beside each other.
+     */
+    val aWideShellDrawsTheSprintListAndDetailSideBySide: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+
+        val list = onNodeWithTag(SprintListScreenTag).getBoundsInRoot()
+        val detail = onNodeWithTag(SprintDetailScreenTag).getBoundsInRoot()
+
+        assertTrue(
+            list.right.value < detail.left.value,
+            "the list runs to ${list.right.value}dp and the detail starts at " +
+                "${detail.left.value}dp, so the panes are not side by side. Both being present is " +
+                "not enough — the detail drawn over the list satisfies that too, and it is the " +
+                "mistake this arrangement exists to remove",
+        )
+        assertTrue(
+            detail.right.value - detail.left.value > 0f && list.right.value - list.left.value > 0f,
+            "the list is ${list.right.value - list.left.value}dp wide and the detail is " +
+                "${detail.right.value - detail.left.value}dp, so a pane has collapsed to nothing",
+        )
+    }
+
+    /**
+     * A narrow window replaces the list with the detail, as it always has.
+     *
+     * The compact path is the one that had to stay unchanged, so it is asserted directly rather
+     * than inferred from the wide scenarios. Read from the other side of the same fact: the list
+     * is *absent*, not merely covered.
+     */
+    val aNarrowShellReplacesTheSprintListWithTheDetail: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = PHONE_WIDTH,
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+
+        onNodeWithTag(SprintDetailScreenTag).assertExists(
+            "at ${PHONE_WIDTH.value}dp the sprint detail should be showing",
+        )
+        assertNothingTagged(
+            SprintListScreenTag,
+            "at ${PHONE_WIDTH.value}dp the sprint list is still composed behind the detail. It is " +
+                "meant to be replaced, not stacked — the same arrangement as before this section",
+        )
+    }
+
+    /**
+     * Choosing a different sprint changes the detail pane without changing the stack.
+     *
+     * This is the assertion that fails if the two panes were implemented as a push. The stack is
+     * read from the router rather than inferred from what is on screen, and its *length* is the
+     * part that matters: a detail pane that pushed would keep pushing, so the path would grow with
+     * every selection and the second sprint's detail would be reachable only by popping through
+     * the first — while looking, in a two-pane layout, exactly like the right behaviour.
+     *
+     * Two sprints, so the second tap has somewhere else to go. Asserted on the detail's *content*
+     * as well as the length, because an unchanged stack and an unchanged detail are also the
+     * failure this cannot see from the router alone.
+     */
+    val choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack:
+        suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val first = shellTestSprint(
+            projectID = project.id,
+            name = "Sprint One",
+            id = SprintID("11111111-1111-1111-1111-111111111111"),
+            startDate = Instant.parse("2026-03-02T00:00:00Z"),
+        )
+        val second = shellTestSprint(
+            projectID = project.id,
+            name = "Sprint Two",
+            id = SprintID("22222222-2222-2222-2222-222222222222"),
+            goalStoryPoints = 34,
+            startDate = Instant.parse("2026-03-16T00:00:00Z"),
+        )
+        projects.seedSprint(first)
+        projects.seedSprint(second)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+
+        val depthAtRoot = router.path(AppTab.Sprints).size
+
+        onNodeWithTag(SprintRowTag(first.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        val depthAfterFirst = router.path(AppTab.Sprints).size
+        val detailForFirst = renderedTextOf(SprintDetailCardTag)
+
+        onNodeWithTag(SprintRowTag(second.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        val depthAfterSecond = router.path(AppTab.Sprints).size
+        val detailForSecond = renderedTextOf(SprintDetailCardTag)
+
+        assertEquals(
+            depthAfterFirst,
+            depthAfterSecond,
+            "the stack was $depthAtRoot deep at the tab root, ${depthAfterFirst} after opening the " +
+                "first sprint and ${depthAfterSecond} after opening the second. The detail pane " +
+                "follows the selection rather than pushing onto it, so a second sprint must land " +
+                "at the same depth — a pane implemented as a push grows the stack and then " +
+                "requires popping back through every sprint already visited",
+        )
+
+        // The pane's *content* changed, which is the other half and the one the depth check cannot
+        // see. The first version of this asserted that the pane had *moved*, which was wrong: a
+        // two-pane layout's detail pane is a fixed slot by design, and it correctly stays put while
+        // what is inside it changes. Asserting position would have failed on correct behaviour.
+        //
+        // Read from the rendered semantics rather than from the model, because "the store holds the
+        // second sprint" and "the pane is drawing the second sprint" are different claims and only
+        // one of them is about this layout. The two sprints carry different goals so the text has
+        // to differ; equal goals would make this pass whatever the pane drew.
+        assertTrue(
+            detailForFirst != detailForSecond,
+            "the detail pane reads \"$detailForFirst\" for both sprints. The pane is a fixed " +
+                "slot and is not supposed to move — what has to change is what is inside it, and " +
+                "the two sprints are named differently precisely so this cannot pass on a pane " +
+                "that ignored its route",
+        )
+    }
+
+    /**
+     * Every piece of text under [tag], joined, for a "did this change" comparison.
+     *
+     * Walked rather than read off the tagged node itself, because the node carrying the tag is a
+     * merged container: `config[SemanticsProperties.Text]` on it throws `Key not present`, since
+     * the text belongs to the labels *inside* it. That is a property of how Compose merges
+     * semantics rather than of this screen, and it is why the first version of the
+     * choosing-another-sprint scenario could not read anything at all.
+     *
+     * Read from the semantics tree rather than from the model on purpose: "the store holds the
+     * second sprint" and "the pane is drawing the second sprint" are different claims, and only
+     * the second is about this layout.
+     */
+    private fun ComposeUiTest.renderedTextOf(tag: String): String {
+        val texts = mutableListOf<String>()
+
+        fun collect(node: SemanticsNode) {
+            // Iterated as a map rather than through `getOrNull`, which this version's
+            // `SemanticsConfiguration` does not carry. `config` *is* a
+            // `Map<SemanticsPropertyKey<*>, Any>`, so a keyed lookup is the same question asked a
+            // portable way.
+            node.config.forEach { (key, value) ->
+                if (key == SemanticsProperties.Text) {
+                    @Suppress("UNCHECKED_CAST")
+                    (value as List<AnnotatedString>).forEach { texts += it.text }
+                }
+            }
+            node.children.forEach(::collect)
+        }
+
+        collect(onNodeWithTag(tag).fetchSemanticsNode())
+        return texts.joinToString(" ")
+    }
 
     /**
      * Exactly one destination on the rail says it is the current one, and it follows the route.

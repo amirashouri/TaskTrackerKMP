@@ -689,10 +689,54 @@ platform check anywhere.
   red scenario rather than add coverage. The structural precondition it rests on *is* asserted,
   from both sides: no bar is composed at a wide width, and nothing writes the inset.
 
-- [ ] **5.4 Two panes for the Sprints tab** · P1 · `shared-ui/…/NavigationHost.kt`,
+- [x] **5.4 Two panes for the Sprints tab** · P1 · `shared-ui/…/NavigationHost.kt`,
   `shared-ui/…/SprintPanes.kt` — Under `Expanded`, the Sprints tab draws
   `SprintList` and `SprintDetail` side by side and the detail pane follows the selection
   rather than replacing the list.
+
+  **Landed. `SprintTwoPanes(listPane, detailPane)` takes two content lambdas, and that signature
+  is the design.** `NavigationHost` already renders exactly these two screens — the tab root for
+  the list, the pushed route for the detail — from the router, which is the only navigation state
+  in the module. A component taking the screens would need them handed to it, which means either
+  duplicating the detail's wiring or introducing a second piece of state holding "the sprint the
+  pane is showing". Both are the shape `NavigationHost` rejects for the session root and the
+  editor overlay: two answers to one question, whose symptom is invisible because each pane renders
+  perfectly well on its own. So the detail pane is the *same* `backgroundPushed` the single-pane
+  path renders — a tap, a deep link and a restored stack differ only in **where** it is drawn.
+
+  `Projects` and `Backlog` stay out, and that is a finding rather than a deferral. The Projects
+  tab's root is the projects list and its "detail" — the board — is a *different tab*, so a
+  two-pane Projects would be drawing two panes belonging to two tabs and would need a second notion
+  of "the project under the cursor" to reconcile them. Backlog's three sections are one screen, not
+  pushes. `SprintDetail` is the only pair whose second pane is already a route in the same stack.
+
+  `BackHandler` is untouched: popping removes the detail pane and the list goes back to full
+  width, which is the right answer in both arrangements.
+
+  **Judgement recorded:** with *nothing* selected the list stays full width and there is no second
+  pane. A "select a sprint" placeholder would need a new string in `design-system`'s `strings.xml`,
+  and an empty glass pane reads as broken. Always-two-panes is the better end state and is not
+  done here.
+
+  **Three scenarios; the two mutations that could be aimed at them, both caught.** Presence is not
+  the assertion — both panes existing is satisfied by the detail drawn *over* the list, which is the
+  single-pane layout with the list left composed underneath, and it is the easy mistake here
+  because the two are the same two composables. `list.right < detail.left` is what says they are
+  beside each other; stacking them turns it red with *"the list runs to 1000.0dp and the detail
+  starts at 97.0dp"*. Reverting the branch turns two scenarios red.
+
+  **The choosing-another-sprint scenario's first version asserted the wrong thing.** It asserted
+  the detail pane had *moved*, which is wrong by design: a two-pane layout's detail pane is a fixed
+  slot and correctly stays put while its contents change. It failed against correct behaviour. The
+  two assertions that matter are the stack's **length** — the one this task's own note names, and
+  the one that fails if the pane were implemented as a push — and the pane's **rendered text**,
+  read by walking the semantics tree because the tagged card is a merged node and `config[Text]`
+  on it throws `Key not present`.
+
+  Two seeding facts, each of which cost a run, recorded so they are not rediscovered:
+  `shellTestSprint` has a **fixed default `id`**, so two seeded sprints collide in the list's keys
+  with `Key "…" was already used`; and `SprintDetailGoalTag` is the goal *sentence*, absent when
+  none is set, not the goal's story points.
 
   **The router is not duplicated.** The detail pane renders
   `navigation.pathFor(AppTab.Sprints).lastOrNull()` — the same expression the single-pane

@@ -132,17 +132,20 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1571 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1531 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **1275 tests, 34 failed** — all layout/raster, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1575 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1535 tests, 12 failed** (same 12) |
+| Android host | `testAndroidHostTest` | Robolectric; **1279 tests, 34 failed** — all layout/raster, documented below |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
 (`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
 2026-10-14 from `--rerun-tasks` (523 tasks, all executed, nothing from cache), so the figures
-are one run's output rather than an accumulation of earlier ones.
+are one run's output rather than an accumulation of earlier ones. Re-measured the same way
+after 5.4 landed its three Sprints two-pane scenarios: **+3 per host** over the
+1572 / 1532 / 1276 that `f5a7fd3` had already measured at `HEAD`, and the twelve JVM/iOS and
+thirty-four Android failures are the same sets, name for name.
 
-**Every one of the three figures above was stale before this run, in the same direction.** The
+**Every one of the three figures recorded before those runs was stale, in the same direction.** The
 recorded 1534 / 1494 / 1238 had drifted from 1571 / 1531 / 1275 — JVM +37, iOS +37, Android +37.
 None of that was section 5: the desktop-layout work accounts for exactly **+10 per host**
 (6 in `:packages:design-system`'s `commonTest`, 4 in `:shared-ui`'s), and the remaining +27 came
@@ -178,7 +181,8 @@ so it moves all three totals. `:packages:keychain`'s 3 keychain round-trip tests
 login keychain, so they run only under `TASKTRACKER_KEYCHAIN_INTEGRATION=1`, and they register
 as passes in a default run without having run. That run is the one that matters for the JNA
 binding; the default suite says nothing about it. `commonTest` holds
-**1729** `@Test` annotations, plus `shared-ui`'s 35 shell scenarios, which are shared `fun`s
+**1729** `@Test` annotations, plus `shared-ui`'s 42 shell scenarios (re-counted with 5.4's
+three; the same method that gave 35), which are shared `fun`s
 counted per host.
 
 ### Desktop is not a fourth test host
