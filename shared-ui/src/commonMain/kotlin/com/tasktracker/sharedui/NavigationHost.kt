@@ -54,6 +54,7 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
+import com.tasktracker.designsystem.TTGlassNavigationRail
 import com.tasktracker.designsystem.TTGlassTabBar
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -189,6 +190,17 @@ fun NavigationHost(
     // that bit: a sheet's action row sat on the bar and clicking Create dismissed the form
     // instead of submitting it, which is why the sheet reads this inset too.
     val tabBarInset = remember { mutableStateOf(0.dp) }
+    // The rail's own width, published for the same reason `tabBarInset` is published and by the
+    // same mechanism — see the overlay note above for what the inset buys back.
+    //
+    // It is measured rather than known because a rail is as wide as its widest caption, and a
+    // caption is a typography measurement rather than a token. There is no number to put here,
+    // which is the same finding that kept a rail-width token out of the design system.
+    //
+    // Under `Compact` this stays 0.dp for the life of the composition, because only the expanded
+    // arm writes it. The padding below is therefore a no-op on a phone rather than a branch that
+    // has to be re-verified there.
+    val railInset = remember { mutableStateOf(0.dp) }
     // Read here rather than inside the `onSizeChanged` lambda, which is not a composable scope.
     val tabBarDensity = LocalDensity.current
     // `BackHandler` needs a `NavigationEventDispatcherOwner` in this composition
@@ -206,7 +218,10 @@ fun NavigationHost(
         LocalNavigationEventDispatcherOwner provides (hostDispatcherOwner ?: fallbackDispatcherOwner),
     ) {
         Box(modifier = modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Starts beside the rail under `Expanded` and flush under `Compact`, for the same
+            // reason the bar is overlaid rather than a second child of a `Column`: the rail floats
+            // over the content and the content has to be given back the room it covers.
+            Box(modifier = Modifier.fillMaxSize().padding(start = railInset.value)) {
                 val path = navigation.pathFor(tab)
                 val pushed = path.lastOrNull()
 
@@ -338,15 +353,42 @@ fun NavigationHost(
                 }
             }
 
-            TabBar(
-                selected = tab,
-                onSelect = router::selectTab,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .onSizeChanged { size: IntSize ->
-                        tabBarInset.value = with(tabBarDensity) { size.height.toDp() }
-                    },
-            )
+            // Which chrome is drawn is the only question the layout class is asked here, and it is
+            // asked of the width the shell was offered — never of the platform. See
+            // `ShellLayoutClass` for why `isDesktopApp` is the wrong source for that answer.
+            //
+            // The load-bearing half of this branch is not the `when` but what the expanded arm does
+            // *not* do: it never writes `tabBarInset`, so `LocalTabBarScrollUnderInset` keeps its
+            // `0.dp` default and every scrolling list stops padding for a bar that is not
+            // composed. Reusing the default is the point — a second spelling of "there is no bar"
+            // is a second thing to keep true, and `TTBottomSheetScaffold` reads the same local for
+            // the same reason.
+            //
+            // The bar's own `WindowInsets.ime` guard and its `navigationBarsPadding()` are left
+            // exactly as they are rather than made conditional. They are already correct at zero
+            // on a desktop window, and a branch that says so is a branch that has to be
+            // re-verified on the phone.
+            when (LocalShellLayoutClass.current) {
+                ShellLayoutClass.Compact -> TabBar(
+                    selected = tab,
+                    onSelect = router::selectTab,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .onSizeChanged { size: IntSize ->
+                            tabBarInset.value = with(tabBarDensity) { size.height.toDp() }
+                        },
+                )
+
+                ShellLayoutClass.Expanded -> NavigationRail(
+                    selected = tab,
+                    onSelect = router::selectTab,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .onSizeChanged { size: IntSize ->
+                            railInset.value = with(tabBarDensity) { size.width.toDp() }
+                        },
+                )
+            }
         }
     }
 }
@@ -1706,6 +1748,71 @@ private fun TabBar(
 }
 
 /**
+ * The expanded shell's chrome: a [TTGlassNavigationRail] down the leading edge.
+ *
+ * The same split as [TabBar] and for the same stated reason: the design system owns the capsule,
+ * the lens and the travel, and what is left here is the five [AppTab]s, their labels and their
+ * glyphs — the part that is about *this* app. `tabTitle` and `tabIcon` are the same two functions
+ * the bar uses, so a sixth tab is a compile error in one place rather than a blank square in two.
+ *
+ * ## Why it runs the full height of the window, from the top
+ *
+ * The rail fills the height it is offered and is anchored to the top edge, which is what a desktop
+ * sidebar is. It was centred and content-sized first, on the argument that stretching five
+ * destinations over a tall window would space them too far apart — and measured, that rail was
+ * 216dp of a 768dp window. A glass capsule a quarter of the window's height, floating in the
+ * middle of the left edge, does not read as navigation; it reads as a floating capsule, which is
+ * what the section set out to replace. The bar's own note about a `768pt-tall wrapper with the
+ * tabs parked dead centre at y=363` is about a bar that filled its screen *and centred its tabs*,
+ * and the fix there was to stop centring the content, not to refuse the height: the destinations
+ * here are laid out from the top, and the trailing space belongs below them.
+ *
+ * ## Why the tag is on the wrapper
+ *
+ * The same call [TabBar] makes about its own tag: the wrapper carries the edge inset, and a tag
+ * below it would measure the inset rather than the rail. `railInset` is read from *this* node's
+ * size, so the two have to agree about what is being measured — the rail and the room it takes,
+ * edge inset included, because that is the space the content has to start after.
+ */
+@Composable
+private fun NavigationRail(
+    selected: AppTab,
+    onSelect: (AppTab) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tabs = AppTab.entries
+
+    Box(
+        modifier = modifier
+            // The edge insets are the shell's, not the rail's, for the same reason the bar's are:
+            // the component owns the capsule and the caller owns where it sits in the tree.
+            //
+            // Vertically as well as horizontally, which is the bar's own first documented rule —
+            // "it floats" — applied to the other axis. A rail running to the window's top and
+            // bottom edges is a full-bleed slab rather than a floating surface, and glass that
+            // touches every edge has nothing to float over. The bar gets its bottom inset from the
+            // system safe area; the leading edge has no system inset to borrow, so the shell
+            // supplies the same number it already uses horizontally and the rail reads as the same
+            // kind of object as the bar.
+            .padding(
+                start = ttSpacing.tabBarEdgeInset,
+                top = ttSpacing.tabBarEdgeInset,
+                bottom = ttSpacing.tabBarEdgeInset,
+            )
+            .testTag(NavigationRailTag),
+    ) {
+        TTGlassNavigationRail(
+            destinations = tabs,
+            selectedIndex = tabs.indexOf(selected),
+            onSelect = onSelect,
+            title = { tabTitle(it) },
+            icon = { tabIcon(it) },
+            destinationModifier = { Modifier.testTag(NavigationRailButtonTag(it)) },
+        )
+    }
+}
+
+/**
  * A work item that has been read, wrapped so "not read yet" is distinguishable from "no such
  * item". The two mean opposite things to the editor: one waits, the other opens a blank form.
  */
@@ -1750,6 +1857,15 @@ internal fun tabIcon(tab: AppTab): ImageVector = when (tab) {
 /** The tab bar as a whole. */
 const val TabBarTag = "shell.tabs"
 
+/**
+ * The navigation rail as a whole, under an expanded layout.
+ *
+ * Distinct from [TabBarTag] rather than shared with it, because exactly one of the two is composed
+ * at any width and the scenarios assert which. A test that asked for a single "the shell's chrome"
+ * tag could not tell a phone that had grown a rail from a rail that had lost its bar.
+ */
+const val NavigationRailTag = "shell.rail"
+
 /** The "choose a project" button on a scoped tab with nothing active. */
 const val ScopedChooseProjectTag = "shell.scoped.chooseProject"
 
@@ -1758,3 +1874,13 @@ const val WorkItemEditorDestinationTag = "shell.workItemEditor"
 
 /** One tab's button, so a test taps a tab by name rather than by position. */
 fun TabButtonTag(tab: AppTab): String = "shell.tab.${tab.wireValue}"
+
+/**
+ * One destination's button on the rail, so a test taps by name rather than by position.
+ *
+ * Prefixed `shell.rail.` rather than reusing [TabButtonTag]'s `shell.tab.` because the two tag
+ * spaces are both live in a wide shell's semantics tree only if a mistake ever composes both — and
+ * `onAllNodesWithTag(TabButtonTag)` should never match a rail. A distinct prefix means such a
+ * mistake is a test that finds nothing rather than one that quietly drives the wrong control.
+ */
+fun NavigationRailButtonTag(tab: AppTab): String = "shell.rail.${tab.wireValue}"
