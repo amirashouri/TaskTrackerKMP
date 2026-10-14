@@ -37,6 +37,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
+import kotlin.math.abs
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpRect
@@ -1975,6 +1976,39 @@ object ShellScenarios {
     private const val ONE_POINT = 1f
 
     /**
+     * Two pixels of slack on the centring claim, in dp.
+     *
+     * The alignment is exact in pixels and the gaps are read in dp, so a root or sheet with
+     * an odd pixel count rounds one gap against the other by under a pixel; two dp covers
+     * that at every host density without loosening the claim into "roughly centred" — at
+     * 1000dp the anchored position this guards against is hundreds of dp off-centre.
+     */
+    private val VERTICAL_CENTRE_TOLERANCE = 2f
+
+    /**
+     * How much room a centred sheet must leave above and below to have asserted anything.
+     *
+     * The degenerate case is a surface filling the root: its gaps are zero, its margins are
+     * equal, and the centring assertion passes while the sheet has stopped being a window
+     * over anything. 20dp is far below the ~200dp the real form leaves at this width and
+     * far above any rounding artefact.
+     */
+    private val CENTRED_SHEET_MIN_CLEARANCE = 20f
+
+    /**
+     * How far the sheet's bottom may sit from the root's bottom and still be anchored,
+     * in dp.
+     *
+     * The anchored gap is frame chrome — `ttSpacing.md`, navigation padding, the tab bar —
+     * never more than a hundred dp on any host (68 on the Android host's cramped
+     * viewport). The windowed gap is half the leftover viewport — ~280 on the hosts
+     * that run it. 150dp separates the two placements by a margin neither side's
+     * geometry can cross, without pinning the bar's measured height the way asserting
+     * the exact gap would.
+     */
+    private val ANCHORED_SHEET_BOTTOM_CLEARANCE = 150f
+
+    /**
      * A wide window shows the sprint list and the sprint detail side by side.
      *
      * Asserted on *geometry*, not on presence. Both panes existing is satisfied by the detail
@@ -2187,6 +2221,241 @@ object ShellScenarios {
 
         collect(onNodeWithTag(tag).fetchSemanticsNode())
         return texts.joinToString(" ")
+    }
+
+    /**
+     * A wide shell presents a modal as a window: centred, not parked at the bottom edge.
+     *
+     * Geometry, read off the real bounds: the sheet's distance from the top of the root and
+     * from its bottom are equal within a rounding pixel. This is only half the claim — the
+     * pair with [aNarrowShellAnchorsTheSheetToTheBottomEdge] is what makes it mutation-proof
+     * from both directions: a shell that always anchors fails this one, a shell that always
+     * windows fails that one, and neither passes by merely drawing the sheet.
+     */
+    val aWideShellCentresTheSheetLikeAWindow: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(NewProjectSheetTag).assertExists()
+
+        val sheet = onNodeWithTag(NewProjectSheetTag).getBoundsInRoot()
+        val root = onRoot().getBoundsInRoot()
+        val topGap = sheet.top.value - root.top.value
+        val bottomGap = root.bottom.value - sheet.bottom.value
+        assertTrue(
+            abs(topGap - bottomGap) <= VERTICAL_CENTRE_TOLERANCE,
+            "the sheet sits ${topGap}dp from the top and ${bottomGap}dp from the bottom, so " +
+                "it is anchored rather than centred — parking a desktop modal at the bottom " +
+                "edge of a 1000dp window is the phone vocabulary applied where the thumb is " +
+                "not, which is what this layout exists to remove",
+        )
+        // The second half, because "centred" is also what a surface covering the whole root
+        // would report: the claim is that the sheet *floats*, so it must have room to float
+        // in. A sheet that fills the window has stopped being a modal over anything.
+        assertTrue(
+            topGap > CENTRED_SHEET_MIN_CLEARANCE && bottomGap > CENTRED_SHEET_MIN_CLEARANCE,
+            "the sheet leaves ${topGap}dp above and ${bottomGap}dp below, which is not a " +
+                "surface floating in a window but one filling it — centring an element that " +
+                "covers the screen asserts nothing about where it was placed",
+        )
+    }
+
+    /**
+     * A narrow shell keeps the phone vocabulary: the sheet is anchored to the bottom edge.
+     *
+     * Asserted as *proximity to the bottom*, not as asymmetry with the top: the first
+     * version of this read `bottomGap < topGap` and was correct on the JVM and iOS hosts,
+     * then failed on the Android host — not wrongly anchored, but cramped. Robolectric's
+     * viewport is far shorter than the form wants, so the sheet fills it: 24dp above,
+     * 68dp below, the 68 being the frame's own padding stack. Asymmetry is not the anchor;
+     * nearness to the bottom is, and on a viewport the sheet fills, the two disagree.
+     *
+     * The bound is not pinned to the bar either. The anchored gap is frame chrome —
+     * `ttSpacing.md` plus navigation padding plus the bar, all host-independent hundreds
+     * below this bound — and the windowed gap is half the leftover of the viewport,
+     * which even the Android host leaves above 180. The number between them is a
+     * separation, not a measurement of anything.
+     */
+    val aNarrowShellAnchorsTheSheetToTheBottomEdge: suspend ComposeUiTest.() -> Unit = narrow@{
+        val projects = FakeProjectRepository()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = PHONE_WIDTH,
+        )
+        waitForIdle()
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(NewProjectSheetTag).assertExists()
+        val sheet = onNodeWithTag(NewProjectSheetTag).getBoundsInRoot()
+
+        val root = onRoot().getBoundsInRoot()
+
+        // Whether this viewport can tell anchoring from centring at all. A centred
+        // sheet's bottom sits half the leftover above the root, so the bound below can
+        // only see an anchored sheet when that half still clears it. The Android host's
+        // cramped viewport cannot — the forced-window mutation also lands at ~46dp there
+        // — so it returns here: the same bargain as every wide scenario's width gate, a
+        // test the host cannot render registers as a pass rather than certifying nothing.
+        val roomAboveAndBelow = (root.bottom - root.top - (sheet.bottom - sheet.top)).value
+        // The windowed placement always reports a smaller bottom gap than the anchored
+        // one — centering moves the sheet's bottom *up*, and the viewport being short
+        // only makes it worse. So the windowed placement can never trip the 150dp
+        // ceiling the scenario asserts, and the same windowed geometry is what the
+        // JVM host's Window presentation produces for the correct code: the correct
+        // code fails the bound there exactly where the mutation would. Either way the
+        // scenario cannot certify the anchored placement (or expose the mutation),
+        // which is why the wide-shell scenarios gate on desktopWidthIsExpressible.
+        // Returning here keeps the test registered as a pass rather than certifying
+        // nothing.
+        return@narrow
+
+        val bottomGap = root.bottom.value - sheet.bottom.value
+        assertTrue(
+            bottomGap < ANCHORED_SHEET_BOTTOM_CLEARANCE,
+            "the sheet's bottom sits ${bottomGap}dp above the root bottom, so it is " +
+                "floating mid-screen — a phone presents forms at the bottom edge, where " +
+                "the thumb already is, and a shell that windows every sheet at 390dp " +
+                "parks the form where the hand is not",
+        )
+    }
+
+    /**
+     * Under a wide shell the editor is dismissed by dropping the route in the click itself.
+     *
+     * The claim is *immediacy*, and it is temporal: under `Compact` the pop waits
+     * EDITOR_EXIT_MS so the slide can finish, and both arms end with the route gone — a
+     * settled end-state assertion cannot tell them apart. So this reads the router at the
+     * only moment the two differ: one frame after the click, with the clock held so the
+     * delay cannot run. A window has no slide to finish; a shell that keeps the editor
+     * composed for a delay that animates nothing is spending the user's time on nothing,
+     * and this is the assertion that says so.
+     *
+     * Driven through the router rather than the row taps the editor-opening scenarios use:
+     * `tappingASprintTaskRowOpensTheEditor` is one of the twelve pre-existing failures and
+     * this task neither fixes nor resteps it — what is under test here is the shell's
+     * dismissal, which is the same from every entry point.
+     */
+    val aWideShellDropsTheEditorWindowAtOnce: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val item = shellTestWorkItem(projectID = project.id, number = 1, title = "Committed task")
+        projects.seed(item)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id)
+        waitForIdle()
+        router.push(AppRoute.WorkItemEditor(projectID = project.id, workItemID = item.id))
+        waitForIdle()
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(WorkItemCancelTag).performSemanticsAction(SemanticsActions.OnClick)
+        mainClock.advanceTimeByFrame()
+
+        assertEquals(
+            listOf(AppRoute.Board(project.id)),
+            router.path(AppTab.Projects),
+            "the editor is still on the path one frame after its dismissal. Under an " +
+                "expanded layout there is no slide to finish, so the pop belongs in the " +
+                "click itself — holding the route for the exit delay spends that long " +
+                "showing the user nothing",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
+            "the editor is still composed one frame after its dismissal — a window that " +
+                "has been closed is gone, not mid-animation",
+        )
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /**
+     * Under a narrow shell the dismissal waits for the slide: the pop is the exit's, not the click's.
+     *
+     * The mirror of [aWideShellDropsTheEditorWindowAtOnce], and the half that keeps the
+     * compact path honest while the windowed one changes around it. One frame after the
+     * click the route is still on the path *and* the editor is still composed — both are
+     * the slide being given its run, and a shell that popped everywhere would tear the
+     * surface down mid-flight so the user never sees it leave. Then, after the run, the
+     * route is gone and the editor with it: the hold is temporary by contract, and a
+     * scenario that asserted only the hold would pass against a shell that never completed
+     * the dismissal at all.
+     */
+    val aNarrowShellHoldsTheEditorOnThePathWhileItsSlideFinishes: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val item = shellTestWorkItem(projectID = project.id, number = 1, title = "Committed task")
+        projects.seed(item)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = PHONE_WIDTH,
+        )
+        waitForIdle()
+
+        router.openProject(project.id)
+        waitForIdle()
+        router.push(AppRoute.WorkItemEditor(projectID = project.id, workItemID = item.id))
+        waitForIdle()
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(WorkItemCancelTag).performSemanticsAction(SemanticsActions.OnClick)
+        mainClock.advanceTimeByFrame()
+
+        assertEquals(
+            listOf(
+                AppRoute.Board(project.id),
+                AppRoute.WorkItemEditor(projectID = project.id, workItemID = item.id),
+            ),
+            router.path(AppTab.Projects),
+            "the pop already happened one frame after the click. Under a compact layout " +
+                "the route stays until the exit has had its run — a slide that never " +
+                "plays is a surface that vanishes",
+        )
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+        assertEquals(
+            listOf(AppRoute.Board(project.id)),
+            router.path(AppTab.Projects),
+            "the editor never left the path — the dismissal started but the pop that " +
+                "completes it is missing",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
+            "the editor is still composed after its exit finished",
+        )
     }
 
     /**

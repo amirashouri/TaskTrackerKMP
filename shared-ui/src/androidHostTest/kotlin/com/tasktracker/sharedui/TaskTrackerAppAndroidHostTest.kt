@@ -114,6 +114,22 @@ class TaskTrackerAppAndroidHostTest {
         runComposeUiTest(block = ShellScenarios.choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack)
 
     @Test
+    fun aWideShellCentresTheSheetLikeAWindow() =
+        runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
+
+    @Test
+    fun aNarrowShellAnchorsTheSheetToTheBottomEdge() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellAnchorsTheSheetToTheBottomEdge)
+
+    @Test
+    fun aWideShellDropsTheEditorWindowAtOnce() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDropsTheEditorWindowAtOnce)
+
+    @Test
+    fun aNarrowShellHoldsTheEditorOnThePathWhileItsSlideFinishes() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellHoldsTheEditorOnThePathWhileItsSlideFinishes)
+
+    @Test
     fun exactlyOneRailDestinationIsMarkedSelected() =
         runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
 

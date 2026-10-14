@@ -26,6 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.MutableTransitionState
@@ -52,7 +54,9 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalSheetPresentation
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.designsystem.SheetPresentation
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassNavigationRail
 import com.tasktracker.designsystem.TTGlassTabBar
@@ -172,9 +176,55 @@ fun NavigationHost(
     // can finish; it is derived from EDITOR_EXIT_SLIDE_MS + slack so raising the spec cannot
     // silently cut the animation mid-flight. The +50ms slack matches the previous hand-tuned
     // 350ms over a 300ms slide.
+    //
+    // These are the `Compact` arm's alone. Under `Expanded` there is no slide to finish, so
+    // dismissal is immediate (see `dismissEditor`) and none of this is read.
     val EDITOR_EXIT_FADE_MS = 200L
     val EDITOR_EXIT_SLIDE_MS = 300L
     val EDITOR_EXIT_MS = EDITOR_EXIT_SLIDE_MS + 50L
+    // The windowed enter's starting scale. The same number as design-system's sheet
+    // `WINDOW_SCALE` on purpose — one desktop vocabulary for every modal — but a separate
+    // declaration because the modules cannot share it: this one sits above design-system
+    // and reads its constants no more than it reads its types.
+    val EDITOR_WINDOW_SCALE = 0.94f
+
+    // Dismissal is one function for both exits — the editor's own Cancel/back chevron and
+    // system back — because two copies is how the two drift into different answers for what
+    // "closing" means, which is the same failure shape as a second piece of navigation state.
+    //
+    // Under `Compact` the slide is the event being dismissed. The route stays on the path and
+    // the editor stays composed (via `dismissingEditors`) until EDITOR_EXIT_MS has given the
+    // slide its full run, and only then does the pop happen — popping first would tear the
+    // surface down mid-flight and the user would never see it leave.
+    //
+    // Under `Expanded` there is no slide: the window scale-fades in, and dismissing it drops
+    // the route in the click itself. Holding it for a delay that animates nothing would be
+    // dead time, and `dismissingEditors` would be state nothing reads — which is exactly what
+    // it becomes, since this arm never writes it.
+    //
+    // Returns whether it took the dismissal: `false` means "already playing its exit", which
+    // the back handler needs in order to fall through to a plain pop rather than queue a
+    // second dismissal behind the first one's delay.
+    fun dismissEditor(editorRoute: AppRoute.WorkItemEditor): Boolean {
+        if (layoutClass == ShellLayoutClass.Expanded) {
+            val currentPath = router.path(tab)
+            if (currentPath.lastOrNull() == editorRoute) {
+                router.setPath(currentPath.dropLast(1), tab)
+            }
+            return true
+        }
+        if (editorRoute in dismissingEditors) return false
+        dismissingEditors.add(editorRoute)
+        scope.launch {
+            delay(EDITOR_EXIT_MS)
+            dismissingEditors.remove(editorRoute)
+            val latestPath = router.path(tab)
+            if (latestPath.lastOrNull() == editorRoute) {
+                router.setPath(latestPath.dropLast(1), tab)
+            }
+        }
+        return true
+    }
 
     // No `testTag` of this composable's own, deliberately. The caller supplies one — see
     // `SignedInShellTag` — and `testTag` *overwrites* rather than merges, so a tag here would
@@ -220,6 +270,15 @@ fun NavigationHost(
     val fallbackDispatcherOwner = rememberNavigationEventDispatcherOwner(parent = null)
     CompositionLocalProvider(
         LocalTabBarScrollUnderInset provides tabBarInset.value,
+        // What a modal does follows the same class the chrome follows: anchored and sliding
+        // under `Compact`, a centred window under `Expanded`. Derived here from the one read
+        // above, so the sheets cannot disagree with the chrome about which layout the shell
+        // is in — the local is the only channel that reaches design-system from down here.
+        LocalSheetPresentation provides if (layoutClass == ShellLayoutClass.Expanded) {
+            SheetPresentation.Window
+        } else {
+            SheetPresentation.BottomSheet
+        },
         LocalNavigationEventDispatcherOwner provides (hostDispatcherOwner ?: fallbackDispatcherOwner),
     ) {
         Box(modifier = modifier.fillMaxSize()) {
@@ -259,17 +318,14 @@ fun NavigationHost(
                     onBack = {
                         val currentPath = router.path(tab)
                         val editorRoute = currentPath.lastOrNull() as? AppRoute.WorkItemEditor
-                        if (editorRoute != null && editorRoute !in dismissingEditors) {
-                            dismissingEditors.add(editorRoute)
-                            scope.launch {
-                                delay(EDITOR_EXIT_MS)
-                                dismissingEditors.remove(editorRoute)
-                                val latestPath = router.path(tab)
-                                if (latestPath.lastOrNull() == editorRoute) {
-                                    router.setPath(latestPath.dropLast(1), tab)
-                                }
+                        if (editorRoute == null) {
+                            if (currentPath.size > 1) {
+                                router.setPath(currentPath.dropLast(1), tab)
                             }
-                        } else if (currentPath.size > 1) {
+                        } else if (!dismissEditor(editorRoute) && currentPath.size > 1) {
+                            // `dismissEditor` declined because the editor is already playing
+                            // its exit: a second back press pops now rather than queueing
+                            // behind the first one's delay.
                             router.setPath(currentPath.dropLast(1), tab)
                         }
                     },
@@ -346,18 +402,43 @@ fun NavigationHost(
                             val transitionState = remember(editorRoute) { MutableTransitionState(false) }
                             transitionState.targetState = editorRoute !in dismissingEditors
 
+                            // Under `Expanded` the editor arrives as a window: the same fade,
+                            // plus a scale where the slide was — a surface travelling the full
+                            // height of a wide window to reach the middle is animation spent
+                            // going nowhere. The scale matches the sheet's on purpose (0.94f):
+                            // one desktop vocabulary for every modal, not one per component.
+                            //
+                            // The window's exit is a plain fade because it never plays:
+                            // dismissal drops the route (see `dismissEditor`), the node leaves
+                            // the composition at once, and a window's close has no travel to
+                            // finish either.
+                            val isWindow = layoutClass == ShellLayoutClass.Expanded
                             AnimatedVisibility(
                                 visibleState = transitionState,
-                                enter = fadeIn(animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) })) + slideInVertically(
-                                    animationSpec = tween(400, easing = { 1f - (1f - it) * (1f - it) }),
-                                    initialOffsetY = { height -> height },
-                                ),
+                                enter = if (isWindow) {
+                                    fadeIn(animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) })) +
+                                        scaleIn(
+                                            animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) }),
+                                            initialScale = EDITOR_WINDOW_SCALE,
+                                        )
+                                } else {
+                                    fadeIn(animationSpec = tween(300, easing = { 1f - (1f - it) * (1f - it) })) +
+                                        slideInVertically(
+                                            animationSpec = tween(400, easing = { 1f - (1f - it) * (1f - it) }),
+                                            initialOffsetY = { height -> height },
+                                        )
+                                },
                                 // Exits the way it entered: downward, not sideways. A sheet
                                 // that leaves on the horizontal axis reads as a screen push.
-                                exit = fadeOut(animationSpec = tween(EDITOR_EXIT_FADE_MS.toInt())) + slideOutVertically(
-                                    animationSpec = tween(EDITOR_EXIT_SLIDE_MS.toInt(), easing = { 1f - (1f - it) * (1f - it) }),
-                                    targetOffsetY = { height -> height },
-                                ),
+                                exit = if (isWindow) {
+                                    fadeOut(animationSpec = tween(EDITOR_EXIT_FADE_MS.toInt()))
+                                } else {
+                                    fadeOut(animationSpec = tween(EDITOR_EXIT_FADE_MS.toInt())) +
+                                        slideOutVertically(
+                                            animationSpec = tween(EDITOR_EXIT_SLIDE_MS.toInt(), easing = { 1f - (1f - it) * (1f - it) }),
+                                            targetOffsetY = { height -> height },
+                                        )
+                                },
                                 label = editorRoute.workItemID?.stringValue ?: "new-${editorRoute.projectID}",
                             ) {
                                 WorkItemEditorDestination(
@@ -372,19 +453,7 @@ fun NavigationHost(
                                     tab = tab,
                                     preferences = preferences,
                                     teamPort = environment.teamPort,
-                                    onDismiss = {
-                                        if (editorRoute !in dismissingEditors) {
-                                            dismissingEditors.add(editorRoute)
-                                            scope.launch {
-                                                delay(EDITOR_EXIT_MS)
-                                                dismissingEditors.remove(editorRoute)
-                                                val currentPath = router.path(tab)
-                                                if (currentPath.lastOrNull() == editorRoute) {
-                                                    router.setPath(currentPath.dropLast(1), tab)
-                                                }
-                                            }
-                                        }
-                                    },
+                                    onDismiss = { dismissEditor(editorRoute) },
                                 )
                             }
                         }

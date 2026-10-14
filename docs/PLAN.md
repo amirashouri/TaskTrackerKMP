@@ -759,12 +759,72 @@ platform check anywhere.
   changing the tab's path length, which is the assertion that would fail if the pane were
   implemented as a push.
 
-- [ ] **5.5 Modals present as windows, not as sheets from the bottom edge** · P1 ·
+- [x] **5.5 Modals present as windows, not as sheets from the bottom edge** · P1 ·
   `:packages:design-system` `…/BottomSheetScaffold.kt` + `shared-ui/…/NavigationHost.kt` —
   Under `Expanded`, `TTBottomSheetScaffold` centres its surface with a scale-and-fade
   rather than anchoring it at `Alignment.BottomCenter` and sliding it in vertically, and
   the `WorkItemEditor` overlay does the same instead of `slideInVertically` at
   `fillMaxSize`.
+
+  **Landed. The sheet learns the layout class through a design-system local, because there
+  is no other channel.** `TTBottomSheetScaffold` sits below `:shared-ui` in the graph and
+  cannot take a shell type in its signature — so `SheetPresentation` (`BottomSheet` /
+  `Window`) and `LocalSheetPresentation` (defaulted `BottomSheet`) live in design-system,
+  beside `LocalTabBarScrollUnderInset`, and the shell provides `Window` iff
+  `ShellLayoutClass.Expanded` at the same `CompositionLocalProvider` site. The 5.1 KDoc
+  said `LocalShellLayoutClass` was "the only mechanism that reaches" the scaffold; as
+  landed, that local is declared in `:shared-ui` and unreachable from design-system, so
+  the claim was aspirational — the local is still the only mechanism, but the
+  *declaration* has to sit where both ends can see it, which is what the second local
+  does. A derived boolean would have been two answers to "what layout is this"; a
+  `BottomSheet | Window` vocabulary is the component's own answer to "how do I present",
+  derived once, at one site, from the one class.
+
+  Nothing below the shell changes: previews, the sign-in tree and any test standing the
+  scaffold up alone read `BottomSheet` and lay out exactly as before, which is why
+  `ProjectPickerSheetRenderTest` is untouched. The scrim, outside-tap, scrolling and
+  inset modifiers are shared by both arms — the fade on the `AnimatedVisibility` wrapper
+  doubly so, which is why the window's column scales only, and why its duration is the
+  fade's own: one scale-and-fade finishing on the same frame, not two overlapping fades.
+  The scale constant (0.94f) sits beside `SHEET_SPRING` and `SHEET_FADE_MILLIS` as a
+  file-local transition constant, not a token — nothing is measured or tinted from it —
+  and the editor's own 0.94f in `NavigationHost` is a separate declaration with a note,
+  because the modules cannot share it and a vocabulary that drifts per component is two
+  vocabularies.
+
+  **The dismissal follows the transition, not the other way round.** `dismissEditor` is
+  one local function for the chevron/Cancel path and system back, because the second
+  copy was exactly how the two exits could disagree. Under `Compact` it is the old dance
+  verbatim — hold in `dismissingEditors`, wait `EDITOR_EXIT_MS`, pop — since popping
+  first would tear the slide down mid-flight. Under `Expanded` it drops the route in the
+  click: a window has no slide to finish, the delay would be dead time, and
+  `dismissingEditors` becomes what it is under that arm — state nothing writes. The
+  window's exit is a plain fade that never plays (the route leaves the composition at
+  once); it exists so the spec is coherent, not because anything reads it.
+
+  **Judgement recorded:** the window keeps `fillMaxWidth` — a full-width band, centred
+  vertically. A max-width cap for desktop dialogs is the obvious next thought and is not
+  done here: nothing in the task asked for it, and the token to spend is one nobody has
+  measured.
+
+  **Four scenarios, four mutations, each red on exactly its own.** A wide shell opens a
+  sheet centred (top gap equals bottom gap within 2dp, plus a >20dp float guard so a
+  full-height surface cannot satisfy "centred"); a narrow shell keeps it bottom-anchored,
+  asserted as the bottom sitting within 150dp of the root — proximity, not asymmetry with
+  the top. The first version read `bottomGap < topGap` and was correct on the JVM and iOS
+  hosts, then failed on the Android host's cramped viewport: 24dp above, 68dp below, the
+  anchored sheet filling the screen. Asymmetry is not the anchor either; nearness to the
+  bottom is, and on a viewport the form fills, the two disagree. 150 separates the
+  anchored gap (frame chrome, never more than a hundred) from the windowed gap (~280
+  where it runs) with a margin neither placement can cross, without pinning the bar's
+  measured height. The editor pair reads the router one
+  frame after the click with the clock held: the wide arm must already have popped, the
+  narrow arm must still hold *and* still be composed, and must have popped *and* gone by
+  the settled run — the second half exists because the hold alone would green-light a
+  shell that never completes the dismissal. Driven through `router.push`, not the row
+  taps: `tappingASprintTaskRowOpensTheEditor` is one of the twelve pre-existing failures
+  and this task neither fixes nor resteps it. `test-reviewer` said can-fail on all four
+  with no findings.
 
   Two pieces of bookkeeping are coupled to the vertical slide and must not be re-entered.
   `NavigationHost`'s `dismissingEditors` list plus `EDITOR_EXIT_MS` exists to keep a
