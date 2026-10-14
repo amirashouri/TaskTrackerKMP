@@ -1994,6 +1994,18 @@ object ShellScenarios {
             "expected the landing destination to be the selected one",
         )
 
+        // The lens is on the landing destination before anything is tapped. Asserted first so that
+        // a lens which never moves and a lens which starts on the wrong one stay different
+        // failures: the check after the click alone cannot tell them apart, because a lens stuck
+        // at index 0 and a lens correctly at index 0 are identical until the selection changes.
+        val lensOnLanding = onNodeWithTag(NavigationRailLensTag).getBoundsInRoot()
+        assertTrue(
+            lensOnLanding.bottom.value <= cellBottomFor(AppTab.Projects) + ONE_POINT,
+            "on the landing tab the lens ends at ${lensOnLanding.bottom.value}dp but the Projects " +
+                "destination ends at ${cellBottomFor(AppTab.Projects)}dp, so the lens is not " +
+                "sitting on the destination the rail says is selected",
+        )
+
         onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
 
@@ -2003,7 +2015,49 @@ object ShellScenarios {
             "after tapping Settings on the rail the selection did not follow the route, so the " +
                 "rail's lens and its `selected` property are both describing a stale destination",
         )
+
+        // ...and the lens *travelled* with it, which the semantics property above cannot see.
+        //
+        // `selected` and the lens are two independent things: the first is set by `RailCell`'s
+        // `semantics { selected = ... }`, the second by the animated `segmentHeight *
+        // selectedIndex` that positions it. Setting that travel to `0f` parks the lens permanently
+        // on the first destination — an indicator marking the wrong thing on every other
+        // destination, with the selection semantics still perfectly correct — and before this
+        // assertion the entire suite stayed green. That was the last unasserted claim in section 5.
+        //
+        // Measured after `waitForIdle`, so the spring has settled and the reading is the final
+        // position rather than a frame of the animation. Settings is the last destination, so
+        // "the lens moved down" and "the lens is on Settings" are also separate claims — a lens
+        // that fell off the end would satisfy the first.
+        val lensAfterTap = onNodeWithTag(NavigationRailLensTag).getBoundsInRoot()
+        val settingsTop = cellTopFor(AppTab.Settings)
+        val settingsBottom = cellBottomFor(AppTab.Settings)
+        assertTrue(
+            lensAfterTap.top.value > lensOnLanding.top.value,
+            "after tapping Settings the lens moved from ${lensOnLanding.top.value}dp to " +
+                "${lensAfterTap.top.value}dp — it did not travel at all. Settings is the last of " +
+                "$PHONE_TAB_COUNT destinations, so the lens should have gone down the rail",
+        )
+        assertTrue(
+            lensAfterTap.bottom.value <= settingsBottom + ONE_POINT &&
+                lensAfterTap.bottom.value >= settingsTop - ONE_POINT,
+            "after tapping Settings the lens spans ${lensAfterTap.top.value}.." +
+                "${lensAfterTap.bottom.value}dp and the Settings destination spans " +
+                "${settingsTop}..${settingsBottom}dp, so the lens is not on the destination that " +
+                "is selected. A lens that never travels would sit on the first destination " +
+                "forever while the `selected` semantics stayed correct",
+        )
     }
+
+    /** A destination cell's bottom edge, in dp. */
+    private fun ComposeUiTest.cellBottomFor(tab: AppTab): Float =
+        onNodeWithTag(NavigationRailButtonTag(tab), useUnmergedTree = true)
+            .getBoundsInRoot().bottom.value
+
+    /** A destination cell's top edge, in dp. */
+    private fun ComposeUiTest.cellTopFor(tab: AppTab): Float =
+        onNodeWithTag(NavigationRailButtonTag(tab), useUnmergedTree = true)
+            .getBoundsInRoot().top.value
 
     /**
      * Which destinations the semantics tree is currently claiming as selected, in [AppTab] order.
