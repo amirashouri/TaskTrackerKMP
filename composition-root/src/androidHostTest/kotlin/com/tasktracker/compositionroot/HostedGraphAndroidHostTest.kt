@@ -50,4 +50,9 @@ class HostedGraphAndroidHostTest {
     fun `the outbox is left alone`() = runTest {
         HostedGraphScenarios.theOutboxIsLeftAlone(this)
     }
+
+    @Test
+    fun `the sample seed only runs without a backend`() = runTest {
+        HostedGraphScenarios.theSampleSeedOnlyRunsWithoutABackend(this)
+    }
 }

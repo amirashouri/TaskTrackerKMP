@@ -6,11 +6,13 @@ import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.RoomOutboxQueue
 import com.tasktracker.database.TaskTrackerDatabase
+import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.network.SessionInvalidationReason
 import com.tasktracker.sync.SyncCoordinator
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -182,6 +184,48 @@ object HostedGraphScenarios {
                 assertEquals(1, outbox.count(status = null))
             } finally {
                 resolver.stop()
+            }
+        }
+    }
+
+    /**
+     * The sample board is written only while no backend is bound.
+     *
+     * Both halves are asserted, because either alone can pass with the wiring still wrong: a
+     * test that only checked the bound graph would pass if the gate were a blanket "never seed",
+     * which would leave every offline demo empty, and one that only checked the offline graph
+     * would pass if the gate were never wired at all.
+     *
+     * Guarded like [theOutboxIsLeftAlone] rather than merely hosted, and for the same reason:
+     * resolving the port opens a Room store, and the Android host has no `sqliteJni` on its
+     * `java.library.path`. The scenario asks [thisHostOpensRoomStores] and registers as a pass
+     * where it cannot run, rather than failing for a reason that is not the graph's.
+     */
+    val theSampleSeedOnlyRunsWithoutABackend: suspend TestScope.() -> Unit = {
+        if (!thisHostOpensRoomStores()) {
+            println("skipped: this host cannot open a Room store to check whether the seed is offline-only")
+        } else {
+            val offline = AppGraph.start(testBindings())
+            try {
+                assertTrue(
+                    offline.resolve(ProjectRepositoryPort::class).seedSampleDataIfNeeded(),
+                    "an offline graph must still seed its demo board, or every entry point that " +
+                        "names no API root launches empty",
+                )
+            } finally {
+                offline.stop()
+            }
+
+            val online = AppGraph.start(testBindings(apiBaseUrl = "http://127.0.0.1:8080"))
+            try {
+                assertFalse(
+                    online.resolve(ProjectRepositoryPort::class).seedSampleDataIfNeeded(),
+                    "a graph with a backend bound must not seed: the repository queues seeded " +
+                        "rows through the outbox, so a true here is the demo board on its way to " +
+                        "http://127.0.0.1:8080",
+                )
+            } finally {
+                online.stop()
             }
         }
     }
