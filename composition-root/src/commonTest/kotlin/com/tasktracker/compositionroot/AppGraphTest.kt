@@ -47,12 +47,14 @@ import kotlin.test.fail
 class AppGraphTest {
 
     /**
-     * The production graph, with in-memory stand-ins for the two platform backends.
+     * The production graph, with in-memory stand-ins for the three values a test host cannot
+     * supply.
      *
      * Everything else is real: the same registrations, the same scopes, the same factories,
-     * and the same `AuthRepository` over the same `TokenVault`. Only the keychain and
-     * preferences are substituted, because on the Android host those two cannot be
-     * constructed at all. See [AppGraph.start] for the full reasoning.
+     * and the same `AuthRepository` over the same `TokenVault`. Three things are substituted,
+     * not one: the keychain and preferences backends, because on the Android host neither can be
+     * constructed at all, and the store, which [testBindings] points at an in-memory database so
+     * a test never opens the developer's. See [AppGraph.start] for the full reasoning.
      */
     private fun testGraph(): Resolver = AppGraph.start(testBindings(startServices = false))
 
@@ -271,9 +273,12 @@ class AppGraphTest {
      * exercised: rebinding it to `{ baseUrl, _ -> KtorHttpClient(baseUrl = baseUrl) }` left all
      * three hosts green while Desktop's sync client shipped unauthenticated.
      *
-     * The argument list below is deliberately `AppGraph.start`'s, minus the two values a test
-     * host must supply: `httpClient` and `apiBaseUrl` are both left to their defaults, which is
-     * the property under test rather than an accident of construction.
+     * The one argument that matters below is the one *not* written: `httpClient` is left to its
+     * default, which is the property under test rather than an accident of construction. The
+     * other arguments a test host has to supply — two in-memory platform backends and an
+     * in-memory store — are why this cannot instead call `AppGraph.start`, and that is exactly
+     * what leaves one link unobserved: a `start` that named `httpClient` itself would replace
+     * this default and stay green here. [PlatformBindings.httpClient] states that residual.
      */
     @Test
     fun `the production bindings keep the client factory the registrations are handed`() = runTest {
@@ -314,12 +319,13 @@ class AppGraphTest {
      * Room database and there is no Android `Context` here. A registration check is the
      * honest question on this host; opening the database is asserted on the device.
      *
-     * The negative half survives: an HTTP client is still not registered, and a
-     * registration that appears without a phase adding it is the failure mode a growing
-     * composition root actually has, invisible to the resolve-everything test above. The two
-     * clients a bound API root opens are built inside the `AuthRemotePort` and `SyncTransport`
-     * factories rather than registered under names of their own, so this stays true — and
-     * still means what it says — with a real backend bound.
+     * The negative half survives, with one qualification: it is asserted on the *offline* graph
+     * ([testGraph]), because that is the graph this class builds. A registration that only a
+     * bound API root added would not be caught here — the two clients a bound root opens are
+     * built inside the `AuthRemotePort` and `SyncTransport` factories rather than registered
+     * under names of their own, and the assertion below reads `registeredNames` from the demo
+     * graph alone. An HTTP client is still not registered, which is the failure mode a growing
+     * composition root actually has, and it is the offline graph that catches it.
      */
     @Test
     fun `the graph registers the ported features and still nothing more`() {

@@ -104,19 +104,28 @@ object AppGraph {
      * `start(startServices = false)` and leaving the URL to its default asserts the demo pair
      * without opening anything — but it is a new test file, and this change adds none.
      *
-     * `startServices`'s default is not gateable the same way: exercising it is what starts the
-     * loops, and `startLoops` resolves the store, so the one assertion that could observe the
-     * default would create the developer's real database. Production is the only caller that
-     * takes it, and it is what all three entry points — both shells and Desktop — get.
+     * `startServices`'s default is the harder half. The *public* start cannot gate it: exercising
+     * the default starts the loops, and `startLoops` resolves the store, so an assertion that
+     * went through it would create the developer's real database. A test *can* reach the default
+     * through the internal `start(platforms)` with an in-memory store, but that leaves three
+     * loops running over a store the test then has to stop, to prove a `true` that production is
+     * the only caller of — a scheduler owned by a wiring test, bought for no assertion about
+     * wiring. Production takes the default, and it is what all three entry points — both shells
+     * and Desktop — get.
      *
      * ## [startServices] is the same switch [PlatformBindings] already carries
      *
-     * It exists for one caller: the Desktop entry point's own wiring test has to build the
-     * graph from the *production* entry (real base URL, real bindings) and look at which auth
-     * remote it bound — and `DesktopGraph` is a `by lazy` holder behind a private name, so a
-     * test cannot reach that line any other way. Starting the loops on the way there would
-     * resolve the store and open the developer's real database, which is a side effect an
-     * assertion about *which client was built* must not have. Production passes nothing.
+     * It was added for the Desktop entry point's own wiring test, which has to build the graph
+     * from the *production* entry (real base URL, real bindings) and look at which auth remote
+     * it bound — and `DesktopGraph` is a `by lazy` holder behind a private name, so a test
+     * cannot reach that line any other way. Starting the loops on the way there would resolve
+     * the store and open the developer's real database, which is a side effect an assertion
+     * about *which client was built* must not have.
+     *
+     * The graph's own tests are the callers that pass `false` most often, for the same reason:
+     * `testBindings(startServices = false)` describes the graph without leaving three loops for
+     * each test to remember to stop. Production is the caller that passes nothing, and `true`
+     * is what it gets.
      */
     fun start(
         host: Any? = null,
@@ -613,11 +622,23 @@ internal class PlatformBindings(
      * factory it can watch. It also keeps a graph test from constructing a real platform
      * engine just to ask which of two clients was bound.
      *
-     * The default is [defaultHttpClient] and production never passes anything, so the one
-     * shape the real entry points can get is [KtorHttpClient] with exactly the interceptors
-     * the registration names. Both links are gated: `AppGraphTest` drives a request through a
-     * client built by [defaultHttpClient], and constructs `PlatformBindings` with this
-     * argument left to its default, which is the argument list `AppGraph.start` builds.
+     * The default is [defaultHttpClient], and both halves of that are gated: `AppGraphTest`
+     * drives a request through a client built by [defaultHttpClient], and it constructs
+     * [PlatformBindings] with this argument left to its default and sends through the factory
+     * it finds, so a default that dropped the interceptors is caught.
+     *
+     * ## What the seam does not reach, stated rather than implied
+     *
+     * [AppGraph.start] builds its [PlatformBindings] with *named* arguments, so naming
+     * `httpClient` there would replace this default — a wiring that shipped an unauthenticated
+     * sync client — and no test would see it. The test above constructs its own
+     * [PlatformBindings] instead of calling `AppGraph.start`, because `start`'s own list leaves
+     * the two platform backends and the store to the caller; and a graph built by `start`
+     * reports only the *type* of client that got bound. Seeing the interceptors a client
+     * carries means asking [KtorHttpClient], which keeps them private, so the only observe is a
+     * request — and a request is the socket these tests exist to avoid. The test's argument list
+     * is therefore deliberately this constructor's, not `AppGraph.start`'s, and this link is
+     * recorded as a residual rather than gated.
      */
     val httpClient: (String, List<RequestInterceptor>) -> HttpClient = defaultHttpClient,
     /**
@@ -643,10 +664,12 @@ internal class PlatformBindings(
      * Whether to start the three looping services after building the container.
      *
      * Production is `true` and no entry point passes anything else: the two platform entry
-     * points and Desktop all call [AppGraph.start], which starts them. The one caller that
-     * passes `false` is the Desktop entry point's wiring assertion, which has to build a real
-     * graph and may not open the developer's store to do it — see [AppGraph.start]'s
-     * `startServices` note. It is also here for tests that exercise a *registration* and would
+     * points and Desktop all call [AppGraph.start], which starts them. The Desktop entry
+     * point's wiring assertion was the first caller that needed `false` — it has to build a real
+     * graph through the production entry and may not open the developer's store to do it — and
+     * the graph's own tests are the others, since `testBindings` passes `false` by default. See
+     * [AppGraph.start]'s `startServices` note. It is also here for tests that exercise a
+     * *registration* and would
      * otherwise have to race the session coordinator's own `restore` against the restore they
      * are trying to observe: two concurrent restores of the same vault is a race that has
      * nothing to do with what those tests are about.
@@ -670,11 +693,18 @@ internal class PlatformBindings(
          * and the whole point of the seam is that the substituted shape and the real one are
          * the same code path up to the engine.
          *
-         * What the tests hold is that the interceptors reach [KtorHttpClient]. They do not hold
-         * `baseUrl` — the test interceptor refuses before an address is built, and the client's
-         * root is private — so a factory that hard-coded the root would stay green. The root is
-         * pinned a level up, at `desktopApiBaseUrl`, and the two are wired together by
-         * `PlatformBindings.apiBaseUrl`'s single pass-through.
+         * What the tests hold is that the interceptors reach [KtorHttpClient], and that the
+         * *given* interceptor runs. Two things they do not hold, and cannot without a socket:
+         *
+         * - `baseUrl`. The test interceptor refuses before an address is built and the client's
+         *   root is private, so a factory that hard-coded the root would stay green. The root is
+         *   pinned a level up instead — at `desktopApiBaseUrl`, whose value
+         *   `DesktopEntryPointJvmTest` asserts literally, and whose pass-through into the graph
+         *   is pinned by type. That pass-through is the link nothing observes: a wrong root here
+         *   is a wrong port, not a failing test.
+         * - an *extra* interceptor. The one the test hands over throws first, so a factory that
+         *   appended another would never reach it, and "and no others" above is the half that
+         *   is asserted by convention rather than by an assertion.
          */
         val defaultHttpClient: (String, List<RequestInterceptor>) -> HttpClient =
             { baseUrl, interceptors ->
