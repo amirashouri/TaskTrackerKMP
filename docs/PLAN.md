@@ -896,7 +896,7 @@ platform check anywhere.
   updating `Project.md` — 5.7 reconciles that with the host tables, which this task does not
   otherwise touch (Desktop is still the JVM host, not a fourth).
 
-- [ ] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md` — Run
+- [x] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md` — Run
   the decision command and reconcile the totals, then record the test-host consequence in
   `Project.md` and `AGENTS.md`. The structural decision itself — "the shell's layout is
   chosen by width, never by platform" — is **already in `DECISIONS.md`**, recorded in 5.1's
@@ -909,6 +909,38 @@ platform check anywhere.
   host rather than a new host, and the tables should say so rather than growing a column.
   Every new scenario is per-host (a `commonTest` body with three entry points), so all
   three totals move, unlike the JVM-only tests 4.6 and 4.8 added.
+
+  **Landed. All three figures are one run's, measured together, and both docs now carry the
+  same three.** 2026-10-15, one `./gradlew check`: JVM **1588**, iOS **1539**, Android
+  **1283**, with the same 12 / 12 / 34 failures, name for name. `AGENTS.md`'s table had been
+  frozen at 1571 / 1531 / 1275 and simply stopped being updated — the failure mode the doc
+  itself names. Over the 1575 / 1535 / 1279 that 5.4 recorded, the movement is 5.5's **+4 per
+  host** (its modal scenarios, never recorded) and 5.6's **+9 on the JVM only** (its `jvmMain`
+  tests); the rest of the gap is the stretch before 5.4 that the table also never saw. Two
+  contradictions inside `Project.md` fell out of the same re-measure: the prose said "the 33
+  on the Android host" where the table said 34, and split 14 / 8 / 3 / **8** where the XML has
+  **9** in `:shared-ui`. It is 34, and 14 / 8 / 3 / 9.
+
+  **Two figures were not merely stale but unreproducible, and are corrected with their
+  method stated.** `Project.md` claimed `commonTest` holds **1729** `@Test` annotations; the
+  source has **1389** (line-leading `@Test` across `**/src/commonTest/**`), and 1729 cannot
+  be a `commonTest` count at all — every `commonTest` body runs on the JVM host, and the whole
+  JVM host is 1588, so the figure is capped below its own claim. Its `:shared-ui` "42 shell
+  scenarios" is now **58**, counted the way the sentence always said: the `@Test` entry points
+  in `TaskTrackerAppJvmTest` / `TaskTrackerAppIosTest` / `TaskTrackerAppAndroidHostTest`.
+  `AGENTS.md`'s `:shared-ui` line moved with it (79 JVM / 71 iOS), and its "eight" — which its
+  own table contradicted with "nine" — is now nine.
+
+  **The consequence, stated rather than columnised.** Desktop is still not a fourth test host
+  — 4.8 settled that — but the shell's *width* (5.1) is a dimension the JVM host drives
+  through `ShellScenarios.setUpShell(width = …)`, so the Desktop row in both tables now says
+  so in a clause rather than growing a column. Every scene section 5 added is a `commonTest`
+  body with three entry points, which is why all three totals move together, unlike the
+  JVM-only tests 4.6 and 4.8 added.
+
+  No source changed, so that run *is* the validation: `jvmTest`, `iosSimulatorArm64Test`,
+  `verifyArchitectureGraph`, `verifyModuleImports` and `:androidApp:compileDebugKotlin` all
+  behaved exactly as the tables now say.
 
 ### 5.0 Implementation order (desktop layout)
 
