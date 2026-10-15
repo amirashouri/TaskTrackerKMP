@@ -138,18 +138,15 @@ above applies.
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
-(`composition-root`, `shared-ui`) and two-deep globs, which do not overlap. Re-measured
-2026-10-14 from `--rerun-tasks` (523 tasks, all executed, nothing from cache), so the figures
-are one run's output rather than an accumulation of earlier ones. Re-measured the same way
-after 5.4 landed its three Sprints two-pane scenarios: **+3 per host** over the
-1572 / 1532 / 1276 that `f5a7fd3` had already measured at `HEAD`, and the twelve JVM/iOS and
-thirty-four Android failures are the same sets, name for name. Re-measured again with the
-Desktop window in place (5.6): JVM **1588** and iOS **1539** from this run's XML, the same
-twelve failures each. 5.6 adds **nine JVM-only** tests (`:packages:user-defaults` and
-`:shared-ui` `jvmTest`, because the code under test is `jvmMain`); the remaining **+4 per host**
-over the 5.4 figures are 5.5's modal scenarios, which had not been recorded here when they
-landed. The Android row is carried from its own last measurement at 1283 / 34 — 5.6 touches
-neither `androidHostTest` source set, so the count moves the same +4 as the other two hosts.
+(`composition-root`, `shared-ui`) and two-deep globs, which do not overlap, and cross-checked
+against the `@Test` declarations in the source rather than a `grep -c` (which over-counts the
+backticked mentions in KDoc). Re-measured 2026-10-15 in one whole `./gradlew check`: JVM
+**1588**, iOS **1539**, Android **1283**, with the same 12 / 12 / 34 failures, name for name.
+The three are one run's output, not an accumulation: 5.6 added **nine JVM-only** tests
+(`:packages:user-defaults` and `:shared-ui` `jvmTest`, because the code under test is
+`jvmMain`), and the **+4 per host** over the 1575 / 1535 / 1279 that 5.4 recorded are 5.5's
+modal scenarios, which landed without a re-measurement here. 5.7 is that re-measurement, and
+`AGENTS.md`'s host table now carries the same three numbers.
 
 **Every one of the three figures recorded before those runs was stale, in the same direction.** The
 recorded 1534 / 1494 / 1238 had drifted from 1571 / 1531 / 1275 — JVM +37, iOS +37, Android +37.
@@ -186,10 +183,15 @@ per-host (a scenario body plus a `jvmTest`, an `iosTest` and an `androidHostTest
 so it moves all three totals. `:packages:keychain`'s 3 keychain round-trip tests are **opt-in** — they write to the real
 login keychain, so they run only under `TASKTRACKER_KEYCHAIN_INTEGRATION=1`, and they register
 as passes in a default run without having run. That run is the one that matters for the JNA
-binding; the default suite says nothing about it. `commonTest` holds
-**1729** `@Test` annotations, plus `shared-ui`'s 42 shell scenarios (re-counted with 5.4's
-three; the same method that gave 35), which are shared `fun`s
-counted per host.
+binding; the default suite says nothing about it. The `commonTest` source sets hold **1389**
+`@Test` annotations (counted as line-leading `@Test` across `**/src/commonTest/**`, which
+excludes the backticked mentions in KDoc that make a `grep -c` over-count), and `:shared-ui`'s
+shell scenarios are **58**, counted per host: the `@Test` entry points in
+`TaskTrackerAppJvmTest` / `TaskTrackerAppIosTest` / `TaskTrackerAppAndroidHostTest`, each one
+wrapping a shared `fun` body that carries no `@Test` itself. Both were re-counted in 5.7; the
+figures they replace (1729 / 42) could not be reproduced from the source, and 1729 cannot even
+be a `commonTest` count — the whole JVM host runs **1588** tests and every `commonTest` body
+runs on it, so the `commonTest` figure is capped below that.
 
 ### Desktop is not a fourth test host
 
@@ -220,14 +222,14 @@ The 12 failures on JVM and iOS are `SeedingTest` ×3 (`:packages:feature-project
 the working tree's uncommitted work, so neither the recurrence feature nor the user-directory
 work caused them. See `docs/DECISIONS.md`, measurement lore.
 
-The 33 on the Android host are Compose layout and rasterisation failures, not behaviour:
+The 34 on the Android host are Compose layout and rasterisation failures, not behaviour:
 Robolectric's default viewport is far smaller, so content inside a `LazyColumn` or a
 `horizontalScroll` row exists but is not displayed, and its rasteriser disagrees with the
 other two hosts on the pixel gates. 14 are in `:packages:design-system` (the `DateField*` and
 `StoryPoints` contrast/raster gates), 8 in `:packages:feature-settings-presentation`,
-3 in `:packages:feature-projects-presentation`, and 8 in `:shared-ui`. Measured 2026-10-12:
-the `:shared-ui` eight were re-run with the comments feature's editor wiring reverted and the
-identical set failed, so none of the 33 belongs to that feature. The rise from the previously
+3 in `:packages:feature-projects-presentation`, and 9 in `:shared-ui`. Measured 2026-10-12:
+the `:shared-ui` failures were re-run with the comments feature's editor wiring reverted and
+the identical set failed, so none of the 34 belongs to that feature. The rise from the previously
 recorded 854/17 is tests that landed on `main` after that measurement, not new breakage.
 
 A test that renders Compose and reads pixels must call `thisHostRasterisesText()` — an `expect` in
