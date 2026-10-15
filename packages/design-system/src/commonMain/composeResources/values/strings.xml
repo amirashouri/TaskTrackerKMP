@@ -398,6 +398,12 @@
     <string name="sprint_picker_title">Add tasks</string>
     <string name="sprint_picker_empty">There are no tasks available to add to this sprint.</string>
     <string name="sprint_picker_add">Add</string>
+    <!-- The Sprints tab's second pane on a wide window before a sprint is chosen. A distinct
+         title and body rather than the list's own "no sprints yet" pair: this pane is empty
+         because nothing is *selected*, not because the project has no sprints, and reusing one
+         sentence for both would tell a user with three sprints that they have none. -->
+    <string name="sprint_detail_placeholder_title">Select a sprint</string>
+    <string name="sprint_detail_placeholder_body">Choose a sprint from the list to see its details.</string>
 
     <!--
       The summary of a finished sprint. Two sections rather than one list with a badge,

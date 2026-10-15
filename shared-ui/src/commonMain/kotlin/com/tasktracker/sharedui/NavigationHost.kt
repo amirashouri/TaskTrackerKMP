@@ -83,6 +83,7 @@ import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
 import com.tasktracker.featureprojectspresentation.SprintDetailModel
+import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholder
 import com.tasktracker.featureprojectspresentation.SprintDetailScreen
 import com.tasktracker.featureprojectspresentation.SprintEditorModel
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
@@ -361,6 +362,10 @@ fun NavigationHost(
                         scope = scope,
                     )
                 }
+                // The detail pane's own empty state, a value for the same reason `tabRoot` and
+                // `pushedPane` are: it is a whole pane of one arrangement arm, and inlining the
+                // lambda would make this the one pane of the three with no name.
+                val noSprintSelected: @Composable () -> Unit = { SprintDetailPlaceholder() }
 
                 // Which of the three arrangements. Read off the layout class, never off the
                 // platform — see `ShellLayoutClass` for why — and off the tab, because the
@@ -382,8 +387,21 @@ fun NavigationHost(
                 when {
                     backgroundPushed == null -> tabRoot()
 
+                    // The Sprints list-detail pair. Its root stack is `[SprintList]` and never
+                    // empty — see `Router.openProject` — so `backgroundPushed` is non-null even
+                    // with no sprint selected, and rendering `pushedPane` unconditionally drew
+                    // the *list* in the right pane: the same screen on both sides. The right pane
+                    // is the detail only when the stack actually holds a detail route; otherwise
+                    // nothing is selected and the pane says so.
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Sprints ->
-                        SprintTwoPanes(listPane = tabRoot, detailPane = pushedPane)
+                        SprintTwoPanes(
+                            listPane = tabRoot,
+                            detailPane = if (backgroundPushed is AppRoute.SprintDetail) {
+                                pushedPane
+                            } else {
+                                noSprintSelected
+                            },
+                        )
 
                     else -> pushedPane()
                 }

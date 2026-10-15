@@ -80,6 +80,7 @@ import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.designsystem.NavigationRailLensTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
+import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholderTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
 import com.tasktracker.featureprojectspresentation.SprintDetailReopenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
@@ -100,6 +101,8 @@ import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
 import com.tasktracker.resources.tab_sprints
+import com.tasktracker.resources.sprint_detail_placeholder_body
+import com.tasktracker.resources.sprint_detail_placeholder_title
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.InMemoryPreferences
@@ -2186,6 +2189,82 @@ object ShellScenarios {
                 "slot and is not supposed to move — what has to change is what is inside it, and " +
                 "the two sprints are named differently precisely so this cannot pass on a pane " +
                 "that ignored its route",
+        )
+    }
+
+    /**
+     * A wide shell's empty detail pane says nothing is selected, and the list is drawn once.
+     *
+     * The Sprints tab's root stack is `[SprintList]` — what `openProject` and a deep link both
+     * install — so with no sprint selected the right pane's route is the list, and the
+     * arrangement rendered it there: the sprint list drawn twice, one copy beside the other. The
+     * count is the assertion, not presence, because the whole defect is a *second* copy — a
+     * presence check on the list is satisfied by two.
+     *
+     * Reached through `openProject(inTab = Sprints)` rather than a tab switch, because a plain
+     * switch leaves the stack empty and the shell then draws the root alone. The `[SprintList]`
+     * stack is the state that has both panes and no selection.
+     */
+    val aWideShellShowsAPlaceholderWhenNothingIsSelected: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        projects.seedSprint(shellTestSprint(projectID = project.id))
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id, inTab = AppTab.Sprints)
+        waitForIdle()
+
+        assertEquals(
+            1,
+            router.path(AppTab.Sprints).size,
+            "the Sprints stack should be the list alone before a sprint is chosen, so this " +
+                "scenario is asserting the no-selection state; it was " +
+                "${router.path(AppTab.Sprints)}",
+        )
+
+        // The count comes first because on the regression it is the assertion that reports the
+        // defect that is actually there — a *second* copy of the list — rather than "the
+        // placeholder is missing", which is the same bug described as a symptom.
+        val listCopies = onAllNodesWithTag(SprintListScreenTag).fetchSemanticsNodes().size
+        assertEquals(
+            1,
+            listCopies,
+            "the sprint list is drawn $listCopies times with no sprint selected. The tab root is " +
+                "a route, so both panes rendering it is the defect the placeholder removes, and " +
+                "the assertion that sees it is the count — presence is satisfied by two.",
+        )
+
+        onNodeWithTag(SprintDetailPlaceholderTag).assertExists(
+            "at ${DESKTOP_WIDTH.value}dp with no sprint selected the detail pane has nothing to " +
+                "draw and should say so, but the placeholder is not there",
+        )
+
+        // Present is not the claim; *saying so* is. A tagged but emptied pane satisfies the
+        // presence check above — the same way a control can exist and render nothing — so the
+        // pane's real words are read back and required.
+        val placeholderText = renderedTextOf(SprintDetailPlaceholderTag)
+        assertEquals(
+            getString(Res.string.sprint_detail_placeholder_title) + " " +
+                getString(Res.string.sprint_detail_placeholder_body),
+            placeholderText,
+            "the placeholder pane is present but reads \"$placeholderText\" — an empty pane " +
+                "certifies that a pane exists, not that a user is told to choose a sprint",
+        )
+
+        assertNothingTagged(
+            SprintDetailScreenTag,
+            "no sprint is selected, so the detail screen has no sprint to draw",
         )
     }
 
