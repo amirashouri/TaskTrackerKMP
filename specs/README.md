@@ -38,7 +38,7 @@ into the format. `_template.md` is the blank one.
 ## Reading budget
 
 An agent working task *X* reads: `AGENTS.md` (always), the spec for *X*, and the files the
-spec names. It does not read `PLAN.md`, `PORT-LOG.md`, or any other spec.
+spec names. It does not read `PLAN.md` or any other spec.
 
 ## Counts
 

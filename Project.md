@@ -2,8 +2,9 @@
 
 How this project is built, run, and verified. Companion to [`docs/DECISIONS.md`](docs/DECISIONS.md), which is the
 design record — why each decision was made. This file is the short operational answer to "how do
-I build and run this, and what will bite me". The finished port log is frozen at
-[`docs/PORT-LOG.md`](docs/PORT-LOG.md).
+I build and run this, and what will bite me". Host test details live in
+[`docs/TEST-HOSTS.md`](docs/TEST-HOSTS.md). The finished port log was removed from the tree
+(it was frozen archaeology); it is recoverable from git history.
 
 ---
 

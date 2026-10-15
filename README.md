@@ -50,7 +50,7 @@ packages/
   feature-<name>-{domain,data,presentation}/   One triple per feature
 build-logic/                 Convention plugins that define the architecture
 docs/DECISIONS.md            The design record — why each rule exists
-docs/PORT-LOG.md             The finished port log (frozen archaeology)
+docs/TEST-HOSTS.md           Pre-existing test failures and host-specific gotchas
 Project.md                   How to build, run, and verify
 ```
 
@@ -107,7 +107,8 @@ about others (Robolectric's viewport is small; its `Build` fields are `null`) �
 - [`Project.md`](Project.md) — build, run, verify; the operational manual.
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — the design record: every rule, with the
   measurement that justifies it.
-- [`docs/PORT-LOG.md`](docs/PORT-LOG.md) — the finished port log, frozen.
+- [`docs/TEST-HOSTS.md`](docs/TEST-HOSTS.md) — the pre-existing failures per host, and why
+  they are not regressions.
 - [`AGENTS.md`](AGENTS.md) — working agreement for this repository, including the
   mutation-check ritual behind every test that claims to catch a defect.
 - [`specs/`](specs/README.md) — one file per pending task: its scope, contract and validation.

@@ -1,7 +1,8 @@
 # Decisions
 
 The design record for this project — why things are the way they are. Curated from the
-finished port log (`docs/PORT-LOG.md`, frozen) in October 2026; that file is history and
+finished port log (removed from the tree; recoverable from git history) in October 2026; that
+work is history and
 this one is the contract. A rule lives here only if breaking it has already caused a
 real bug. Everything operational — how to build, run, and test — lives in `Project.md`;
 how to work here lives in `AGENTS.md`.
