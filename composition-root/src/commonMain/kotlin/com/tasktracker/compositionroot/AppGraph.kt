@@ -182,7 +182,7 @@ object AppGraph {
         KoinResolver.build {
             registerPlatform(platforms)
             registerPersistence(platforms)
-            registerProjects()
+            registerProjects(platforms)
             registerTeams()
             registerAuth(platforms)
             registerSync(platforms)
@@ -364,10 +364,20 @@ object AppGraph {
      * status change to an author, and absent is a legitimate state rather than a stub — every
      * change is then recorded with an unknown author. Wiring it is Phase 13's session-coordinator
      * work, and a graph that invented a user id to fill it in would write false history.
+     *
+     * ## The demo board is written only while offline
+     *
+     * The port is wrapped in [OfflineOnlySampleSeed] whenever `platforms.apiBaseUrl` names a
+     * backend, and the seeding call then answers `false`. That is a correctness rule rather than
+     * a convenience: the repository queues every seeded row through the outbox, so with a
+     * backend bound the sample board would not stay local scenery — the first sync would push it
+     * to the server, for an account whose owner never asked to populate it. With no URL bound —
+     * the demo every entry point that names no API root still runs — the real repository is
+     * bound unchanged and seeds exactly as before.
      */
-    private fun ResolverBuilder.registerProjects() {
+    private fun ResolverBuilder.registerProjects(platforms: PlatformBindings) {
         app<ProjectRepositoryPort> { resolver ->
-            RoomProjectRepository(
+            val repository = RoomProjectRepository(
                 database = resolver.resolve(TaskTrackerDatabase::class),
                 changeBus = resolver.resolve(ProjectChangeBus::class),
                 // Who to credit a status change to. Wired now that persistence registers a
@@ -380,6 +390,10 @@ object AppGraph {
                 // single app-scoped registration exists to prevent.
                 dateProvider = resolver.resolve(DateProvider::class),
             )
+            // The demo board is an offline fixture, so it is bound only while nothing is
+            // pointing at a server. See the section above for why that is correctness rather
+            // than convenience, and [OfflineOnlySampleSeed] for the decorator itself.
+            if (platforms.apiBaseUrl == null) repository else OfflineOnlySampleSeed(repository)
         }
 
         // The one sink that knows how to write a project or a work item into the local
