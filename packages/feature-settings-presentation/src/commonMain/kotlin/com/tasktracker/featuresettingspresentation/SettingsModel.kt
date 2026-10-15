@@ -3,6 +3,7 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
@@ -14,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Drives the Settings screen.
@@ -63,6 +65,20 @@ class SettingsModel(private val port: SettingsPort) {
      * to a tap.
      */
     var commandOutcome: SyncOutcome? by mutableStateOf(null)
+        private set
+
+    /**
+     * The sign-out the server could not confirm, or `null` when there is nothing to answer.
+     *
+     * Held as the [AppError] rather than as a sentence, for the reason [commandOutcome] is held
+     * as a [SyncOutcome]: a model is a plain class and must stay testable without a composition,
+     * so it cannot read a resource, and formatting the message here would put the wording in a
+     * second place from every other user-facing sentence in the app.
+     *
+     * Non-null is what the screen renders the force-sign-out popup for. It is the only state in
+     * this model the user has to *answer* rather than merely read — see [forceSignOut].
+     */
+    var signOutFailure: AppError? by mutableStateOf(null)
         private set
 
     /** Whether the user has asked to force the offline state. See the class note. */
@@ -141,9 +157,54 @@ class SettingsModel(private val port: SettingsPort) {
     /**
      * Ends the session. What that tears down, and where it routes, belongs to the app — which
      * is why this is a port call and not a call to the auth feature.
+     *
+     * ## A failure is held rather than thrown, and holding it is what raises the popup
+     *
+     * The port's sign-out asks the server to revoke the refresh token family before it forgets
+     * anything, so a server that cannot be reached leaves the session standing — deliberately,
+     * rather than signing a user out behind their back while a possibly-live token sits on the
+     * server. The failure therefore arrives here as an [AppError], and the screen turns it into
+     * the one thing the user can do about it: end the session on this device anyway, which is
+     * [forceSignOut].
+     *
+     * ## [CancellationException] is rethrown, and that is not tidiness
+     *
+     * The screen is disposed while this call is in flight whenever the user leaves the tab
+     * mid-sign-out. A `runCatching` here would read that as a failed sign-out and arm a popup
+     * for a screen that no longer exists — a dialog raised over whatever the user navigated to
+     * next, which is the worst shape this bug can take because it looks like a different bug.
      */
     suspend fun signOut() {
-        port.endSession()
+        try {
+            port.endSession()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            signOutFailure = failure
+        }
+    }
+
+    /**
+     * Ends the session without asking the server, and erases what it left behind.
+     *
+     * The action the popup offers. [signOutFailure] is cleared *before* the call rather than
+     * after, so the failure the user has just answered cannot be re-raised by a recomposition
+     * in the window between this returning and the route change it causes.
+     */
+    suspend fun forceSignOut() {
+        signOutFailure = null
+        port.forceEndSession()
+    }
+
+    /**
+     * Clears [signOutFailure], for a user who declined to force the sign-out.
+     *
+     * Dismissing leaves the session exactly as it was — still signed in, still on Settings —
+     * which is the honest outcome: nothing was revoked and nothing was erased, so there is
+     * nothing the screen should pretend happened.
+     */
+    fun dismissSignOutFailure() {
+        signOutFailure = null
     }
 
     suspend fun applyUserDetails(details: UserDetails) {

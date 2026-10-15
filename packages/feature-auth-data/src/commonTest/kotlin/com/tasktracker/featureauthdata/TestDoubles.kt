@@ -48,12 +48,33 @@ class ScriptedAuthRemote : AuthRemotePort {
     private val mutex = Mutex()
     private val signInScript: MutableList<Result<AuthTokens>> = mutableListOf()
     private val refreshScript: MutableList<Result<AuthTokens>> = mutableListOf()
+    private val signOutScript: MutableList<Result<Unit>> = mutableListOf()
     private var latency: Duration = Duration.ZERO
+    private var signOutLatency: Duration = Duration.ZERO
 
     var signInCount: Int = 0
         private set
     var refreshCount: Int = 0
         private set
+
+    /**
+     * How many times the server was asked to revoke a token family.
+     *
+     * Counted here rather than inferred from the outcome, because the outcome of a sign-out is
+     * the *local* wipe and that happens either way — so a test that only looked at the vault
+     * could not tell the two ways of ending a session apart.
+     */
+    var signOutCount: Int = 0
+        private set
+
+    /**
+     * The tokens a revocation was actually attempted with.
+     *
+     * Kept because the count alone cannot tell a revocation of the *stored refresh token* from
+     * one sent with whatever else was to hand — and revoking the wrong family leaves the real
+     * one live on the server while every count-based assertion still passes.
+     */
+    val seenSignOutTokens: MutableList<String> = mutableListOf()
     val seenRefreshTokens: MutableList<String> = mutableListOf()
 
     // MARK: Scripting
@@ -74,12 +95,30 @@ class ScriptedAuthRemote : AuthRemotePort {
         }
     }
 
+    /** Returned by each successive `signOut`, in order. */
+    suspend fun setSignOutResults(results: List<Result<Unit>>) {
+        mutex.withLock {
+            signOutScript.clear()
+            signOutScript += results
+        }
+    }
+
     /**
      * Artificial latency, used to hold a refresh open long enough that concurrent callers
      * genuinely overlap instead of accidentally serialising.
      */
     suspend fun setRefreshDelay(delay: Duration) {
         mutex.withLock { latency = delay }
+    }
+
+    /**
+     * A revocation that never completes, for proving the sign-out's deadline.
+     *
+     * The realistic failure is not a refusal but silence — a host that accepts the connection
+     * and never answers — so the double has to be able to *hang* rather than merely fail.
+     */
+    suspend fun setSignOutDelay(delay: Duration) {
+        mutex.withLock { signOutLatency = delay }
     }
 
     // MARK: AuthRemotePort
@@ -105,6 +144,25 @@ class ScriptedAuthRemote : AuthRemotePort {
         }
         if (wait > Duration.ZERO) delay(wait)
         return (result ?: throw AppError.Unauthorized).getOrElse { throw it }
+    }
+
+    /**
+     * A revocation the server may refuse, or never answer at all.
+     *
+     * Overridden rather than left as the interface's no-op default, because the default is what
+     * makes the *other* tests pass without ever exercising this call — and the whole point of
+     * the deadline under test is that this call is the one that can hang. With nothing scripted
+     * it stays a no-op, so every existing test keeps its meaning.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun signOut(refreshToken: String) {
+        val (result, wait) = mutex.withLock {
+            signOutCount += 1
+            seenSignOutTokens += refreshToken
+            signOutScript.removeFirstOrNull() to signOutLatency
+        }
+        if (wait > Duration.ZERO) delay(wait)
+        result?.getOrElse { throw it }
     }
 }
 

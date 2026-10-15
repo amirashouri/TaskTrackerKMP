@@ -75,6 +75,28 @@ interface SettingsPort {
     @Throws(AppError::class, CancellationException::class)
     suspend fun endSession()
 
+    /**
+     * Ends the session without asking the server, and erases what it left behind.
+     *
+     * The other half of [endSession], and the one a user reaches for after it has failed.
+     * [endSession] asks the server to revoke the refresh token family before it forgets
+     * anything, so a server that cannot be reached leaves the session standing and [endSession]
+     * throwing — deliberately, rather than signing the user out behind their back while a
+     * possibly-live token sits on the server. This is the answer to that: nothing is asked of
+     * the network, so nothing can fail for want of one.
+     *
+     * What it discards is deliberately wider than [endSession]. The credentials and the session
+     * caches go either way; this also empties the local store and every cached preference,
+     * because the user has been told the clean sign-out could not be completed and has chosen
+     * to leave nothing behind on this device. That is a decision they make, which is why it is
+     * a separate method rather than a parameter on [endSession]: the two are different
+     * operations with different outcomes, and only the screen knows which one was chosen.
+     *
+     * A closure the app injects, for the reason [endSession] gives.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun forceEndSession()
+
     suspend fun userDetails(): UserDetails
 
     fun userDetailsUpdates(): Flow<UserDetails>

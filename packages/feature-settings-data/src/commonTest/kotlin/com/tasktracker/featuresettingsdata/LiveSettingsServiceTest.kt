@@ -80,6 +80,7 @@ class LiveSettingsServiceTest {
         coordinator = unusedSyncCoordinator(),
         version = AppVersion(marketing = "1.0", build = "1"),
         endSession = {},
+        forceEndSession = {},
         defaults = UserDefaultsStore(InMemoryPreferences()),
     )
 
@@ -152,6 +153,7 @@ class LiveSettingsServiceTest {
             coordinator = unusedSyncCoordinator(),
             version = version,
             endSession = {},
+            forceEndSession = {},
             defaults = UserDefaultsStore(InMemoryPreferences()),
         )
 

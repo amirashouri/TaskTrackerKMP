@@ -10,8 +10,12 @@ import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * The session, as one object.
@@ -101,16 +105,69 @@ class AuthRepository(
         return SessionState.SignedOut
     }
 
+    /**
+     * Revokes the token family on the server, then forgets the session here.
+     *
+     * ## The revoke is bounded, and its failure is no longer swallowed
+     *
+     * Both halves of that change are one decision. The revoke is the only part of a sign-out
+     * that touches the network, and it is the part the user is waiting on: the default request
+     * timeout is 30 seconds and the endpoint is idempotent, so the retry policy makes three
+     * attempts — a blackholed host leaves the tap looking ignored for around ninety seconds,
+     * with the screen still on Settings and nothing on it saying why. A deadline turns that
+     * into a prompt answer.
+     *
+     * Not swallowing the failure is what lets the caller say *which* answer it got, and it is
+     * why the local wipe below is no longer unconditional. The failure propagates before it,
+     * so a session that could not be ended cleanly is still intact and the user chooses what
+     * happens next. The previous behaviour — wiping anyway — accepted a possibly-live refresh
+     * token on the server without ever telling them, which is the one thing a sign-out exists
+     * to prevent.
+     */
     @Throws(AppError::class, CancellationException::class)
     override suspend fun signOut() {
-        // Ask the server to revoke the refresh token family first, so a stolen token
-        // cannot be replayed after the user has signed out. A network failure is
-        // acceptable: the token will expire on its own, and the local wipe is immediate
-        // and unconditional below.
         val refreshToken = vault.storedRefreshToken()
         if (refreshToken != null) {
-            runCatching { remote.signOut(refreshToken) }
+            revoke(refreshToken)
         }
+        forget()
+    }
+
+    /**
+     * Forgets the session here without asking the server anything.
+     *
+     * The way out a user reaches for after [signOut] has told them the revocation could not be
+     * confirmed. Nothing about it can fail for want of a network, so it is also the path a
+     * device with no backend has always effectively taken — see [AuthSessionPort.signOutLocally].
+     */
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun signOutLocally() {
+        forget()
+    }
+
+    /**
+     * Asks the server to revoke the family, failing if it cannot be reached in time.
+     *
+     * `withTimeout` signals the deadline with [TimeoutCancellationException], which *is* a
+     * [CancellationException] — so it is translated rather than left to propagate. A caller
+     * that saw a bare cancellation would treat a slow server as a cancelled screen, and the
+     * whole point of the deadline is that it is a result.
+     */
+    private suspend fun revoke(refreshToken: String) {
+        try {
+            withTimeout(SIGN_OUT_REVOKE_TIMEOUT) { remote.signOut(refreshToken) }
+        } catch (_: TimeoutCancellationException) {
+            throw AppError.Timeout
+        }
+    }
+
+    /**
+     * The local half, shared by both ways of ending a session.
+     *
+     * Clears the credentials and *then* publishes, for the reason the class note gives: the
+     * other order would let an observer rebuild something this wipe had just removed.
+     */
+    private suspend fun forget() {
         vault.clear()
         defaults.remove(DefaultsKey.CachedProfile)
         defaults.remove(DefaultsKey.CachedUserEmail)
@@ -143,3 +200,13 @@ class AuthRepository(
         defaults.set(identity.email, DefaultsKey.CachedUserEmail)
     }
 }
+
+/**
+ * How long a sign-out waits for the server to revoke the refresh token family.
+ *
+ * Short on purpose: this is the one network call in the app the user is watching. The cost of
+ * abandoning it is bounded, because the token expires on its own — which is the same outcome
+ * the unbounded version settled for whenever the request failed, except that here the user is
+ * told and gets to choose.
+ */
+internal val SIGN_OUT_REVOKE_TIMEOUT: Duration = 5.seconds

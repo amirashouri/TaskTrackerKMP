@@ -2,6 +2,7 @@ package com.tasktracker.compositionroot
 
 import com.tasktracker.core.DateProvider
 import com.tasktracker.database.CachedSession
+import com.tasktracker.database.LocalStoreEraser
 import com.tasktracker.database.OutboxEntry
 import com.tasktracker.database.OutboxQueue
 import com.tasktracker.database.OutboxStatus
@@ -21,6 +22,8 @@ import com.tasktracker.sync.InMemorySyncTransport
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncEngine
 import com.tasktracker.sync.SyncSchedule
+import com.tasktracker.userdefaults.InMemoryPreferences
+import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlin.time.Clock
 import kotlin.time.Instant
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +55,18 @@ internal class RecordingSessionPort : AuthSessionPort {
     var signOutCalls: Int = 0
         private set
 
+    /**
+     * Makes [signOut] fail instead of ending the session.
+     *
+     * The revocation is the one part of a sign-out that needs a server, so it is the one part
+     * that can leave the session standing — which is the state the coordinator has to survive
+     * without arming a reason for a teardown that never happened.
+     */
+    var failSignOut: Boolean = false
+
+    var signOutLocallyCalls: Int = 0
+        private set
+
     private val states = MutableSharedFlow<SessionState>(extraBufferCapacity = 8)
 
     /** Published with nothing collecting, to reproduce a publication nothing was ready for. */
@@ -79,8 +94,14 @@ internal class RecordingSessionPort : AuthSessionPort {
 
     override suspend fun signOut() {
         signOutCalls += 1
+        if (failSignOut) throw com.tasktracker.core.AppError.Timeout
         // A real port publishes here, and the coordinator's whole design is that it reacts
         // rather than tears down. Publishing is what makes the sign-out test meaningful.
+        publish(SessionState.SignedOut)
+    }
+
+    override suspend fun signOutLocally() {
+        signOutLocallyCalls += 1
         publish(SessionState.SignedOut)
     }
 
@@ -249,6 +270,20 @@ internal class InMemoryStores {
     val metadata = RecordingMetadataStore()
     val session = RecordingSessionCache()
 
+    /**
+     * A real store over an in-memory backend, rather than a stand-in.
+     *
+     * The behaviour a force teardown is asserted on is [UserDefaultsStore.removeAll], which
+     * walks [com.tasktracker.userdefaults.DefaultsKey] — so a fake that only counted calls
+     * would pass even if the real one walked nothing, and would keep passing if the enum
+     * stopped matching what the store writes. `InMemoryPreferences` is already this project's
+     * backend for exactly this purpose, so there is no second one to invent.
+     */
+    val defaults = UserDefaultsStore(backend = InMemoryPreferences())
+
+    /** Counts the wipe rather than performing one. See [RecordingLocalStoreEraser]. */
+    val eraser = RecordingLocalStoreEraser()
+
     /** Puts the caches in a state that looks like a signed-in app mid-cycle. */
     fun seed() {
         metadata.put(scope = "projects", cursor = "page-7")
@@ -265,7 +300,33 @@ internal class InMemoryStores {
             metadata = metadata,
             sessionCache = session,
             syncCoordinator = silentSyncCoordinator(scope = scope),
+            defaults = defaults,
+            eraser = eraser,
         )
+}
+
+/**
+ * An eraser that counts instead of erasing.
+ *
+ * The real one needs a database, and a `commonTest` cannot build one on every host — the
+ * Android host has no `sqlite-bundled` native library on its `java.library.path`, which is the
+ * same constraint that moved the outbox assertion into `HostedGraphScenarios`. What the
+ * teardown tests are actually asserting is that the wipe was *asked for*, and on which of the
+ * two paths, which is a decision rather than a database behaviour. `LocalStoreEraserTest` is
+ * where the erasing itself is proved, against a real store.
+ */
+internal class RecordingLocalStoreEraser : LocalStoreEraser {
+
+    var eraseAllCalls: Int = 0
+        private set
+
+    /** Makes the wipe throw, for proving a store that refuses cannot fail the sign-out. */
+    var failErase: Boolean = false
+
+    override suspend fun eraseAll() {
+        eraseAllCalls += 1
+        if (failErase) throw IllegalStateException("store unavailable")
+    }
 }
 
 /**

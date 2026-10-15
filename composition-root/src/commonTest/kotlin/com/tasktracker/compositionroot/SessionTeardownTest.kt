@@ -4,6 +4,7 @@ import com.tasktracker.core.TTLogger
 import com.tasktracker.database.CachedSession
 import com.tasktracker.di.Resolver
 import com.tasktracker.network.SessionInvalidationReason
+import com.tasktracker.userdefaults.DefaultsKey
 import kotlin.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -92,6 +93,8 @@ class SessionTeardownTest {
             metadata = FailingMetadataStore(),
             sessionCache = stores.session,
             syncCoordinator = silentSyncCoordinator(scope = backgroundScope),
+            defaults = stores.defaults,
+            eraser = stores.eraser,
         )
 
         teardown.run(SessionInvalidationReason.RefreshRejected)
@@ -99,6 +102,69 @@ class SessionTeardownTest {
         assertEquals(1, stores.session.clearCalls)
         // The metadata this teardown held is untouched, because the store refused.
         assertEquals(setOf("projects", "workItems"), stores.metadata.scopes())
+    }
+
+    /**
+     * The force path, which is [run] plus two wipes.
+     *
+     * Asserted as a *superset* rather than as a separate behaviour, because that is the claim
+     * that matters: a force sign-out that skipped the ordinary teardown would leave pull
+     * cursors behind and a sync engine still running against a store it is about to empty,
+     * and every symptom of that arrives later and somewhere else.
+     */
+    @Test
+    fun `a force teardown erases the store and every default`() = runTest {
+        val stores = InMemoryStores().apply { seed() }
+        stores.session.save(cachedSession())
+        stores.defaults.set(true, DefaultsKey.BoardShowsBacklog)
+        // Asserted rather than assumed: a wipe that passes because the seed never landed would
+        // be the most convincing kind of false green.
+        assertTrue(stores.defaults.hasValue(DefaultsKey.BoardShowsBacklog), "seed did not land")
+
+        stores.teardown(testResolver(), backgroundScope)
+            .runForce(SessionInvalidationReason.UserLogout)
+
+        assertEquals(1, stores.eraser.eraseAllCalls)
+        assertTrue(!stores.defaults.hasValue(DefaultsKey.BoardShowsBacklog))
+        assertEquals(1, stores.metadata.removeAllCalls)
+        assertEquals(1, stores.session.clearCalls)
+    }
+
+    /**
+     * The guard on the other side, and the reason the two paths are separate methods.
+     *
+     * [run] is what every `403` and every expired refresh token takes. A wipe that leaked into
+     * it would erase the local store of a user who was signed out by an expiry — someone who
+     * did not ask to lose anything, on a path they never chose, with no popup to warn them.
+     */
+    @Test
+    fun `an ordinary teardown leaves the store and the defaults alone`() = runTest {
+        val stores = InMemoryStores().apply { seed() }
+        stores.defaults.set(true, DefaultsKey.BoardShowsBacklog)
+
+        stores.teardown(testResolver(), backgroundScope)
+            .run(SessionInvalidationReason.Unauthorized)
+
+        assertEquals(0, stores.eraser.eraseAllCalls)
+        assertTrue(stores.defaults.hasValue(DefaultsKey.BoardShowsBacklog))
+    }
+
+    @Test
+    fun `a force teardown survives a store that will not erase`() = runTest {
+        val stores = InMemoryStores().apply { seed() }
+        stores.eraser.failErase = true
+
+        // No assertion on a thrown failure, because there must not be one. By the time this
+        // runs the credentials are already gone and the session is over, so a store that
+        // refuses is a log line rather than a reason to fail a sign-out the user has already
+        // made — failing here would show them a signed-out app and an error, with no action
+        // that could improve it.
+        stores.teardown(testResolver(), backgroundScope)
+            .runForce(SessionInvalidationReason.UserLogout)
+
+        assertEquals(1, stores.eraser.eraseAllCalls)
+        assertEquals(1, stores.metadata.removeAllCalls)
+        assertEquals(1, stores.session.clearCalls)
     }
 
     /**

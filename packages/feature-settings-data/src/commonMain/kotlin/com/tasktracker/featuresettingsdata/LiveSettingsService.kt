@@ -30,6 +30,12 @@ import kotlinx.coroutines.flow.map
  * the auth feature and the session teardown; a settings package that named either would be
  * reaching across a feature boundary to no benefit.
  *
+ * There are **two** such closures, and the pair is the point rather than an accident. The
+ * ordinary sign-out can fail — it asks the server to revoke the refresh token family first —
+ * and the failure is what the screen's popup exists to answer, so the screen has to be able to
+ * tell the two apart. One closure taking a flag would put that distinction inside the app and
+ * leave the service forwarding a boolean it does not understand.
+ *
  * ## Both update methods are plain `map`s, and that is the whole simplification
  *
  * The original wrapped each upstream stream in an `AsyncStream` with a task, a continuation and
@@ -46,6 +52,7 @@ class LiveSettingsService(
     private val coordinator: SyncCoordinator,
     private val version: AppVersion,
     private val endSession: suspend () -> Unit,
+    private val forceEndSession: suspend () -> Unit,
     private val defaults: UserDefaultsStore,
 ) : SettingsPort {
 
@@ -90,6 +97,17 @@ class LiveSettingsService(
 
     override suspend fun endSession() {
         endSession()
+    }
+
+    /**
+     * The device-only sign-out, forwarded to the app's own closure.
+     *
+     * Nothing is added here — no retry, no fallback to the ordinary path. The decision about
+     * what a force sign-out erases belongs to the app, and this service's whole job with these
+     * two methods is to be the seam that lets a screen ask without being able to reach.
+     */
+    override suspend fun forceEndSession() {
+        forceEndSession()
     }
 
     // MARK: - Version

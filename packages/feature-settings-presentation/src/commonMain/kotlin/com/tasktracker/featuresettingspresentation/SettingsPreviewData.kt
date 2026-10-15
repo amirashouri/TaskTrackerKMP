@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
@@ -101,6 +102,9 @@ class PreviewSettingsPort(
 
     override suspend fun endSession() = Unit
 
+    /** A preview has no session to end, so both ways out are the same no-op here. */
+    override suspend fun forceEndSession() = Unit
+
     override fun appVersion(): AppVersion = version
 
     override suspend fun userDetails(): UserDetails = UserDetails()
@@ -157,6 +161,7 @@ private fun SettingsPreview(
     connectivity: ConnectivitySummary,
     activity: SyncActivity,
     version: AppVersion = SettingsPreviewData.version,
+    signOutFailure: AppError? = null,
 ) {
     ttTheme(ThemeScheme.System) {
         SettingsScreen(
@@ -168,6 +173,24 @@ private fun SettingsPreview(
             onThemeChange = {},
             onSyncNow = {},
             onSignOut = {},
+            signOutFailure = signOutFailure,
         )
     }
+}
+
+/**
+ * The popup, which only exists once a clean sign-out has failed.
+ *
+ * Worth its own preview rather than a note on the happy one: it is the only state on this
+ * screen with two buttons and a destructive one, and it is unreachable by tapping around in a
+ * preview — nothing there can make a real sign-out fail.
+ */
+@Preview(name = "Settings, sign-out blocked", showBackground = true)
+@Composable
+private fun SettingsSignOutBlockedPreview() {
+    SettingsPreview(
+        connectivity = ConnectivitySummary.Offline,
+        activity = SyncActivity(phase = SyncActivity.Phase.WaitingForConnection, queueDepth = 2),
+        signOutFailure = AppError.Timeout,
+    )
 }

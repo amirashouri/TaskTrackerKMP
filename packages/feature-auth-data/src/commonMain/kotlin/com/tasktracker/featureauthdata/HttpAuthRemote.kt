@@ -76,6 +76,12 @@ private class RefreshEndpoint(private val payload: RefreshRequestBody) : Endpoin
  * whether a token is still live, so calling this prevents a stolen token from being used
  * after the user has signed out. The endpoint is idempotent: the server returns `204`
  * whether the token was valid or not.
+ *
+ * That idempotency is also what makes this the request worth bounding. `isIdempotent = true`
+ * is what lets `RetryPolicy` replay it, so a blackholed host costs the default timeout three
+ * times over rather than once — and this is the one request in the app the user is watching.
+ * `AuthRepository` puts the deadline on it; the endpoint's job is only to say that replaying
+ * it is safe.
  */
 private class SignOutEndpoint(private val payload: RefreshRequestBody) : Endpoint {
     override val path: String = "/v1/auth/signout"

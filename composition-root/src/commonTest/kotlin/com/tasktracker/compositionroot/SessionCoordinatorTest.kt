@@ -130,6 +130,119 @@ class SessionCoordinatorTest {
         harness.coordinator.stop()
     }
 
+    /**
+     * The failure the settings screen's popup exists for.
+     *
+     * A sign-out asks the server to revoke the refresh token family before it forgets anything,
+     * so a server that cannot be reached leaves the session standing. This asserts the whole of
+     * that outcome: the port was asked, nothing was torn down, and the router did not move —
+     * which is exactly the state that leaves the user on Settings with a live session and
+     * something to decide.
+     */
+    @Test
+    fun `a sign-out the server could not confirm leaves the session standing`() = runTest {
+        val session = RecordingSessionPort().apply {
+            restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
+        }
+        val stores = InMemoryStores().apply { seed() }
+        val harness = harness(session = session, stores = stores)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        session.failSignOut = true
+        val failure = runCatching { harness.coordinator.signOut() }
+        harness.drain()
+
+        // Rethrown rather than absorbed: the caller is what turns this into the offer to force,
+        // and a coordinator that swallowed it would leave the user looking at a button that
+        // silently did nothing.
+        assertTrue(failure.isFailure, "a failed sign-out must reach the caller")
+        assertEquals(1, session.signOutCalls)
+        assertEquals(0, stores.metadata.removeAllCalls)
+        assertEquals(setOf("projects", "workItems"), stores.metadata.scopes())
+        assertEquals(RootDestination.Main, harness.router.root)
+        harness.coordinator.stop()
+    }
+
+    @Test
+    fun `a failed sign-out does not arm a reason for the next one`() = runTest {
+        val session = RecordingSessionPort().apply {
+            restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
+        }
+        val harness = harness(session = session)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        session.failSignOut = true
+        runCatching { harness.coordinator.signOut() }
+        harness.drain()
+
+        // The user retries and this time the server answers. Exactly one teardown, and it
+        // belongs to *this* sign-out: a reason left armed by the failure would have been
+        // consumed by the retry, and the log would name a session that never ended.
+        session.failSignOut = false
+        harness.coordinator.signOut()
+        harness.drain()
+
+        assertEquals(1, harness.stores.metadata.removeAllCalls)
+        assertEquals(RootDestination.Auth, harness.router.root)
+        harness.coordinator.stop()
+    }
+
+    @Test
+    fun `a forced sign-out erases the store and never asks the server`() = runTest {
+        val session = RecordingSessionPort().apply {
+            restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
+        }
+        val stores = InMemoryStores().apply { seed() }
+        val harness = harness(session = session, stores = stores)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        harness.coordinator.forceSignOut()
+        harness.drain()
+
+        assertEquals(1, session.signOutLocallyCalls)
+        // The distinction the two port methods exist for. A force asks nothing of the network,
+        // which is what makes it unable to fail for want of one — and the server-facing call is
+        // precisely the one that can.
+        assertEquals(0, session.signOutCalls)
+        assertEquals(1, stores.eraser.eraseAllCalls)
+        assertEquals(1, stores.metadata.removeAllCalls)
+        assertEquals(RootDestination.Auth, harness.router.root)
+        harness.coordinator.stop()
+    }
+
+    /**
+     * The branch's other side, asserted through the coordinator rather than the teardown.
+     *
+     * `handle` is where the force flag is read, so this is the only place that can show the
+     * flag does not leak into the ordinary path. A wipe reaching a normal sign-out would erase
+     * the data of a user who never chose to lose it.
+     */
+    @Test
+    fun `an ordinary sign-out does not erase the store`() = runTest {
+        val session = RecordingSessionPort().apply {
+            restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
+        }
+        val stores = InMemoryStores().apply { seed() }
+        val harness = harness(session = session, stores = stores)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        harness.coordinator.signOut()
+        harness.drain()
+
+        assertEquals(0, stores.eraser.eraseAllCalls)
+        assertEquals(1, stores.metadata.removeAllCalls)
+        assertEquals(RootDestination.Auth, harness.router.root)
+        harness.coordinator.stop()
+    }
+
     @Test
     fun `a restoring session is reported to the router`() = runTest {
         val session = RecordingSessionPort().apply { restoreResult = SessionState.Restoring }

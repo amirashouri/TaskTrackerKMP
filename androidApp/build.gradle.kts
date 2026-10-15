@@ -62,6 +62,17 @@ android {
         compileSdk = libs.versions.androidCompileSdk.get().toInt()
         versionCode = 1
         versionName = "1.0.0"
+
+        // The API root this build talks to, surfaced to `platformApiBaseUrl` through the
+        // manifest meta-data declared in `src/main/AndroidManifest.xml`. Override it for a real
+        // deployment with `-Ptasktracker.apiBaseUrl=https://server.example.com` (or a
+        // `tasktracker.apiBaseUrl` entry in `gradle.properties`).
+        //
+        // Deliberately empty when unset, so the fallback is the Kotlin default in
+        // `PlatformApiBaseUrl.android.kt` and not a second copy of the same address here: a
+        // value baked in at this layer would drift from the one the resolver's tests pin.
+        manifestPlaceholders["tasktrackerApiBaseUrl"] =
+            (findProperty("tasktracker.apiBaseUrl") as String?).orEmpty()
     }
 
     buildTypes {

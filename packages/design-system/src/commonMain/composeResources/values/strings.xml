@@ -500,6 +500,26 @@
     <string name="settings_outcome_offline">There is no connection. Your edits are queued and will go out when you are back online.</string>
     <string name="settings_account_section">Account</string>
     <string name="settings_sign_out">Sign Out</string>
+    <!--
+      The force-sign-out popup. The title names the problem rather than the action: the user
+      has just tapped Sign Out and knows what they asked for — what they do not know is why
+      nothing happened, and that is the only thing worth the first line.
+
+      The body has three jobs in one sentence, in the order the user needs them. What went
+      wrong, so the tap does not read as a dead button. What forcing costs, because it erases
+      data and that has to be said before the button rather than after it. And what is left
+      behind, because "signed out here" and "signed out everywhere" are different claims and
+      a user who wanted the second deserves to know they are getting the first. The last clause
+      is deliberately not a warning — a refresh token that expires on its own is the ordinary
+      outcome of an unreachable server, not a leak.
+
+      "Force Sign Out" rather than "Continue" or "Sign Out Anyway": it is the same words as the
+      row that raised this, so the button reads as the same action carried further rather than
+      as a new one.
+    -->
+    <string name="settings_signout_blocked_title">Could not reach the server</string>
+    <string name="settings_signout_blocked_body">Your session could not be ended, because the server did not answer. Forcing the sign-out ends it on this device and erases the local data it left behind. The session may stay active on the server until it expires.</string>
+    <string name="settings_signout_force">Force Sign Out</string>
     <string name="settings_about_section">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_missing_title">Nothing to configure</string>

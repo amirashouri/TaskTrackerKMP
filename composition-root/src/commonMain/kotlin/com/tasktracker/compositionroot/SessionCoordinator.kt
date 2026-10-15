@@ -4,6 +4,7 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.TTLogger
 import com.tasktracker.core.logMessage
 import com.tasktracker.database.CachedSession
+import com.tasktracker.database.LocalStoreEraser
 import com.tasktracker.database.SessionCache
 import com.tasktracker.database.SyncMetadataStore
 import com.tasktracker.di.Resolver
@@ -13,6 +14,7 @@ import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.network.SessionInvalidationReason
 import com.tasktracker.routing.Router
 import com.tasktracker.sync.SyncCoordinator
+import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +56,8 @@ class SessionTeardown(
     private val metadata: SyncMetadataStore,
     private val sessionCache: SessionCache,
     private val syncCoordinator: SyncCoordinator,
+    private val defaults: UserDefaultsStore,
+    private val eraser: LocalStoreEraser,
 ) {
 
     suspend fun run(reason: SessionInvalidationReason) {
@@ -79,6 +83,46 @@ class SessionTeardown(
         // someone signs in.
         runCatching { sessionCache.clear() }
         syncCoordinator.stop()
+    }
+
+    /**
+     * Ends the session and erases everything else this app instance is holding.
+     *
+     * ## Why this is a second method rather than a flag on [run]
+     *
+     * The ordinary teardown keeps queued rows on purpose — see the class note. A force
+     * sign-out is the user saying they do not want that, so this is the one path that
+     * discards the outbox, and it is worth being explicit that it is not an oversight. The
+     * user has been told the session could not be ended cleanly and has chosen to leave
+     * nothing behind on this device; keeping a copy of their unsent work would be keeping
+     * exactly the thing they just asked to be rid of. That is a decision they make, which is
+     * why it has its own name rather than a boolean at the call site.
+     *
+     * ## [run] goes first, and the ordering is the reason
+     *
+     * A wipe that raced a running sync cycle would be deleting rows out from under a writer.
+     * [run] is what stops the engine and drops the session scope, so by the time the tables are
+     * touched there is no writer left. The reverse order is a race that shows up as a
+     * constraint error or a half-pushed change, neither of which reproduces on demand.
+     *
+     * ## Both wipes are best effort, unlike [run]'s two
+     *
+     * For the same reason [run] tolerates a store that refuses: by the time this runs the
+     * credentials are already gone and the session is already over, so a store that will not
+     * empty is a log line rather than a reason to fail a sign-out the user has already made.
+     * Failing here would leave them looking at a signed-out app and an error, with no action
+     * that could improve it.
+     *
+     * ## [UserDefaultsStore.removeAll] walks the enum, and the theme is deliberately outside it
+     *
+     * A wipe that took the appearance scheme with it would flip every force-signed-out user's
+     * light/dark choice back to `system`. The store's own note explains why that key is not a
+     * `DefaultsKey`, and this path inherits that carve-out rather than working around it.
+     */
+    suspend fun runForce(reason: SessionInvalidationReason) {
+        run(reason)
+        runCatching { defaults.removeAll() }
+        runCatching { eraser.eraseAll() }
     }
 }
 
@@ -138,6 +182,16 @@ class SessionCoordinator(
      */
     private var pendingReason: SessionInvalidationReason? = null
 
+    /**
+     * Whether the sign-out in flight is the device-only one, so the teardown knows to erase.
+     *
+     * The same shape as [pendingReason] and for the same reason: the port publishes a state
+     * that does not carry *why*, so the reason and the depth of the teardown have to be
+     * remembered on this side of the publication. Read and cleared together in one place —
+     * see [handle] — so the two can never describe different sign-outs.
+     */
+    private var pendingForce: Boolean = false
+
     /** Whether a session is currently live. See the class note. */
     private var hasLiveSession = false
 
@@ -188,10 +242,53 @@ class SessionCoordinator(
      * Deliberately goes through the port rather than tearing down directly: the port is what
      * forgets the credentials, and this coordinator reacts to the state it publishes. Calling
      * the teardown here would leave the tokens sitting in the keychain.
+     *
+     * ## This can fail, and the failure is the caller's to handle
+     *
+     * The port asks the server to revoke the refresh token family before it forgets anything,
+     * so a server that cannot be reached leaves the session standing. That is deliberate — the
+     * alternative signs a user out behind their back while a possibly-live token sits on the
+     * server — and it means this method throws with the session still live and the router still
+     * on the signed-in shell. The settings screen is what turns that into the offer to force.
+     *
+     * [pendingReason] is disarmed on the way out. It is a note about a session that *ended*,
+     * and leaving it set would hand it to whatever ends this session next — a retry, or a
+     * `403` — so the log would name the wrong cause. That is the one field a failed attempt has
+     * to clean up after itself; nothing else here has changed yet.
      */
     suspend fun signOut() {
         pendingReason = SessionInvalidationReason.UserLogout
-        session.signOut()
+        try {
+            session.signOut()
+        } catch (failure: Throwable) {
+            pendingReason = null
+            throw failure
+        }
+    }
+
+    /**
+     * Ends the session without asking the server, and erases what it left behind.
+     *
+     * The second half of the pair above, and the one a user reaches for after [signOut] has
+     * told them the revocation could not be confirmed. The port is still what forgets the
+     * credentials — see [signOut]'s note on why this class does not do it itself — but the
+     * device-only method asks nothing of the network, so there is nothing left to fail for
+     * want of one.
+     *
+     * [pendingForce] is what carries the difference down to the teardown, because the
+     * publication the port makes carries only the state. It is set before the call and cleared
+     * with [pendingReason] in [handle], so the two are always read as a pair.
+     */
+    suspend fun forceSignOut() {
+        pendingForce = true
+        pendingReason = SessionInvalidationReason.UserLogout
+        try {
+            session.signOutLocally()
+        } catch (failure: Throwable) {
+            pendingForce = false
+            pendingReason = null
+            throw failure
+        }
     }
 
     private suspend fun handle(state: SessionState) {
@@ -212,14 +309,24 @@ class SessionCoordinator(
             }
 
             SessionState.SignedOut -> {
+                // Read as a pair, and cleared as a pair: a force that left the reason armed, or
+                // a reason that outlived its force, would describe a sign-out that never
+                // happened. See both fields' notes.
                 val userAsked = pendingReason
+                val forced = pendingForce
                 pendingReason = null
+                pendingForce = false
                 val wasLive = hasLiveSession
                 hasLiveSession = false
 
                 // Teardown only for a session that actually ended. See the class note.
                 if (wasLive || userAsked != null) {
-                    teardown.run(reason = userAsked ?: SessionInvalidationReason.Unauthorized)
+                    val reason = userAsked ?: SessionInvalidationReason.Unauthorized
+                    if (forced) {
+                        teardown.runForce(reason = reason)
+                    } else {
+                        teardown.run(reason = reason)
+                    }
                 }
                 router.enterAuth()
             }

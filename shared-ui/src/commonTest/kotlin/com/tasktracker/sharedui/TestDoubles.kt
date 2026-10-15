@@ -1,5 +1,6 @@
 package com.tasktracker.sharedui
 
+import com.tasktracker.core.AppError
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.TestDateProvider
@@ -187,6 +188,18 @@ class ScriptedSession(
     val signInAttempts: MutableList<Pair<String, String>> = mutableListOf()
 
     /**
+     * When set, [signOut] fails with it instead of ending the session.
+     *
+     * The server-facing half of a sign-out is the only part that can fail, and this is how a
+     * shell test reaches the popup that failure exists to raise.
+     */
+    var signOutFailure: AppError? = null
+
+    /** How many times the device-only sign-out was taken. */
+    var signOutLocallyCalls: Int = 0
+        private set
+
+    /**
      * What the port last published, for asserting an effect rather than an emission.
      *
      * Tracked separately because the real bus keeps no such field — a broadcast is fire and
@@ -222,6 +235,22 @@ class ScriptedSession(
     }
 
     override suspend fun signOut() {
+        // Settable, so a shell test can drive the one path the settings screen has a popup
+        // for: a sign-out the server could not confirm. Left null, this is the happy path and
+        // the popup must not appear.
+        signOutFailure?.let { throw it }
+        publish(SessionState.SignedOut)
+    }
+
+    /**
+     * The device-only sign-out, counted rather than published separately.
+     *
+     * It publishes the same state as [signOut], because that is the contract: the difference
+     * between the two is what they ask the server, and a double that ended in a different state
+     * would let a shell that confused them pass.
+     */
+    override suspend fun signOutLocally() {
+        signOutLocallyCalls++
         publish(SessionState.SignedOut)
     }
 }
@@ -250,6 +279,9 @@ class FakeShellSettingsPort(
     var sessionEndCount: Int = 0
         private set
 
+    var sessionForceEndCount: Int = 0
+        private set
+
     val forcedOfflineHistory: List<Boolean> get() = forcedOfflineValues.toList()
 
     val syncNowHistory: List<SyncOutcome> get() = syncNowValues.toList()
@@ -275,6 +307,16 @@ class FakeShellSettingsPort(
 
     override suspend fun endSession() {
         sessionEndCount++
+    }
+
+    /**
+     * Counted separately from [sessionEndCount], and the separation is the assertion that
+     * matters here: only this one erases the user's data, so a shell that wired the popup's
+     * confirm button to the wrong port call would still sign the user out and only this count
+     * would show it.
+     */
+    override suspend fun forceEndSession() {
+        sessionForceEndCount++
     }
 
     override fun appVersion(): AppVersion = AppVersion(marketing = "1.0", build = "1")

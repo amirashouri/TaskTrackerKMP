@@ -20,6 +20,15 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+
+	<!-- The API root the app talks to, read at runtime by `platformApiBaseUrl` in
+	     :composition-root. It is wired to the TASKTRACKER_API_BASE_URL build setting, which
+	     project.yml leaves empty so the Kotlin fallback (http://localhost:8080, which the
+	     simulator reaches on the host) is the one place the default lives. A deployment sets
+	     the build setting to name its own server. -->
+	<key>TaskTrackerApiBaseUrl</key>
+	<string>$(TASKTRACKER_API_BASE_URL)</string>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 

@@ -2,6 +2,7 @@ package com.tasktracker.sharedui
 
 import androidx.compose.ui.window.ComposeUIViewController
 import com.tasktracker.compositionroot.AppGraph
+import com.tasktracker.compositionroot.platformApiBaseUrl
 import com.tasktracker.di.Resolver
 import platform.UIKit.UIViewController
 
@@ -53,7 +54,15 @@ fun mainViewController(): UIViewController = ComposeUIViewController {
  * reliably receive — would be an API whose correct use is unavailable and whose incorrect use
  * is silent. So there is no such symbol here. If iOS ever grows a real teardown signal, this
  * holder is where `AppGraph.stop(resolver)` belongs, and the doc above is what to replace.
+ *
+ * ## Why it names a base URL
+ *
+ * iOS runs beside the Go server as much as Desktop does, so it asks for the real HTTP remote and
+ * transport rather than the in-process demo pair. [platformApiBaseUrl] reads the `Info.plist`
+ * key a deployment sets (and falls back to the local server for the simulator), so the address
+ * lives in the app bundle rather than in this file — the same shared resolver Desktop and
+ * Android call.
  */
 private object IosGraph {
-    val resolver: Resolver by lazy { AppGraph.start() }
+    val resolver: Resolver by lazy { AppGraph.start(apiBaseUrl = platformApiBaseUrl()) }
 }

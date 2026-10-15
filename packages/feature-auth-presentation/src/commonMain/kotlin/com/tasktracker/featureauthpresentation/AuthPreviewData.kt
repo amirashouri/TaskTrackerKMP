@@ -114,6 +114,17 @@ private class FakeSession(
         updates.value = SessionState.SignedOut
     }
 
+    /**
+     * The same transition, and deliberately the same line.
+     *
+     * A preview has no server, so the difference the two methods exist for — whether the
+     * server was asked — is not something a fixture can show. Both end at [SessionState.SignedOut],
+     * which is what every screen being previewed reacts to.
+     */
+    override suspend fun signOutLocally() {
+        updates.value = SessionState.SignedOut
+    }
+
     override val sessionUpdates: Flow<SessionState> = updates.asStateFlow()
 }
 

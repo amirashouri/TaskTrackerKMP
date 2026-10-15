@@ -1,5 +1,6 @@
 package com.tasktracker.featuresettingspresentation
 
+import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
@@ -16,8 +17,10 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * [SettingsModel] against a port that answers from scripted values.
@@ -185,6 +188,77 @@ class SettingsModelTest {
         model.signOut()
 
         assertEquals(1, port.sessionEndCalls)
+        // Nothing to answer on the happy path, which is what keeps the popup off a screen where
+        // the sign-out simply worked.
+        assertNull(model.signOutFailure)
+    }
+
+    @Test
+    fun aSignOutTheServerCouldNotConfirmIsHeldRatherThanThrown() = runTest {
+        val port = RecordingSettingsPort().apply { endSessionFailure = AppError.Timeout }
+        val model = SettingsModel(port)
+
+        // No throw: the failure is the screen's state, not the caller's problem. A model that
+        // rethrew would leave the shell launching a coroutine whose exception has nowhere to go.
+        model.signOut()
+
+        assertEquals(AppError.Timeout, model.signOutFailure)
+        assertEquals(1, port.sessionEndCalls)
+    }
+
+    @Test
+    fun aCancelledSignOutDoesNotRaiseThePopup() = runTest {
+        val port = RecordingSettingsPort().apply {
+            endSessionFailure = CancellationException("the tab was left mid-sign-out")
+        }
+        val model = SettingsModel(port)
+
+        // Caught here rather than in the model: the screen is disposed while this call is in
+        // flight whenever the user leaves the tab, and a `runCatching` in the model would read
+        // that as a failed sign-out and raise a popup over whatever the user navigated to next.
+        val thrown = try {
+            model.signOut()
+            null
+        } catch (cancelled: CancellationException) {
+            cancelled
+        }
+
+        assertNotNull(thrown, "a cancellation must be rethrown, not absorbed")
+        assertNull(model.signOutFailure)
+    }
+
+    @Test
+    fun forcingASignOutTakesTheForceCallAndClearsTheFailure() = runTest {
+        val port = RecordingSettingsPort().apply { endSessionFailure = AppError.Offline }
+        val model = SettingsModel(port)
+        model.signOut()
+        assertEquals(AppError.Offline, model.signOutFailure)
+
+        model.forceSignOut()
+
+        // The second port method, not the first: `forceEndSession` is the one that erases, and a
+        // screen wired to the wrong one would sign the user out and leave their data behind.
+        assertEquals(1, port.forceEndSessionCalls)
+        assertEquals(1, port.sessionEndCalls)
+        // Cleared *before* the call, so a recomposition in the window between this returning and
+        // the route change it causes cannot re-raise a question the user has just answered.
+        assertNull(model.signOutFailure)
+    }
+
+    @Test
+    fun decliningToForceLeavesTheSessionExactlyAsItWas() = runTest {
+        val port = RecordingSettingsPort().apply { endSessionFailure = AppError.Timeout }
+        val model = SettingsModel(port)
+        model.signOut()
+
+        model.dismissSignOutFailure()
+
+        assertNull(model.signOutFailure)
+        // Nothing was revoked and nothing was erased, so the session is still live. Asserted
+        // because a dismiss that quietly forced the sign-out would look identical from the
+        // popup's side and would destroy the user's data against their answer.
+        assertEquals(0, port.forceEndSessionCalls)
+        assertEquals(1, port.sessionEndCalls)
     }
 
     @Test
@@ -238,6 +312,19 @@ class RecordingSettingsPort(
     var sessionEndCalls: Int = 0
         private set
 
+    /**
+     * When set, [endSession] fails with it instead of ending the session.
+     *
+     * The server-facing half of a sign-out is the only part that can fail, and this is how a
+     * model test reaches the popup that failure exists to raise. A `Throwable` rather than an
+     * [AppError] so a test can also script the one failure the model must *not* catch:
+     * cancellation, which arrives when the user leaves the tab mid-sign-out.
+     */
+    var endSessionFailure: Throwable? = null
+
+    var forceEndSessionCalls: Int = 0
+        private set
+
     val forcedOfflineHistory = mutableListOf<Boolean>()
 
     override suspend fun connectivity(): ConnectivitySummary {
@@ -264,6 +351,11 @@ class RecordingSettingsPort(
 
     override suspend fun endSession() {
         sessionEndCalls++
+        endSessionFailure?.let { throw it }
+    }
+
+    override suspend fun forceEndSession() {
+        forceEndSessionCalls++
     }
 
     override fun appVersion(): AppVersion {

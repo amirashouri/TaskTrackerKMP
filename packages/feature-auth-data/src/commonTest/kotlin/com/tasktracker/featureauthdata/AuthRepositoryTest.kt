@@ -20,6 +20,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 /** A repository over an in-memory keychain, a scripted remote and its own bus. */
 private class RepositorySubject {
@@ -161,6 +162,97 @@ class AuthRepositoryTest {
         assertNull(subject.defaults.value<UserIdentity>(DefaultsKey.CachedProfile))
         assertEquals(listOf<SessionState>(SessionState.SignedOut), seen)
         subject.bus.finish()
+    }
+
+    @Test
+    fun aRevocationThatReachesTheServerRetiresTheStoredFamilyExactlyOnce() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(listOf(Result.success(AuthTokens(token(), "r1"))))
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        val seen = mutableListOf<SessionState>()
+        collecting(subject.bus.states(), seen)
+
+        subject.repository.signOut()
+
+        // The *stored refresh* token, not the access token: revoking the wrong family would
+        // leave the one that can mint new access tokens alive on the server while every
+        // count-based assertion still passed.
+        assertEquals(listOf("r1"), subject.remote.seenSignOutTokens)
+        assertEquals(1, subject.remote.signOutCount)
+        assertEquals(listOf<SessionState>(SessionState.SignedOut), seen)
+        subject.bus.finish()
+    }
+
+    @Test
+    fun aSignOutTheServerNeverAnswersGivesUpAndLeavesTheSessionIntact() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(listOf(Result.success(AuthTokens(token(), "r1"))))
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        // Silence rather than refusal: a host that accepts the connection and never answers.
+        // Just past the deadline, so the test pins *that* constant rather than merely proving
+        // some deadline exists.
+        subject.remote.setSignOutDelay(SIGN_OUT_REVOKE_TIMEOUT + 1.seconds)
+        val seen = mutableListOf<SessionState>()
+        collecting(subject.bus.states(), seen)
+
+        assertFailsWith<AppError.Timeout> { subject.repository.signOut() }
+
+        // The ordering invariant, and the reason the popup can exist at all: the failure
+        // propagates *before* the wipe, so there is still a session for the user to force.
+        // Wiping first would sign them out silently and never offer the choice.
+        assertTrue(subject.vault.hasStoredSession())
+        assertTrue(subject.defaults.hasValue(DefaultsKey.CachedProfile))
+        assertTrue(seen.isEmpty(), "a blocked sign-out published $seen")
+        subject.bus.finish()
+    }
+
+    @Test
+    fun aRefusedRevocationIsReportedRatherThanSwallowed() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(listOf(Result.success(AuthTokens(token(), "r1"))))
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        subject.remote.setSignOutResults(listOf(Result.failure(AppError.Unauthorized)))
+
+        assertFailsWith<AppError.Unauthorized> { subject.repository.signOut() }
+
+        // A refusal and a timeout are the same decision from here — the caller is told, and
+        // the session is left standing. What matters is that the reason survives the trip
+        // instead of being flattened into a generic failure.
+        assertTrue(subject.vault.hasStoredSession())
+        assertEquals(1, subject.remote.signOutCount)
+        subject.bus.finish()
+    }
+
+    @Test
+    fun aLocalSignOutWipesTheDeviceWithoutAskingTheServer() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(listOf(Result.success(AuthTokens(token(), "r1"))))
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        val seen = mutableListOf<SessionState>()
+        collecting(subject.bus.states(), seen)
+
+        subject.repository.signOutLocally()
+
+        assertTrue(!subject.vault.hasStoredSession())
+        assertNull(subject.defaults.value<UserIdentity>(DefaultsKey.CachedProfile))
+        assertEquals(listOf<SessionState>(SessionState.SignedOut), seen)
+        // Not one request, even with a server that would have hung: a device with no backend
+        // reaches this path on the first tap, and it must not spend the deadline finding out
+        // there is nothing to reach.
+        assertEquals(0, subject.remote.signOutCount)
+        subject.bus.finish()
+    }
+
+    @Test
+    fun signingOutWithNothingStoredDoesNotCallTheServer() = runTest {
+        val subject = RepositorySubject()
+
+        subject.repository.signOut()
+
+        // Nothing to revoke, so nothing to wait for — and no deadline burned on a device that
+        // has never been signed in.
+        assertEquals(0, subject.remote.signOutCount)
+        assertTrue(!subject.vault.hasStoredSession())
     }
 
     @Test

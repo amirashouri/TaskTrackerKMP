@@ -6,6 +6,8 @@ import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxQueue
 import com.tasktracker.database.RoomOutboxQueue
+import com.tasktracker.database.LocalStoreEraser
+import com.tasktracker.database.RoomLocalStoreEraser
 import com.tasktracker.database.RoomSessionCache
 import com.tasktracker.database.RoomSyncMetadataStore
 import com.tasktracker.database.SessionCache
@@ -89,20 +91,21 @@ object AppGraph {
      * ## [apiBaseUrl] is the one switch between a real backend and the offline demo
      *
      * A named URL binds the real `HttpAuthRemote` and `HttpSyncTransport`; `null`, the
-     * default, binds the in-process `MockAuthRemote` / `InMemorySyncTransport` pair the
-     * mobile shells still run on. The default is the demo because a caller that names no
-     * backend has not got one, and a graph that guessed at an address could only hang the
-     * auth gate on a socket nobody is listening to. Desktop names `http://localhost:8080`
-     * so it reaches the local Go server.
+     * default, binds the in-process `MockAuthRemote` / `InMemorySyncTransport` pair. The
+     * default is the demo because a caller that names no backend has not got one, and a graph
+     * that guessed at an address could only hang the auth gate on a socket nobody is listening
+     * to. All three shells now name one: [platformApiBaseUrl] reads each platform's own
+     * configuration surface — an environment variable, an `Info.plist` key, a manifest
+     * meta-data — so Desktop, iOS and Android all reach the Go server.
      *
-     * ## Two defaults here are relied on and not gated
+     * ## The `null` default is what the tests rely on, and no shell reaches it
      *
-     * Both mobile entry points depend on `apiBaseUrl`'s default: `MainViewController` on iOS
-     * and `TaskTrackerApplication` on Android call this function with no URL at all, so a
-     * default changed to a non-null value would bind both shells to a real backend with the
-     * suite still green. That one *is* gateable — a `jvmTest` case calling
-     * `start(startServices = false)` and leaving the URL to its default asserts the demo pair
-     * without opening anything — but it is a new test file, and this change adds none.
+     * Every entry point passes a URL from [platformApiBaseUrl], so this default is no longer
+     * the path a launched app takes. The callers that still depend on it are the tests:
+     * `testBindings` defaults `apiBaseUrl` to `null` because that is the demo pair the rest of
+     * the suite wants, and `HostedGraphScenarios.theSampleSeedOnlyRunsWithoutABackend` exercises
+     * both sides of the switch. A default changed to a non-null value would bind those graphs
+     * to a real backend with the assertions still green.
      *
      * `startServices`'s default is the harder half. The *public* start cannot gate it: exercising
      * the default starts the loops, and `startLoops` resolves the store, so an assertion that
@@ -249,6 +252,12 @@ object AppGraph {
         // the graph.
         app<TaskTrackerDatabase> { TaskTrackerDatabase.open(platforms.database) }
 
+        // Bound here rather than inside the session registration, because it is a property of
+        // the store and not of a session: the eraser holds the database and nothing else.
+        app<LocalStoreEraser> { resolver ->
+            RoomLocalStoreEraser(resolver.resolve(TaskTrackerDatabase::class))
+        }
+
         app<ProjectChangeBus> { ProjectChangeBus() }
 
         app<SessionCache> { resolver -> RoomSessionCache(resolver.resolve(TaskTrackerDatabase::class)) }
@@ -283,13 +292,13 @@ object AppGraph {
         //
         // With no URL the graph has no server to talk to, so `MockAuthRemote` mints genuine
         // signed-format JWTs in-process — the vault's expiry, forced-refresh and restore paths
-        // all run for real while nothing is listening on a socket. That is the offline demo
-        // the mobile shells run: they name no URL, so they keep working with no backend.
+        // all run for real while nothing is listening on a socket. That is the offline demo a
+        // test runs by leaving the URL `null`; no shipping shell names no URL any more.
         //
-        // With a URL the real `HttpAuthRemote` is bound instead, and Desktop points it at the
-        // local Go server. This is the switch `MockAuthRemote`'s own KDoc placed here, and the
-        // release rule it named still holds: a build with a backend is handed `HttpAuthRemote`,
-        // never the mock.
+        // With a URL the real `HttpAuthRemote` is bound instead, which is every shell now that
+        // all three pass [platformApiBaseUrl]'s value. This is the switch `MockAuthRemote`'s own
+        // KDoc placed here, and the release rule it named still holds: a build with a backend is
+        // handed `HttpAuthRemote`, never the mock.
         //
         // The client has **no interceptors**, deliberately. A login or refresh must not carry
         // an `Authorization` header, and routing a refresh through the authenticated client
@@ -507,6 +516,8 @@ object AppGraph {
                 metadata = resolver.resolve(SyncMetadataStore::class),
                 sessionCache = resolver.resolve(SessionCache::class),
                 syncCoordinator = resolver.resolve(SyncCoordinator::class),
+                defaults = resolver.resolve(UserDefaultsStore::class),
+                eraser = resolver.resolve(LocalStoreEraser::class),
             )
         }
 
@@ -532,6 +543,14 @@ object AppGraph {
      * service's construction path, so a graph where settings were resolved before auth would
      * build a coordinator over a session port that does not exist yet.
      *
+     * ## Two closures, because there are two ways to end a session
+     *
+     * `endSession` asks the server first and can fail; `forceEndSession` asks nothing and
+     * erases what the session left behind. They are separate parameters rather than one
+     * closure taking a flag, so the settings service cannot accidentally pass the wrong one —
+     * the two are not variants of a call, they are different calls with different outcomes,
+     * and only the screen knows which one the user chose.
+     *
      * ## [AppVersion] is a value, not a factory
      *
      * It cannot change while the app runs, so it is read once here and the About row reads
@@ -547,6 +566,7 @@ object AppGraph {
                 coordinator = resolver.resolve(SyncCoordinator::class),
                 version = resolver.resolve(AppVersion::class),
                 endSession = { resolver.resolve(SessionCoordinator::class).signOut() },
+                forceEndSession = { resolver.resolve(SessionCoordinator::class).forceSignOut() },
                 defaults = resolver.resolve(UserDefaultsStore::class),
             )
         }
@@ -615,8 +635,8 @@ internal class PlatformBindings(
      *
      * The one value that decides whether [AppGraph]'s auth and sync registrations bind the real
      * HTTP pair or the in-process demo pair. `null` is the default so a call site that names no
-     * backend gets the demo, exactly as the mobile shells do; Desktop passes
-     * `http://localhost:8080` so it reaches the local Go server.
+     * backend gets the demo; the three shells all pass [platformApiBaseUrl]'s value, so only a
+     * test leaves this `null`.
      *
      * A default rather than a required argument for the same reason [database] is: the default
      * is what production gets, and the call sites that pass anything are the platform entry

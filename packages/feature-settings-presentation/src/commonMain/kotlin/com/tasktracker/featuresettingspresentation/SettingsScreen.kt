@@ -1,6 +1,7 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.tasktracker.core.AppError
+import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.AccentPalette
@@ -39,6 +42,9 @@ import com.tasktracker.resources.settings_connectivity_unknown
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_sign_out
+import com.tasktracker.resources.settings_signout_blocked_body
+import com.tasktracker.resources.settings_signout_blocked_title
+import com.tasktracker.resources.settings_signout_force
 import com.tasktracker.resources.settings_status_label
 import com.tasktracker.resources.settings_sync_now
 import com.tasktracker.resources.settings_sync_stuck
@@ -74,6 +80,16 @@ import org.jetbrains.compose.resources.stringResource
  * reason the user cannot see is how a dead button gets reported as a bug — so an offline tap
  * is *answered*, with [SyncOutcome.Offline] rendered as the sentence explaining that the edits
  * are queued and safe.
+ *
+ * ## Sign Out is the one control that can be answered with a question
+ *
+ * Every other command on this screen either works or reports what happened. Sign Out can fail
+ * in a way the user has to decide about, because the app asks the server to revoke the refresh
+ * token family before it forgets anything — deliberately, so a user is never signed out behind
+ * their back while a possibly-live token sits on the server. When that call cannot be
+ * completed, [signOutFailure] is non-null and the screen raises [ConfirmPopup] offering the
+ * device-only sign-out instead. See `SettingsModel.signOut` for where that failure is caught,
+ * and `SettingsPort.forceEndSession` for what the second button discards.
  */
 @Composable
 fun SettingsScreen(
@@ -93,194 +109,228 @@ fun SettingsScreen(
     onGlassIntensityCommit: (Float) -> Unit = {},
     userDetails: UserDetails = UserDetails(),
     onUserDetailsChange: (UserDetails) -> Unit = {},
-)
- {
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            // Top only: bottom padding here would shrink the *list's viewport*, and the sign-out row
-            // would then never reach the screen's bottom edge — which is the bound the scroll is
-            // supposed to have. Its clearance from the glass is `contentPadding`, below.
-            .padding(horizontal = ttSpacing.xxl)
-            .padding(top = ttSpacing.xl)
-            .testTag(SettingsScreenTag),
-        // Scroll range under the floating tab bar, not viewport inset — see
-        // `LocalTabBarScrollUnderInset`. This is the list whose last row is the sign-out button,
-        // so an inset that is a few dp short is a sign-out button parked under the glass. The
-        // `ttSpacing.xl` is clearance rather than decoration: it is the same air the board gives
-        // its lanes, and without it the last row comes to rest flush against the capsule's top
-        // edge instead of above it.
-        contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-    ) {
-        item {
-            // First section on the page: it is the identity the rest of the screen belongs to,
-            // not a preference filed with the others. It renders even when empty — the row that
-            // reads "—" is the honest answer, whereas a section that hides itself would leave
-            // the user with no idea where their profile went. The position picker dispatches
-            // through the same callback as every other edit here; the model persists it.
-            SettingsSection {
-                UserDetailsRow(
-                    details = userDetails,
-                    onDetailsChange = onUserDetailsChange,
-                    modifier = Modifier.testTag(SettingsUserDetailsTag),
-                )
-                SettingsDivider()
-                UserPositionPickerRow(
-                    selected = userDetails.position,
-                    onSelect = { position ->
-                        onUserDetailsChange(userDetails.copy(position = position))
-                    },
-                    modifier = Modifier.testTag(SettingsPositionRowTag),
-                )
-                SettingsDivider()
-                UserStatusPickerRow(
-                    selected = userDetails.status,
-                    onSelect = { status ->
-                        onUserDetailsChange(userDetails.copy(status = status))
-                    },
-                    modifier = Modifier.testTag(SettingsUserStatusRowTag),
-                )
-                SettingsDivider()
-                StatusTextEditor(
-                    value = userDetails.statusText,
-                    onValueChange = { statusText ->
-                        onUserDetailsChange(userDetails.copy(statusText = statusText))
-                    },
-                    modifier = Modifier.testTag(SettingsStatusTextRowTag),
-                )
-            }
-        }
-        item {
-            SettingsSection {
-                ThemePickerRow(
-                    selected = themeScheme,
-                    onSelect = onThemeChange,
-                )
-                SettingsDivider()
-                AccentPalettePickerRow(
-                    selected = accentPalette,
-                    onSelect = onAccentPaletteChange,
-                )
-                SettingsDivider()
-                GlassIntensityRow(
-                    intensity = glassIntensity,
-                    onPreview = onGlassIntensityPreview,
-                    onCommit = onGlassIntensityCommit,
-                )
-            }
-        }
-        item {
-            SettingsSection {
-                SettingsIconRow(
-                    label = stringResource(Res.string.settings_status_label),
-                    value = connectivityLabel(connectivity),
-                    icon = ttSettingsIcons.connectivity,
-                )
-                SettingsDivider()
-            }
-        }
-        item {
-            SettingsSection {
-                SettingsIconRow(
-                    label = stringResource(Res.string.settings_status_label),
-                    value = activityLabel(activity.phase),
-                    icon = ttSettingsIcons.sync,
-                )
-                // The queue depth is the number a user actually cares about: it is how many of
-                // their edits are still only on this device.
-                activity.outstandingCount?.let { outstanding ->
+    signOutFailure: AppError? = null,
+    onForceSignOut: () -> Unit = {},
+    onDismissSignOutFailure: () -> Unit = {},
+) {
+    // The list and the confirmation popup are siblings in one box, so the popup floats over
+    // the list rather than scrolling with it. `modifier` lands here rather than on the
+    // `LazyColumn`, which is what lets the overlay cover the whole screen instead of only the
+    // list's viewport — the same shape `SprintDetailScreen` uses for its own confirmation.
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                // Top only: bottom padding here would shrink the *list's viewport*, and the sign-out row
+                // would then never reach the screen's bottom edge — which is the bound the scroll is
+                // supposed to have. Its clearance from the glass is `contentPadding`, below.
+                .padding(horizontal = ttSpacing.xxl)
+                .padding(top = ttSpacing.xl)
+                .testTag(SettingsScreenTag),
+            // Scroll range under the floating tab bar, not viewport inset — see
+            // `LocalTabBarScrollUnderInset`. This is the list whose last row is the sign-out button,
+            // so an inset that is a few dp short is a sign-out button parked under the glass. The
+            // `ttSpacing.xl` is clearance rather than decoration: it is the same air the board gives
+            // its lanes, and without it the last row comes to rest flush against the capsule's top
+            // edge instead of above it.
+            contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            item {
+                // First section on the page: it is the identity the rest of the screen belongs to,
+                // not a preference filed with the others. It renders even when empty — the row that
+                // reads "—" is the honest answer, whereas a section that hides itself would leave
+                // the user with no idea where their profile went. The position picker dispatches
+                // through the same callback as every other edit here; the model persists it.
+                SettingsSection {
+                    UserDetailsRow(
+                        details = userDetails,
+                        onDetailsChange = onUserDetailsChange,
+                        modifier = Modifier.testTag(SettingsUserDetailsTag),
+                    )
                     SettingsDivider()
-                    SettingsIconRow(
-                        label = stringResource(Res.string.settings_sync_waiting),
-                        value = outstanding.toString(),
-                        icon = ttSettingsIcons.sync,
-                        modifier = Modifier.testTag(SettingsWaitingRowTag),
+                    UserPositionPickerRow(
+                        selected = userDetails.position,
+                        onSelect = { position ->
+                            onUserDetailsChange(userDetails.copy(position = position))
+                        },
+                        modifier = Modifier.testTag(SettingsPositionRowTag),
+                    )
+                    SettingsDivider()
+                    UserStatusPickerRow(
+                        selected = userDetails.status,
+                        onSelect = { status ->
+                            onUserDetailsChange(userDetails.copy(status = status))
+                        },
+                        modifier = Modifier.testTag(SettingsUserStatusRowTag),
+                    )
+                    SettingsDivider()
+                    StatusTextEditor(
+                        value = userDetails.statusText,
+                        onValueChange = { statusText ->
+                            onUserDetailsChange(userDetails.copy(statusText = statusText))
+                        },
+                        modifier = Modifier.testTag(SettingsStatusTextRowTag),
                     )
                 }
-                // Dead rows are kept rather than dropped, so this can be non-zero, and it is
-                // then the only sign that something is stuck.
-                activity.stuckCount?.let { stuck ->
+            }
+            item {
+                SettingsSection {
+                    ThemePickerRow(
+                        selected = themeScheme,
+                        onSelect = onThemeChange,
+                    )
                     SettingsDivider()
-                    SettingsIconRow(
-                        label = stringResource(Res.string.settings_sync_stuck),
-                        value = stuck.toString(),
-                        icon = ttSettingsIcons.sync,
-                        valueColor = ttError(),
-                        modifier = Modifier.testTag(SettingsStuckRowTag),
+                    AccentPalettePickerRow(
+                        selected = accentPalette,
+                        onSelect = onAccentPaletteChange,
+                    )
+                    SettingsDivider()
+                    GlassIntensityRow(
+                        intensity = glassIntensity,
+                        onPreview = onGlassIntensityPreview,
+                        onCommit = onGlassIntensityCommit,
                     )
                 }
-                if (activity.failures.isNotEmpty()) {
-                    SettingsDivider()
-                    ttText(
-                        text = activity.failures.joinToString(separator = "\n"),
-                        style = ttTypography.footnote,
-                        color = ttLabelSecondary(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = ttSpacing.sm)
-                            .testTag(SettingsFailuresTag),
-                    )
-                }
-                // Only a request that could not start lands here. The button below is
-                // deliberately *not* disabled for it: greying a control out for a reason the
-                // user cannot see is how a dead button gets reported as a bug.
-                commandOutcome?.let { outcome ->
-                    outcomeMessage(outcome)?.let { message ->
-                        SettingsDivider()
-                        ttText(
-                            text = message,
-                            style = ttTypography.footnote,
-                            color = ttError(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = ttSpacing.sm)
-                                .testTag(SettingsOutcomeTag),
-                        )
-                    }
-                }
-                SettingsDivider()
-                SettingsActionRow(
-                    label = stringResource(Res.string.settings_sync_now),
-                    icon = ttSettingsIcons.sync,
-                    tint = ttAccent(),
-                    onClick = onSyncNow,
-                    enabled = !activity.isSyncing,
-                    modifier = Modifier.testTag(SettingsSyncNowTag),
-                    // The one state that disables it: a cycle already running, which the status
-                    // row above is already saying out loud. Offline is *not* a reason — that
-                    // tap has to be answerable, and the answer is what lands above.
-                )
             }
-        }
-        item {
-            SettingsSection {
-                // Through the port, which the app backs with the session coordinator: that is
-                // what forgets the credentials, ends the session-scoped state and routes back
-                // to sign-in. Tearing down from here would leave the tokens behind.
-                SettingsActionRow(
-                    label = stringResource(Res.string.settings_sign_out),
-                    icon = ttSettingsIcons.account,
-                    tint = ttError(),
-                    onClick = onSignOut,
-                    modifier = Modifier.testTag(SettingsSignOutTag),
-                )
-            }
-        }
-        // The About section hides itself entirely rather than rendering an empty one: a
-        // version row with nothing beside it is a row that says the app does not know its own
-        // version, which is only true for a build with no version keys at all.
-        version.display?.let { displayed ->
             item {
                 SettingsSection {
                     SettingsIconRow(
-                        label = stringResource(Res.string.settings_version),
-                        value = displayed,
-                        icon = ttSettingsIcons.about,
-                        modifier = Modifier.testTag(SettingsVersionRowTag),
+                        label = stringResource(Res.string.settings_status_label),
+                        value = connectivityLabel(connectivity),
+                        icon = ttSettingsIcons.connectivity,
+                    )
+                    SettingsDivider()
+                }
+            }
+            item {
+                SettingsSection {
+                    SettingsIconRow(
+                        label = stringResource(Res.string.settings_status_label),
+                        value = activityLabel(activity.phase),
+                        icon = ttSettingsIcons.sync,
+                    )
+                    // The queue depth is the number a user actually cares about: it is how many of
+                    // their edits are still only on this device.
+                    activity.outstandingCount?.let { outstanding ->
+                        SettingsDivider()
+                        SettingsIconRow(
+                            label = stringResource(Res.string.settings_sync_waiting),
+                            value = outstanding.toString(),
+                            icon = ttSettingsIcons.sync,
+                            modifier = Modifier.testTag(SettingsWaitingRowTag),
+                        )
+                    }
+                    // Dead rows are kept rather than dropped, so this can be non-zero, and it is
+                    // then the only sign that something is stuck.
+                    activity.stuckCount?.let { stuck ->
+                        SettingsDivider()
+                        SettingsIconRow(
+                            label = stringResource(Res.string.settings_sync_stuck),
+                            value = stuck.toString(),
+                            icon = ttSettingsIcons.sync,
+                            valueColor = ttError(),
+                            modifier = Modifier.testTag(SettingsStuckRowTag),
+                        )
+                    }
+                    if (activity.failures.isNotEmpty()) {
+                        SettingsDivider()
+                        ttText(
+                            text = activity.failures.joinToString(separator = "\n"),
+                            style = ttTypography.footnote,
+                            color = ttLabelSecondary(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = ttSpacing.sm)
+                                .testTag(SettingsFailuresTag),
+                        )
+                    }
+                    // Only a request that could not start lands here. The button below is
+                    // deliberately *not* disabled for it: greying a control out for a reason the
+                    // user cannot see is how a dead button gets reported as a bug.
+                    commandOutcome?.let { outcome ->
+                        outcomeMessage(outcome)?.let { message ->
+                            SettingsDivider()
+                            ttText(
+                                text = message,
+                                style = ttTypography.footnote,
+                                color = ttError(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = ttSpacing.sm)
+                                    .testTag(SettingsOutcomeTag),
+                            )
+                        }
+                    }
+                    SettingsDivider()
+                    SettingsActionRow(
+                        label = stringResource(Res.string.settings_sync_now),
+                        icon = ttSettingsIcons.sync,
+                        tint = ttAccent(),
+                        onClick = onSyncNow,
+                        enabled = !activity.isSyncing,
+                        modifier = Modifier.testTag(SettingsSyncNowTag),
+                        // The one state that disables it: a cycle already running, which the status
+                        // row above is already saying out loud. Offline is *not* a reason — that
+                        // tap has to be answerable, and the answer is what lands above.
                     )
                 }
             }
+            item {
+                SettingsSection {
+                    // Through the port, which the app backs with the session coordinator: that is
+                    // what forgets the credentials, ends the session-scoped state and routes back
+                    // to sign-in. Tearing down from here would leave the tokens behind.
+                    SettingsActionRow(
+                        label = stringResource(Res.string.settings_sign_out),
+                        icon = ttSettingsIcons.account,
+                        tint = ttError(),
+                        onClick = onSignOut,
+                        modifier = Modifier.testTag(SettingsSignOutTag),
+                    )
+                }
+            }
+            // The About section hides itself entirely rather than rendering an empty one: a
+            // version row with nothing beside it is a row that says the app does not know its own
+            // version, which is only true for a build with no version keys at all.
+            version.display?.let { displayed ->
+                item {
+                    SettingsSection {
+                        SettingsIconRow(
+                            label = stringResource(Res.string.settings_version),
+                            value = displayed,
+                            icon = ttSettingsIcons.about,
+                            modifier = Modifier.testTag(SettingsVersionRowTag),
+                        )
+                    }
+                }
+            }
+        }
+
+        // The force sign-out, offered only when the clean one could not be completed.
+        //
+        // A popup rather than an inline row, and the reason is that this is the one thing on the
+        // screen the user has to *answer* rather than read: the sign-out has already failed, and
+        // what happens next is theirs to decide. The design system's own popup, for the contrast
+        // reason `ConfirmPopup` documents — an inline confirmation on this glass was the defect
+        // that component was written to fix.
+        //
+        // One body for every failure. The title already names what went wrong in the user's own
+        // terms, and the choice in front of them — force it, or leave the session alone — is
+        // identical whether the server timed out, refused, or was never reached at all.
+        if (signOutFailure != null) {
+            ConfirmPopup(
+                title = stringResource(Res.string.settings_signout_blocked_title),
+                body = stringResource(Res.string.settings_signout_blocked_body),
+                confirmLabel = stringResource(Res.string.settings_signout_force),
+                onCancel = onDismissSignOutFailure,
+                onConfirm = onForceSignOut,
+                // Red, like every other destructive confirm in the app. The button erases data,
+                // and the tint is the only thing distinguishing it from the neutral button
+                // beside it — which is the button that keeps everything.
+                confirmTint = ttError(),
+                tag = SettingsForceSignOutTag,
+            )
         }
     }
 }
@@ -332,6 +382,7 @@ private fun outcomeMessage(outcome: SyncOutcome): String? = when (outcome) {
 const val SettingsScreenTag = "settings.screen"
 const val SettingsSyncNowTag = "settings.syncNow"
 const val SettingsSignOutTag = "settings.signOut"
+const val SettingsForceSignOutTag = "settings.forceSignOut"
 const val SettingsWaitingRowTag = "settings.waitingRow"
 const val SettingsStuckRowTag = "settings.stuckRow"
 const val SettingsFailuresTag = "settings.failures"

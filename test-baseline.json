@@ -5,7 +5,7 @@
       "target": "jvm",
       "exit": "red",
       "why": "three pre-existing failures",
-      "tests": 1599,
+      "tests": 1620,
       "failures": 12,
       "errors": 0,
       "skipped": 0
@@ -14,7 +14,7 @@
       "target": "iosSimulatorArm64",
       "exit": "red",
       "why": "the same three",
-      "tests": 1545,
+      "tests": 1568,
       "failures": 12,
       "errors": 0,
       "skipped": 0
@@ -23,7 +23,7 @@
       "target": "androidHost",
       "exit": "red",
       "why": "Robolectric viewport and rasteriser",
-      "tests": 1289,
+      "tests": 1308,
       "failures": 34,
       "errors": 0,
       "skipped": 0

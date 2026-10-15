@@ -2,6 +2,7 @@ package com.tasktracker.android
 
 import android.app.Application
 import com.tasktracker.compositionroot.AppGraph
+import com.tasktracker.compositionroot.platformApiBaseUrl
 import com.tasktracker.di.Resolver
 
 /**
@@ -23,7 +24,12 @@ class TaskTrackerApplication : Application() {
         // and preferences backends need a context that outlives any window. Both take
         // `.applicationContext` internally, so passing the Application here is also the
         // point at which that leak-safety is established.
-        resolver = AppGraph.start(this)
+        //
+        // `apiBaseUrl` is the address the graph talks to, read from this app's manifest
+        // meta-data by the shared resolver. Naming it is what binds the real HTTP remote and
+        // transport; without it the graph would keep the in-process demo pair and never reach
+        // the server. See `platformApiBaseUrl` for where the value comes from.
+        resolver = AppGraph.start(this, apiBaseUrl = platformApiBaseUrl(this))
     }
 
     override fun onTerminate() {

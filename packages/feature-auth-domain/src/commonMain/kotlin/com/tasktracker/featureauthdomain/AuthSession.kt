@@ -147,11 +147,16 @@ interface AuthRemotePort {
     /**
      * Asks the server to revoke a refresh token's family, ending the session server-side.
      *
-     * The client clears its local state regardless of whether this call succeeds — the
-     * device is the authority on whether the user is signed in on this device — but
-     * calling the server prevents a stolen refresh token from being used after sign-out.
-     * A failure (e.g. the server is unreachable) is acceptable: the token will expire on
-     * its own, and the local wipe is immediate.
+     * Calling the server is what stops a stolen refresh token being replayed after the user has
+     * left, and it is the reason this call is *not* allowed to fail quietly. A failure
+     * propagates to the caller before anything local is discarded, so a sign-out the server
+     * could not confirm leaves the session standing and the user decides what happens next —
+     * see [AuthSessionPort.signOutLocally], which is the answer they are offered.
+     *
+     * It follows that the caller owns the deadline, not this method. The repository bounds it,
+     * because this is the one network request in the app the user is watching: an unbounded
+     * call against a host that accepts the connection and never answers holds the tap for the
+     * length of the transport's timeout *and* its retry policy.
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun signOut(refreshToken: String) {
@@ -203,6 +208,35 @@ interface AuthSessionPort {
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun signOut()
+
+    /**
+     * Ends the session on this device without asking the server to revoke anything.
+     *
+     * ## Why a second way to end a session exists at all
+     *
+     * [signOut] is defined as "ask the server first, then forget". That ordering is deliberate
+     * — it is what stops a stolen refresh token being replayed after the user has left — and
+     * it is also what makes [signOut] able to fail: a server that cannot be reached in time
+     * leaves the session intact rather than signing the user out behind their back.
+     *
+     * This is the answer to that failure, and it is the *user's* answer rather than the app's.
+     * They have been told the revocation could not be confirmed and have chosen to end the
+     * session here anyway. Nothing is asked of the server, so nothing can fail for want of
+     * one, and the token expires on its own — the same outcome a network failure produced
+     * before this pair of methods existed, except that the user chose it knowingly rather
+     * than the app choosing it silently on their behalf.
+     *
+     * ## A method rather than a flag on [signOut]
+     *
+     * The two are different operations with different failure modes, and a boolean at a call
+     * site — `signOut(revokeOnServer = false)` — reads as a detail of the same call rather
+     * than as the decision it is. The name says the whole of it: this one only touches the
+     * device.
+     *
+     * Idempotent when already signed out.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun signOutLocally()
 
     /**
      * State changes, hottest-last. A fresh stream per subscriber, dropping while nobody is

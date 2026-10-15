@@ -310,6 +310,9 @@ private open class RecordingSession : AuthSessionPort {
 
     override suspend fun signOut() = Unit
 
+    /** The sign-in screen never ends a session; the settings screen does. */
+    override suspend fun signOutLocally() = Unit
+
     override val sessionUpdates: Flow<SessionState> = MutableStateFlow(SessionState.SignedOut).asStateFlow()
 }
 

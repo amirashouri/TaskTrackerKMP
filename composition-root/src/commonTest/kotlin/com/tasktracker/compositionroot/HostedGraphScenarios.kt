@@ -179,6 +179,8 @@ object HostedGraphScenarios {
                     metadata = stores.metadata,
                     sessionCache = stores.session,
                     syncCoordinator = silentSyncCoordinator(scope = backgroundScope),
+                    defaults = stores.defaults,
+                    eraser = stores.eraser,
                 ).run(SessionInvalidationReason.UserLogout)
 
                 assertEquals(1, outbox.count(status = null))

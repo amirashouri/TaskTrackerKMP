@@ -29,6 +29,7 @@ class FakeSettingsPort(
     private var outcomeValue: SyncOutcome = outcome
     private val syncNowCallsMutable = mutableListOf<SyncOutcome>()
     private val endSessionCallsMutable = mutableListOf<Unit>()
+    private val forceEndSessionCallsMutable = mutableListOf<Unit>()
     private val forcedOfflineValues = mutableListOf<Boolean>()
 
     val version: AppVersion = version
@@ -36,6 +37,8 @@ class FakeSettingsPort(
     val syncNowCount: Int get() = syncNowCallsMutable.size
 
     val sessionEndCount: Int get() = endSessionCallsMutable.size
+
+    val sessionForceEndCount: Int get() = forceEndSessionCallsMutable.size
 
     val forcedOfflineHistory: List<Boolean> get() = forcedOfflineValues.toList()
 
@@ -68,6 +71,15 @@ class FakeSettingsPort(
 
     override suspend fun endSession() {
         endSessionCallsMutable += Unit
+    }
+
+    /**
+     * Counted separately from [sessionEndCount], because the difference between the two is the
+     * whole point of the pair: a screen that could not tell them apart could not tell a
+     * server-facing sign-out from a device-only one, and only the second erases data.
+     */
+    override suspend fun forceEndSession() {
+        forceEndSessionCallsMutable += Unit
     }
 
     override fun appVersion(): AppVersion = version

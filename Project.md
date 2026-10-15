@@ -134,6 +134,28 @@ above applies.
 
 ---
 
+## The backend URL
+
+All three shells reach the Go backend, and each reads its address from its own platform's
+configuration surface through the single resolver `platformApiBaseUrl` in `:composition-root`.
+When nothing overrides it, each falls back to the local server — `http://localhost:8080` where the
+host network is shared, `http://10.0.2.2:8080` on Android, where that alias is how an emulator
+reaches the machine running the server.
+
+| Shell | Configuration surface | Override |
+| --- | --- | --- |
+| Desktop (JVM) | environment variable | `TASKTRACKER_API_URL=https://… ./gradlew :shared-ui:runDesktop` |
+| iOS | `Info.plist` key `TaskTrackerApiBaseUrl` | the `TASKTRACKER_API_BASE_URL` build setting, set in `iosApp/project.yml` |
+| Android | manifest `<meta-data android:name="com.tasktracker.API_BASE_URL">` | `-Ptasktracker.apiBaseUrl=https://…` (or `gradle.properties`) |
+
+Two consequences worth knowing. First, naming a URL binds the real `HttpAuthRemote` /
+`HttpSyncTransport` and disables the offline sample seed — that is the point, but it means a
+launched app now expects a reachable server rather than working standalone. Second, Android blocks
+cleartext HTTP by default, so `androidApp/src/main/res/xml/network_security_config.xml` permits it
+for the two local hosts only; a deployment whose server is plain HTTP must add its host there.
+
+---
+
 ## Tests
 
 | Host | Task | State |

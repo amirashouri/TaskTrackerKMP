@@ -1788,6 +1788,13 @@ private fun SettingsDestination(
         // to know what a session is. The graph binds that call to the session coordinator, so
         // this is the tap on the control that did not exist when the header was removed.
         onSignOut = { scope.launch { model.signOut() } },
+        // The other half of the same pair. `signOut` can fail — it asks the server to revoke the
+        // refresh token family first — and the failure is what raises the popup, so the model's
+        // state is read straight through and the two answers are dispatched back to it. The
+        // screen owns the wording; the model owns the failure and the choice.
+        signOutFailure = model.signOutFailure,
+        onForceSignOut = { scope.launch { model.forceSignOut() } },
+        onDismissSignOutFailure = { model.dismissSignOutFailure() },
         // Read from the model's observed state and written through `applyUserDetails`, which
         // both updates the state and dispatches to the port — a write that only touched the
         // state would look correct until the next reload put the stored value back.

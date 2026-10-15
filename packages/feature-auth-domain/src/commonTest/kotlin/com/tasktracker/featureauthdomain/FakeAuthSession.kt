@@ -25,6 +25,8 @@ class FakeAuthSession : AuthSessionPort {
         private set
     var signOutCount: Int = 0
         private set
+    var signOutLocallyCount: Int = 0
+        private set
 
     // MARK: Scripting
 
@@ -62,6 +64,16 @@ class FakeAuthSession : AuthSessionPort {
     @Throws(AppError::class, CancellationException::class)
     override suspend fun signOut() {
         signOutCount += 1
+    }
+
+    /**
+     * Counted separately from [signOutCount], because the difference between the two is the
+     * whole point of the pair: a test that could not tell them apart could not tell a
+     * server-facing sign-out from a device-only one.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun signOutLocally() {
+        signOutLocallyCount += 1
     }
 
     /**
