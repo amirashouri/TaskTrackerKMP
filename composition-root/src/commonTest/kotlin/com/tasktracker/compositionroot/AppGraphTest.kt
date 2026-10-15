@@ -1,26 +1,44 @@
 package com.tasktracker.compositionroot
 
+import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.database.OutboxQueue
 import com.tasktracker.database.SessionCache
 import com.tasktracker.database.SyncMetadataStore
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.di.DiException
 import com.tasktracker.di.Resolver
+import com.tasktracker.featureauthdata.HttpAuthRemote
+import com.tasktracker.featureauthdata.MockAuthRemote
 import com.tasktracker.featureauthdata.TokenVault
 import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.keychain.InMemoryKeychain
+import com.tasktracker.network.AuthInterceptor
+import com.tasktracker.network.HttpClient
+import com.tasktracker.network.HttpMethod
+import com.tasktracker.network.HttpRequest
 import com.tasktracker.network.NetworkMonitor
+import com.tasktracker.network.RequestInterceptor
 import com.tasktracker.routing.Router
+import com.tasktracker.sync.HttpSyncTransport
+import com.tasktracker.sync.InMemorySyncTransport
 import com.tasktracker.sync.SyncCoordinator
+import com.tasktracker.sync.SyncTransport
+import com.tasktracker.userdefaults.InMemoryPreferences
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.KSerializer
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 /**
  * The seam the whole port depends on: one describable object graph, reachable from one
@@ -108,6 +126,181 @@ class AppGraphTest {
     }
 
     /**
+     * A named backend swaps the demo pair for the real one, and an unnamed one keeps the demo.
+     *
+     * The switch is the whole reason a base URL exists on this graph, and it is asserted by
+     * type rather than by making a call: the question is *which* implementation got bound, and
+     * a request would only prove a socket answers. Both directions are asserted in one test
+     * because the negative half is the one that would be silently lost — a graph that bound
+     * the real pair unconditionally would leave the mobile shells stuck behind a backend that
+     * is not there.
+     */
+    @Test
+    fun `a bound backend swaps the demo remote and transport for the real ones`() {
+        val offline = testGraph()
+        val online = AppGraph.start(testBindings(startServices = false, apiBaseUrl = "http://127.0.0.1:8080"))
+
+        try {
+            assertIs<MockAuthRemote>(
+                offline.resolve(AuthRemotePort::class),
+                "with no base URL the graph must keep the in-process demo remote",
+            )
+            assertIs<InMemorySyncTransport>(
+                offline.resolve(SyncTransport::class),
+                "with no base URL the graph must keep the in-memory demo transport",
+            )
+            assertIs<HttpAuthRemote>(
+                online.resolve(AuthRemotePort::class),
+                "a bound backend must get the real auth remote rather than the demo mock",
+            )
+            assertIs<HttpSyncTransport>(
+                online.resolve(SyncTransport::class),
+                "a bound backend must get the real sync transport rather than the in-memory one",
+            )
+        } finally {
+            offline.stop()
+            online.stop()
+        }
+    }
+
+    /**
+     * The two clients a bound backend opens, and what each of them carries.
+     *
+     * Type says *which* pair got bound; only this says what the clients must carry, and both
+     * halves are silent when they are wrong. Without the `AuthInterceptor` every push and pull
+     * leaves with no `Authorization` header and the server answers 401 — a sync that never
+     * runs and never says why. With it on the *auth* client, a refresh's own 401 triggers
+     * another refresh until the vault tears the session down as expired. Neither is visible
+     * from outside a constructed client, so the factory is watched instead of the client.
+     *
+     * The count is asserted too, and deliberately: "the second client had an interceptor" is
+     * also true of a graph that built the sync client twice, or that built a third client for
+     * something else. Exactly two openings, in registration order, is the claim.
+     */
+    @Test
+    fun `a bound backend opens one open client for auth and one authenticated client for sync`() {
+        val opened = mutableListOf<List<RequestInterceptor>>()
+        val resolver = AppGraph.start(
+            testBindings(
+                startServices = false,
+                apiBaseUrl = "http://127.0.0.1:8080",
+                httpClient = { _, interceptors ->
+                    opened += interceptors
+                    InertHttpClient()
+                },
+            ),
+        )
+
+        try {
+            // Resolved in registration order, which is the order the assertions below name:
+            // the auth remote first, then the transport.
+            resolver.resolve(AuthRemotePort::class)
+            resolver.resolve(SyncTransport::class)
+        } finally {
+            resolver.stop()
+        }
+
+        assertEquals(
+            2,
+            opened.size,
+            "a bound backend must open exactly the auth client and the sync client, " +
+                "opened ${opened.size}",
+        )
+        assertTrue(
+            opened[0].isEmpty(),
+            "the auth client must carry no interceptor, or a refresh recurses on the 401 that " +
+                "asked for it; found ${opened[0].map { it::class.simpleName }}",
+        )
+        assertEquals(
+            1,
+            opened[1].size,
+            "the sync client must carry exactly one interceptor; found " +
+                "${opened[1].map { it::class.simpleName }}",
+        )
+        assertIs<AuthInterceptor>(
+            opened[1][0],
+            "the sync client's one interceptor must be the bearer-token one, or every push " +
+                "and pull reaches the server unauthenticated",
+        )
+    }
+
+    /**
+     * The production client factory keeps the interceptors it is handed.
+     *
+     * [PlatformBindings]' own default is watched separately, below; this asserts the lambda
+     * itself. The graph test above pins *what* `registerAuth` and `registerSync` name, but it
+     * substitutes the factory, so the line that turns that list into a working client never
+     * ran. An `AuthInterceptor` dropped here leaves every push and pull without an
+     * `Authorization` header, silently: the same defect as an empty list at the registration,
+     * one token further in.
+     *
+     * `InterceptorThatRefuses` throws from `adapt`, which `KtorHttpClient.send` runs before the
+     * engine is reached, so the pass path opens no socket. That is also why the assertion reads
+     * the thrown value rather than a flag on the interceptor: a flag set on the line before the
+     * throw could never disagree with the exception, so the assertion could not fail, and the
+     * mutation's real signal — `Transport(Failed to connect to /127.0.0.1:9)` in place of `Ran`
+     * — would have been hidden behind a generic `assertFailsWith` message that reads like a
+     * flaky network test rather than a missing bearer token.
+     */
+    @Test
+    fun `the production client factory keeps the interceptors it is handed`() = runTest {
+        val client = PlatformBindings.defaultHttpClient(
+            "http://127.0.0.1:9/",
+            listOf(InterceptorThatRefuses()),
+        )
+
+        val thrown = runCatching {
+            client.send(HttpRequest(method = HttpMethod.Get, path = "/v1/sync/changes"))
+        }.exceptionOrNull()
+
+        assertIs<InterceptorThatRefuses.Ran>(
+            thrown,
+            "the default client did not run the interceptor chain ahead of the engine, so it " +
+                "dropped the interceptors it was handed; it threw " +
+                "${thrown?.let { it::class.simpleName }}",
+        )
+    }
+
+    /**
+     * The bindings a production start gets are the client factory production means.
+     *
+     * `PlatformBindings` declares `httpClient` with a default, and `AppGraph.start` — the only
+     * caller in the product — names neither it nor `apiBaseUrl`. Every test goes through
+     * `testBindings`, which passes the factory explicitly, and the test above calls
+     * [PlatformBindings.defaultHttpClient] by name, so the *binding* was the one link nothing
+     * exercised: rebinding it to `{ baseUrl, _ -> KtorHttpClient(baseUrl = baseUrl) }` left all
+     * three hosts green while Desktop's sync client shipped unauthenticated.
+     *
+     * The argument list below is deliberately `AppGraph.start`'s, minus the two values a test
+     * host must supply: `httpClient` and `apiBaseUrl` are both left to their defaults, which is
+     * the property under test rather than an accident of construction.
+     */
+    @Test
+    fun `the production bindings keep the client factory the registrations are handed`() = runTest {
+        val host = testPlatformHost()
+        val bindings = PlatformBindings(
+            host = host,
+            keychain = InMemoryKeychain(),
+            preferences = InMemoryPreferences(),
+            database = DatabaseConfiguration(name = "", inMemory = true, host = host),
+            startServices = false,
+        )
+
+        val thrown = runCatching {
+            bindings.httpClient("http://127.0.0.1:9/", listOf(InterceptorThatRefuses()))
+                .send(HttpRequest(method = HttpMethod.Get, path = "/v1/sync/changes"))
+        }.exceptionOrNull()
+
+        assertIs<InterceptorThatRefuses.Ran>(
+            thrown,
+            "PlatformBindings' default client factory did not run the interceptor chain ahead " +
+                "of the engine, so an argument list that names none — every production entry " +
+                "point — builds an unauthenticated sync client; it threw " +
+                "${thrown?.let { it::class.simpleName }}",
+        )
+    }
+
+    /**
      * The graph registers what has been ported, and nothing else.
      *
      * The positive half is the point: `ProjectRepositoryPort`, `TaskTrackerDatabase`,
@@ -123,7 +316,10 @@ class AppGraphTest {
      *
      * The negative half survives: an HTTP client is still not registered, and a
      * registration that appears without a phase adding it is the failure mode a growing
-     * composition root actually has, invisible to the resolve-everything test above.
+     * composition root actually has, invisible to the resolve-everything test above. The two
+     * clients a bound API root opens are built inside the `AuthRemotePort` and `SyncTransport`
+     * factories rather than registered under names of their own, so this stays true — and
+     * still means what it says — with a real backend bound.
      */
     @Test
     fun `the graph registers the ported features and still nothing more`() {
@@ -239,3 +435,44 @@ class AppGraphTest {
  * is broken on Android" and is not. The same assertions pass on JVM and iOS, where neither
  * backend needs a host, so it was always a gap in the test target rather than in the wiring.
  */
+
+/**
+ * An [HttpClient] no graph test ever sends through.
+ *
+ * [PlatformBindings.httpClient] records the interceptor list and hands this back, which is
+ * what keeps a test that only needs to know *which* client was built from standing up a real
+ * Ktor engine and its socket machinery. Nothing in the assertion should ever reach a request,
+ * so this fails loudly rather than answering something plausible that a later test would
+ * mistake for a real response.
+ */
+private class InertHttpClient : HttpClient {
+
+    override suspend fun send(request: HttpRequest): ByteArray = fail(neverSent)
+
+    override suspend fun <T> send(request: HttpRequest, decoding: KSerializer<T>): T =
+        fail(neverSent)
+
+    override suspend fun <T> send(request: HttpRequest, encoding: KSerializer<T>, body: T): Unit =
+        fail(neverSent)
+
+    private companion object {
+        const val neverSent =
+            "a graph test must not send a request; the graph only had to build the client"
+    }
+}
+
+/**
+ * An interceptor that refuses before any bytes move.
+ *
+ * Thrown from `adapt` rather than `retry` on purpose: [com.tasktracker.network.KtorHttpClient]
+ * runs the adapt chain ahead of the engine, so refusing there is what keeps the assertions that
+ * use this off the network. A reordering that reached the engine first would fail them by trying
+ * to connect — `Transport(Failed to connect to /127.0.0.1:9)` in place of `Ran` — which is the
+ * honest signal rather than a silent pass.
+ */
+private class InterceptorThatRefuses : RequestInterceptor {
+
+    class Ran : Exception("the interceptor chain ran")
+
+    override suspend fun adapt(request: HttpRequest): HttpRequest = throw Ran()
+}
