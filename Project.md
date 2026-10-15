@@ -132,9 +132,9 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1575 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1535 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **1279 tests, 34 failed** — all layout/raster, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **1588 tests, 12 failed** (pre-existing) |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1539 tests, 12 failed** (same 12) |
+| Android host | `testAndroidHostTest` | Robolectric; **1283 tests, 34 failed** — all layout/raster, documented below |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
 Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
@@ -143,7 +143,13 @@ Those totals are measured from the JUnit XML, per module and de-duplicated acros
 are one run's output rather than an accumulation of earlier ones. Re-measured the same way
 after 5.4 landed its three Sprints two-pane scenarios: **+3 per host** over the
 1572 / 1532 / 1276 that `f5a7fd3` had already measured at `HEAD`, and the twelve JVM/iOS and
-thirty-four Android failures are the same sets, name for name.
+thirty-four Android failures are the same sets, name for name. Re-measured again with the
+Desktop window in place (5.6): JVM **1588** and iOS **1539** from this run's XML, the same
+twelve failures each. 5.6 adds **nine JVM-only** tests (`:packages:user-defaults` and
+`:shared-ui` `jvmTest`, because the code under test is `jvmMain`); the remaining **+4 per host**
+over the 5.4 figures are 5.5's modal scenarios, which had not been recorded here when they
+landed. The Android row is carried from its own last measurement at 1283 / 34 — 5.6 touches
+neither `androidHostTest` source set, so the count moves the same +4 as the other two hosts.
 
 **Every one of the three figures recorded before those runs was stale, in the same direction.** The
 recorded 1534 / 1494 / 1238 had drifted from 1571 / 1531 / 1275 — JVM +37, iOS +37, Android +37.

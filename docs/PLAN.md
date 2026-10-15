@@ -838,7 +838,7 @@ platform check anywhere.
   of the twelve documented pre-existing failures. This task must not be credited with them
   and must not fix them; the new scenarios run at an expanded width and are separate.
 
-- [ ] **5.6 Give the Desktop window a size, a title, and a memory** · P2 ·
+- [x] **5.6 Give the Desktop window a size, a title, and a memory** · P2 ·
   `shared-ui/src/jvmMain/…/DesktopMain.kt` + `:packages:user-defaults` — `Window` currently
   takes no size and no title, so the app opens at the platform default and a desktop layout
   is not reachable by hand without dragging. Set a default window size that is above 5.1's
@@ -851,6 +851,50 @@ platform check anywhere.
   project, for the reason that file already records: the window size is a property of the
   machine, not of the session, so it must not be wiped by `UserDefaultsStore.removeAll` on
   sign-out.
+
+  **Landed. The size persists — and the key is one `removeAll` cannot reach.** The title is
+  `Res.string.app_name`, the string 4.7 already asserts, so the window names the app the way
+  the shell does. The opening size is `1280 × 800` when nothing is remembered
+  (`DefaultDesktopWindowSize`), for the reason `ShellExpandedMinimumWidth` (840) exists: a
+  first launch reaches the expanded two-pane shell without the frame being dragged, and 800
+  of height gives the panes a body rather than a letterbox. The remembered size is `WxH`
+  (`"1280x800"`) under the verbatim key `com.tasktracker.window.geometry`, in
+  `:packages:user-defaults`' `jvmMain` (`WindowGeometry.kt`) — **not** a `DefaultsKey`,
+  because `removeAll` walks that enum on sign-out and would clear a member with the session,
+  and this is the machine's property rather than the session's.
+  `theSizeSurvivesSignOutBecauseItIsNotADefaultsKey` pins it by calling `removeAll` and
+  reading the size back; moving the key into `DefaultsKey` under the same namespaced form
+  turns it red, which is the mutation that was run.
+
+  **The read is synchronous, and that is the whole reason these functions exist.** Every
+  other preference is read in a `LaunchedEffect` into a `StateFlow`; the window is the one
+  that cannot wait, because `rememberWindowState(size = …)` takes its value on the first
+  frame and there is no coroutine scope to suspend in yet. `WindowGeometryDefaults` blocks
+  on one small `Properties` read through `platformPreferences()` — the expect/actual 4.6
+  built, with the backend injectable so a test never touches the developer's real file. The
+  write goes the other way: keyed on `windowState.size` with a 500 ms settle, so a drag
+  cancels its own pending write per frame instead of rewriting the file per frame (the
+  `ShellPreferences` preview/commit split, applied to a window), and it is deliberately not
+  a save in `onCloseRequest` — that runs only on a polite close, so a killed process would
+  keep whatever the last polite close left.
+
+  **Nine tests, all `jvmTest`, because the code under test is `jvmMain`.** `:shared-ui`'s
+  `DesktopWindowJvmTest` pins the gate (`DefaultDesktopWindowSize.width >=
+  ShellExpandedMinimumWidth`), that a remembered size wins, and that an absent one falls
+  back — the choice is a pure `desktopWindowSize(stored)`, reachable by a test that `main`
+  (blocking on a real window) is not. `:packages:user-defaults`'
+  `WindowGeometryDefaultsTest` pins the round trip, the survival, the unparseable value and
+  the untouched file; `WindowGeometryTest` is the `WxH` table, added after `test-reviewer`
+  showed that the single value driven through the store left `parse`'s promised "negative or
+  zero side" branch — and the `null`, empty, trailing-`x` and half-pair shapes — deletable
+  with the suite still green. Nine assertions, nine mutations, each red on exactly its own;
+  `test-reviewer` says can-fail with no remaining blocking or major finding.
+
+  **Counts.** Re-measured from the JUnit XML: JVM **1588**, iOS **1539**, Android **1283**,
+  the same 12 / 12 / 34 failures. Nine are this task's and are JVM-only; the other **+4 per
+  host** over the figures 5.4 recorded are 5.5's modal scenarios, which landed without
+  updating `Project.md` — 5.7 reconciles that with the host tables, which this task does not
+  otherwise touch (Desktop is still the JVM host, not a fourth).
 
 - [ ] **5.7 Reconcile the counts and the host tables** · P1 · `Project.md`, `AGENTS.md` — Run
   the decision command and reconcile the totals, then record the test-host consequence in

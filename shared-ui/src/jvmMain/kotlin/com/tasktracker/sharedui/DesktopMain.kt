@@ -1,11 +1,23 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import com.tasktracker.core.isDesktopApp
 import com.tasktracker.compositionroot.AppGraph
 import com.tasktracker.di.Resolver
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.app_name
+import com.tasktracker.userdefaults.WindowGeometry
+import com.tasktracker.userdefaults.WindowGeometryDefaults
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * The Desktop entry point.
@@ -30,9 +42,77 @@ import com.tasktracker.di.Resolver
 fun main() = startDesktopProcess {
     val resolver = DesktopGraph.resolver
     application {
-        Window(onCloseRequest = ::exitApplication) {
+        val windowState = rememberWindowState(
+            size = desktopWindowSize(WindowGeometryDefaults.load()),
+        )
+        Window(
+            onCloseRequest = ::exitApplication,
+            title = stringResource(Res.string.app_name),
+            state = windowState,
+        ) {
+            RememberWindowGeometry(windowState)
             DesktopContent(resolver = resolver)
         }
+    }
+}
+
+/**
+ * The size the Desktop window opens at before anything has been remembered.
+ *
+ * Comfortably above [ShellExpandedMinimumWidth] so a first launch reaches the wide,
+ * two-pane shell without the user having to drag the frame — which is the entire point of
+ * giving the window a size at all. `1280 × 800` is a common laptop's usable area and leaves
+ * the expanded layout headroom rather than sitting on the threshold; a value at the
+ * threshold would satisfy the class but leave neither pane a readable measure, which is what
+ * the threshold's own KDoc says it is for.
+ */
+internal val DefaultDesktopWindowSize: DpSize = DpSize(width = 1280.dp, height = 800.dp)
+
+/**
+ * The size the window should open at: the remembered one, or [DefaultDesktopWindowSize].
+ *
+ * A pure function rather than an expression inside `main` so a test can pin the choice.
+ * `main` opens a real window and blocks until it closes, so nothing in the suite could
+ * otherwise enter the branch that decides whether a stored size is honoured.
+ */
+internal fun desktopWindowSize(stored: WindowGeometry?): DpSize =
+    stored?.let { DpSize(width = it.width.dp, height = it.height.dp) } ?: DefaultDesktopWindowSize
+
+/** How long the window must hold a new size before it is written. See [RememberWindowGeometry]. */
+private const val WINDOW_GEOMETRY_SETTLE_MS: Long = 500L
+
+/**
+ * Writes the window's size back once a resize has settled.
+ *
+ * ## Why the write waits rather than landing on every frame
+ *
+ * Dragging the window's edge fires a size change per frame, and a write on each would be a
+ * `Properties` file rewrite per frame. Keying the effect on `windowState.size` makes each new
+ * drag frame **cancel** the pending write and start a fresh delay, so one settled size is the
+ * one that reaches disk. That is the same split `ShellPreferences` draws between a glass
+ * slider's `preview` (every frame) and `commit` (on release).
+ *
+ * ## Why this is not a save on window close
+ *
+ * A write in `onCloseRequest` runs only when the window is closed through the chrome; a
+ * process that is killed, or a machine that is shut down with the app open, would keep
+ * whatever size the last *polite* close happened to leave. Observing the size while the app
+ * runs means the stored value is already correct before any close arrives.
+ *
+ * The read is a frame late on the very first composition — the state is created from the
+ * stored size, so the first observed value is already the remembered one — and the delay
+ * then writes back the same number, which is harmless.
+ */
+@Composable
+private fun RememberWindowGeometry(windowState: WindowState) {
+    LaunchedEffect(windowState.size) {
+        delay(WINDOW_GEOMETRY_SETTLE_MS)
+        WindowGeometryDefaults.save(
+            WindowGeometry(
+                width = windowState.size.width.value.roundToInt(),
+                height = windowState.size.height.value.roundToInt(),
+            ),
+        )
     }
 }
 
