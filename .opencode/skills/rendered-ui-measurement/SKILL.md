@@ -56,14 +56,9 @@ token values under the active theme, per-row changed counts, per-row extremes, b
 boxes — then read the output once and decide. Adding one `println` per hypothesis and
 rebuilding is prohibited: it produces a trail of non-answers and sends you theorising instead of looking.
 
-Your immediate response after a render calculation block mismatch must yield this context block explicitly:
-```markdown
-### DIAGNOSTIC RECONCILIATION
-- **Failing Scenario/Assertion:** [Name]
-- **Host Environment:** [JVM / iOS / Android Host]
-- **Expected vs Actual Primitives:** [Token Values/Hex/Dimensions]
-- **System State Summary:** [Dump of relevant Cache/Outbox/Router states]
-```
+Your immediate response after a render calculation block mismatch must emit the
+`### DIAGNOSTIC RECONCILIATION` block defined once in `AGENTS.md` → rule 3. It is not
+redefined here, so its fields cannot drift between this skill and the contract.
 
 A diagnostic that finds the bug in one run looks like this — per-row counts *and* the extreme
 pixel for each row, which is what revealed that one row of two changed pixels was the entire

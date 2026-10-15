@@ -16,6 +16,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ```
 
 Without it the build dies immediately with `Unable to locate a Java Runtime`.
+`scripts/check.sh` exports it for you, so prefer it over a bare `./gradlew`.
 
 ## Token-Saving & Execution Scope (CRITICAL)
 
@@ -25,9 +26,12 @@ To optimize token usage and prevent infinite tool loops, you must tightly scope 
 * **Constraint:** Do not read or scan modules outside the explicit scope of your task.
 * **Action:** If adding a feature or fixing a bug, request context *only* for the specific `shared` domain logic or the target UI file. Never run repository-wide string replacements or mass directory indexing.
 
-### 2. Algorithmic Backoff & Reading Constraints
-* **Tool Execution Ceiling:** You are limited to a maximum of **3 consecutive file-reading or search tool actions** per exploration phase. If you cannot locate the target within 3 attempts, halt and request exact paths from the user.
-* **No Speculative Reading:** Never read files to "understand the coding style" if they do not contain logic directly interacting with your current task. Lean entirely on the architecture documentation in `Project.md` for architectural context.
+### 2. Read with a target, not a net
+* **The cap is on *searching*, not on reading.** Reading the files a task names, and their direct
+  neighbours in the same package, is the job — do it without counting. What is capped is the blind
+  sweep: three consecutive exploratory searches to *locate* a target you cannot name. If three turns
+  have not found it, stop and ask for the path; the fourth guess costs more than the question.
+* **No Speculative Reading:** Never read files to "understand the coding style" if they do not contain logic directly interacting with your current task. Lean on `Project.md` for architecture and on the task's spec (`specs/`) for its scope.
 
 ### 3. KMP Structural Isolation
 * **Constraint:** Shared behavior belongs in `commonMain`; platform code belongs in a platform source set only when an API or behavior is genuinely platform-specific.
@@ -35,10 +39,16 @@ To optimize token usage and prevent infinite tool loops, you must tightly scope 
 * **Atomicity of expect/actual:** When adding or modifying an `expect` declaration, you must implement the corresponding `actual` declarations across **all matching source sets** within the *same tool transaction*. Never emit an `expect` change with a plan to add platform actuals later.
 
 ### 4. Plan-First Execution Mode (Two-Phase Protocol)
-For any task requiring modifications across more than one file, you must execute in two phases:
+The `ACK` gate exists so a planned change cannot surprise the user; it is not a toll on every
+edit. It applies to a change that is **cross-module, contract-bearing, or destructive**: it moves
+a Gradle dependency edge, edits the checked architecture tables, changes a public signature,
+deletes code, or touches files outside the one package the task names.
 * **Phase 1 (Token-Light):** Output a short, maximum 3-bullet plan detailing exactly which files will be modified (with absolute paths and targeted functions) and why. Stop and wait for user acknowledgment (`ACK`).
 * **Phase 2 (Code Generation):** Output a single sentence confirming which underlying repository skill guidelines you are actively executing against. Then, write the implementation only *after* receiving an `ACK`. Never write complete files from scratch if editing a single function; emit minimal unified diff patches.
 * **Drift Constraint:** If during Phase 2 you discover that a file outside your approved Phase 1 plan must be edited, you must immediately abort execution, output an updated plan, and request a **secondary `ACK`**. Do not proceed with unapproved file modifications.
+* **Fast path — no `ACK` needed:** a docs-only change, a typo or comment, or a single-file edit that
+  changes no public signature and no dependency edge. Say what you are about to do in one sentence,
+  then do it. Only the ceremony is skipped — the branch/PR workflow below still applies.
 
 ### 5. Clean Architecture and Package Boundaries
 * **Constraint:** Gradle modules are the architecture boundary. Domain modules hold business rules and ports; data modules implement those ports; presentation modules depend on their own domain and render UI; `:composition-root` binds implementations; `:shared-ui` assembles the shared screen tree.
@@ -55,23 +65,33 @@ For any task requiring modifications across more than one file, you must execute
 ## The command that decides whether you are done
 
 ```bash
+scripts/check.sh
+```
+
+That script is the one place this command lives (it is the five tasks below); it also exports
+the JDK. Scopes: `jvm`, `ios`, `android`, `graph`, `lint`, `docs`.
+
+```bash
 ./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
 ```
 
-`./gradlew check` is that plus `testAndroidHostTest`, which is **red for documented,
-pre-existing reasons** (see above). Do not fix it as a side effect of other work, and do
-not report it as a regression you caused — check whether it was already failing.
+`./gradlew check` is that, **plus** `testAndroidHostTest` **and** `:androidApp:lintDebug`. All
+three of the extras are **red for documented, pre-existing reasons** (see below): the Android host
+on 34 layout/raster failures, and `lintDebug` on one `[NotificationPermission]` error. Do not fix
+any of them as a side effect of other work, and do not report them as a regression you caused —
+check whether it was already failing.
 
 ## Test hosts
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | **1588 tests, 12 failed** — the pre-existing set listed below, and the only thing the run exits red on |
-| iOS simulator | `iosSimulatorArm64Test` | **1539 tests, 12 failed** — the same 12 |
-| Android host | `testAndroidHostTest` | **red** — 1283 tests, 34 failures, all `testAndroidHostTest` environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression — the count is the measured whole-command set (design-system 14 rasterised-pixel gates, feature-settings-presentation 8, feature-projects-presentation 3, shared-ui 9). The 34 is `HEAD`'s 34: the eighteen tests section 5 added to this host all pass, and the nine `shared-ui` failures are the same nine with and without this change |
+| JVM | `jvmTest` | **12 failed** — the pre-existing set listed below, and the only thing the run exits red on. Totals: `test-baseline.json` |
+| iOS simulator | `iosSimulatorArm64Test` | **12 failed** — the same 12. Totals: `test-baseline.json` |
+| Android host | `testAndroidHostTest` | **red** — **34 failures**, all environment failures (Robolectric's default viewport is far smaller and its `Build` fields are `null`); not a regression. Split: design-system 14 rasterised-pixel gates, feature-settings-presentation 8, feature-projects-presentation 3, shared-ui 9. Totals: `test-baseline.json` |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a host** — Desktop *is* the `jvm` target, so the JVM row above is its suite; `Project.md` → Tests has the note and the one Desktop-only behaviour's test. Section 5 gave the shell a **width** dimension (5.1) that this host can drive through `ShellScenarios.setUpShell(width = …)` — a new capability of the existing host, not a fourth column |
 
-The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals are measured from the JUnit XML, cross-checked against `@Test` declarations.
+The two modules that reported no executions before are now fixed: `WorkItemCardScenarios.kt:142` and `SettingsScenarios.kt:234` called `ttTheme(ThemeScheme.Dark, content)` positionally and `ttTheme` grew an `accentPalette` parameter between `scheme` and `content`, so both `commonTest` compilations failed. Naming the argument (`content = content`) fixed both — they now read `WorkItemCardScenarios.kt:163` and `SettingsScenarios.kt:241`. The totals in `test-baseline.json` are generated from the JUnit XML by
+`scripts/test-baseline.py` and cross-checked against `@Test` declarations.
 
 `:shared-ui` was also uncompilable until recently — `ShellPreferences.currentUserName` was a
 non-suspend `val` whose getter called the `suspend` `UserDefaultsStore.value(DefaultsKey)`. It is
@@ -160,7 +180,7 @@ When multiple agent instances operate simultaneously across separate branches or
 
 ### 2. Upstream Reconciliation Protocol
 * **The Stale-Base Trap:** Before submitting a Phase 1 Plan for user `ACK`, you must pull the latest upstream tracking branch (`git fetch origin && git rebase origin/main`) and verify that no concurrent tasks have modified files or layers within your designated target scope.
-* **Test Baseline Overwrites:** Your `Project.md` test-count baseline is updated in the same change as any test addition. If a parallel agent commits an updated test baseline while you are running generation, your local count is stale. You must pull, re-verify the full validation command, update the count based on the *merged* JUnit XML, and only then proceed to request final review.
+* **Test Baseline Overwrites:** `test-baseline.json` is regenerated in the same change as any test addition. If a parallel agent commits an updated baseline while you are running, your local copy is stale: pull, re-run `scripts/check.sh all`, regenerate with `scripts/test-baseline.py` from the *merged* JUnit XML, and only then request final review.
 
 ### 3. Structural Splitting to Reduce Concurrency Conflicts
 * **Anti-Monolith Commits:** To allow parallel feature development without merge failures, aggressively enforce the **Presentation Splitting Rules**. If two concurrent tasks require additions to the same package layer, they must land in completely separate files rather than appending code to shared module files.
@@ -184,10 +204,10 @@ Stale-Base Trap above still applies before you plan.
 
 **2. Do the task on that branch**, under the phase protocol and the four rules.
 
-**3. Push when — and only when — it is done.** "Done" means the validation command is green:
+**3. Push when — and only when — it is done.** "Done" means the deciding command is green:
 
 ```bash
-./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+scripts/check.sh
 ```
 
 ```bash
@@ -216,8 +236,6 @@ If the review finds a defect, fix it on the same branch, push, and re-review —
 unreviewed PR is never merged. When the user asked to be the approver, wait for their
 explicit approval; your own review passing is not their approval.
 
-## Four rules
-These exist because each one has already cost real time here.
 ## Four rules
 These exist because each one has already cost real time here.
 
@@ -260,7 +278,7 @@ When a measurement or scenario is wrong, add **one** diagnostic that dumps every
 Your immediate next response after a test failure must output your diagnostic block matching this layout before attempting any theorizing:
 
 ```markdown
-## DIAGNOSTIC RECONCILIATION
+### DIAGNOSTIC RECONCILIATION
 *   **Failing Scenario/Assertion:** [Name]
 *   **Host Environment:** [JVM / iOS / Android Host]
 *   **Expected vs Actual Primitives:** [Token Values/Hex/Dimensions]
@@ -279,12 +297,25 @@ instructions for every skill whose description matches the task; follow its refe
 resources as needed. This applies to every agent using this repository, not only tasks
 that explicitly mention a skill. These skills carry the detail this file deliberately omits.
 
-*   `kmp-compose-tests` — adding or running tests in this multiplatform Compose project: the host matrix, source-set layout, the rasterisation skip, screenshot capture.
-*   `rendered-ui-measurement` — proving a UI assertion: the mutation ritual, twin-frame diffing and its contamination traps, contrast measurement on two rasterisers.
-*   `kmp-architecture-workflow` — placing feature logic and platform-specific behavior in this project's KMP module/source-set structure, checking dependency edges, and preserving shared Android/iOS UI.
+*   `kmp-architecture-workflow` — placing feature logic and platform-specific behavior: Clean Architecture boundaries, the checked Gradle graph, KMP source sets, Liquid Glass design-system ownership.
+*   `kmp-compose-tests` — adding, running or debugging tests: the three-host matrix, source-set layout, the Android host's known gaps, the rasterisation skip, screenshot capture.
+*   `rendered-ui-measurement` — proving a UI assertion: the mutation-first ritual, twin-frame differencing and its contamination traps, estimator robustness, measuring on two rasterisers.
+*   `compose-presentation-splitting` — adding or changing Compose screens, rows, previews or components in any `*-presentation` module or `:shared-ui`: the file-splitting and reuse limits.
+*   `kmp-desktop-entry` — the Compose Desktop (JVM) target: the `shared-ui/src/jvmMain` entry point, the `compose.desktop.currentOs` classpath change, the run task, per-OS caveats.
+*   `kmp-room-database-migrations` — Room schemas, DAOs, outbox queues, builders and transactions in `:packages:database` / `:packages:sync`: Context provisioning, split scenario testing, migration verification.
 
 There is also a `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) that reviews
 a proposed test adversarially, specifically for whether it can fail.
+
+## Where a task's detail lives
+*   A pending task's *how* lives in one spec, `specs/<plan-id>-<slug>.md`. Read that spec and this
+  file, plus the files the spec names — not all of `docs/PLAN.md`. The plan is the append-only
+  roadmap and finished log, and reading a thousand lines to find one entry is the cost this split
+  removes. See `specs/README.md` for the format and the lifecycle.
+*   **Counts are generated, not written.** Host totals live in `test-baseline.json`, written by
+  `scripts/test-baseline.py` from the JUnit XML; `scripts/check-baseline.sh` fails when the file and
+  the build disagree. Never hand-copy a total into prose — the old baseline said to update it by
+  hand and still drifted three times. A spec says how the counts should *move*, not what they are.
 
 ## Local rules
 The root file above is the repo-wide contract. Rules that are true in only one package
@@ -302,7 +333,7 @@ is the whole contract.
 *   **Comments explain why, and carry the measurement.** This house style is not decoration;
 a change to a non-obvious value is expected to arrive with the number that justifies it.
 Routine tuning does not need a paragraph.
-*   `Project.md` test-count baseline is updated in the same change as any test addition. It says so twice and has been wrong three times. Counts come from the JUnit XML the build writes, cross-checked against `@Test` in the source — never from `grep -c` alone, which over-counts because KDoc mentions the string in backticks.
+*   **Counts are generated, not written.** Host totals live in `test-baseline.json` (see `scripts/test-baseline.py`), and `scripts/check-baseline.sh` fails when the file and the JUnit XML disagree — regenerate it in the same change as any test addition. Do not hand-copy a total into `Project.md`, `AGENTS.md` or a spec: that habit was wrong three times. Cross-check a suspicious count against the `@Test` declarations in the source, never `grep -c` alone, which over-counts the backticked mentions in KDoc.
 *   `NavigationHost.kt` and most of `shared-ui` are untracked. Git cannot recover an accidental edit. Do not use broad scripted search-and-replace in this tree; read the file and edit deliberately.
 *   **Compose Multiplatform 1.12.1 specifics** bite regularly: `BasicText` has no `textAlign` parameter (it goes in the style), `TextStyle` has no `overflow` property, and `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it renders nothing at all, silently, even with a `ColorFilter` tint.
 *   **No drive-by cleanup.** While changing code, do not also delete what looks unused — imports, private helpers, parameters, files. "Unused" is a claim that needs its own proof and its own diff: the sweep that removed 109 imports across 58 files needed a dedicated detector, a hand-triaged list of 80 false positives (`by`-delegation's `getValue`/`setValue`, operator `get`, and `@Preview` functions all read as unused to any name matcher), a stash-revert mutation check, and a full three-host build — and it only moved behind an explicitly ACK'd plan. A deletion riding inside a feature diff cannot be verified in the same sitting: the feature's tests prove the feature, not the deletion, and the two failure modes (over-removal vs. the feature's own bug) become indistinguishable. Dead code you notice incidentally goes in your report to the user, never in the diff; sweeping it is a separate, separately acknowledged task.
