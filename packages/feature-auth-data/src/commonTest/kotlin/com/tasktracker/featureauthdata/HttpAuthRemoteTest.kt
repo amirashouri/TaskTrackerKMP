@@ -166,4 +166,36 @@ class HttpAuthRemoteTest {
             remote(client).signIn(email = "ada@example.com", password = "hunter2")
         }
     }
+
+    /**
+     * The client's half of the rule that a response may not gain a field.
+     *
+     * `JSONCoding` leaves `ignoreUnknownKeys` off on purpose, so a key this DTO does not
+     * declare is a decoding failure rather than a value it skips. That is what makes the
+     * server's "a response may not gain a field" a requirement rather than a style note —
+     * and it is why the envelope below, which is the five keys the client declares plus the
+     * two the server used to add, broke every sign-in until those two were removed.
+     *
+     * The strictness is asserted from this side because this is the side that owns it. A
+     * server test cannot see it, and the contract test over there only holds while its
+     * transcription of this DTO is faithful — which, for `token_type` and `expires_in`, it
+     * was not.
+     */
+    @Test
+    fun anUndeclaredKeyInTheEnvelopeIsADecodingFailure() = runTest {
+        val client = StubHttpClient(
+            """
+            {
+              "access_token": "access-1",
+              "refresh_token": "refresh-1",
+              "token_type": "Bearer",
+              "expires_in": 3600
+            }
+            """.trimIndent().encodeToByteArray(),
+        )
+
+        assertFailsWith<AppError.Decoding> {
+            remote(client).signIn(email = "ada@example.com", password = "hunter2")
+        }
+    }
 }
