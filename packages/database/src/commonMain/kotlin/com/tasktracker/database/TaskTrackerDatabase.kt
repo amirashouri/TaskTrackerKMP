@@ -145,12 +145,19 @@ abstract class TaskTrackerDatabase : RoomDatabase() {
                     // exists, so a store left behind by an earlier dev build — at any
                     // version, including one *newer* than this binary, which is the
                     // downgrade case Room treats as a separate condition — is dropped
-                    // and recreated rather than failing the open. Both calls are
-                    // needed for that: the first covers a missing forward path, the
-                    // second a higher-versioned file. `dropAllTables` is `true` on
-                    // purpose — there is no dev store whose tables are worth keeping.
+                    // and recreated rather than failing the open. `dropAllTables` is
+                    // `true` on purpose — there is no dev store whose tables are worth
+                    // keeping.
+                    //
+                    // This single call covers both directions, and a second one is a trap
+                    // rather than a belt: `fallbackToDestructiveMigration` clears
+                    // `requireMigration` *and* sets the downgrade flag, but
+                    // `fallbackToDestructiveMigrationOnDowngrade` sets `requireMigration`
+                    // back to `true`. Called after it — as it was — the pair re-armed the
+                    // upgrade requirement, so opening a version-3 store with a version-4
+                    // binary threw "A migration from 3 to 4 was required but not found"
+                    // instead of recreating it. `StoreUpgradeTest` fails if it returns.
                     .fallbackToDestructiveMigration(dropAllTables = true)
-                    .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
                     .build()
             } catch (failure: Throwable) {
                 throw AppError.Storage("Could not open the local database: ${failure.readable()}")
