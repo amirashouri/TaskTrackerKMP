@@ -5,7 +5,7 @@
       "target": "jvm",
       "exit": "red",
       "why": "three pre-existing failures",
-      "tests": 1588,
+      "tests": 1590,
       "failures": 12,
       "errors": 0,
       "skipped": 0
