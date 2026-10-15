@@ -114,6 +114,10 @@ class TaskTrackerAppAndroidHostTest {
         runComposeUiTest(block = ShellScenarios.choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack)
 
     @Test
+    fun aWideShellShowsAPlaceholderWhenNothingIsSelected() =
+        runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
+
+    @Test
     fun aWideShellCentresTheSheetLikeAWindow() =
         runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
 
