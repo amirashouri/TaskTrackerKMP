@@ -16,21 +16,26 @@ invocation needs:
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ```
 
-Without it the build dies immediately with `Unable to locate a Java Runtime`.
+Without it the build dies immediately with `Unable to locate a Java Runtime`. The scripts under
+`scripts/` export it for you, so prefer them over a bare `./gradlew`.
 
 ---
 
 ## The command that decides whether you are done
 
 ```bash
-./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+scripts/check.sh
 ```
 
-`./gradlew check` is that plus `testAndroidHostTest`, which is **still red**, now for one
-documented reason rather than three: 17 Compose UI assertions fail on Robolectric's small default
-viewport. The `:composition-root` `Context` failures and the two presentation modules that would
-not compile are both fixed; do not report the remaining 17 as a regression you caused — check
-whether it was already failing, and see [Tests](#tests) for the exact split.
+That is `./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports
+:androidApp:compileDebugKotlin`, and the script also exports the JDK. Scopes: `jvm`, `ios`,
+`android`, `graph`, `lint`, `docs`.
+
+`./gradlew check` is that **plus** `testAndroidHostTest` **and** `:androidApp:lintDebug`. All of the
+red is pre-existing and documented: 34 Compose layout/raster failures on the Android host
+(Robolectric's small default viewport and its rasteriser), the same 12 on the JVM and iOS hosts,
+and one `[NotificationPermission]` lint error in `androidApp`'s manifest. Do not report any of it as
+a regression you caused — check whether it was already failing, and see [Tests](#tests) for the split.
 
 ---
 
@@ -132,21 +137,22 @@ above applies.
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **1588 tests, 12 failed** (pre-existing) |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **1539 tests, 12 failed** (same 12) |
-| Android host | `testAndroidHostTest` | Robolectric; **1283 tests, 34 failed** — all layout/raster, documented below |
+| JVM | `jvmTest` | fast feedback; run this — **12 failed** (pre-existing); totals in `test-baseline.json` |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **12 failed** (same 12); totals in `test-baseline.json` |
+| Android host | `testAndroidHostTest` | Robolectric; **34 failed** — all layout/raster, documented below; totals in `test-baseline.json` |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
 
-Those totals are measured from the JUnit XML, per module and de-duplicated across the one-deep
-(`composition-root`, `shared-ui`) and two-deep globs, which do not overlap, and cross-checked
-against the `@Test` declarations in the source rather than a `grep -c` (which over-counts the
-backticked mentions in KDoc). Re-measured 2026-10-15 in one whole `./gradlew check`: JVM
-**1588**, iOS **1539**, Android **1283**, with the same 12 / 12 / 34 failures, name for name.
-The three are one run's output, not an accumulation: 5.6 added **nine JVM-only** tests
+Those totals are now **generated**: `test-baseline.json` is written by `scripts/test-baseline.py`
+from the JUnit XML, and `scripts/check-baseline.sh` fails if the file and the build disagree. The
+count is per module and de-duplicated across the one-deep (`composition-root`, `shared-ui`) and
+two-deep globs, which do not overlap, and cross-checked against the `@Test` declarations in the
+source rather than a `grep -c` (which over-counts the backticked mentions in KDoc). The last hand
+measurement, 2026-10-15 in one whole `./gradlew check`, read JVM **1588**, iOS **1539**, Android
+**1283**, with 12 / 12 / 34 failures, name for name — the figures the generated file was seeded
+from. The three are one run's output, not an accumulation: 5.6 added **nine JVM-only** tests
 (`:packages:user-defaults` and `:shared-ui` `jvmTest`, because the code under test is
 `jvmMain`), and the **+4 per host** over the 1575 / 1535 / 1279 that 5.4 recorded are 5.5's
-modal scenarios, which landed without a re-measurement here. 5.7 is that re-measurement, and
-`AGENTS.md`'s host table now carries the same three numbers.
+modal scenarios, which landed without a re-measurement here. 5.7 is that re-measurement.
 
 **Every one of the three figures recorded before those runs was stale, in the same direction.** The
 recorded 1534 / 1494 / 1238 had drifted from 1571 / 1531 / 1275 — JVM +37, iOS +37, Android +37.

@@ -59,15 +59,7 @@ directory `test_config.properties` names as `android_merged_assets`.
 ## Boundary Rules for Testing Failures
 
 - **No Incremental Debugging Loops:** If a suite compilation or run fails, you are explicitly blocked from executing sequential `println` or minor code-poking patches to guess layout trees. You must pull structural info in one dump.
-- **Mandatory Failure Receipt:** Immediately following any test run containing unexpected red lines, you must generate a unified tracking reconciliation state before modifying files.
-
-```markdown
-### DIAGNOSTIC RECONCILIATION
-- **Failing Scenario/Assertion:** [Name]
-- **Host Environment:** [JVM / iOS / Android Host]
-- **Expected vs Actual Primitives:** [Token Values/Hex/Dimensions]
-- **System State Summary:** [Dump of relevant Cache/Outbox/Router states]
-```
+- **Mandatory Failure Receipt:** Immediately following any test run containing unexpected red lines, emit the `### DIAGNOSTIC RECONCILIATION` block defined once in `AGENTS.md` → rule 3, before modifying any file. It is defined there and nowhere else, so its four fields cannot drift between this skill and the contract.
 
 ## A test that reads pixels must declare where it can run
 

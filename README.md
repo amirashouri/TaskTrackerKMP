@@ -90,8 +90,12 @@ build does not mean the Kotlin you just edited is in it; check the Gradle task o
 ## The command that decides whether you are done
 
 ```bash
-./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports :androidApp:compileDebugKotlin
+scripts/check.sh
 ```
+
+It compiles the Android app, checks the architecture graph, and runs the JVM and iOS test
+hosts. `Project.md` lists the scopes (`jvm`, `ios`, `android`, `graph`, `lint`, `docs`) and
+the extras that are known-red.
 
 Tests run on **three hosts**: the JVM, the iOS simulator, and Android under
 Robolectric. The Android host is deliberately stricter about some things and weaker
@@ -106,6 +110,9 @@ about others (Robolectric's viewport is small; its `Build` fields are `null`) �
 - [`docs/PORT-LOG.md`](docs/PORT-LOG.md) — the finished port log, frozen.
 - [`AGENTS.md`](AGENTS.md) — working agreement for this repository, including the
   mutation-check ritual behind every test that claims to catch a defect.
+- [`specs/`](specs/README.md) — one file per pending task: its scope, contract and validation.
+- [`test-baseline.json`](test-baseline.json) — the host test totals, generated from the build;
+  `scripts/test-baseline.py` writes it and `scripts/check-baseline.sh` guards it.
 
 ## License
 
