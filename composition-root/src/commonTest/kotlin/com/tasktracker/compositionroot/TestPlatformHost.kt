@@ -3,6 +3,8 @@ package com.tasktracker.compositionroot
 import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.keychain.InMemoryKeychain
 import com.tasktracker.keychain.KeychainAccess
+import com.tasktracker.network.HttpClient
+import com.tasktracker.network.RequestInterceptor
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.PreferencesBackend
 
@@ -39,6 +41,16 @@ internal expect fun testPlatformHost(): Any
  * *the same* in-memory stores in two graphs — fresh ones would assert that a session survives
  * nothing at all, and would pass, which is why those tests pass them explicitly.
  *
+ * `apiBaseUrl` is a parameter so a test can build the graph with a backend bound and assert
+ * that the real HTTP remote and transport replace the demo pair, without naming a socket. It
+ * defaults to `null` — the offline demo — because that is what every other test in this
+ * package wants.
+ *
+ * `httpClient` follows it, and defaults to [PlatformBindings.defaultHttpClient] rather than to
+ * a second copy of the same lambda: the one test that asserts the sync client carries a
+ * bearer-token interceptor has to watch the factory that builds it, and a copy here would
+ * diverge from production the day either changed.
+ *
  * ## The host is threaded into the database configuration, not just handed to the bindings
  *
  * `DatabaseConfiguration.inMemory` carries a `null` host by design — it is the configuration
@@ -54,12 +66,16 @@ internal fun testBindings(
     startServices: Boolean = false,
     keychain: KeychainAccess = InMemoryKeychain(),
     preferences: PreferencesBackend = InMemoryPreferences(),
+    apiBaseUrl: String? = null,
+    httpClient: (String, List<RequestInterceptor>) -> HttpClient = PlatformBindings.defaultHttpClient,
 ): PlatformBindings {
     val host = testPlatformHost()
     return PlatformBindings(
         host = host,
         keychain = keychain,
         preferences = preferences,
+        apiBaseUrl = apiBaseUrl,
+        httpClient = httpClient,
         database = DatabaseConfiguration(name = "", inMemory = true, host = host),
         startServices = startServices,
     )

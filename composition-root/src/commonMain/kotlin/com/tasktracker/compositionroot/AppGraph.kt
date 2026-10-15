@@ -15,6 +15,7 @@ import com.tasktracker.di.KoinResolver
 import com.tasktracker.di.ResolverBuilder
 import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdata.AuthRepository
+import com.tasktracker.featureauthdata.HttpAuthRemote
 import com.tasktracker.featureauthdata.MockAuthRemote
 import com.tasktracker.featureauthdata.SessionStateBus
 import com.tasktracker.featureauthdata.TokenVault
@@ -34,8 +35,13 @@ import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.keychain.KeychainAccess
 import com.tasktracker.keychain.KeychainStore
 import com.tasktracker.keychain.systemKeychain
+import com.tasktracker.network.AuthInterceptor
+import com.tasktracker.network.HttpClient
+import com.tasktracker.network.KtorHttpClient
 import com.tasktracker.network.NetworkMonitor
+import com.tasktracker.network.RequestInterceptor
 import com.tasktracker.routing.Router
+import com.tasktracker.sync.HttpSyncTransport
 import com.tasktracker.sync.InMemorySyncTransport
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncEngine
@@ -79,8 +85,55 @@ object AppGraph {
      * is not a default case: it throws at start-up, deliberately, because the alternative is
      * a keychain that fails later on the first sign-in with a message about the user rather
      * than about the wiring.
+     *
+     * ## [apiBaseUrl] is the one switch between a real backend and the offline demo
+     *
+     * A named URL binds the real `HttpAuthRemote` and `HttpSyncTransport`; `null`, the
+     * default, binds the in-process `MockAuthRemote` / `InMemorySyncTransport` pair the
+     * mobile shells still run on. The default is the demo because a caller that names no
+     * backend has not got one, and a graph that guessed at an address could only hang the
+     * auth gate on a socket nobody is listening to. Desktop names `http://localhost:8080`
+     * so it reaches the local Go server.
+     *
+     * ## Two defaults here are relied on and not gated
+     *
+     * Both mobile entry points depend on `apiBaseUrl`'s default: `MainViewController` on iOS
+     * and `TaskTrackerApplication` on Android call this function with no URL at all, so a
+     * default changed to a non-null value would bind both shells to a real backend with the
+     * suite still green. That one *is* gateable — a `jvmTest` case calling
+     * `start(startServices = false)` and leaving the URL to its default asserts the demo pair
+     * without opening anything — but it is a new test file, and this change adds none.
+     *
+     * `startServices`'s default is the harder half. The *public* start cannot gate it: exercising
+     * the default starts the loops, and `startLoops` resolves the store, so an assertion that
+     * went through it would create the developer's real database. A test *can* reach the default
+     * through the internal `start(platforms)` with an in-memory store, but that leaves three
+     * loops running over a store the test then has to stop, to prove a `true` that production is
+     * the only caller of — a scheduler owned by a wiring test, bought for no assertion about
+     * wiring. Production takes the default, and it is what all three entry points — both shells
+     * and Desktop — get.
+     *
+     * ## [startServices] is the same switch [PlatformBindings] already carries
+     *
+     * It was added for the Desktop entry point's own wiring test, which has to build the graph
+     * from the *production* entry (real base URL, real bindings) and look at which auth remote
+     * it bound — and `DesktopGraph` is a `by lazy` holder behind a private name, so a test
+     * cannot reach that line any other way. Starting the loops on the way there would resolve
+     * the store and open the developer's real database, which is a side effect an assertion
+     * about *which client was built* must not have.
+     *
+     * The graph's own tests are the callers that pass `false` most often, for the same reason:
+     * `testBindings(startServices = false)` describes the graph without leaving three loops for
+     * each test to remember to stop. Production is the caller that passes nothing, and `true`
+     * is what it gets.
      */
-    fun start(host: Any? = null): Resolver = start(PlatformBindings(host))
+    fun start(
+        host: Any? = null,
+        apiBaseUrl: String? = null,
+        startServices: Boolean = true,
+    ): Resolver = start(
+        PlatformBindings(host = host, apiBaseUrl = apiBaseUrl, startServices = startServices),
+    )
 
     /**
      * Stops the graph's looping services and releases the container.
@@ -132,7 +185,7 @@ object AppGraph {
             registerProjects()
             registerTeams()
             registerAuth(platforms)
-            registerSync()
+            registerSync(platforms)
             registerSession()
             registerSettings(platforms)
         }.also {
@@ -226,23 +279,28 @@ object AppGraph {
         // the transition it exists to observe.
         app<SessionStateBus> { SessionStateBus() }
 
-        // ## The remote is a mock, and that is a recorded decision rather than an oversight
+        // ## The remote follows the base URL, and that switch is a recorded decision
         //
-        // There is no server. The real `HttpAuthRemote` needs an `HttpClient` pointed at a
-        // base URL, and this project's base URL is a `.invalid` host by design, so a real
-        // remote could only ever fail — the app would be permanently stuck behind the auth
-        // gate with a network error and no way forward. `MockAuthRemote` mints genuine
-        // signed-format JWTs in-process, so the vault's expiry, forced-refresh and restore
-        // paths all run for real while nothing has to be listening on a socket.
+        // With no URL the graph has no server to talk to, so `MockAuthRemote` mints genuine
+        // signed-format JWTs in-process — the vault's expiry, forced-refresh and restore paths
+        // all run for real while nothing is listening on a socket. That is the offline demo
+        // the mobile shells run: they name no URL, so they keep working with no backend.
         //
-        // What this is *not* is a build-mode switch that already exists. `MockAuthRemote`'s
-        // own KDoc puts the switch in this file, and it lands here: the release rule is
-        // "a release build must never be handed this instead of `HttpAuthRemote`", and the
-        // enforcement point is this `if`, not the class's source set. Until there is a base
-        // URL to configure there is nothing to switch between, so a switch would be a
-        // constant with a misleading name. See `docs/PORT-LOG.md`, Phase 13.
+        // With a URL the real `HttpAuthRemote` is bound instead, and Desktop points it at the
+        // local Go server. This is the switch `MockAuthRemote`'s own KDoc placed here, and the
+        // release rule it named still holds: a build with a backend is handed `HttpAuthRemote`,
+        // never the mock.
+        //
+        // The client has **no interceptors**, deliberately. A login or refresh must not carry
+        // an `Authorization` header, and routing a refresh through the authenticated client
+        // would recurse: the 401 answering a refresh would trigger another refresh, which would
+        // 401 again until the session was torn down as "expired". It is built here rather than
+        // registered because `AppGraphTest` pins "no HTTP client registered"; the app scope
+        // means the factory runs once, so one engine is created for the process either way.
         app<AuthRemotePort> { resolver ->
-            MockAuthRemote(dateProvider = resolver.resolve(DateProvider::class))
+            platforms.apiBaseUrl?.let { url ->
+                HttpAuthRemote(platforms.httpClient(url, emptyList()))
+            } ?: MockAuthRemote(dateProvider = resolver.resolve(DateProvider::class))
         }
 
         // The platform keychain and preferences backends, resolved rather than constructed
@@ -354,19 +412,31 @@ object AppGraph {
     /**
      * The transport, the engine, and the gate that decides when a cycle runs.
      *
-     * ## [SyncTransport] is in-memory, and that is the same decision as the mock auth remote
+     * ## The transport follows the same switch as the auth remote
      *
-     * There is no backend: the base URL is a `.invalid` host by design, so a real transport
-     * could only ever fail and the app would sit permanently on a sync error. The original
-     * needed a server that does not exist yet too, and Phase 14 has the same problem.
+     * With no base URL, [InMemorySyncTransport] is bound: it is a real
+     * [com.tasktracker.sync.SyncTransport] — it pushes, appends to a change log and serves it
+     * back — so an offline demo still round-trips a change through the engine and the outbox
+     * without a server, and a board hears about a write it did not make.
      *
-     * [InMemorySyncTransport] is a real [com.tasktracker.sync.SyncTransport] — it pushes,
-     * appends to a change log, and serves it back — not a stub. So a cycle runs end to end
-     * and a pulled change really does wake a board, which is what makes the local edits
-     * observable at all before a server exists.
+     * With a URL, [com.tasktracker.sync.HttpSyncTransport] talks to the `/v1/sync` routes
+     * instead. It is built over the **authenticated** client, which every sync call needs: the
+     * server rejects an unauthorised push or pull, and a `401` from one is what drives
+     * `AuthInterceptor`'s refresh-then-replay. Reusing the remote's plain client here would send
+     * every request without a token. The interceptor needs the vault, so this is constructed
+     * after [registerAuth] — the registration list is the dependency order.
      */
-    private fun ResolverBuilder.registerSync() {
-        app<SyncTransport> { InMemorySyncTransport() }
+    private fun ResolverBuilder.registerSync(platforms: PlatformBindings) {
+        app<SyncTransport> { resolver ->
+            platforms.apiBaseUrl?.let { url ->
+                HttpSyncTransport(
+                    platforms.httpClient(
+                        url,
+                        listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                    ),
+                )
+            } ?: InMemorySyncTransport()
+        }
 
         app<SyncEngine> { resolver ->
             val sink = resolver.resolve(LocalDataSyncSink::class)
@@ -514,7 +584,8 @@ object AppGraph {
 }
 
 /**
- * The three things that differ between a device and a test host.
+ * The platform backends, the store location, and the API root: the values that differ between
+ * a real process and a test host.
  *
  * Every other registration is pure wiring — classes with no platform state — so this is the
  * entire surface a test has to substitute. `internal` because it is not part of the
@@ -525,6 +596,51 @@ internal class PlatformBindings(
     val host: Any? = null,
     val keychain: KeychainAccess = systemKeychain(host),
     val preferences: PreferencesBackend = platformPreferences(host),
+    /**
+     * The API root the graph talks to, or `null` for the offline demo with no backend.
+     *
+     * The one value that decides whether [AppGraph]'s auth and sync registrations bind the real
+     * HTTP pair or the in-process demo pair. `null` is the default so a call site that names no
+     * backend gets the demo, exactly as the mobile shells do; Desktop passes
+     * `http://localhost:8080` so it reaches the local Go server.
+     *
+     * A default rather than a required argument for the same reason [database] is: the default
+     * is what production gets, and the call sites that pass anything are the platform entry
+     * points and the tests.
+     */
+    val apiBaseUrl: String? = null,
+    /**
+     * Builds the HTTP client a bound backend is reached through, given its root and the
+     * interceptors it must carry.
+     *
+     * A seam for the same reason [keychain] is one, and it is here to make one property
+     * assertable rather than obvious: the sync client carries a bearer-token interceptor and
+     * the auth client carries none. Both halves are silent when they are wrong — an
+     * unauthenticated sync is a 401 on every push, and a login routed through the
+     * authenticated client recurses the moment the server answers 401 — and neither is
+     * observable from outside a built client, so a graph test cannot see them without a
+     * factory it can watch. It also keeps a graph test from constructing a real platform
+     * engine just to ask which of two clients was bound.
+     *
+     * The default is [defaultHttpClient], and both halves of that are gated: `AppGraphTest`
+     * drives a request through a client built by [defaultHttpClient], and it constructs
+     * [PlatformBindings] with this argument left to its default and sends through the factory
+     * it finds, so a default that dropped the interceptors is caught.
+     *
+     * ## What the seam does not reach, stated rather than implied
+     *
+     * [AppGraph.start] builds its [PlatformBindings] with *named* arguments, so naming
+     * `httpClient` there would replace this default — a wiring that shipped an unauthenticated
+     * sync client — and no test would see it. The test above constructs its own
+     * [PlatformBindings] instead of calling `AppGraph.start`, because `start`'s own list leaves
+     * the two platform backends and the store to the caller; and a graph built by `start`
+     * reports only the *type* of client that got bound. Seeing the interceptors a client
+     * carries means asking [KtorHttpClient], which keeps them private, so the only observe is a
+     * request — and a request is the socket these tests exist to avoid. The test's argument list
+     * is therefore deliberately this constructor's, not `AppGraph.start`'s, and this link is
+     * recorded as a residual rather than gated.
+     */
+    val httpClient: (String, List<RequestInterceptor>) -> HttpClient = defaultHttpClient,
     /**
      * Where the store is, as a configuration rather than as a host.
      *
@@ -547,15 +663,52 @@ internal class PlatformBindings(
     /**
      * Whether to start the three looping services after building the container.
      *
-     * Production is `true` and there is no code path that says otherwise — the two platform
-     * entry points call [AppGraph.start], which starts them. It is here for tests that
-     * exercise a *registration* and would otherwise have to race the session coordinator's
-     * own `restore` against the restore they are trying to observe: two concurrent restores of
-     * the same vault is a race that has nothing to do with what those tests are about.
+     * Production is `true` and no entry point passes anything else: the two platform entry
+     * points and Desktop all call [AppGraph.start], which starts them. The Desktop entry
+     * point's wiring assertion was the first caller that needed `false` — it has to build a real
+     * graph through the production entry and may not open the developer's store to do it — and
+     * the graph's own tests are the others, since `testBindings` passes `false` by default. See
+     * [AppGraph.start]'s `startServices` note. It is also here for tests that exercise a
+     * *registration* and would
+     * otherwise have to race the session coordinator's own `restore` against the restore they
+     * are trying to observe: two concurrent restores of the same vault is a race that has
+     * nothing to do with what those tests are about.
      *
      * Turning loops off is not turning off wiring — every registration, scope and factory is
      * still the production one, so a graph built this way is describable and resolvable in
      * exactly the ways a running one is.
      */
     val startServices: Boolean = true,
-)
+) {
+
+    companion object {
+
+        /**
+         * The client every real backend call goes through: [KtorHttpClient] over the platform
+         * engine, with exactly the interceptors its caller named and no others.
+         *
+         * A named value rather than the literal duplicated at [PlatformBindings.httpClient]'s
+         * declaration and again in `testBindings`: a test that substituted a factory would
+         * otherwise silently diverge from what production builds the day either copy changed,
+         * and the whole point of the seam is that the substituted shape and the real one are
+         * the same code path up to the engine.
+         *
+         * What the tests hold is that the interceptors reach [KtorHttpClient], and that the
+         * *given* interceptor runs. Two things they do not hold, and cannot without a socket:
+         *
+         * - `baseUrl`. The test interceptor refuses before an address is built and the client's
+         *   root is private, so a factory that hard-coded the root would stay green. The root is
+         *   pinned a level up instead — at `desktopApiBaseUrl`, whose value
+         *   `DesktopEntryPointJvmTest` asserts literally, and whose pass-through into the graph
+         *   is pinned by type. That pass-through is the link nothing observes: a wrong root here
+         *   is a wrong port, not a failing test.
+         * - an *extra* interceptor. The one the test hands over throws first, so a factory that
+         *   appended another would never reach it, and "and no others" above is the half that
+         *   is asserted by convention rather than by an assertion.
+         */
+        val defaultHttpClient: (String, List<RequestInterceptor>) -> HttpClient =
+            { baseUrl, interceptors ->
+                KtorHttpClient(baseUrl = baseUrl, interceptors = interceptors)
+            }
+    }
+}

@@ -1,6 +1,7 @@
 package com.tasktracker.sharedui
 
 import com.tasktracker.core.isDesktopApp
+import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.userdefaults.FilePropertiesBackend
 import com.tasktracker.userdefaults.JvmPropertiesBackend
 import com.tasktracker.userdefaults.PreferencesBackend
@@ -82,6 +83,72 @@ class DesktopEntryPointJvmTest {
             "the JVM test host must keep the in-memory backend, so a scenario that writes a " +
                 "preference leaves nothing behind",
         )
+    }
+
+    @Test
+    fun theDesktopApiRootDefaultsToTheLocalServerAndObeysTheOverride() {
+        assertEquals(
+            "http://localhost:8080",
+            desktopApiBaseUrl(emptyMap()),
+            "with nothing set, Desktop must reach the docker-compose server on 8080",
+        )
+        // The name is spelled out rather than read from `API_BASE_URL_ENV_VAR`, deliberately:
+        // a map keyed by the constant would still match after the constant were renamed, and
+        // the exported name *is* the contract — a user who exported `TASKTRACKER_API_URL`
+        // would silently be ignored.
+        assertEquals(
+            "https://staging.example.test/api",
+            desktopApiBaseUrl(mapOf("TASKTRACKER_API_URL" to "https://staging.example.test/api")),
+            "an exported override must win, or a Desktop app cannot reach a server that is not "
+                + "the local one",
+        )
+    }
+
+    @Test
+    fun aBlankApiRootOverrideFallsBackRatherThanReachingAnUnusableUrl() {
+        // A blank value is a real case — an unset-looking shell variable, or a CI job that
+        // exports an empty string — and it must not reach `KtorHttpClient` as a base URL:
+        // `URLBuilder("")` has no scheme, so every request would fail before it left.
+        assertEquals(
+            "http://localhost:8080",
+            desktopApiBaseUrl(mapOf("TASKTRACKER_API_URL" to "   ")),
+            "a blank override must fall back to the default rather than be used as an address",
+        )
+    }
+
+    /**
+     * Desktop's graph is built against a real backend, not the offline demo.
+     *
+     * The two halves of that decision are pinned elsewhere — [desktopApiBaseUrl] by the tests
+     * above, and `AppGraph`'s switch by `AppGraphTest` — and this is the join between them,
+     * which is the half that used to be silently deletable: `DesktopGraph` is a `by lazy`
+     * holder behind a private name, so dropping `apiBaseUrl` from its call left every other
+     * test green while Desktop talked to the in-process mock and never reached the server.
+     *
+     * The implementation is named by its class name rather than by type because `:shared-ui`
+     * depends on `:packages:feature-auth-domain`, not on the data module that holds the two
+     * `AuthRemotePort` implementations — naming `HttpAuthRemote` directly would mean a new
+     * Gradle edge and an architecture-table entry for one assertion. `javaClass` reads that name
+     * off the JVM class, so it needs nothing the suite does not have.
+     *
+     * `startServices = false` for the reason the graph tests give: the assertion is about which
+     * remote got bound, and starting the loops would open the developer's real store to find
+     * out.
+     */
+    @Test
+    fun theDesktopGraphBindsARealBackendRatherThanTheOfflineDemo() {
+        val resolver = desktopGraph(startServices = false)
+
+        try {
+            assertEquals(
+                "HttpAuthRemote",
+                resolver.resolve(AuthRemotePort::class).javaClass.simpleName,
+                "Desktop names a base URL, so its graph must bind the real HTTP remote; the " +
+                    "in-process demo mock would mean no request ever leaves the process",
+            )
+        } finally {
+            resolver.stop()
+        }
     }
 
     /**

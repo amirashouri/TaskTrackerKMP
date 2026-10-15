@@ -150,6 +150,26 @@ internal fun startDesktopProcess(openShell: () -> Unit) {
 public val preferencesFilePath: String
     get() = com.tasktracker.userdefaults.preferencesFile().path
 
+/**
+ * The API root the Desktop app talks to.
+ *
+ * `http://localhost:8080` is the port `docker compose --profile postgres` publishes the Go
+ * server on, so a launched Desktop app reaches the backend with nothing exported.
+ * `TASKTRACKER_API_URL` overrides it for a server on another host or port.
+ *
+ * A pure function of the environment rather than a `System.getenv` call at the use site, so a
+ * test can pin both halves without owning the process's environment — the same reason
+ * [desktopWindowSize] takes the stored geometry instead of reading it.
+ */
+internal fun desktopApiBaseUrl(environment: Map<String, String> = System.getenv()): String =
+    environment[API_BASE_URL_ENV_VAR]?.takeIf { it.isNotBlank() } ?: DEFAULT_API_BASE_URL
+
+/** The environment variable that overrides [desktopApiBaseUrl]. */
+internal const val API_BASE_URL_ENV_VAR: String = "TASKTRACKER_API_URL"
+
+/** Where the Go server listens when nothing overrides it. See [desktopApiBaseUrl]. */
+internal const val DEFAULT_API_BASE_URL: String = "http://localhost:8080"
+
 @Composable
 private fun DesktopContent(resolver: Resolver) {
     TaskTrackerApp(resolver = resolver)
@@ -169,7 +189,58 @@ private fun DesktopContent(resolver: Resolver) {
  * correct, and hooking a `stop` off a window-close callback would cancel them for
  * an app the user was about to resume. So there is no such symbol here. If Desktop
  * ever needs explicit teardown, this holder is where it belongs.
+ *
+ * ## Why it names a base URL and the mobile shells do not
+ *
+ * Desktop is the one target that runs beside the Go server, so it is the one target that
+ * asks for the real HTTP remote and transport instead of the in-process demo pair. Naming
+ * [desktopApiBaseUrl] here rather than in `commonMain` is what keeps the mobile shells on the
+ * offline demo they were built against.
+ *
+ * ## Why the graph is built by a named function
+ *
+ * [DesktopGraph] is a `by lazy` holder behind a private name, so nothing could enter the call
+ * that decides whether this process talks to the Go server or to the offline demo — the same
+ * reason [desktopWindowSize] takes the stored geometry as an argument rather than reading it
+ * inside `main`. A process that lost `apiBaseUrl` there would still start, still sign in against
+ * the in-process mock, and simply never reach the server, which is the failure this file exists
+ * to make loud.
+ *
+ * ## The residual, stated rather than implied
+ *
+ * `DesktopEntryPointJvmTest` pins [desktopGraph]'s own line — that a URL reaches `AppGraph.start`
+ * and `HttpAuthRemote` comes back — and pins [desktopApiBaseUrl]'s value. The holder's single
+ * line below, `desktopGraph()` with no argument, is **not** covered: reverting it to a bare
+ * `AppGraph.start()` leaves the suite byte-identical. No behavioural test can reach it, because
+ * entering the holder's lazy initialiser starts the three loops, and `startLoops` resolves the
+ * store — the developer's real database — so asserting the composition of the two tested halves
+ * would create it. Scanning this file's text for `desktopGraph(` would pin it and is this repo's
+ * idiom for a rule with nothing to resolve (`AppGraphAccessTest` does exactly that for the
+ * container), but a scan cannot tell a call from a mention in a comment, so the gap is written
+ * down here instead of gated by something a comment could satisfy.
  */
 private object DesktopGraph {
-    val resolver: Resolver by lazy { AppGraph.start() }
+    val resolver: Resolver by lazy { desktopGraph() }
 }
+
+/**
+ * Builds the one graph this process runs on, against a named API root.
+ *
+ * [desktopApiBaseUrl] is the default rather than the argument spelled at the call site, so the
+ * URL decision lives in exactly one place. A caller passes a root, or turns
+ * [startServices] off, only to describe the graph without running it; [DesktopGraph.resolver]
+ * passes nothing.
+ *
+ * `startServices = false` is not a second production shape: it builds every registration
+ * exactly as production does and merely declines to start the three loops, which is what lets
+ * an assertion look at the auth remote without opening the developer's store on the way.
+ *
+ * The default is an expression this file alone holds and no test can see: the root reaches
+ * `KtorHttpClient` privately, so `= "http://localhost:9999"` here would leave every test green
+ * while Desktop dialled the wrong port. Naming [desktopApiBaseUrl] is what keeps the value in
+ * the one place its tests do pin.
+ */
+internal fun desktopGraph(
+    apiBaseUrl: String = desktopApiBaseUrl(),
+    startServices: Boolean = true,
+): Resolver = AppGraph.start(apiBaseUrl = apiBaseUrl, startServices = startServices)
