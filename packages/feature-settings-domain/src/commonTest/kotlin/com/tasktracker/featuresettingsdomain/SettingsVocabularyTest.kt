@@ -31,6 +31,26 @@ class SettingsVocabularyTest {
     }
 
     @Test
+    fun aDeadRowIsCountedAsStuckAndNeverAsWaiting() {
+        // One row reported as two was the bug. A dead row is not waiting: the server refused it
+        // permanently, so it will never be claimed again, and "Waiting to sync: 1" could not be
+        // cleared by any number of taps on Sync Now.
+        val oneDeadRow = SyncActivity(queueDepth = 1, deadLetterCount = 1)
+
+        assertNull(oneDeadRow.outstandingCount)
+        assertEquals(1, oneDeadRow.stuckCount)
+    }
+
+    @Test
+    fun onlyTheLiveRowsAreCountedAsWaiting() {
+        // The two rows are disjoint: the live subset waits, the dead subset is stuck.
+        val mixed = SyncActivity(queueDepth = 5, deadLetterCount = 2)
+
+        assertEquals(3, mixed.outstandingCount)
+        assertEquals(2, mixed.stuckCount)
+    }
+
+    @Test
     fun syncingIsThePhaseTheSyncNowControlIsDisabledOn() {
         assertTrue(SyncActivity(phase = SyncActivity.Phase.Syncing).isSyncing)
         assertFalse(SyncActivity(phase = SyncActivity.Phase.Idle).isSyncing)

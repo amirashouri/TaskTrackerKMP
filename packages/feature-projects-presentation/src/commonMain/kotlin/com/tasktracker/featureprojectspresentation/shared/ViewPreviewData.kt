@@ -898,6 +898,10 @@ private class PreviewRepository(
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
     }
 
+    // A preview holds no outbox, so there are never dead rows to revive. Returning zero
+    // keeps the retry affordance a no-op here without faking a sync that cannot happen.
+    override suspend fun retryStuckChanges(now: Instant): Int = 0
+
     override fun changes(): Flow<ProjectChange> = broadcaster.stream()
 }
 

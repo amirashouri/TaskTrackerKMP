@@ -325,6 +325,16 @@ class RecordingSettingsPort(
     var forceEndSessionCalls: Int = 0
         private set
 
+    /**
+     * How many times the refused changes were put back.
+     *
+     * Separate from [syncNowCalls] because the model's retry ends by asking for a cycle, so a
+     * build that wired the control to the wrong one would still move [syncNowCalls] — and the
+     * count that would show it is this one.
+     */
+    var retryStuckCalls: Int = 0
+        private set
+
     val forcedOfflineHistory = mutableListOf<Boolean>()
 
     override suspend fun connectivity(): ConnectivitySummary {
@@ -347,6 +357,10 @@ class RecordingSettingsPort(
     override suspend fun syncNow(): SyncOutcome {
         syncNowCalls++
         return outcome
+    }
+
+    override suspend fun retryStuckChanges() {
+        retryStuckCalls++
     }
 
     override suspend fun endSession() {

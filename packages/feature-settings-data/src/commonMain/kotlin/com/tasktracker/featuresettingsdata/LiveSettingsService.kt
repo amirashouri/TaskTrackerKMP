@@ -51,8 +51,33 @@ class LiveSettingsService(
     private val monitor: NetworkMonitor,
     private val coordinator: SyncCoordinator,
     private val version: AppVersion,
-    private val endSession: suspend () -> Unit,
-    private val forceEndSession: suspend () -> Unit,
+    /**
+     * The three injected calls, and they are **not** named after the methods that forward to
+     * them.
+     *
+     * That is not a style choice. A constructor property and a member function may share a
+     * name — they compile, because one becomes `getEndSession()` and the other `endSession()`
+     * — and inside the method body the *function* wins, so `override fun endSession() {
+     * endSession() }` is unbounded recursion, not a call to the closure. It compiles, it reads
+     * as correct, and the only thing it does at runtime is a `StackOverflowError` on the frame
+     * that was supposed to end the session. The `on` prefix makes the two names distinct, so
+     * the mistake cannot be written here at all.
+     */
+    private val onEndSession: suspend () -> Unit,
+    private val onForceEndSession: suspend () -> Unit,
+    /**
+     * Re-queues the changes the server refused permanently.
+     *
+     * A closure rather than a port, for the reason the two sign-out closures are: what can
+     * rebuild a refused payload is the projects repository, which lives in a feature module
+     * this one is not allowed to see. The composition root is the only object holding both
+     * sides, so it supplies the call and this service's whole job is to be the seam.
+     *
+     * Defaulted, unlike the sign-out pair, because it is not a second answer to anything —
+     * a build wired without it simply has no way to un-stick a queue, which is the state
+     * every build was in before this existed.
+     */
+    private val onRetryStuckChanges: suspend () -> Unit = {},
     private val defaults: UserDefaultsStore,
 ) : SettingsPort {
 
@@ -96,7 +121,7 @@ class LiveSettingsService(
     // MARK: - Session
 
     override suspend fun endSession() {
-        endSession()
+        onEndSession()
     }
 
     /**
@@ -107,7 +132,19 @@ class LiveSettingsService(
      * two methods is to be the seam that lets a screen ask without being able to reach.
      */
     override suspend fun forceEndSession() {
-        forceEndSession()
+        onForceEndSession()
+    }
+
+    /**
+     * Forwarded to the app's own closure, which is the only thing that can reach the store
+     * that rebuilds a refused payload.
+     *
+     * No cycle is started here and no offline check is made, deliberately: both belong to
+     * `RetryStuckChanges`, which is the object that knows the two steps have an order. A
+     * service that also pushed would be a second place that decides when a cycle runs.
+     */
+    override suspend fun retryStuckChanges() {
+        onRetryStuckChanges()
     }
 
     // MARK: - Version

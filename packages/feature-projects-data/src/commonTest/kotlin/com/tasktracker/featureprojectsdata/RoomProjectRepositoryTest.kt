@@ -117,6 +117,57 @@ class RoomProjectRepositoryTest {
     }
 
     @Test
+    fun aCreatedProjectNamesItsCreatorAsAMemberEvenWhenNoneWerePicked() = runTest {
+        // The server authorizes a project it does not already have against the payload's own
+        // member list, because a project that does not exist has no membership rows to check.
+        // So a project created without its creator in that list is not merely unauthorized —
+        // it is permanently unsyncable: the server answers `Rejected`, and the queue
+        // dead-letters the change instead of retrying it.
+        val harness = Harness()
+        val userID = harness.session.signIn("10000000-0000-4000-8000-0000000000aa")
+
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+
+        assertEquals(listOf(UserID(userID)), project.memberIDs)
+        // The payload is what the server actually reads, so this is the assertion that
+        // matters: a stored member list that never reached the wire would fix nothing.
+        assertEquals(listOf(UserID(userID)), harness.queuedProject().memberIDs)
+    }
+
+    @Test
+    fun aCreatedProjectKeepsTheMembersItWasGivenAndAppendsTheCreatorOnce() = runTest {
+        val harness = Harness()
+        val userID = harness.session.signIn("10000000-0000-4000-8000-0000000000bb")
+        val ada = UserID("10000000-0000-4000-8000-000000000001")
+        val grace = UserID("10000000-0000-4000-8000-000000000003")
+
+        val project = harness.repository.createProject(
+            "Apollo", "APO", "", Moments.start, memberIDs = listOf(ada, grace),
+        )
+
+        // Appended, not prepended: the order the user arranged their members in is theirs.
+        assertEquals(listOf(ada, grace, UserID(userID)), project.memberIDs)
+
+        // And ticking yourself in the picker is not a second membership.
+        val alsoMine = harness.repository.createProject(
+            "Borealis", "BOR", "", Moments.later, memberIDs = listOf(ada, UserID(userID)),
+        )
+
+        assertEquals(listOf(ada, UserID(userID)), alsoMine.memberIDs)
+    }
+
+    @Test
+    fun aProjectCreatedWithoutASessionAddsNoCreatorToItsMembers() = runTest {
+        // There is nobody to name, and an unauthenticated store cannot push, so there is no
+        // payload for the rule to protect. A placeholder would be a fabricated member.
+        val harness = Harness()
+
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+
+        assertEquals(emptyList(), project.memberIDs)
+    }
+
+    @Test
     fun creatingAProjectAnnouncesTheProjectsOnlyAndScopesItToTheNewProject() = runTest {
         // One kind, not both. The original announced `.projects` *and* `.workItems` from all
         // seven of its write paths, which is the over-broadcast `ProjectChange` exists to

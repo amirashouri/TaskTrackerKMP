@@ -28,6 +28,7 @@ class FakeSettingsPort(
     private var canSyncNowValue: Boolean = canSyncNow
     private var outcomeValue: SyncOutcome = outcome
     private val syncNowCallsMutable = mutableListOf<SyncOutcome>()
+    private val retryStuckCallsMutable = mutableListOf<Unit>()
     private val endSessionCallsMutable = mutableListOf<Unit>()
     private val forceEndSessionCallsMutable = mutableListOf<Unit>()
     private val forcedOfflineValues = mutableListOf<Boolean>()
@@ -68,6 +69,18 @@ class FakeSettingsPort(
         syncNowCallsMutable += outcomeValue
         return outcomeValue
     }
+
+    /**
+     * Counted, because the rule worth asserting is the *order*: the queue has to be put back
+     * before a cycle is asked for, and a double that only recorded "a retry happened" could
+     * not tell the two orders apart.
+     */
+    override suspend fun retryStuckChanges() {
+        retryStuckCallsMutable += Unit
+    }
+
+    /** How many times the refused changes were put back. */
+    val retryStuckCount: Int get() = retryStuckCallsMutable.size
 
     override suspend fun endSession() {
         endSessionCallsMutable += Unit

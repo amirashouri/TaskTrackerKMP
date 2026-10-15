@@ -282,6 +282,10 @@ class FakeShellSettingsPort(
     var sessionForceEndCount: Int = 0
         private set
 
+    /** Counted so a shell test can tell the retry control from the Sync Now one. */
+    var retryStuckCount: Int = 0
+        private set
+
     val forcedOfflineHistory: List<Boolean> get() = forcedOfflineValues.toList()
 
     val syncNowHistory: List<SyncOutcome> get() = syncNowValues.toList()
@@ -317,6 +321,10 @@ class FakeShellSettingsPort(
      */
     override suspend fun forceEndSession() {
         sessionForceEndCount++
+    }
+
+    override suspend fun retryStuckChanges() {
+        retryStuckCount++
     }
 
     override fun appVersion(): AppVersion = AppVersion(marketing = "1.0", build = "1")

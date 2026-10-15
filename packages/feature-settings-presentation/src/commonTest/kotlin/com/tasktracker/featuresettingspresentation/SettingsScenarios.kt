@@ -77,7 +77,15 @@ object SettingsScenarios {
         onNodeWithTag(SettingsWaitingRowTag).assertDoesNotExist()
     }
 
-    /** Offline with a queue is the state the screen exists to explain, and all of it shows. */
+    /**
+     * Offline with a queue is the state the screen exists to explain, and all of it shows.
+     *
+     * Seven rows are in the outbox and two of them are dead, so the two count rows are
+     * **disjoint**: five waiting, two stuck. They used to overlap — the waiting row read the
+     * full depth — which told the user about nine items where there were seven, and left the
+     * waiting row unclearable once the only rows left were the dead ones, because a dead row
+     * is never claimed again.
+     */
     val offlineWorkIsExplainedRatherThanHidden: suspend ComposeUiTest.() -> Unit = {
         screenShowing(
             connectivity = ConnectivitySummary.Offline,
@@ -95,8 +103,9 @@ object SettingsScenarios {
         // past the fold, and `assertIsDisplayed` is about pixels — a row below the fold has none.
         onNodeWithText(getString(Res.string.settings_sync_waiting)).performScrollTo().assertIsDisplayed()
         // The number, not just the label: "Waiting to sync" with nothing beside it would be a
-        // row that promises an answer it does not give.
-        onNodeWithText("7").assertIsDisplayed()
+        // row that promises an answer it does not give. Five rather than the seven in the queue,
+        // because two of the seven are dead — those are the row below.
+        onNodeWithText("5").assertIsDisplayed()
         // Scrolled because the User details header above pushed the sync section past the fold
         // — `assertIsDisplayed` is about pixels, and a row below the fold has none.
         onNodeWithTag(SettingsStuckRowTag).performScrollTo().assertIsDisplayed()

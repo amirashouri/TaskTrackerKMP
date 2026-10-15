@@ -81,12 +81,24 @@ data class SyncActivity(
     val isSyncing: Boolean get() = phase == Phase.Syncing
 
     /**
-     * How many of the user's edits are still only on this device, or `null` when there is
-     * nothing worth saying. The view renders the row only when it has a number, so the rule
-     * for "is the queue worth mentioning" is written once instead of in a `>` at the call
-     * site.
+     * How many of the user's edits are still only on this device *and still going somewhere*,
+     * or `null` when there is nothing worth saying. The view renders the row only when it has
+     * a number, so the rule for "is the queue worth mentioning" is written once instead of in
+     * a `>` at the call site.
+     *
+     * ## The subtraction is the whole point
+     *
+     * [queueDepth] counts dead rows, because it mirrors the engine's report, where a dead row
+     * is still a row in the outbox. But a dead row is one the server refused *permanently*, so
+     * it is not waiting — it will never be claimed again, and no number of taps on Sync Now
+     * will move it.
+     *
+     * Leaving it in this count made a single dead row render twice: as "Waiting to sync: 1"
+     * and as "Could not be sent: 1". The first was a lie that could not clear, because every
+     * cycle correctly found nothing left to claim and reported success. The two rows are
+     * disjoint now — this one is the live subset, [stuckCount] is the dead one.
      */
-    val outstandingCount: Int? get() = queueDepth.takeIf { it > 0 }
+    val outstandingCount: Int? get() = (queueDepth - deadLetterCount).takeIf { it > 0 }
 
     /** Dead rows, or `null` when there are none. */
     val stuckCount: Int? get() = deadLetterCount.takeIf { it > 0 }

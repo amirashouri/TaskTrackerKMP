@@ -10,7 +10,10 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseUserID
+import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
@@ -200,6 +203,32 @@ class RoomProjectRepository(
 
     // MARK: Project writes
 
+    /**
+     * Creates a project, queues it, and puts its creator in its member list.
+     *
+     * ## Why the creator is added here, and not by the caller
+     *
+     * The server refuses a push for a project it does not already have unless the payload's
+     * member list names the pusher. A project that does not exist has no membership rows to
+     * authorize against, so the payload is the only thing that can — which is exactly what
+     * lets a creator push a project before any membership row exists.
+     *
+     * A project created *without* its creator in that list is therefore not merely
+     * unauthorized, it is permanently unsyncable: the server answers `Rejected`, and the queue
+     * dead-letters the change rather than retrying it. Adding the creator is what keeps an
+     * ordinary "new project" from being that case.
+     *
+     * The rule lives in this layer rather than in `CreateProject` because the session is what
+     * it needs, and this is where the session is already read — the same [currentUserStamp]
+     * the outbox row is stamped with. Moving it into the use case would mean threading a
+     * second identity port through the editor and the host for a rule the store can apply on
+     * its own.
+     *
+     * The creator is appended rather than prepended, so the members the user picked keep the
+     * order they arranged them in. A store with no session adds nobody, and that is the honest
+     * answer rather than a stub: an unauthenticated build cannot push, so there is no payload
+     * for the rule to protect.
+     */
     override suspend fun createProject(
         name: String,
         keyPrefix: String,
@@ -207,16 +236,16 @@ class RoomProjectRepository(
         now: Instant,
         memberIDs: List<UserID>,
     ): Project {
+        val stamp = currentUserStamp()
         val project = Project(
             id = randomProjectID(),
             keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix),
             name = ProjectRules.normaliseName(name),
             details = ProjectRules.normaliseDetails(details),
-            memberIDs = memberIDs.distinct(),
+            memberIDs = (memberIDs + listOfNotNull(stamp?.let(::parseUserID))).distinct(),
             createdAt = now,
             updatedAt = now,
         )
-        val stamp = currentUserStamp()
 
         inTransaction(database) {
             database.projectDao().insert(project.toRecord())
@@ -852,6 +881,126 @@ class RoomProjectRepository(
         val (owner, orphanedBlobs) = outcome
         orphanedBlobs.forEach { safeDeleteBlob(it) }
         changeBus.announceWorkItems(owner)
+    }
+
+    // MARK: Recovering refused changes
+
+    /**
+     * Puts every refused change back in the queue, rebuilding the payload of any the store
+     * itself made un-sendable.
+     *
+     * See [ProjectRepositoryPort.retryStuckChanges] for why this is a repository operation
+     * rather than a queue one, and for the guard on the single repair it performs.
+     *
+     * ## Rows are revived, never re-queued
+     *
+     * The id and `createdAt` of each row are left exactly as they are, and that is the point
+     * rather than a shortcut. A retried batch contains a project and the work items that name
+     * it, and the server applies a push in order — so re-dating the project to "now" would
+     * put it *behind* its own work items, which is the refusal this is recovering from. A
+     * fresh row would also leave the old one dead and counted, so the number on the Settings
+     * screen would go up rather than down.
+     *
+     * ## Nothing is announced unless the write committed
+     *
+     * The repaired projects are collected inside the transaction and announced after it, for
+     * the reason the class KDoc gives: a listener that re-read on an uncommitted write would
+     * fetch the old member list and never look again.
+     */
+    override suspend fun retryStuckChanges(now: Instant): Int {
+        val stamp = currentUserStamp()
+        val userID = stamp?.let(::parseUserID)
+        val repaired = mutableListOf<ProjectID>()
+
+        val revived = inTransaction(database) {
+            val dead = database.outboxDao().deadLetters(stamp)
+            if (dead.isEmpty()) return@inTransaction 0
+
+            var count = 0
+            for (record in dead) {
+                val entity = OutboxEntity.parse(record.entityKind)
+                val operation = OutboxOperation.parse(record.operation)
+                // A row this build cannot read cannot be rebuilt either, and it is left where
+                // it is rather than dropped: it is the only record of what did not make it,
+                // and pushing a payload whose shape this build cannot vouch for is worse than
+                // leaving it visible.
+                if (entity == null || operation == null) continue
+
+                val payload = when (operation) {
+                    // A delete's payload is the bare id, so the stored one is already the
+                    // whole message and there is nothing to read back from the store.
+                    OutboxOperation.Delete -> record.payload
+                    OutboxOperation.Upsert ->
+                        rebuiltPayload(entity, record.entityID, userID, now, repaired)
+                } ?: continue
+
+                count += database.outboxDao().revive(record.id, payload)
+            }
+            count
+        }
+
+        repaired.forEach(changeBus::announceProjectChange)
+        return revived
+    }
+
+    /**
+     * The payload to send for one refused change, or `null` when there is nothing left to
+     * send because the entity has gone from the store since.
+     *
+     * This is the one place a payload is *rebuilt* rather than built fresh, and it has to
+     * exist because an outbox row holds a snapshot: the server's refusal was a verdict on the
+     * bytes it was handed, not on the change, so re-sending those bytes would earn the same
+     * answer. Every other enqueue here builds from a value the caller already holds; this is
+     * the one that has to read the value back first.
+     *
+     * [repaired] collects the projects this actually changed, so the caller can announce them
+     * once the transaction has committed.
+     */
+    private suspend fun rebuiltPayload(
+        entity: OutboxEntity,
+        entityID: String,
+        userID: UserID?,
+        now: Instant,
+        repaired: MutableList<ProjectID>,
+    ): ByteArray? = when (entity) {
+        OutboxEntity.Project -> {
+            val id = parseProjectID(entityID) ?: return null
+            val stored = recordForProject(id)?.domainValue ?: return null
+            // The repair. The guard is "names nobody", not "does not name me": a project that
+            // names other people but not the signed-in user is one they are not in, and
+            // adding themselves would be a silent join. A project that names nobody is one
+            // whose creator was never recorded, which is the whole of the defect.
+            val resent = if (stored.memberIDs.isEmpty() && userID != null) {
+                stored.copy(memberIDs = listOf(userID), updatedAt = now)
+            } else {
+                stored
+            }
+            if (resent != stored) {
+                database.projectDao().update(resent.toRecord())
+                repaired.add(resent.id)
+            }
+            JSONCoding.json.encodeToString(Project.serializer(), resent).encodeToByteArray()
+        }
+
+        OutboxEntity.WorkItem -> {
+            val id = parseWorkItemID(entityID) ?: return null
+            val item = recordForWorkItem(id)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(WorkItem.serializer(), item).encodeToByteArray()
+        }
+
+        OutboxEntity.Sprint -> {
+            // The id is checked through the parser rather than used raw, so a row written by
+            // a build that spelled ids differently is refused here instead of being handed to
+            // a DAO that would simply find nothing.
+            if (parseSprintID(entityID) == null) return null
+            val sprint = database.sprintDao().byID(entityID)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(Sprint.serializer(), sprint).encodeToByteArray()
+        }
+
+        OutboxEntity.Comment -> {
+            val comment = database.commentDao().byID(entityID)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(Comment.serializer(), comment).encodeToByteArray()
+        }
     }
 
     override suspend fun addComment(

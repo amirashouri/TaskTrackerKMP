@@ -565,7 +565,13 @@ port), `SignInUseCase`.
 `jvmTest`/`iosTest`/`androidHostTest`.
 
 **`:packages:feature-settings-domain`** (`com.tasktracker.featuresettingsdomain`) — `SettingsPort`,
-`SettingsVocabulary`, `SyncNow`.
+`SettingsVocabulary`, `SyncNow`. `SyncActivity`'s two count rows are **disjoint**: `outstandingCount`
+is the live rows still waiting, `stuckCount` is the dead ones the server refused permanently. Both
+derive from `SyncReport`'s `queueDepth`/`deadLetterCount`, and `queueDepth` deliberately includes the
+dead rows because it mirrors the outbox — so the *waiting* row subtracts them. Showing the raw depth
+there made one dead row render as both "Waiting to sync: 1" and "Could not be sent: 1", and the first
+could never clear, because a dead row is never claimed again and every subsequent cycle correctly
+found nothing to do.
 *Structure:* `commonMain` on `core` + `domain`, plus a `FakeSettingsPort` in `commonTest` so other
 modules can drive the screen.
 
@@ -648,6 +654,26 @@ Steps 3 and 7 are the two invariants the whole design rests on: one transaction 
 and its outbox row, and a pull never enqueues. A two-step write in step 3 leaves a crash window
 where an edit exists with nothing queued; a queuing sink in step 7 makes every pull generate a
 push, forever. Both are on the non-negotiable list in `docs/DECISIONS.md`.
+
+### Creating a project
+
+| # | Where | What happens |
+| --- | --- | --- |
+| 1 | `:packages:feature-projects-presentation` `ProjectEditorModel.save()` | calls `CreateProject`, which applies `ProjectRules` before the port is touched, so a rejected edit never leaves a queued change behind |
+| 2 | `:packages:feature-projects-data` `RoomProjectRepository.createProject` | reads the session **once**, folds the creator into `memberIDs`, then writes the record **and** its outbox row in one transaction |
+| 3 | `:packages:sync` `SyncEngine.push` | claims the row — scoped by `pushAs` to the signed-in account — and hands it to `SyncTransport.push` |
+| 4 | `TaskTrackerServer` `internal/sync/engine.go` `canWrite` | authorizes a project it does not already have against **the payload's own member list**, because a project that does not exist yet has no membership rows to check |
+
+Step 2's addition is not a convenience; it is what makes step 4 pass. A project created without its
+creator in that list is not merely unauthorized but **permanently unsyncable**: the server answers
+`Rejected`, and the queue dead-letters the change instead of retrying it — which is how a user's
+first project ends up sitting in the outbox with nothing on the server and no retry that could ever
+succeed. `createProject` is the one place that knows both the session and the payload, so the rule
+lives there rather than in the use case. The stored record and the queued payload carry the same
+list because `enqueueProject` serialises the very object the insert just wrote. The creator is
+**appended**, so the members the user picked keep the order they arranged them in, and a store with
+no session adds nobody — an unauthenticated build cannot push, so there is no payload for the rule
+to protect.
 
 ### Ending a session
 

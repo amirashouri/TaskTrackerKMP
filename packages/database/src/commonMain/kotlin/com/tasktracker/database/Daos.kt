@@ -82,6 +82,64 @@ interface OutboxDao {
     suspend fun reject(ids: List<String>, message: String)
 
     /**
+     * The rows [reject] took out of circulation, oldest first.
+     *
+     * Oldest first for the same reason [claimable] is: a caller putting them back has to
+     * put them back in the order the server will apply them, and re-queueing out of order
+     * is how a work item ends up ahead of the project that has to exist first.
+     *
+     * Scoped like [claimable] and with the same predicate, so the set a caller sees here is
+     * exactly the set it could later claim.
+     */
+    @Query(
+        """
+        SELECT * FROM outbox
+        WHERE status = 'dead'
+          AND (:userID IS NULL OR userID IS NULL OR userID = :userID)
+        ORDER BY createdAt ASC, id ASC
+        """,
+    )
+    suspend fun deadLetters(userID: String?): List<OutboxRecord>
+
+    /**
+     * Puts one dead row back in the queue, with [payload] replacing what it was refused for.
+     *
+     * **The id and `createdAt` are deliberately untouched.** They are the row's position in
+     * the queue, and a retry that re-dated it would put a change back *after* everything
+     * queued since — which is the wrong order for the changes that depend on each other.
+     * Rewriting the payload in place is what keeps a retried batch in the order the user's
+     * actions actually happened.
+     *
+     * `attemptCount` resets rather than continuing. The budget exists to stop a server that
+     * is merely unreachable from being retried forever; a row the user has asked to send
+     * again has earned a fresh one, and keeping the old count would make the very next
+     * failure dead-letter it on the spot.
+     *
+     * `lastError` goes with it: the row is queued again, so the verdict it just had is
+     * answered and carrying it forward would show a stale refusal against a change that has
+     * not been sent yet.
+     *
+     * The `status = 'dead'` guard is the whole of the write's safety. A row that is in
+     * flight, or that was already re-queued by a second press, is not touched — so pressing
+     * the control twice cannot demote a row that is mid-push back to pending underneath the
+     * engine holding it.
+     *
+     * @return 1 when the row was revived, 0 when it was not dead any more.
+     */
+    @Query(
+        """
+        UPDATE outbox
+        SET payload = :payload,
+            status = 'pending',
+            attemptCount = 0,
+            lastError = NULL,
+            lastAttemptAt = NULL
+        WHERE id = :id AND status = 'dead'
+        """,
+    )
+    suspend fun revive(id: String, payload: ByteArray): Int
+
+    /**
      * Back to pending **without** charging an attempt.
      *
      * For failures that are not the change's fault — the session ended, the user signed

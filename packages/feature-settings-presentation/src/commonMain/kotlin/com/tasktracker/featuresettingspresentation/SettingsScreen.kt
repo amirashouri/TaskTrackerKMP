@@ -47,6 +47,7 @@ import com.tasktracker.resources.settings_signout_blocked_title
 import com.tasktracker.resources.settings_signout_force
 import com.tasktracker.resources.settings_status_label
 import com.tasktracker.resources.settings_sync_now
+import com.tasktracker.resources.settings_sync_retry
 import com.tasktracker.resources.settings_sync_stuck
 import com.tasktracker.resources.settings_sync_waiting
 import com.tasktracker.resources.settings_version
@@ -101,6 +102,13 @@ fun SettingsScreen(
     onThemeChange: (ThemeScheme) -> Unit,
     onSyncNow: () -> Unit,
     onSignOut: () -> Unit,
+    /**
+     * Puts the changes the server refused back in the queue and tries them again.
+     *
+     * Defaulted like every other optional command on this screen, so the previews and the
+     * scenarios that do not exercise the stuck state do not have to name it.
+     */
+    onRetryStuckChanges: () -> Unit = {},
     modifier: Modifier = Modifier,
     accentPalette: AccentPalette = AccentPalette.Classic,
     onAccentPaletteChange: (AccentPalette) -> Unit = {},
@@ -231,6 +239,24 @@ fun SettingsScreen(
                             icon = ttSettingsIcons.sync,
                             valueColor = ttError(),
                             modifier = Modifier.testTag(SettingsStuckRowTag),
+                        )
+                        // The way out, and it sits here rather than beside Sync Now because it
+                        // only means anything while the row above has a number on it. Without
+                        // it that number is a dead end: a refused change is never claimed again,
+                        // so Sync Now cannot move it and the only other answer was to delete
+                        // the work and make it again.
+                        SettingsDivider()
+                        SettingsActionRow(
+                            label = stringResource(Res.string.settings_sync_retry),
+                            icon = ttSettingsIcons.sync,
+                            tint = ttAccent(),
+                            onClick = onRetryStuckChanges,
+                            // Disabled on the same rule as Sync Now, and for the same reason:
+                            // the retry ends by asking for a cycle, and that request would be
+                            // dropped. Offline is not a reason here either — putting the rows
+                            // back needs no network, and the cycle that follows says so.
+                            enabled = !activity.isSyncing,
+                            modifier = Modifier.testTag(SettingsRetryStuckTag),
                         )
                     }
                     if (activity.failures.isNotEmpty()) {
@@ -385,6 +411,15 @@ const val SettingsSignOutTag = "settings.signOut"
 const val SettingsForceSignOutTag = "settings.forceSignOut"
 const val SettingsWaitingRowTag = "settings.waitingRow"
 const val SettingsStuckRowTag = "settings.stuckRow"
+
+/**
+ * The control that sends the refused changes again.
+ *
+ * A tag of its own rather than reusing the stuck row's, because the two are asserted
+ * separately: a scenario has to be able to say both "the count is there" and "the way out of
+ * it is there", and a single tag would let a build that dropped the control still pass.
+ */
+const val SettingsRetryStuckTag = "settings.retryStuck"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"

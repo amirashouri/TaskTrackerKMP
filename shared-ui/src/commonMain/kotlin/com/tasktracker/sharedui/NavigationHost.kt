@@ -1784,6 +1784,10 @@ private fun SettingsDestination(
             scope.launch { preferences.commitGlassIntensity(intensity) }
         },
         onSyncNow = { scope.launch { model.requestSync() } },
+        // The way out of the "Could not be sent" row. It ends by asking for a cycle of its own,
+        // which is why the model reports its outcome into the same state Sync Now uses rather
+        // than into a second one.
+        onRetryStuckChanges = { scope.launch { model.retryStuckChanges() } },
         // `signOut` goes through the port rather than to an auth API: the screen is not allowed
         // to know what a session is. The graph binds that call to the session coordinator, so
         // this is the tap on the control that did not exist when the header was removed.

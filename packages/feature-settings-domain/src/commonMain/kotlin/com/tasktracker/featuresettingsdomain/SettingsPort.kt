@@ -64,6 +64,22 @@ interface SettingsPort {
     suspend fun syncNow(): SyncOutcome
 
     /**
+     * Puts the changes the server refused permanently back in the queue, rebuilding any the
+     * store itself made un-sendable.
+     *
+     * The counterpart to the "Could not be sent" row, and it exists because that row is
+     * otherwise a dead end: a refused change is never claimed again, so no number of taps on
+     * [syncNow] can move it, and the only other way out was to delete the work and make it
+     * again — which loses the work.
+     *
+     * Nothing here touches the network. Whether the re-queued changes are then *accepted* is
+     * [syncNow]'s answer, which is why the screen offers both and why this one does not
+     * pretend to report the outcome of a push.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun retryStuckChanges()
+
+    /**
      * Ends the session — forgetting the credentials, tearing down the session scope and
      * routing back to sign-in.
      *

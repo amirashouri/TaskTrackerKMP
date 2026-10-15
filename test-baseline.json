@@ -5,7 +5,7 @@
       "target": "jvm",
       "exit": "red",
       "why": "three pre-existing failures",
-      "tests": 1621,
+      "tests": 1626,
       "failures": 12,
       "errors": 0,
       "skipped": 0
@@ -14,7 +14,7 @@
       "target": "iosSimulatorArm64",
       "exit": "red",
       "why": "the same three",
-      "tests": 1569,
+      "tests": 1574,
       "failures": 12,
       "errors": 0,
       "skipped": 0

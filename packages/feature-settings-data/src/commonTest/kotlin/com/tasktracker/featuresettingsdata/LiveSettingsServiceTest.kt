@@ -79,7 +79,7 @@ class LiveSettingsServiceTest {
         // Never asked to sync by the connectivity tests; see `UnusedSyncDependencies`.
         coordinator = unusedSyncCoordinator(),
         version = AppVersion(marketing = "1.0", build = "1"),
-        endSession = {},
+        onEndSession = {},
         forceEndSession = {},
         defaults = UserDefaultsStore(InMemoryPreferences()),
     )
@@ -152,8 +152,8 @@ class LiveSettingsServiceTest {
             monitor = NetworkMonitor.forWatcher(FakeConnectivityWatcher()),
             coordinator = unusedSyncCoordinator(),
             version = version,
-            endSession = {},
-            forceEndSession = {},
+            onEndSession = {},
+            onForceEndSession = {},
             defaults = UserDefaultsStore(InMemoryPreferences()),
         )
 

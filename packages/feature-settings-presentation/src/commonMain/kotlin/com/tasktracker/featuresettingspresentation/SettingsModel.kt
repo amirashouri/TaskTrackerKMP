@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.RetryStuckChanges
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncNow
@@ -50,6 +51,15 @@ import kotlin.coroutines.cancellation.CancellationException
 class SettingsModel(private val port: SettingsPort) {
 
     private val syncNow = SyncNow(port)
+
+    /**
+     * Named differently from the method that invokes it, and that is a requirement rather than
+     * a preference. A property and a function may share a name, and inside the function the
+     * *function* wins — so `suspend fun retryStuckChanges() { retryStuckChanges() }` would call
+     * itself forever instead of calling this. See `LiveSettingsService`'s constructor, where
+     * that exact mistake was live.
+     */
+    private val retryStuck = RetryStuckChanges(port)
 
     var connectivity: ConnectivitySummary by mutableStateOf(ConnectivitySummary.Unknown)
         private set
@@ -152,6 +162,20 @@ class SettingsModel(private val port: SettingsPort) {
     /** Asks for a cycle and reports what became of the request. */
     suspend fun requestSync() {
         commandOutcome = syncNow()
+    }
+
+    /**
+     * Puts the refused changes back in the queue and asks for a cycle, reporting what became
+     * of the cycle.
+     *
+     * The same outcome state as [requestSync], because it answers the same question — whether
+     * a cycle could start — and the screen must not grow a second banner saying the same
+     * thing in different words. What the retry *did* to the queue is visible in [activity],
+     * which the stream updates: the "Could not be sent" row drops to nothing and the "Waiting
+     * to sync" row takes its place if the changes have not gone yet.
+     */
+    suspend fun retryStuckChanges() {
+        commandOutcome = retryStuck()
     }
 
     /**

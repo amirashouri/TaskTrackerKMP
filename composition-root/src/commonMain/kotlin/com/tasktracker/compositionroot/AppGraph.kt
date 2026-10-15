@@ -565,8 +565,20 @@ object AppGraph {
                 monitor = resolver.resolve(NetworkMonitor::class),
                 coordinator = resolver.resolve(SyncCoordinator::class),
                 version = resolver.resolve(AppVersion::class),
-                endSession = { resolver.resolve(SessionCoordinator::class).signOut() },
-                forceEndSession = { resolver.resolve(SessionCoordinator::class).forceSignOut() },
+                onEndSession = { resolver.resolve(SessionCoordinator::class).signOut() },
+                onForceEndSession = { resolver.resolve(SessionCoordinator::class).forceSignOut() },
+                // The one place both sides are visible. The store that can rebuild a refused
+                // payload is the projects repository, which `:packages:feature-settings-data`
+                // is not allowed to name — so the call is handed over as a closure and the
+                // service stays the seam rather than learning what a project is.
+                onRetryStuckChanges = {
+                    resolver.resolve(ProjectRepositoryPort::class).retryStuckChanges(
+                        // The same app-scoped clock the repository was built with, rather than
+                        // a second one, so a repaired project's `updatedAt` agrees with every
+                        // other timestamp this write touches.
+                        now = resolver.resolve(DateProvider::class).now(),
+                    )
+                },
                 defaults = resolver.resolve(UserDefaultsStore::class),
             )
         }

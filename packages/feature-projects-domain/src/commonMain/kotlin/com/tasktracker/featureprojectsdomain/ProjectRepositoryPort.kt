@@ -338,6 +338,53 @@ interface ProjectRepositoryPort {
 
     suspend fun deleteWorkItem(id: WorkItemID)
 
+    // MARK: Recovering refused changes
+
+    /**
+     * Puts every change the server refused permanently back in the queue, rebuilding the
+     * payload of any the store itself made un-sendable, and answers how many went back.
+     *
+     * ## Why this is a repository method and not a queue one
+     *
+     * A dead row is a row nothing will ever claim again, and "retry" therefore cannot mean
+     * "un-deaden it": the row holds a **snapshot** of the payload taken when the change was
+     * made, and the server's refusal was a verdict on that snapshot. Sending the same bytes
+     * again earns the same answer. Recovering means rebuilding each payload from the store
+     * as it stands now — which is what this interface's writes already do — so the operation
+     * belongs here, beside them, rather than in the sync layer that can only see opaque
+     * bytes and does not know what a project is.
+     *
+     * ## The repair, and why its guard is what it is
+     *
+     * A project that names **nobody at all** was refused because the server authorizes the
+     * creation of a project it does not yet hold against the payload's own member list — so
+     * an empty list can never be accepted, no matter how often it is sent. [createProject]
+     * now names the signed-in user on every project it makes, but a project created before
+     * it did is stored with an empty list and its queued row holds that same empty list.
+     * This is the only place that can still fix one: the project is read, the signed-in user
+     * is added to a list that is empty, and the result is written back before the fresh
+     * payload is queued.
+     *
+     * The guard is "names nobody" rather than "does not name me" on purpose. A project that
+     * names other people but not the signed-in user is one they are not a member of, and
+     * adding themselves would be a silent join. A project that names nobody is one whose
+     * creator was never recorded, which is the whole of the defect.
+     *
+     * ## A repair that cannot succeed is not a hazard
+     *
+     * If the server does hold the project — the case this method cannot tell apart, because
+     * the local store keeps no per-project server version — the refreshed payload is refused
+     * again for the same reason and the row dead-letters again. Nothing is corrupted and
+     * nothing is lost; the only cost is a push that was going to fail anyway. That is what
+     * makes a guard this narrow sufficient without a version column to lean on.
+     *
+     * @param now the instant stamped on a repaired project's own `updatedAt`, so the change
+     *   it records is dated when it was made rather than when it was rescued.
+     * @return how many rows are back in the queue. A row whose entity no longer exists
+     *   locally is dropped rather than sent: there is nothing left to tell the server about.
+     */
+    suspend fun retryStuckChanges(now: Instant): Int
+
     // MARK: Comments
 
     /**

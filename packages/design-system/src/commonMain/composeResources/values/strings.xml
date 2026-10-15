@@ -484,6 +484,7 @@
     <string name="settings_sync_section">Sync</string>
     <string name="settings_sync_waiting">Waiting to sync</string>
     <string name="settings_sync_stuck">Could not be sent</string>
+    <string name="settings_sync_retry">Send them again</string>
     <string name="settings_sync_now">Sync Now</string>
     <string name="settings_activity_idle">Not synced yet</string>
     <string name="settings_activity_waiting">Waiting for a connection</string>

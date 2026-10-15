@@ -105,6 +105,9 @@ class PreviewSettingsPort(
     /** A preview has no session to end, so both ways out are the same no-op here. */
     override suspend fun forceEndSession() = Unit
 
+    /** A preview has no queue behind it, so there is nothing refused to put back. */
+    override suspend fun retryStuckChanges() = Unit
+
     override fun appVersion(): AppVersion = version
 
     override suspend fun userDetails(): UserDetails = UserDetails()
