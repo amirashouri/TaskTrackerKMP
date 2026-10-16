@@ -32,7 +32,10 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featureteamsdata.HttpMemberAdminRemote
+import com.tasktracker.featureteamsdata.MemberAdminRepository
 import com.tasktracker.featureteamsdata.RoomTeamRepository
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.keychain.KeychainAccess
 import com.tasktracker.keychain.KeychainStore
@@ -428,6 +431,15 @@ object AppGraph {
         app<TeamPort> { resolver ->
             RoomTeamRepository(
                 sessionCache = resolver.resolve(SessionCache::class),
+            )
+        }
+        app<HttpMemberAdminRemote> { resolver ->
+            HttpMemberAdminRemote(client = resolver.resolve(HttpClient::class))
+        }
+        app<MemberAdminPort> { resolver ->
+            MemberAdminRepository(
+                remote = resolver.resolve(HttpMemberAdminRemote::class),
+                team = resolver.resolve(TeamPort::class),
             )
         }
     }
