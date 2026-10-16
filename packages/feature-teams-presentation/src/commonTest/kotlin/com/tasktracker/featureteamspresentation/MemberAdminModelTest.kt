@@ -9,10 +9,12 @@ import com.tasktracker.featureteamsdomain.UserStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -156,6 +158,36 @@ class MemberAdminModelTest {
         assertEquals(MembersBucket.Deleted, model.bucket)
     }
 
+    /**
+     * A cancelled load is rethrown, not held as a failure.
+     *
+     * The screen is disposed while this call is in flight whenever the user leaves the members
+     * page, and reaching for the bucket is exactly what `selectBucket` does on the way out. A
+     * model that absorbed the cancellation would put an "offline" banner over whatever the user
+     * navigated to next — reporting the exit as a server failure.
+     *
+     * The `try`/`catch` is the assertion, not noise: the exception is caught here rather than
+     * left to escape into `runTest`, which is what makes it possible to assert both that it was
+     * thrown at all and that nothing was held.
+     */
+    @Test
+    fun aCancelledLoadIsRethrownRatherThanHeldAsAFailure() = runTest {
+        val port = RecordingMemberAdminPort()
+        port.membersFailure = CancellationException("the screen was disposed mid-load")
+        val model = MemberAdminModel(port)
+
+        val thrown = try {
+            model.reload()
+            null
+        } catch (cancelled: CancellationException) {
+            cancelled
+        }
+
+        assertNotNull(thrown, "a cancellation must be rethrown, not absorbed")
+        assertNull(model.listFailure)
+        assertFalse(model.isLoading, "the rethrown cancellation must still clear the in-flight flag")
+    }
+
     @Test
     fun dismissingTheFailureClearsIt() = runTest {
         val port = RecordingMemberAdminPort(membersFailure = AppError.Server(500, "boom"))
@@ -252,6 +284,34 @@ class MemberAdminModelTest {
         assertEquals(listOf(alan.id), port.reactivatedIDs)
         assertEquals(emptyList<User>(), model.members)
         assertNull(model.listFailure)
+    }
+
+    /**
+     * A failed reactivation keeps the row and raises the failure.
+     *
+     * The mirror of [aFailedDeletionKeepsTheRowAndRaisesTheFailure], and the reason it exists at
+     * all: `reactivate` is the one command whose failure path had no test, and the row it acts on
+     * is already *gone* from the list — dropping it again on a failed call would look like a
+     * success. A restore the server refused must leave the deleted row where it was.
+     */
+    @Test
+    fun aFailedReactivationKeepsTheRowAndRaisesTheFailure() = runTest {
+        val port = RecordingMemberAdminPort(byStatus = mapOf(UserStatus.Deleted to listOf(alan)))
+        val model = MemberAdminModel(port)
+        model.observe(this)
+        advanceUntilIdle()
+        model.selectBucket(MembersBucket.Deleted)
+        advanceUntilIdle()
+        port.reactivateFailure = AppError.Forbidden
+
+        model.reactivate(alan)
+        advanceUntilIdle()
+
+        assertIs<AppError.Forbidden>(model.listFailure)
+        // The row stays: the server refused, so the member is still deleted, and a list that
+        // had already dropped them would be the client showing a restore that did not happen.
+        assertEquals(listOf(alan), model.members)
+        assertEquals(MembersBucket.Deleted, model.bucket)
     }
 
     @Test
