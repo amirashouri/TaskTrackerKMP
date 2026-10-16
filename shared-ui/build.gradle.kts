@@ -20,6 +20,7 @@ dependencies {
     commonMainImplementation(project(":packages:feature-auth-presentation"))
     // For `TeamPort`, resolved and handed to the projects environment.
     commonMainImplementation(project(":packages:feature-teams-domain"))
+    commonMainImplementation(project(":packages:feature-teams-presentation"))
 
     // For `NotificationPort`: the inbox screen asks for the port, and the shell provides it.
     commonMainImplementation(project(":packages:feature-notifications-domain"))

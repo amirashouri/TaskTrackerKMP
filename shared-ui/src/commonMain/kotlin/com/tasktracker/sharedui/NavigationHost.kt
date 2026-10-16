@@ -77,7 +77,10 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
+import com.tasktracker.featureteamspresentation.MemberAdminModel
+import com.tasktracker.featureteamspresentation.MembersAdminScreen
 import com.tasktracker.featureprojectspresentation.assignableMembersFor
 import com.tasktracker.featureprojectspresentation.currentProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
@@ -165,6 +168,11 @@ fun NavigationHost(
     LaunchedEffect(router) { router.state.collect { navigation = it } }
 
     val tab = navigation.selectedTab
+
+    // The member admin port is a public property in another module, so the compiler cannot
+    // smart-cast its null checks across `if` branches. Capture it once as a local so the
+    // branches below can narrow its type freely.
+    val memberAdminPort = environment.memberAdminPort
 
     // Read once, used twice: the chrome below and the pane arrangement further down ask the same
     // question, and two reads of the same local is two chances for them to disagree about what
@@ -361,6 +369,7 @@ fun NavigationHost(
                         preferences = preferences,
                         themeScheme = themeScheme,
                         scope = scope,
+                        memberAdminPort = memberAdminPort,
                     )
                 }
                 // The detail pane's own empty state, a value for the same reason `tabRoot` and
@@ -374,7 +383,11 @@ fun NavigationHost(
                 // top is also what keeps the right pane from being handed the list when nothing
                 // is selected — the mistake the Sprints branch below documents.
                 val adminMembersListPane: @Composable () -> Unit = {
-                    AdminMembersPlaceholder(memberID = null)
+                    if (memberAdminPort == null) {
+                        AdminMembersPlaceholder(memberID = null)
+                    } else {
+                        AdminMembersDestination(memberID = null, router = router, memberAdminPort = memberAdminPort, scope = scope)
+                    }
                 }
                 val adminProjectsListPane: @Composable () -> Unit = {
                     AdminProjectsPlaceholder(projectID = null)
@@ -423,18 +436,25 @@ fun NavigationHost(
                         )
 
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
-                        backgroundPushed is AppRoute.AdminMembers ->
-                        AdminTwoPanes(
-                            listPane = adminMembersListPane,
-                            // `null` is the section's *list*, which is the left pane already —
-                            // so the right pane is the selection or the "nothing chosen" state,
-                            // never the list again.
-                            detailPane = if (backgroundPushed.memberID == null) {
-                                noAdminSelected
-                            } else {
-                                pushedPane
-                            },
-                        )
+                        backgroundPushed is AppRoute.AdminMembers -> {
+                        if (memberAdminPort == null) {
+                            AdminTwoPanes(
+                                listPane = adminMembersListPane,
+                                detailPane = if (backgroundPushed.memberID == null) {
+                                    noAdminSelected
+                                } else {
+                                    pushedPane
+                                },
+                            )
+                        } else {
+                            AdminMembersDestination(
+                                memberID = backgroundPushed.memberID,
+                                router = router,
+                                memberAdminPort = memberAdminPort,
+                                scope = scope,
+                            )
+                        }
+                    }
 
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminProjects ->
@@ -660,6 +680,7 @@ private fun PushedRoute(
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
+    memberAdminPort: MemberAdminPort?,
 ) {
     when (route) {
         // The Board as a destination in its own right, reachable through a deep link and
@@ -739,7 +760,18 @@ private fun PushedRoute(
         // screen — so these are the *first pushed* routes on its stack, never tab roots. The
         // screen they render is a placeholder in this task; what is real about them is which
         // pane they land in, which is why the branch below carries the pane argument.
-        is AppRoute.AdminMembers -> AdminMembersPlaceholder(memberID = route.memberID)
+        is AppRoute.AdminMembers -> {
+            if (memberAdminPort == null) {
+                AdminMembersPlaceholder(memberID = route.memberID)
+            } else {
+                AdminMembersDestination(
+                    memberID = route.memberID,
+                    router = router,
+                    memberAdminPort = memberAdminPort,
+                    scope = scope,
+                )
+            }
+        }
 
         is AppRoute.AdminProjects -> AdminProjectsPlaceholder(projectID = route.projectID)
     }

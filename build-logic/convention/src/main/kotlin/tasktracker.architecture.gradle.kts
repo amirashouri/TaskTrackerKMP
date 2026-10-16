@@ -260,6 +260,10 @@ val allowedDependenciesTable: Map<String, Set<String>> = allowedLibraryTable +
             // graph for the port and passes it down, and it cannot construct a live
             // directory because `:packages:feature-teams-data` is not an edge either.
             ":packages:feature-teams-domain",
+            // For `MemberAdminPort`, which the shell resolves and hands to the projects
+            // environment — same shape as `TeamPort` and `SettingsPort`: the graph binds
+            // the live port, the shell passes it down.
+            ":packages:feature-teams-presentation",
             ":packages:feature-auth-domain",
             ":packages:feature-auth-presentation",
             // For `SettingsPort` alone, which the settings screen is handed. The shell

@@ -24,6 +24,7 @@ import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
 
 /**
@@ -53,6 +54,13 @@ class ProjectEnvironment(
      * nobody; it never crashes a screen.
      */
     val teamPort: TeamPort? = null,
+    /**
+     * The member administration port, or `null` when the graph supplied none.
+     *
+     * Extends [TeamPort] and adds write operations; nullable so shells that do not expose
+     * admin can still render projects surfaces.
+     */
+    val memberAdminPort: MemberAdminPort? = null,
     /**
      * The platform file picker, or `null` when the graph supplied none.
      *

@@ -32,6 +32,7 @@ import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentView
 import com.tasktracker.featureprojectspresentation.ProjectEnvironment
@@ -149,6 +150,7 @@ fun RootScreen(
                 repository,
                 clock,
                 resolver.getOrNull(TeamPort::class),
+                resolver.getOrNull(MemberAdminPort::class),
                 resolver.getOrNull(FilePicker::class),
             )
         }
