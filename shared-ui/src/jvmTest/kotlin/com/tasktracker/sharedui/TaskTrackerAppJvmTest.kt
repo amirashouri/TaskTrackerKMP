@@ -87,6 +87,18 @@ class TaskTrackerAppJvmTest {
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
 
     @Test
+    fun theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt() =
+        runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
+
+    @Test
+    fun aWideShellDrawsTheAdminListAndDetailSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheAdminListAndDetailSideBySide)
+
+    @Test
+    fun theAdminProjectsRowOpensTheProjectsSection() =
+        runComposeUiTest(block = ShellScenarios.theAdminProjectsRowOpensTheProjectsSection)
+
+    @Test
     fun aWideShellCentresTheSheetLikeAWindow() =
         runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
 
@@ -173,3 +185,9 @@ class TaskTrackerAppJvmTest {
  * Desktop app, which is the only arrangement in which that claim is worth anything.
  */
 internal actual fun thisHostExpressesDesktopWidth(): Boolean = true
+
+/**
+ * The JVM host presses through the synthetic input on the dispatcher the shell registers with, so
+ * the scenario's back assertions run here.
+ */
+internal actual fun thisHostDeliversSystemBack(): Boolean = true

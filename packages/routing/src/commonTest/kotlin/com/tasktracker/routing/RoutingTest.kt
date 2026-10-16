@@ -2,6 +2,7 @@ package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomWorkItemID
@@ -15,10 +16,14 @@ import kotlin.test.assertTrue
 private const val PROJECT_UUID = "11111111-1111-1111-1111-111111111111"
 private const val ITEM_UUID = "22222222-2222-2222-2222-222222222222"
 private const val SPRINT_UUID = "33333333-3333-3333-3333-333333333333"
+private const val MEMBER_UUID = "44444444-4444-4444-4444-444444444444"
+private const val OTHER_MEMBER_UUID = "55555555-5555-5555-5555-555555555555"
 
 private val projectID = ProjectID(PROJECT_UUID)
 private val itemID = WorkItemID(ITEM_UUID)
 private val sprintID = SprintID(SPRINT_UUID)
+private val memberID = UserID(MEMBER_UUID)
+private val otherMemberID = UserID(OTHER_MEMBER_UUID)
 
 class DeepLinkParserTest {
 
@@ -695,5 +700,130 @@ class RouterTest {
         val generated = randomWorkItemID()
         val link = DeepLinkParser.route("tasktracker://workitem/$projectID/$generated")
         assertEquals(AppRoute.WorkItemEditor(projectID, generated), link?.route)
+    }
+
+    @Test
+    fun `opening the members section installs the settings screen beneath the list`() {
+        val router = Router()
+        router.enterMain()
+
+        router.openAdminMembers()
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertEquals(
+            listOf(AppRoute.Settings, AppRoute.AdminMembers()),
+            router.path(AppTab.Settings),
+            "the settings screen is the section's floor: a list pushed onto an empty stack " +
+                "would be the bottom of its own stack, where system back is disabled and the " +
+                "Settings tab button is already selected, leaving no way out of the section",
+        )
+    }
+
+    @Test
+    fun `a selected member sits on the list rather than replacing it`() {
+        val router = Router()
+        router.enterMain()
+
+        router.openAdminMembers(memberID)
+
+        assertEquals(
+            adminMembersStack(memberID),
+            router.path(AppTab.Settings),
+            "a selection reached without the list first must still install the list beneath it",
+        )
+        assertEquals(
+            listOf(
+                AppRoute.Settings,
+                AppRoute.AdminMembers(),
+                AppRoute.AdminMembers(memberID),
+            ),
+            router.path(AppTab.Settings),
+        )
+    }
+
+    @Test
+    fun `choosing another member replaces the selection without growing the stack`() {
+        val router = Router()
+        router.enterMain()
+        router.openAdminMembers(memberID)
+        val depth = router.path(AppTab.Settings).size
+
+        router.openAdminMembers(otherMemberID)
+
+        // The property the two-pane arrangement depends on. A selection that pushed would grow
+        // the stack once per member visited, which a wide window draws identically — the left
+        // pane would simply keep showing the first member chosen — so only the depth can see it.
+        assertEquals(
+            depth,
+            router.path(AppTab.Settings).size,
+            "opening a second member grew the stack from $depth to " +
+                "${router.path(AppTab.Settings).size}. The selection is a choice within the " +
+                "section, not a destination in its own right, so it replaces rather than pushes",
+        )
+        assertEquals(
+            listOf(
+                AppRoute.Settings,
+                AppRoute.AdminMembers(),
+                AppRoute.AdminMembers(otherMemberID),
+            ),
+            router.path(AppTab.Settings),
+        )
+    }
+
+    @Test
+    fun `clearing the selection returns to the list rather than being ignored`() {
+        val router = Router()
+        router.enterMain()
+        router.openAdminMembers(memberID)
+
+        router.openAdminMembers(null)
+
+        assertEquals(adminMembersStack(), router.path(AppTab.Settings))
+    }
+
+    @Test
+    fun `opening the projects section is the same shape as members`() {
+        val router = Router()
+        router.enterMain()
+
+        router.openAdminProjects()
+        assertEquals(adminProjectsStack(), router.path(AppTab.Settings))
+
+        router.openAdminProjects(projectID)
+        assertEquals(adminProjectsStack(projectID), router.path(AppTab.Settings))
+        assertEquals(
+            listOf(
+                AppRoute.Settings,
+                AppRoute.AdminProjects(),
+                AppRoute.AdminProjects(projectID),
+            ),
+            router.path(AppTab.Settings),
+        )
+    }
+
+    @Test
+    fun `the admin sections are not project-scoped`() {
+        // Neither one selects: managing a project's settings is not showing that project's
+        // work, so entering `AdminProjects(projectID)` must not move the Board and Backlog
+        // tabs out from under the user — the rule `WorkItemEditor` already follows.
+        assertNull(AppRoute.AdminMembers().selectsActiveProject)
+        assertNull(AppRoute.AdminMembers(memberID).selectsActiveProject)
+        assertNull(AppRoute.AdminProjects().selectsActiveProject)
+        assertNull(AppRoute.AdminProjects(projectID).selectsActiveProject)
+        assertNull(AppRoute.AdminMembers().projectIDOrNull)
+        assertNull(AppRoute.AdminProjects(projectID).projectIDOrNull)
+
+        val router = Router()
+        router.enterMain()
+        router.openProject(projectID)
+        router.openAdminProjects(projectID)
+
+        assertEquals(projectID, router.activeProjectID)
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertEquals(
+            listOf(AppRoute.Board(projectID)),
+            router.path(AppTab.Projects),
+            "entering an admin section must not disturb the stacks it was not aimed at",
+        )
     }
 }

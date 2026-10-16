@@ -146,6 +146,13 @@ fun ProjectsHost(
             is AppRoute.SprintDetail,
             is AppRoute.WorkItemEditor,
             AppRoute.Settings,
+            // The admin sections are pushed onto the *Settings* stack and never onto this one,
+            // so these two are unreachable here rather than unimplemented: `openAdminMembers`
+            // and `openAdminProjects` write `settingsPath`. They are named rather than covered
+            // by an `else` so that the next route added to the interface still fails to compile
+            // until somebody decides which of these two answers it gets.
+            is AppRoute.AdminMembers,
+            is AppRoute.AdminProjects,
             -> ProjectsListDestination(
                 environment = environment,
                 scope = scope,

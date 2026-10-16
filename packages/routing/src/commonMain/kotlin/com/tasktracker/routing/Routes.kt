@@ -2,6 +2,7 @@ package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.WorkItemStatus
 
@@ -91,9 +92,33 @@ sealed interface AppRoute {
     ) : AppRoute
 
     data object Settings : AppRoute
+
+    /**
+     * The members administration section, as a route on the Settings stack.
+     *
+     * ## Why one route carries both the list and the detail
+     *
+     * [memberID] is `null` for the section's list and non-null for one member. That is the
+     * shape [SprintList] and [SprintDetail] have as two cases, collapsed into one, and the
+     * reason is the two-pane arrangement rather than saving a type: a wide window draws the
+     * list and the selected member side by side, and "which member is under the cursor" is a
+     * *selection* in the same stack rather than a destination in its own right. Two cases
+     * would work identically and would let a `when` grow a rule that never fires.
+     *
+     * The pair is kept honest by [adminMembersStack], which is the one definition of the
+     * stack for both the list and a selection — see its note for why the settings screen
+     * sits *beneath* the list rather than the list being the tab root.
+     */
+    data class AdminMembers(val memberID: UserID? = null) : AppRoute
+
+    /**
+     * The projects administration section, in the same shape and for the same reasons as
+     * [AdminMembers]: `null` is the active/archived list, non-null is one project's editor.
+     */
+    data class AdminProjects(val projectID: ProjectID? = null) : AppRoute
 }
 
-/** The project a route is scoped to, or null for [AppRoute.Settings]. */
+/** The project a route is scoped to, or null for [AppRoute.Settings] and the admin sections. */
 val AppRoute.projectIDOrNull: ProjectID?
     get() = when (this) {
         is AppRoute.Board -> projectID
@@ -102,7 +127,10 @@ val AppRoute.projectIDOrNull: ProjectID?
         is AppRoute.SprintList -> projectID
         is AppRoute.SprintDetail -> projectID
         is AppRoute.WorkItemEditor -> projectID
-        AppRoute.Settings -> null
+        // Admin sections are not project-scoped even though one names a project: managing a
+        // project's settings is not showing that project's work, and `AdminProjects(projectID)`
+        // must not become the active project any more than `WorkItemEditor` does.
+        is AppRoute.AdminProjects, AppRoute.Settings, is AppRoute.AdminMembers -> null
     }
 
 /**
@@ -129,7 +157,9 @@ val AppRoute.selectsActiveProject: ProjectID?
         is AppRoute.Archive -> projectID
         is AppRoute.SprintList -> projectID
         is AppRoute.SprintDetail -> projectID
-        is AppRoute.WorkItemEditor, AppRoute.Settings -> null
+        is AppRoute.WorkItemEditor, AppRoute.Settings, is AppRoute.AdminMembers,
+        is AppRoute.AdminProjects,
+        -> null
     }
 
 /**

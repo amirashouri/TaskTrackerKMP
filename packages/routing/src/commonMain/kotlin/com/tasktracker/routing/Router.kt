@@ -4,6 +4,7 @@ import com.tasktracker.core.LogPrivacy
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TTLogger
+import com.tasktracker.core.UserID
 import com.tasktracker.core.logMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -245,6 +246,45 @@ class Router {
         ).withPath(AppTab.Sprints, sprintStack(projectID, sprintID))
     }
 
+    // MARK: - Admin sections
+
+    /**
+     * Opens the members administration section, or one member inside it, in a single
+     * transition.
+     *
+     * One entry point for both the list and a selection, exactly as [openSprint] is for a
+     * sprint list and a sprint, and for the same reason: the row tap and the shell's
+     * two-pane selection have to install the *same* stack or the wide and narrow
+     * arrangements disagree about what is behind the screen the user is looking at. A
+     * `push` of the selection would grow the stack by one per member visited — the drift
+     * `openSprint` exists to remove, and here it would also mean a wide window's left pane
+     * showed the first member selected rather than the list.
+     *
+     * A `null` [memberID] with no section open is the list; a non-null one is that member
+     * with the list beneath it. A `null` one *with* a member open is the selection being
+     * cleared, so it returns to the list rather than being ignored.
+     *
+     * The active project is deliberately untouched: the admin sections are not
+     * project-scoped, so entering them must not move the Board and Backlog tabs — the same
+     * rule [AppRoute.WorkItemEditor] follows.
+     */
+    fun openAdminMembers(memberID: UserID? = null) = update { state ->
+        state.copy(selectedTab = AppTab.Settings)
+            .withPath(AppTab.Settings, adminMembersStack(memberID))
+    }
+
+    /**
+     * Opens the projects administration section, or one project inside it.
+     *
+     * Same shape and same reasoning as [openAdminMembers], including why the active project
+     * does not move: this manages a project's settings, which is not the same act as
+     * showing that project's work.
+     */
+    fun openAdminProjects(projectID: ProjectID? = null) = update { state ->
+        state.copy(selectedTab = AppTab.Settings)
+            .withPath(AppTab.Settings, adminProjectsStack(projectID))
+    }
+
     /** Pushes onto [onTab], defaulting to the selected tab; pops if already on top. */
     fun push(route: AppRoute, onTab: AppTab? = null) = update { state ->
         val target = onTab ?: state.selectedTab
@@ -394,3 +434,52 @@ fun sprintListStack(projectID: ProjectID): List<AppRoute> = listOf(AppRoute.Spri
  */
 fun sprintStack(projectID: ProjectID, sprintID: SprintID): List<AppRoute> =
     sprintListStack(projectID) + AppRoute.SprintDetail(projectID, sprintID)
+
+/**
+ * The Settings tab's stack for the members administration section: the settings screen, the
+ * list, and the member being edited if there is one.
+ *
+ * ## Why the settings screen is *in* the stack
+ *
+ * This is the one place the admin sections differ from sprints, and it is forced by where
+ * the tab root sits. The Sprints tab's root is the sprint list, so a list with nothing
+ * pushed onto it is still a screen with a tab to leave by. The Settings tab's root is the
+ * settings screen, and an admin list pushed onto an *empty* stack would be the bottom of
+ * its own stack: system back would be disabled there (the shell enables it only above depth
+ * one) and the Settings tab button would be a no-op because it is already selected — so the
+ * only way out of the section would be a different tab, and coming back would land in the
+ * admin list again. Naming the settings screen makes back from the list a pop to the screen
+ * the section was opened from.
+ *
+ * `AppRoute.Settings` is already a legitimate element of this tab's stack: a
+ * `tasktracker://settings` link installs exactly that, so the shell renders the settings
+ * screen from a pushed route and from the tab root identically.
+ *
+ * ## Why one function for three stacks
+ *
+ * The list, a selection and a cleared selection are the same question asked three times, and
+ * the growth the two-pane arrangement depends on — a selection replaces rather than stacks —
+ * is a property of this function rather than of any caller. [Router.openAdminMembers] is its
+ * only writer, so the two cannot drift.
+ */
+fun adminMembersStack(memberID: UserID? = null): List<AppRoute> =
+    listOf(AppRoute.Settings, AppRoute.AdminMembers()) +
+        if (memberID == null) {
+            emptyList()
+        } else {
+            listOf(AppRoute.AdminMembers(memberID))
+        }
+
+/**
+ * The Settings tab's stack for the projects administration section.
+ *
+ * The same shape as [adminMembersStack], and the same argument for it — see that function's
+ * note rather than a second copy here.
+ */
+fun adminProjectsStack(projectID: ProjectID? = null): List<AppRoute> =
+    listOf(AppRoute.Settings, AppRoute.AdminProjects()) +
+        if (projectID == null) {
+            emptyList()
+        } else {
+            listOf(AppRoute.AdminProjects(projectID))
+        }
