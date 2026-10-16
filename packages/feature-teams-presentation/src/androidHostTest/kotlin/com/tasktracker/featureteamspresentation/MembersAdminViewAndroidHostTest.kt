@@ -61,4 +61,8 @@ class MembersAdminViewAndroidHostTest {
     @Test
     fun aFailureIsShownAsItWasWorded() =
         runComposeUiTest(block = MembersAdminScenarios.aFailureIsShownAsItWasWorded)
+
+    @Test
+    fun theChevronAsksTheShellToGoBack() =
+        runComposeUiTest(block = MembersAdminScenarios.theChevronAsksTheShellToGoBack)
 }

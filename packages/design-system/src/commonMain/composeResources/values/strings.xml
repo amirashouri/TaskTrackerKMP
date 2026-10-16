@@ -100,6 +100,7 @@
       Shared across more than one screen's dialog, so it is grouped by meaning rather than
       repeated per screen. `%1$s` is a project name or a work item key.
     -->
+    <string name="common_back">Back</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_delete">Delete</string>
     <string name="common_save">Save</string>
