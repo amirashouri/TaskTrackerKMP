@@ -395,7 +395,7 @@ private fun BottomSheetPreview() {
 }
 
 @Composable
-private fun ttPreviewSurface(
+internal fun ttPreviewSurface(
     scheme: ThemeScheme = ThemeScheme.System,
     content: @Composable () -> Unit,
 ) {

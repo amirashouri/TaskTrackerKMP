@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.TTConfirmPopupTag
+import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featureteamsdomain.MemberRole
@@ -71,6 +72,25 @@ object MembersAdminScenarios {
         displayName = "Alan Turing",
         status = UserStatus.Deleted,
     )
+
+    /**
+     * The chevron is the way out, and it asks the shell to take it.
+     *
+     * This is the one control that must exist on *every* host rather than only the two with a
+     * system back: on the desktop window there is no button and no edge swipe, re-selecting the
+     * active tab is a no-op, so a pushed screen that drew no back control is a screen the desktop
+     * cannot leave. The assertion is therefore that the control is in the tree and that tapping it
+     * dispatches the shell's command — the shell owns which route pops; this screen only asks.
+     */
+    val theChevronAsksTheShellToGoBack: suspend ComposeUiTest.() -> Unit = {
+        var backs = 0
+        screenShowing(members = listOf(ada), onBack = { backs++ })
+
+        onNodeWithTag(TTGlassBackButtonTag).assertIsDisplayed()
+        onNodeWithTag(TTGlassBackButtonTag).performClick()
+
+        assertEquals(1, backs, "the back control must ask the shell to leave, on every host")
+    }
 
     /**
      * The empty active bucket, which is what an administrator with no colleagues yet sees.
@@ -274,6 +294,7 @@ private fun ComposeUiTest.screenShowing(
     isAddFormOpen: Boolean = false,
     isCreating: Boolean = false,
     createErrorMessage: String? = null,
+    onBack: () -> Unit = {},
     onSelectBucket: (MembersBucket) -> Unit = {},
     onRequestDelete: (User) -> Unit = {},
     onCancelDelete: () -> Unit = {},
@@ -295,6 +316,7 @@ private fun ComposeUiTest.screenShowing(
                 isAddFormOpen = isAddFormOpen,
                 isCreating = isCreating,
                 createErrorMessage = createErrorMessage,
+                onBack = onBack,
                 onSelectBucket = onSelectBucket,
                 onRequestDelete = onRequestDelete,
                 onCancelDelete = onCancelDelete,

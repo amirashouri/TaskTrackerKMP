@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.designsystem.TTGlassBackButton
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
@@ -75,6 +76,7 @@ fun MembersAdminScreen(
     isAddFormOpen: Boolean,
     isCreating: Boolean,
     createErrorMessage: String?,
+    onBack: () -> Unit,
     onSelectBucket: (MembersBucket) -> Unit,
     onRequestDelete: (User) -> Unit,
     onCancelDelete: () -> Unit,
@@ -102,7 +104,7 @@ fun MembersAdminScreen(
                 .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            MembersHeader(onOpenAddForm = onOpenAddForm)
+            MembersHeader(onBack = onBack, onOpenAddForm = onOpenAddForm)
 
             if (errorMessage != null) {
                 ttBanner(message = errorMessage, onDismiss = onDismissError)
@@ -184,15 +186,21 @@ fun MembersAdminScreen(
 }
 
 /**
- * The page title, with the create action in its trailing section.
+ * The way out, the page title, and the create action — in that order across the header.
  *
  * An action in the header rather than a floating button, for the reason the projects list
  * records: a floating circle has to be paid for twice — once in layout that reserves space for
  * it and once in the touch target that has to aim past it — and the reservation is the half that
  * gets forgotten. There is nothing under a header action to cover.
+ *
+ * The back control is this screen's rather than the shell's, and leading rather than trailing,
+ * because the shell cannot draw it: on the desktop window there is no system back, re-selecting
+ * the active tab does nothing, and the rail therefore has no route back to Settings. It sits where
+ * a reader looks for it — before the title — so this screen leaves the same way on all four hosts.
  */
 @Composable
 private fun MembersHeader(
+    onBack: () -> Unit,
     onOpenAddForm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -201,6 +209,7 @@ private fun MembersHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
+        TTGlassBackButton(onBack = onBack)
         ttText(
             text = stringResource(Res.string.admin_members_title),
             style = ttTypography.titleSmall,
