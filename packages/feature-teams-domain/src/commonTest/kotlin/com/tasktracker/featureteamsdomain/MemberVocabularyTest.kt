@@ -8,14 +8,17 @@ import kotlin.test.assertEquals
 class MemberVocabularyTest {
 
     @Test
-    fun everyUserStatusRoundTripsItsWireValue() {
-        for (status in UserStatus.entries) {
-            assertEquals(
-                status,
-                UserStatus.fromWireValue(status.wireValue),
-                "UserStatus.${status.name} must round-trip through its wire value",
-            )
-        }
+    fun theUserStatusWireVocabularyMatchesTheDirectoryApi() {
+        // The server's column carries exactly these three strings (entities.StatusActive,
+        // StatusInactive, StatusDeleted). Pinned literally, because a round-trip against our
+        // own wireValue would stay green through a typo in the spelling itself.
+        assertEquals(
+            listOf("active", "inactive", "deleted"),
+            UserStatus.entries.map { it.wireValue },
+        )
+        assertEquals(UserStatus.Active, UserStatus.fromWireValue("active"))
+        assertEquals(UserStatus.Inactive, UserStatus.fromWireValue("inactive"))
+        assertEquals(UserStatus.Deleted, UserStatus.fromWireValue("deleted"))
     }
 
     @Test
@@ -40,14 +43,15 @@ class MemberVocabularyTest {
     }
 
     @Test
-    fun everyMemberRoleRoundTripsItsWireValue() {
-        for (role in MemberRole.entries) {
-            assertEquals(
-                role,
-                MemberRole.fromWire(role.wireValue),
-                "MemberRole.${role.name} must round-trip through its wire value",
-            )
-        }
+    fun theMemberRoleWireVocabularyMatchesTheDirectoryApi() {
+        // The server accepts exactly these two role strings (entities.RoleAdmin, RoleMember).
+        // Pinned literally for the same reason the status vocabulary is.
+        assertEquals(
+            listOf("admin", "member"),
+            MemberRole.entries.map { it.wireValue },
+        )
+        assertEquals(MemberRole.Admin, MemberRole.fromWire("admin"))
+        assertEquals(MemberRole.Member, MemberRole.fromWire("member"))
     }
 
     @Test
