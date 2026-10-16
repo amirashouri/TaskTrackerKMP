@@ -8,6 +8,7 @@ import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.TimeoutCancellationException
@@ -190,6 +191,7 @@ class AuthRepository(
             id = identifier,
             email = claims.email ?: fallbackEmail ?: "",
             displayName = null,
+            role = UserRole.fromWire(claims.role),
         )
     }
 

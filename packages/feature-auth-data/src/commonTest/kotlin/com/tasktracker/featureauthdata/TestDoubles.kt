@@ -186,6 +186,7 @@ object TestToken {
     fun make(
         subject: String = DEFAULT_SUBJECT,
         email: String = DEFAULT_EMAIL,
+        role: String? = null,
         type: String = "access",
         expiresIn: Long,
         issuedAt: Instant = Instant.fromEpochSeconds(1_760_000_000),
@@ -203,6 +204,9 @@ object TestToken {
             buildJsonObject {
                 put("sub", subject)
                 put("email", email)
+                // Only present when asked for, so the default fixture keeps modelling the
+                // token an older server signed — one with no `role` claim at all.
+                if (role != null) put("role", role)
                 put("typ", type)
                 put("iat", issuedAt.epochSeconds)
                 put("exp", issuedAt.epochSeconds + expiresIn)
