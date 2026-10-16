@@ -1,4 +1,4 @@
-# Feature Plan
+# TaskTrackerKMP — Feature Plan
 
 A roadmap for extending TaskTrackerKMP beyond its current personal/board tool into a
 fuller personal and team task manager. Each entry states the gap it closes, where in the
