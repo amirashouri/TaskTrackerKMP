@@ -175,13 +175,16 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:feature-settings-domain",
     ),
 
-    // The user directory: a read-only UserID -> User lookup backed by the session cache.
-    // feature-teams-data performs no network or sync work yet — no server transport for a
-    // member list exists — so it is deliberately narrower than the other data modules.
+    // The user directory. Reads resolve a UserID against the session cache; the admin
+    // member API is the write half, so `:packages:network` is here for the transport behind
+    // `MemberAdminRepository`. Deliberately still narrower than the other data modules: there
+    // is no sync engine here, because a user is never synced — the member list is an online
+    // view, not an outbox-backed local one.
     ":packages:feature-teams-domain" to setOf(":packages:core"),
     ":packages:feature-teams-data" to setOf(
         ":packages:core",
         ":packages:database",
+        ":packages:network",
         ":packages:feature-teams-domain",
     ),
 
