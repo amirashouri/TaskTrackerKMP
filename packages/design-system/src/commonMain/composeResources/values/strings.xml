@@ -533,6 +533,38 @@
     <string name="settings_missing_body">The app was built without a settings service, so this screen has nothing to read.</string>
 
     <!--
+      The members screen, reached from the admin-only Settings row. Only an administrator
+      gets here, so the wording can assume a reader who already administers.
+
+      The one string that has to be precise rather than brief is the confirm popup's body.
+      It is where the user learns that deleting a member is a *soft* delete: the account
+      loses access at once, but its row survives under Deleted so it can be restored. A body
+      that just said "Delete?" would let an admin believe the row was about to disappear,
+      which is the opposite of what the server does and of what this screen then shows.
+    -->
+    <string name="admin_members_title">Members</string>
+    <string name="admin_members_segment_active">Active</string>
+    <string name="admin_members_segment_deleted">Deleted</string>
+    <string name="admin_members_add">Add member</string>
+    <string name="admin_members_empty_active">No members yet. Use the button above to add one.</string>
+    <string name="admin_members_empty_deleted">No deleted members.</string>
+    <string name="admin_members_delete">Delete member</string>
+    <string name="admin_members_reactivate">Reactivate</string>
+    <string name="admin_members_delete_title">Delete %1$s?</string>
+    <string name="admin_members_delete_body">They lose access immediately. The account keeps its row in the deleted list, where you can restore it later.</string>
+
+    <!-- The add-member form. The field labels are the words the person filling it in expects. -->
+    <string name="admin_members_add_title">Add member</string>
+    <string name="admin_members_field_email">Email</string>
+    <string name="admin_members_field_password">Password</string>
+    <string name="admin_members_field_role">Role</string>
+    <string name="admin_members_field_position">Position</string>
+    <string name="admin_members_position_none">No position</string>
+    <string name="admin_members_create">Create</string>
+    <string name="admin_members_role_admin">Admin</string>
+    <string name="admin_members_role_member">Member</string>
+
+    <!--
       No `error_*` strings here, deliberately. Error text is hardcoded in
       `AppError` in `:packages:core`, because that module is allowed no project
       dependencies at all and therefore cannot read `Res`. Duplicating the wording

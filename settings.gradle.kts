@@ -66,6 +66,7 @@ include(":packages:feature-settings-presentation")
 
 include(":packages:feature-teams-domain")
 include(":packages:feature-teams-data")
+include(":packages:feature-teams-presentation")
 
 include(":packages:feature-notifications-domain")
 include(":packages:feature-notifications-data")
