@@ -230,6 +230,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    // Reachable from the shell: the Settings retry affordance. A shell fake holds no outbox,
+    // so there is never a dead row to revive — zero is the honest count here, not a stub.
+    override suspend fun retryStuckChanges(now: Instant): Int = 0
+
     // MARK: Not reachable from the shell
 
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =

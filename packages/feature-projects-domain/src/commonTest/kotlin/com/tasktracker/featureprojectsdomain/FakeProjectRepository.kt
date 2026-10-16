@@ -675,6 +675,19 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    // MARK: Recovering refused changes
+
+    /**
+     * The fake holds no outbox, so no change can be dead in it: there is nothing to revive.
+     *
+     * Returning zero keeps the retry affordance a no-op here rather than faking a sync that
+     * cannot happen — the same answer `ViewPreviewData` gives in
+     * `:packages:feature-projects-presentation`, and the reason this file does not grow an
+     * outbox just to satisfy the interface. A test that needs the retry to do something
+     * belongs against `:packages:feature-projects-data`, where a real queue exists.
+     */
+    override suspend fun retryStuckChanges(now: Instant): Int = 0
+
     // MARK: Invalidation
 
     override fun changes(): Flow<ProjectChange> = broadcaster.stream()
