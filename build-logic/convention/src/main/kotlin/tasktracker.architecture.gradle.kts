@@ -52,6 +52,7 @@ val packageOwnersTable: Map<String, String> = mapOf(
     "com.tasktracker.featuresettingspresentation" to ":packages:feature-settings-presentation",
     "com.tasktracker.featureteamsdomain" to ":packages:feature-teams-domain",
     "com.tasktracker.featureteamsdata" to ":packages:feature-teams-data",
+    "com.tasktracker.featureteamspresentation" to ":packages:feature-teams-presentation",
     "com.tasktracker.featurenotificationsdomain" to ":packages:feature-notifications-domain",
     "com.tasktracker.featurenotificationsdata" to ":packages:feature-notifications-data",
     "com.tasktracker.featurenotificationspresentation" to ":packages:feature-notifications-presentation",
@@ -186,6 +187,19 @@ val allowedLibraryTable: Map<String, Set<String>> = mapOf(
         ":packages:database",
         ":packages:network",
         ":packages:feature-teams-domain",
+    ),
+    // The member directory as an administrator manages it. The screen renders `User`s,
+    // `MemberRole`s and `UserStatus`es from `feature-teams-domain`, and its add-member form
+    // offers the job titles `feature-settings-domain` already names — a deliberate
+    // cross-feature read of a vocabulary, the same shape as
+    // `feature-projects-presentation`'s edge to `feature-teams-domain`. It never sees
+    // `feature-teams-data`: the screen talks to `MemberAdminPort`, and the composition root
+    // binds the transport.
+    ":packages:feature-teams-presentation" to setOf(
+        ":packages:core",
+        ":packages:design-system",
+        ":packages:feature-teams-domain",
+        ":packages:feature-settings-domain",
     ),
 
     // Notifications inbox: domain, data, and presentation.
