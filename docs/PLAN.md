@@ -961,3 +961,194 @@ platform check anywhere.
 - **The threshold is a decision, not a constant.** It is pinned by an exact-value test for
   the reason `AGENTS.md` gives about numbers a test already holds: moving it should be a
   deliberate edit that a reader can see in a diff.
+
+# PLAN — Admin Member & Project Management (KMP client side)
+
+Repo: `/Users/amirreza/Desktop/SampleProjects/TaskTracker/TaskTrackerKMP`
+Story: an admin-only section in **Settings** with **Manage members** and **Manage
+projects**. Members: create (email/password/role/position), list with Active/Deleted
+segments, delete (soft-delete, confirm popup), reactivate. Projects: Active/Archived
+segments, selecting one opens the edit-project page. Detail opens as a **new screen on
+mobile** and a **split screen on desktop**. This file is the repo-scoped breakdown;
+the server half lives in `../TaskTrackerServer/PLAN.md`.
+
+> **Not in the repo.** Plan mode restricts edits to `~/.opencode/plan`. At
+> implementation time, each task becomes one `specs/<plan-id>-<slug>.md` (per
+> `specs/README.md`) + one `feat/` branch + one PR, exactly as `AGENTS.md` requires.
+
+## Frozen decisions (agreed with the user)
+
+| # | Decision | Consequence |
+| --- | --- | --- |
+| D1 | Admin gate = new `role` on the auth responses, **declared client-first**. | `CLI-1` ships the field with a default **before** server `SRV-8` sends it. |
+| D2 | Manage Projects lists **all** projects server-wide. | New admin projects network port; the local Room/outbox path is **not** used for the admin list. |
+| D3 | Deleted member = status value **`deleted`**. | Client maps a fresh `MemberStatus`; legacy settings `UserStatus` (Active/Away/Busy/BeRightBack) is unrelated. |
+| D4 | ≤1h access-token window after delete. | No client change beyond handling the eventual 401. |
+
+## Architecture constraints this plan must respect (verified)
+
+- `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts`:
+  - `:packages:feature-teams-data` has **no** `:packages:network` edge (line 182) — must be added for the member API.
+  - `:packages:feature-teams-domain` depends only on `:packages:core`.
+  - `:packages:feature-projects-data` **already** has `:packages:network`.
+  - `:packages:feature-projects-presentation` **already** depends on `:packages:feature-teams-domain`.
+  - `:packages:feature-settings-presentation` does **not** depend on `feature-teams-domain` — so the admin gate is threaded as a plain `isAdmin: Boolean`, avoiding a new edge.
+- Presentation may **not** depend on a data module. New screens talk to **ports** in the domain module; `:composition-root` binds the data implementations; `:shared-ui` gains the presentation-module edge.
+- `NavigationHost.kt` + most of `:shared-ui` are **untracked** — read and edit deliberately, never scripted.
+- `NavigationHost.kt`’s route `when` is exhaustive: a new `AppRoute` is a compile error until handled.
+- The only split-screen precedent is `shared-ui/.../SprintPanes.kt` (`Expanded` widths, Sprints-only); desktop-vs-mobile is width-driven via `LocalShellLayoutClass`, never platform branching.
+- `JSONCoding.ignoreUnknownKeys` is **off** — added server keys must be declared in Kotlin with a default first.
+
+## Task order
+
+| ID | Title | Depends on | ACK |
+| --- | --- | --- | --- |
+| CLI-1 | Declare `role` on the auth token response + identity | — | yes (wire) |
+| CLI-2 | Admin section + entry rows in Settings, gated on role | CLI-1 | yes (2+ modules) |
+| CLI-3 | Admin `AppRoute`s + `NavigationHost` dispatch + desktop two-pane scaffolding | CLI-2 | yes (shared-ui/routing) |
+| CLI-4 | `feature-teams-domain`: member-admin port + role/status vocabulary | — | yes (domain API) |
+| CLI-5 | `feature-teams-data`: HTTP member-admin remote + network edge | CLI-4 | yes (graph) |
+| CLI-6 | New `:packages:feature-teams-presentation`: members screens | CLI-3, CLI-5 | yes (new module) |
+| CLI-7 | `feature-projects-domain`: admin-projects port | — | yes (domain API) |
+| CLI-8 | `feature-projects-data`: HTTP admin-projects remote | CLI-7 | yes (data API) |
+| CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes |
+| CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes |
+| CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — |
+
+---
+
+## CLI-1 — Declare `role` on the auth token response + identity
+
+**Why first:** the server may not send `role` until an installed client declares it
+(`ignoreUnknownKeys` is off). This is the client-first half of D1.
+
+**Files**
+- `packages/feature-auth-data/src/commonMain/kotlin/com/tasktracker/featureauthdata/HttpAuthRemote.kt` — `AuthTokenResponse` (line ~104) gains `@SerialName("role") val role: String? = null`; map it through the remote.
+- `packages/feature-auth-domain/src/commonMain/kotlin/com/tasktracker/featureauthdomain/AuthSession.kt` — `UserIdentity` (line ~34) gains `role: UserRole = UserRole.Member`; add `UserRole { Admin, Member }` here (auth vocabulary).
+- `packages/feature-auth-data/src/commonTest/.../HttpAuthRemoteTest.kt` — decoding with and without `role`.
+
+**Acceptance / tests**
+- A token response **without** `role` still decodes (default `Member`) — the old-server case.
+- A response **with** `role: "admin"` yields `UserRole.Admin`.
+- `contract_test` counterpart (server) is updated in `SRV-8`, not here.
+
+## CLI-2 — Admin section + entry rows in Settings
+
+**Files**
+- `packages/feature-settings-presentation/.../SettingsScreen.kt` — add an **Admin** `SettingsSection` (reusing `SettingsActionRow`) with "Manage members" and "Manage projects"; render it only when `isAdmin`.
+- `packages/feature-settings-presentation/.../SettingsEnvironment.kt` (or the screen signature) — thread `isAdmin: Boolean` through; the shell supplies it from `UserIdentity.role` (no `feature-teams-domain` edge added).
+- `shared-ui/.../NavigationHost.kt` (`SettingsDestination`, ~L1753) — pass `isAdmin` computed from the signed-in identity.
+- `packages/feature-settings-presentation/src/commonTest/.../SettingsScenarios.kt` — structural tests.
+- Any new row that becomes a public `@Composable` gets its **own file** (splitting rule).
+
+**Acceptance / tests**
+- Member: the Admin section is absent from the tree. Admin: both rows are present.
+- Tapping a row invokes the injected callback with the right destination (structural).
+- Mutation-check: make the gate unconditional → the "hidden for member" test goes red.
+
+## CLI-3 — Admin routes + navigation dispatch + desktop two-pane scaffolding
+
+**Files**
+- `packages/routing/src/commonMain/kotlin/com/tasktracker/routing/Routes.kt` — new `AppRoute` cases, e.g. `AdminMembers(memberId: UserID? = null)` and `AdminProjects(projectId: ProjectID? = null)` (parameterized so a selection can be carried on `Expanded` and pushed on `Compact`).
+- `shared-ui/.../NavigationHost.kt` — handle both routes in the exhaustive `when`; `Compact` → push detail screens; `Expanded` → two-pane.
+- **NEW** `shared-ui/.../AdminPanes.kt` — two-pane layout modelled on `SprintPanes.kt` (list pane + divider + detail pane), reusing its divider.
+- `packages/routing/src/commonTest/...` — route/path tests; `shared-ui` host-split tests.
+
+**Acceptance / tests**
+- `Compact` + a selected id → a pushed detail route; back pops to the list.
+- `Expanded` → list and detail coexisting; selecting changes the detail pane without a push.
+- Mutation-check: force one layout branch → the opposite-width test goes red.
+
+## CLI-4 — `feature-teams-domain`: member-admin port + vocabulary
+
+**Files**
+- `packages/feature-teams-domain/.../MemberAdminPort.kt` (**new**) — `members(status: MemberStatus)`, `createMember(email, password, role, position)`, `softDeleteMember(id)`, `reactivateMember(id)`.
+- `packages/feature-teams-domain/.../MemberRole.kt` (**new**) — `Admin`/`Member` with `wireValue`.
+- `packages/feature-teams-domain/.../MemberStatus.kt` (**new**) — `Active`/`Deleted` with `wireValue` + a total `fromWireValue` fallback.
+- `packages/feature-teams-domain/src/commonTest/...` — vocabulary round-trip tests.
+
+**Acceptance / tests**
+- Every wire value round-trips; an unknown status maps to a safe default rather than throwing.
+- Extends the read-only `TeamPort` seam its KDoc already names as "the backend member API".
+
+## CLI-5 — `feature-teams-data`: HTTP member-admin remote
+
+**Files**
+- `build-logic/convention/src/main/kotlin/tasktracker.architecture.gradle.kts` — add `":packages:network"` to `:packages:feature-teams-data` (update the comment at line ~179 that currently says it does no network work).
+- `packages/feature-teams-data/.../HttpMemberAdminRemote.kt` (**new**) — per-call DTOs with `@SerialName` matching the server keys (`email`, `password`, `display_name`, `position`, `role`, `status`, `id`, `created_at`), `Endpoint` classes, modelled on `HttpAuthRemote.kt`.
+- `packages/feature-teams-data/.../MemberAdminRepository.kt` (**new**) — implements `MemberAdminPort`.
+- `packages/feature-teams-data/src/commonTest/...` — remote tests (decode + request shape).
+
+**Acceptance / tests**
+- Create/list/delete/reactivate hit the right method+path with auth required; the response decodes into `User`/`MemberRole`/`MemberStatus`.
+- Mutation-check: break the `@SerialName` case → the decode test goes red.
+
+## CLI-6 — New `:packages:feature-teams-presentation`: members screens
+
+**Files**
+- New module `packages/feature-teams-presentation/` (build file) — edges: core, domain, design-system, routing, di, `feature-teams-domain`.
+- `.../MembersAdminScreen.kt` — `TTGlassSegmentedPicker` (Active/Deleted), list, `+` in the top bar; state in a Compose-state model (the `SettingsModel`/`ProjectModel` pattern, not androidx `ViewModel`).
+- `.../MemberAdminModel.kt`, `.../MemberRow.kt` (trailing trash `ttGlassButton`), `.../AddMemberDialog.kt` (email, password, role, position dropdown fed by `UserPosition.all`), delete uses `ConfirmPopup` with a destructive tint.
+- `build-logic/.../tasktracker.architecture.gradle.kts` — `packageOwnersTable` + `allowedLibraryTable` + `shared-ui` edge; `:composition-root` binding.
+- `.../src/commonTest/...` — model tests with a fake `MemberAdminPort`; host tests.
+
+**Acceptance / tests**
+- Default segment is Active; switching to Deleted lists deleted members and the row offers **reactivate** instead of delete.
+- Creating a member appends a row (fake port records the call).
+- Delete shows `ConfirmPopup`; cancel ⇒ no call; confirm ⇒ `softDeleteMember` called.
+- Mutation-check: default the segment to Deleted → the "defaults to Active" test goes red.
+
+## CLI-7 — `feature-projects-domain`: admin-projects port
+
+**Files**
+- `packages/feature-projects-domain/.../AdminProjectsPort.kt` (**new**) — `projects(status: ProjectAdminStatus)` (Active/Archived), `project(id)`, `updateProject(patch)`.
+- `packages/feature-projects-domain/src/commonTest/...` — port contract tests.
+
+## CLI-8 — `feature-projects-data`: HTTP admin-projects remote
+
+**Files**
+- `packages/feature-projects-data/.../HttpAdminProjectsRemote.kt` (**new**) — DTOs per the server decision (recommend: reuse the sync project shape: camelCase, ISO-8601 via the existing timestamp serializer, `isArchived`, `version`).
+- `packages/feature-projects-data/.../AdminProjectsRepository.kt` (**new**) — implements `AdminProjectsPort`.
+- `packages/feature-projects-data/src/commonTest/...` — decode + request tests.
+
+**Acceptance / tests**
+- Active vs Archived selection maps to `?status=`; the edit patch sends only changed fields + `version`.
+- Mutation-check: swap the `status` query value → the segment test goes red.
+
+## CLI-9 — `feature-projects-presentation`: Manage-projects screen
+
+**Files**
+- `packages/feature-projects-presentation/.../AdminProjectsScreen.kt` (**new**) — `TTGlassSegmentedPicker` Active/Archived over `ProjectRow`; selecting a project routes to the existing `ProjectEditorScreen` (already in this module — no new cross-presentation edge).
+- `.../AdminProjectsModel.kt`, host/common tests reusing `FakeProjectRepository` style.
+
+**Acceptance / tests**
+- Archived projects appear only under Archived; selecting opens the editor with that project; saving calls `updateProject`.
+- Mutation-check: hard-code the Active filter → the archived-selection test goes red.
+
+## CLI-10 — Desktop split screen vs mobile page
+
+**Files**
+- `shared-ui/.../NavigationHost.kt` — wire `AdminMembers`/`AdminProjects` through `AdminPanes` on `Expanded`, pushed screens on `Compact`.
+- `shared-ui` host-split tests.
+
+**Acceptance / tests**
+- `Expanded`: tapping the Settings entry shows list + detail side by side. `Compact`: the entry pushes a full screen.
+- Mutation-check: treat both widths as `Compact` → the split-screen test goes red.
+
+## CLI-11 — Tests, baseline, verification
+
+**Files**
+- `test-baseline.json` — regenerate with `scripts/test-baseline.py` in the same change as the new tests (never hand-edit; `scripts/check-baseline.sh` enforces).
+- Anything pixel-reading (contrast of the trash/`+` buttons over glass, the segmented picker) → follow the render-vs-structural table + the `test-reviewer` subagent + mutation ritual.
+
+**Acceptance**
+- `scripts/check.sh` green; the documented pre-existing host failures (`docs/TEST-HOSTS.md`) unchanged.
+
+---
+
+## Open assumptions (correct me before ACK)
+
+1. Role vocabulary is **deliberately duplicated**: `UserRole` in `feature-auth-domain` (identity) and `MemberRole` in `feature-teams-domain` (member admin), following the existing duplicated-`preferredGreeting` precedent — rather than adding a `feature-settings-presentation → feature-auth/teams-domain` edge.
+2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation` (so `ProjectEditorScreen` is reusable with no new cross-presentation edge).
+3. Position choices for the add-member form come from the client's `UserPosition.all`; the server stores free text (matches server assumption 1).
+4. The admin members/projects screens are **online-only** (direct network, no Room/outbox), unlike the offline-first board/backlog surfaces.
