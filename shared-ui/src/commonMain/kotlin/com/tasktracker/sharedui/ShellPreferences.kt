@@ -5,6 +5,7 @@ import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.featureauthdomain.UserIdentity
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -106,6 +107,18 @@ class ShellPreferences(
     val currentUserID: StateFlow<UserID?> = _currentUserID.asStateFlow()
 
     /**
+     * The signed-in person's account role, or `null` before [refreshCurrentUser] has run.
+     *
+     * Read from the same cached profile as [currentUserID] and at the same moment, for the same
+     * reason: the role decides whether Settings offers the admin management screens, and that
+     * gate has to hold on a relaunch of a device that is offline. `null` means "nobody is signed
+     * in" rather than "a member" — the profile's own default already answers the second question
+     * ([UserRole.Member]) — so the shell never has to invent an identity before sign-in.
+     */
+    private val _currentUserRole = MutableStateFlow<UserRole?>(null)
+    val currentUserRole: StateFlow<UserRole?> = _currentUserRole.asStateFlow()
+
+    /**
      * Who to call the signed-in person, or `null` before [refreshCurrentUser] has run.
      *
      * A [StateFlow] and not a `val` for two reasons, and the first is mechanical: the read is
@@ -190,6 +203,10 @@ class ShellPreferences(
         val profile = store.value<UserIdentity>(DefaultsKey.CachedProfile)
         _currentUserName.value = profile?.preferredGreeting
         _currentUserID.value = profile?.id
+        // The raw role, not an `isAdmin` boolean: which role opens which screen is a decision for
+        // the screen that gates on it, and the profile's own default has already failed closed to
+        // `Member` for a missing or unrecognised claim.
+        _currentUserRole.value = profile?.role
     }
 
     /**

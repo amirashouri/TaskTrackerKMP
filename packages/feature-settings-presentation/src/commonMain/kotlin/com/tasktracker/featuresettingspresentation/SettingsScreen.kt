@@ -22,6 +22,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttSettingsIcons
+import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -39,6 +40,8 @@ import com.tasktracker.resources.settings_connectivity_needs_connection
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_connectivity_unknown
+import com.tasktracker.resources.settings_manage_members
+import com.tasktracker.resources.settings_manage_projects
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_sign_out
@@ -120,6 +123,17 @@ fun SettingsScreen(
     signOutFailure: AppError? = null,
     onForceSignOut: () -> Unit = {},
     onDismissSignOutFailure: () -> Unit = {},
+    /**
+     * Whether the signed-in person administers the account, and so sees the Admin section.
+     *
+     * The gate is *presence* rather than a disabled row: a control that is drawn but cannot be
+     * used is how "the app is broken for me" gets reported, and a member has nothing to do on
+     * either screen. Defaulted to `false`, so the previews and the scenarios that do not name it
+     * read as a member — the honest default, and the safe one.
+     */
+    isAdmin: Boolean = false,
+    onManageMembers: () -> Unit = {},
+    onManageProjects: () -> Unit = {},
 ) {
     // The list and the confirmation popup are siblings in one box, so the popup floats over
     // the list rather than scrolling with it. `modifier` lands here rather than on the
@@ -180,6 +194,31 @@ fun SettingsScreen(
                         },
                         modifier = Modifier.testTag(SettingsStatusTextRowTag),
                     )
+                }
+            }
+            // The Admin section is drawn only for an administrator. It sits high on the page
+            // because for the one person who can see it, member and project management are the
+            // highest-value destinations here — and because a row below the fold would be a row
+            // a test could not tell from an absent one.
+            if (isAdmin) {
+                item {
+                    SettingsSection {
+                        SettingsActionRow(
+                            label = stringResource(Res.string.settings_manage_members),
+                            icon = ttSettingsIcons.account,
+                            tint = ttAccent(),
+                            onClick = onManageMembers,
+                            modifier = Modifier.testTag(SettingsManageMembersTag),
+                        )
+                        SettingsDivider()
+                        SettingsActionRow(
+                            label = stringResource(Res.string.settings_manage_projects),
+                            icon = ttTabIcons.projects,
+                            tint = ttAccent(),
+                            onClick = onManageProjects,
+                            modifier = Modifier.testTag(SettingsManageProjectsTag),
+                        )
+                    }
                 }
             }
             item {
@@ -423,5 +462,13 @@ const val SettingsRetryStuckTag = "settings.retryStuck"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
+
+/**
+ * The two admin-only entries. Tags of their own rather than one shared tag, because the gate and
+ * the two dispatch assertions are separate claims: a build that dropped one row, or wired both
+ * to the same callback, has to fail rather than pass on a single match.
+ */
+const val SettingsManageMembersTag = "settings.manageMembers"
+const val SettingsManageProjectsTag = "settings.manageProjects"
 
 
