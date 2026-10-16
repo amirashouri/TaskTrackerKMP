@@ -347,6 +347,52 @@ object SettingsScenarios {
                 "its centre (a top-aligned Box leaves it 4dp off)",
         )
     }
+
+    /**
+     * A member is not an administrator, so the Admin section is not in the tree at all.
+     *
+     * The absence is the assertion, and it is only meaningful because the section sits high on
+     * the page: a row below the fold is not composed, and `assertDoesNotExist` would then pass
+     * whether or not the gate held — the false green this scenario exists to avoid.
+     */
+    val theAdminSectionIsHiddenFromAMember: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(isAdmin = false)
+
+        onNodeWithTag(SettingsManageMembersTag).assertDoesNotExist()
+        onNodeWithTag(SettingsManageProjectsTag).assertDoesNotExist()
+    }
+
+    /** An administrator sees both entries, and each dispatches its own command exactly once. */
+    val anAdminSeesTheManagementEntriesAndTheyDispatch: suspend ComposeUiTest.() -> Unit = {
+        var membersTaps = 0
+        var projectsTaps = 0
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    isAdmin = true,
+                    onManageMembers = { membersTaps++ },
+                    onManageProjects = { projectsTaps++ },
+                )
+            }
+        }
+
+        onNodeWithTag(SettingsManageMembersTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(SettingsManageProjectsTag).performScrollTo().assertIsDisplayed()
+
+        onNodeWithTag(SettingsManageMembersTag).performClick()
+        onNodeWithTag(SettingsManageProjectsTag).performClick()
+
+        assertEquals(1, membersTaps, "the Manage Members row must dispatch its own command")
+        assertEquals(1, projectsTaps, "the Manage Projects row must dispatch its own command")
+    }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -355,6 +401,7 @@ private fun ComposeUiTest.screenShowing(
     activity: SyncActivity = SyncActivity(),
     version: AppVersion = SettingsPreviewData.version,
     commandOutcome: SyncOutcome? = null,
+    isAdmin: Boolean = false,
 ) {
     setContent {
         Themed {
@@ -367,6 +414,7 @@ private fun ComposeUiTest.screenShowing(
                 onThemeChange = {},
                 onSyncNow = {},
                 onSignOut = {},
+                isAdmin = isAdmin,
             )
         }
     }

@@ -500,6 +500,12 @@
     -->
     <string name="settings_outcome_offline">There is no connection. Your edits are queued and will go out when you are back online.</string>
     <string name="settings_account_section">Account</string>
+    <!--
+      The admin-only section. Both rows lead to a management screen and neither is rendered for
+      a member, so the wording only has to be clear to someone who already administers.
+    -->
+    <string name="settings_manage_members">Manage Members</string>
+    <string name="settings_manage_projects">Manage Projects</string>
     <string name="settings_sign_out">Sign Out</string>
     <!--
       The force-sign-out popup. The title names the problem rather than the action: the user

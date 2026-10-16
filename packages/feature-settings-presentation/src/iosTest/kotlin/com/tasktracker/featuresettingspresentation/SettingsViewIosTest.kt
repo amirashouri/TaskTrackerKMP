@@ -92,4 +92,12 @@ class SettingsViewIosTest {
     @Test
     fun theSelectedAccentSwatchCarriesTheGlassLens() =
         runComposeUiTest(block = AccentSwatchScenarios.theSelectedAccentSwatchCarriesTheGlassLens)
+
+    @Test
+    fun theAdminSectionIsHiddenFromAMember() =
+        runComposeUiTest(block = SettingsScenarios.theAdminSectionIsHiddenFromAMember)
+
+    @Test
+    fun anAdminSeesTheManagementEntriesAndTheyDispatch() =
+        runComposeUiTest(block = SettingsScenarios.anAdminSeesTheManagementEntriesAndTheyDispatch)
 }

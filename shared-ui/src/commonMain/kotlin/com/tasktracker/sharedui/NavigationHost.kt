@@ -75,6 +75,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.assignableMembersFor
@@ -1764,6 +1765,11 @@ private fun SettingsDestination(
 
     val accentPalette by preferences.accentPalette.collectAsState()
     val glassIntensity by preferences.glassIntensity.collectAsState()
+    // The admin gate, read from the profile the shell already caches rather than from a new
+    // feature edge. `UserRole.Admin` is the only role that opens the Admin section, and a
+    // `null` role — nobody signed in — is not one: fail closed on the screen that leads to
+    // member and project management.
+    val isAdmin = preferences.currentUserRole.collectAsState().value == UserRole.Admin
 
     SettingsScreen(
         connectivity = model.connectivity,
@@ -1804,6 +1810,7 @@ private fun SettingsDestination(
         // state would look correct until the next reload put the stored value back.
         userDetails = model.userDetails,
         onUserDetailsChange = { details -> scope.launch { model.applyUserDetails(details) } },
+        isAdmin = isAdmin,
     )
 }
 
