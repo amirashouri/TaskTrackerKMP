@@ -169,10 +169,11 @@ fun NavigationHost(
 
     val tab = navigation.selectedTab
 
-    // The member admin port is a public property in another module, so the compiler cannot
-    // smart-cast its null checks across `if` branches. Capture it once as a local so the
-    // branches below can narrow its type freely.
+    // The admin ports are public properties in other modules, so the compiler cannot smart-cast
+    // their null checks across `if` branches. Capture them once as locals so the branches below
+    // can narrow their types freely.
     val memberAdminPort = environment.memberAdminPort
+    val adminProjectsPort = environment.adminProjectsPort
 
     // Read once, used twice: the chrome below and the pane arrangement further down ask the same
     // question, and two reads of the same local is two chances for them to disagree about what
@@ -390,7 +391,16 @@ fun NavigationHost(
                     }
                 }
                 val adminProjectsListPane: @Composable () -> Unit = {
-                    AdminProjectsPlaceholder(projectID = null)
+                    if (adminProjectsPort == null) {
+                        AdminProjectsPlaceholder(projectID = null)
+                    } else {
+                        AdminProjectsDestination(
+                            projectID = null,
+                            router = router,
+                            adminProjectsPort = adminProjectsPort,
+                            scope = scope,
+                        )
+                    }
                 }
                 val noAdminSelected: @Composable () -> Unit = { AdminDetailPlaceholder() }
 
@@ -463,7 +473,11 @@ fun NavigationHost(
                             detailPane = if (backgroundPushed.projectID == null) {
                                 noAdminSelected
                             } else {
-                                pushedPane
+                                if (adminProjectsPort == null) {
+                                    AdminProjectsPlaceholder(projectID = backgroundPushed.projectID)
+                                } else {
+                                    pushedPane
+                                }
                             },
                         )
 
@@ -773,7 +787,17 @@ private fun PushedRoute(
             }
         }
 
-        is AppRoute.AdminProjects -> AdminProjectsPlaceholder(projectID = route.projectID)
+        is AppRoute.AdminProjects ->
+            if (environment.adminProjectsPort == null) {
+                AdminProjectsPlaceholder(projectID = route.projectID)
+            } else {
+                AdminProjectsDestination(
+                    projectID = route.projectID,
+                    router = router,
+                    adminProjectsPort = environment.adminProjectsPort,
+                    scope = scope,
+                )
+            }
     }
 }
 
@@ -2123,3 +2147,8 @@ fun TabButtonTag(tab: AppTab): String = "shell.tab.${tab.wireValue}"
  * mistake is a test that finds nothing rather than one that quietly drives the wrong control.
  */
 fun NavigationRailButtonTag(tab: AppTab): String = "shell.rail.${tab.wireValue}"
+
+/**
+ * The projects admin destination tag, so a test can assert the real screen rendered.
+ */
+const val AdminProjectsDestinationTag = "shell.admin.projects.destination"

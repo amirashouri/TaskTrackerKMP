@@ -554,6 +554,12 @@
     <string name="admin_members_delete_title">Delete %1$s?</string>
     <string name="admin_members_delete_body">They lose access immediately. The account keeps its row in the deleted list, where you can restore it later.</string>
 
+    <!-- The admin projects screen, reached from the same admin-only Settings row as members. -->
+    <string name="admin_projects_title">Projects</string>
+    <string name="admin_project_scope">Show</string>
+    <string name="admin_projects_loading">Loading projects…</string>
+    <string name="admin_projects_empty">No %1$s projects.</string>
+
     <!-- The add-member form. The field labels are the words the person filling it in expects. -->
     <string name="admin_members_add_title">Add member</string>
     <string name="admin_members_field_email">Email</string>
