@@ -46,6 +46,8 @@ import androidx.navigationevent.NavigationEventDispatcher
 import androidx.navigationevent.NavigationEventDispatcherOwner
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.tasktracker.featureauthdomain.SessionState
+import com.tasktracker.featureauthdomain.UserIdentity
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureauthpresentation.EmailFieldTag
@@ -58,6 +60,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
@@ -92,6 +95,8 @@ import com.tasktracker.featureprojectspresentation.SprintRowTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featuresettingspresentation.SettingsManageMembersTag
+import com.tasktracker.featuresettingspresentation.SettingsManageProjectsTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
 import com.tasktracker.featuresettingspresentation.SettingsSignOutTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
@@ -105,6 +110,9 @@ import com.tasktracker.resources.sprint_detail_placeholder_body
 import com.tasktracker.resources.sprint_detail_placeholder_title
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
+import com.tasktracker.routing.adminMembersStack
+import com.tasktracker.routing.adminProjectsStack
+import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.CompletableDeferred
@@ -1641,6 +1649,16 @@ object ShellScenarios {
     private const val PHONE_TAB_COUNT = 5
 
     /**
+     * The member the admin section's scenarios select, and a second one to move to.
+     *
+     * Fixed ids rather than fixtures, because the tag an assertion reads carries the id: what the
+     * scenarios ask is whether the detail pane drew *the member that was chosen*, so the property
+     * that matters is that the two differ, not what either one is.
+     */
+    private val adminMemberID = UserID("66666666-6666-4666-8666-666666666666")
+    private val adminOtherMemberID = UserID("77777777-7777-4777-8777-777777777777")
+
+    /**
      * A desktop window, as a fixed number rather than a device's.
      *
      * 1000dp rather than something just over [ShellExpandedMinimumWidth], for the same reason
@@ -2265,6 +2283,261 @@ object ShellScenarios {
         assertNothingTagged(
             SprintDetailScreenTag,
             "no sprint is selected, so the detail screen has no sprint to draw",
+        )
+    }
+
+    /**
+     * A signed-in admin's preferences, carrying the role the Settings tab's gate reads.
+     *
+     * The role is neither a shell parameter nor a field of the session double: it is read from the
+     * cached profile sign-in writes — `ShellPreferences.refreshCurrentUser` reading
+     * `DefaultsKey.CachedProfile` — which is the whole point of that arrangement, since it is what
+     * makes the gate hold on a relaunch of an offline device. A scenario therefore has to *be* a
+     * device that signed in as an admin, and the only honest way to say that is to seed what
+     * signing in would have left behind.
+     *
+     * Nothing in the harness writes this key, so the seeded value survives: `ScriptedSession`
+     * drives the router rather than `AuthRepository`, and `AuthRepository.signIn` owns the write.
+     */
+    private suspend fun adminPreferences(): UserDefaultsStore =
+        UserDefaultsStore(InMemoryPreferences()).apply {
+            set(
+                UserIdentity(
+                    id = shellTestUserID,
+                    email = "admin@example.com",
+                    role = UserRole.Admin,
+                ),
+                DefaultsKey.CachedProfile,
+            )
+        }
+
+    /**
+     * The Settings tab's members row opens the section, and system back walks out of it.
+     *
+     * Two claims, and the second is the one that is easy to get wrong. The section's list is
+     * *not* the Settings tab's root: the tab root is the settings screen, so the list is the first
+     * pushed route and the settings screen sits beneath it. Without that the list would be the
+     * bottom of its own stack — system back disabled there because the shell enables it only above
+     * depth one, and the Settings tab button a no-op because the tab is already selected — leaving
+     * the section with no way back to the screen it was opened from.
+     *
+     * The narrow arrangement is asserted from the other side of the same fact as its Sprints twin:
+     * the list is *absent* when a member is chosen, not merely covered.
+     *
+     * The two presses are gated on [thisHostDeliversSystemBack]. Where the host delivers one — the
+     * JVM and the iOS simulator — the scenario drives the real chain end to end. Where it does not
+     * — the Android host, whose press enters through `activity.onBackPressed()` and never reaches
+     * the shell's `BackHandler`, the same host gap that leaves `systemBackPopsTheSprintDetail` red
+     * at its own back assertion — the presses are skipped and the remaining claims are still made,
+     * because the stack shape and the compact replacement are facts about the router and the
+     * composition rather than about this host's back chain.
+     */
+    val theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt:
+        suspend ComposeUiTest.() -> Unit = {
+            val router = Router()
+            val dispatcher = NavigationEventDispatcher()
+            val owner = object : NavigationEventDispatcherOwner {
+                override val navigationEventDispatcher: NavigationEventDispatcher = dispatcher
+            }
+            setUpShell(
+                session = ScriptedSession(restored = signedIn()),
+                router = router,
+                settings = FakeShellSettingsPort(),
+                preferences = adminPreferences(),
+                navigationEventOwner = owner,
+            )
+            waitForIdle()
+            val deliversBack = thisHostDeliversSystemBack()
+
+            onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+            waitForIdle()
+            onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
+            waitForIdle()
+
+            assertEquals(
+                adminMembersStack(),
+                router.path(AppTab.Settings),
+                "the members row should install the settings screen and the list, but the stack " +
+                    "is ${router.path(AppTab.Settings)}",
+            )
+            onNodeWithTag(AdminMembersListTag).assertExists(
+                "tapping the members row should show the members list",
+            )
+
+            if (deliversBack) {
+                pressSystemBack(dispatcher)
+                waitForIdle()
+                assertEquals(
+                    listOf(AppRoute.Settings),
+                    router.path(AppTab.Settings),
+                    "system back from the members list should return to the settings screen " +
+                        "rather than exit the app — that is why the settings screen is in the " +
+                        "stack at all, and it was ${router.path(AppTab.Settings)}",
+                )
+            }
+
+            // The chosen member is installed through the router rather than by tapping the row a
+            // second time. Under the compact arrangement the list has *replaced* the settings
+            // screen, so the row is only in the composition again if the press above put it back —
+            // and on a host that cannot press it is not. Going straight to the selection keeps the
+            // claim below, that the detail replaces the list, independent of the press.
+            router.openAdminMembers(adminMemberID)
+            waitForIdle()
+
+            onNodeWithTag(AdminMemberDetailTag(adminMemberID)).assertExists(
+                "at ${PHONE_WIDTH.value}dp the chosen member's detail should be showing",
+            )
+            assertNothingTagged(
+                AdminMembersListTag,
+                "at ${PHONE_WIDTH.value}dp the members list is still composed behind the detail. " +
+                    "It is meant to be replaced, not stacked",
+            )
+
+            if (deliversBack) {
+                pressSystemBack(dispatcher)
+                waitForIdle()
+                assertEquals(
+                    adminMembersStack(),
+                    router.path(AppTab.Settings),
+                    "system back should pop the member detail and land on the list, but the stack " +
+                        "is ${router.path(AppTab.Settings)}",
+                )
+                onNodeWithTag(AdminMembersListTag).assertExists(
+                    "after popping the detail the members list should be showing again",
+                )
+            }
+        }
+
+    /**
+     * A wide window draws the members list and the chosen member side by side.
+     *
+     * Geometry, not presence, for the reason the Sprints twin gives: both panes existing is
+     * satisfied by the detail being drawn *over* the list, which is the narrow arrangement with
+     * the list left composed underneath it.
+     *
+     * The no-selection state is asserted first and separately, because it is the arm where the
+     * arrangement can draw the list twice — the list is the left pane by construction, so a right
+     * pane that took the top route would draw it again.
+     *
+     * The selection is then moved, and the *tag* is what proves the right pane followed its route.
+     * These screens are placeholders with no words in them, so there is no text to read back the
+     * way `choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack` reads the sprint card; the
+     * id in the tag is the placeholder's equivalent, and it is why the tag carries one.
+     */
+    val aWideShellDrawsTheAdminListAndDetailSideBySide: suspend ComposeUiTest.() -> Unit = wide@{
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
+        waitForIdle()
+
+        val listCopies = onAllNodesWithTag(AdminMembersListTag).fetchSemanticsNodes().size
+        assertEquals(
+            1,
+            listCopies,
+            "the members list is drawn $listCopies times with no member chosen. The list is the " +
+                "left pane, so a right pane rendering the top route draws it a second time — " +
+                "presence is satisfied by two, which is why this is a count",
+        )
+        val listWithNothingChosen = onNodeWithTag(AdminMembersListTag).getBoundsInRoot()
+        val emptyPane = onNodeWithTag(AdminDetailPlaceholderTag).getBoundsInRoot()
+        assertTrue(
+            listWithNothingChosen.right.value < emptyPane.left.value,
+            "with no member chosen the list runs to ${listWithNothingChosen.right.value}dp and the " +
+                "right pane starts at ${emptyPane.left.value}dp, so they are not side by side",
+        )
+
+        router.openAdminMembers(adminMemberID)
+        waitForIdle()
+
+        val list = onNodeWithTag(AdminMembersListTag).getBoundsInRoot()
+        val detail = onNodeWithTag(AdminMemberDetailTag(adminMemberID)).getBoundsInRoot()
+        assertTrue(
+            list.right.value < detail.left.value,
+            "the list runs to ${list.right.value}dp and the detail starts at " +
+                "${detail.left.value}dp, so the panes are not side by side. Both being present is " +
+                "not enough — the detail drawn over the list satisfies that too, and it is the " +
+                "mistake this arrangement exists to remove",
+        )
+        assertTrue(
+            detail.right.value - detail.left.value > 0f && list.right.value - list.left.value > 0f,
+            "the list is ${list.right.value - list.left.value}dp wide and the detail is " +
+                "${detail.right.value - detail.left.value}dp, so a pane has collapsed to nothing",
+        )
+
+        val depthAfterFirst = router.path(AppTab.Settings).size
+        router.openAdminMembers(adminOtherMemberID)
+        waitForIdle()
+
+        assertEquals(
+            depthAfterFirst,
+            router.path(AppTab.Settings).size,
+            "the stack was ${depthAfterFirst} deep, and choosing a second member made it " +
+                "${router.path(AppTab.Settings).size}. The detail pane follows the selection " +
+                "rather than pushing onto it, so a second member must land at the same depth — a " +
+                "pane implemented as a push grows the stack and then requires popping back " +
+                "through every member already visited",
+        )
+        onNodeWithTag(AdminMemberDetailTag(adminOtherMemberID)).assertExists(
+            "after choosing the second member the right pane should be drawing it. A static pane " +
+                "would still hold the first one, and only the right pane follows the selection",
+        )
+        assertNothingTagged(
+            AdminMemberDetailTag(adminMemberID),
+            "the right pane is still drawing the first member as well as the second, so it was " +
+                "added to rather than replaced",
+        )
+        onNodeWithTag(AdminMembersListTag).assertExists(
+            "the left pane is the section's list and must not be the thing that followed the " +
+                "selection",
+        )
+    }
+
+    /**
+     * The projects row opens the projects section, not the members one.
+     *
+     * Two rows, two callbacks, one screen. The failure this exists for is both rows wired to the
+     * same transition — which every other scenario here would pass, because each of them taps one
+     * row and then only ever asks whether *a* section opened.
+     */
+    val theAdminProjectsRowOpensTheProjectsSection: suspend ComposeUiTest.() -> Unit = {
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+        )
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
+        waitForIdle()
+
+        assertEquals(
+            adminProjectsStack(),
+            router.path(AppTab.Settings),
+            "the projects row should install the projects section, but the stack is " +
+                "${router.path(AppTab.Settings)}",
+        )
+        onNodeWithTag(AdminProjectsListTag).assertExists(
+            "tapping the projects row should show the projects list",
+        )
+        assertNothingTagged(
+            AdminMembersListTag,
+            "the projects row opened the members section. The two rows are separate rows on one " +
+                "screen and have to reach separate sections",
         )
     }
 
@@ -3198,3 +3471,19 @@ object ShellScenarios {
  * `thisHostRasterisesText` uses in `:packages:design-system`.
  */
 internal expect fun thisHostExpressesDesktopWidth(): Boolean
+
+/**
+ * Whether this host can deliver a system back press into the composition.
+ *
+ * True on the JVM and the iOS simulator, where [pressSystemBack] drives a synthetic input on the
+ * dispatcher the shell's `BackHandler` registers with. False on the Android host: there the press
+ * enters through `activity.onBackPressed()` — the chain the device uses — and it does not reach the
+ * shell's `BackHandler` under Robolectric. That is not this task's defect and not something the
+ * scenario can work around; `systemBackPopsTheSprintDetail` is red on that host at the same
+ * assertion, and this is the declaration that stops a second scenario from silently joining it.
+ *
+ * Declared per host for the reason [thisHostExpressesDesktopWidth] gives — the capability is a
+ * property of the host, so the scenario asks rather than going red where the answer is no — and
+ * top level for the same reason, since `expect` cannot be a member.
+ */
+internal expect fun thisHostDeliversSystemBack(): Boolean

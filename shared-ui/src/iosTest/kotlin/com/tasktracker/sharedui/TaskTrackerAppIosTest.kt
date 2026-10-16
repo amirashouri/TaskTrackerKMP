@@ -85,6 +85,18 @@ class TaskTrackerAppIosTest {
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
 
     @Test
+    fun theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt() =
+        runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
+
+    @Test
+    fun aWideShellDrawsTheAdminListAndDetailSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheAdminListAndDetailSideBySide)
+
+    @Test
+    fun theAdminProjectsRowOpensTheProjectsSection() =
+        runComposeUiTest(block = ShellScenarios.theAdminProjectsRowOpensTheProjectsSection)
+
+    @Test
     fun aWideShellCentresTheSheetLikeAWindow() =
         runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
 
@@ -171,3 +183,9 @@ class TaskTrackerAppIosTest {
  * completely.
  */
 internal actual fun thisHostExpressesDesktopWidth(): Boolean = true
+
+/**
+ * The iOS simulator presses through the same synthetic input as the JVM, so the scenario's back
+ * assertions run here too.
+ */
+internal actual fun thisHostDeliversSystemBack(): Boolean = true

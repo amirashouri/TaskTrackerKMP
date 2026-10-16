@@ -118,6 +118,18 @@ class TaskTrackerAppAndroidHostTest {
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
 
     @Test
+    fun theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt() =
+        runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
+
+    @Test
+    fun aWideShellDrawsTheAdminListAndDetailSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheAdminListAndDetailSideBySide)
+
+    @Test
+    fun theAdminProjectsRowOpensTheProjectsSection() =
+        runComposeUiTest(block = ShellScenarios.theAdminProjectsRowOpensTheProjectsSection)
+
+    @Test
     fun aWideShellCentresTheSheetLikeAWindow() =
         runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
 
@@ -219,3 +231,14 @@ class TaskTrackerAppAndroidHostTest {
  * the host records the return as a *pass*.
  */
 internal actual fun thisHostExpressesDesktopWidth(): Boolean = false
+
+/**
+ * The Android host cannot, so a scenario's back assertions are skipped here rather than left red.
+ *
+ * `pressSystemBack` enters through `activity.onBackPressed()` — the device's own chain — and under
+ * Robolectric that press does not reach the shell's `BackHandler`: the router is untouched, which
+ * is why `systemBackPopsTheSprintDetail` fails on this host at its first back assertion. Declining
+ * the capability keeps this scenario out of that red, and keeps the two assertions that do not need
+ * a press — the stack it installs and the replacement it performs — running here.
+ */
+internal actual fun thisHostDeliversSystemBack(): Boolean = false

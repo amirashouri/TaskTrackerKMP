@@ -57,6 +57,9 @@ fun SprintTwoPanes(
 /**
  * The divider drawn between the two panes.
  *
+ * Shared by [SprintTwoPanes] and `AdminTwoPanes` rather than written twice: it is the same
+ * hairline making the same claim, and two copies would be two surfaces to keep in step.
+ *
  * A hairline rather than a gap of nothing, because on a two-pane layout the panes' edges are the
  * only thing saying "these are one screen with two halves" rather than two screens that happen to
  * be adjacent. It is drawn by the caller's own background showing through [PANE_GUTTER], so there
@@ -87,16 +90,24 @@ fun SprintPaneDivider(modifier: Modifier = Modifier) {
  *
  * A `weight` rather than a width also means the split follows the window instead of the window
  * needing to know the split.
+ *
+ * `internal` for the same reason [PANE_GUTTER] is — `AdminTwoPanes` splits its panes with the
+ * same weight rather than a second magic number.
  */
-private const val PANE_WEIGHT = 1f
+internal const val PANE_WEIGHT = 1f
 
 /**
  * The gap the divider lives in, in dp.
  *
  * Wide enough that the hairline is not flush against either pane's content, narrow enough that it
  * does not read as a column the panes are floating in.
+ *
+ * `internal` rather than `private` because `AdminTwoPanes` is a second user of the same
+ * geometry: two two-pane layouts that disagreed about their gutter would show it as a
+ * hairline in one place and a seam in another, and there is no reason for the number to be
+ * stated twice. The name carries no "sprint" because the number never did.
  */
-private val PANE_GUTTER = 1.dp
+internal val PANE_GUTTER = 1.dp
 
 /** The divider's own width, in dp. */
 private val PANE_DIVIDER_WIDTH = 1.dp

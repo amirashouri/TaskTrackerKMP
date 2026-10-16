@@ -367,11 +367,24 @@ fun NavigationHost(
                 // `pushedPane` are: it is a whole pane of one arrangement arm, and inlining the
                 // lambda would make this the one pane of the three with no name.
                 val noSprintSelected: @Composable () -> Unit = { SprintDetailPlaceholder() }
+                // The admin sections' left panes. Values rather than `pushedPane`, and that is
+                // the difference from Sprints: the Settings tab's root is the settings screen,
+                // so an admin section's list is the *first pushed* route rather than `tabRoot`.
+                // Drawing the list from a constant route rather than from whichever route is on
+                // top is also what keeps the right pane from being handed the list when nothing
+                // is selected — the mistake the Sprints branch below documents.
+                val adminMembersListPane: @Composable () -> Unit = {
+                    AdminMembersPlaceholder(memberID = null)
+                }
+                val adminProjectsListPane: @Composable () -> Unit = {
+                    AdminProjectsPlaceholder(projectID = null)
+                }
+                val noAdminSelected: @Composable () -> Unit = { AdminDetailPlaceholder() }
 
-                // Which of the three arrangements. Read off the layout class, never off the
-                // platform — see `ShellLayoutClass` for why — and off the tab, because the
-                // Sprints list-detail pair is the only one in the app whose second pane is already
-                // a route in the same stack, which is what lets it be widened without new state.
+                // Which of the arrangements. Read off the layout class, never off the
+                // platform — see `ShellLayoutClass` for why — and off the tab, because a
+                // list-detail pair whose second pane is already a route in the same stack is
+                // what lets it be widened without new state.
                 //
                 // `Projects` is excluded deliberately and that is a finding rather than a
                 // deferral: its root is the projects list and its "detail" — the board — is a
@@ -379,7 +392,12 @@ fun NavigationHost(
                 // two tabs and would need a second notion of "the project under the cursor" to
                 // reconcile them. Backlog's three sections are one screen, not pushes.
                 //
-                // Nothing here is animated and nothing is remembered. The panes are the same two
+                // The Settings tab's two admin sections are the second pair, and they qualify
+                // for the same reason Sprints does: the selection is a route in this stack. The
+                // difference is only which element the left pane draws — the tab root for
+                // Sprints, the section's list route for admin — and the branch says so.
+                //
+                // Nothing here is animated and nothing is remembered. The panes are the same
                 // composables the single-pane path renders, so a tap, a deep link and a restored
                 // stack all land on the same screen and differ only in where it is drawn — and
                 // `BackHandler` above is untouched, because popping the route removes the detail
@@ -401,6 +419,31 @@ fun NavigationHost(
                                 pushedPane
                             } else {
                                 noSprintSelected
+                            },
+                        )
+
+                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
+                        backgroundPushed is AppRoute.AdminMembers ->
+                        AdminTwoPanes(
+                            listPane = adminMembersListPane,
+                            // `null` is the section's *list*, which is the left pane already —
+                            // so the right pane is the selection or the "nothing chosen" state,
+                            // never the list again.
+                            detailPane = if (backgroundPushed.memberID == null) {
+                                noAdminSelected
+                            } else {
+                                pushedPane
+                            },
+                        )
+
+                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
+                        backgroundPushed is AppRoute.AdminProjects ->
+                        AdminTwoPanes(
+                            listPane = adminProjectsListPane,
+                            detailPane = if (backgroundPushed.projectID == null) {
+                                noAdminSelected
+                            } else {
+                                pushedPane
                             },
                         )
 
@@ -591,6 +634,7 @@ private fun TabRoot(
         } else {
             SettingsDestination(
                 port = settings,
+                router = router,
                 preferences = preferences,
                 themeScheme = themeScheme,
                 scope = scope,
@@ -602,7 +646,7 @@ private fun TabRoot(
 /**
  * A pushed destination.
  *
- * Exhaustive over [AppRoute] with no `else`, deliberately: a sixth route has to be a compile
+ * Exhaustive over [AppRoute] with no `else`, deliberately: a new route has to be a compile
  * error here rather than a runtime fall-through. The sealed interface exists to give exactly
  * that, and this switch is where it pays off.
  */
@@ -683,11 +727,21 @@ private fun PushedRoute(
         } else {
             SettingsDestination(
                 port = settings,
+                router = router,
                 preferences = preferences,
                 themeScheme = themeScheme,
                 scope = scope,
             )
         }
+
+        // The two admin sections. Unlike every other route here they are reached only from a
+        // screen rather than from a link, and the Settings tab's own root is the settings
+        // screen — so these are the *first pushed* routes on its stack, never tab roots. The
+        // screen they render is a placeholder in this task; what is real about them is which
+        // pane they land in, which is why the branch below carries the pane argument.
+        is AppRoute.AdminMembers -> AdminMembersPlaceholder(memberID = route.memberID)
+
+        is AppRoute.AdminProjects -> AdminProjectsPlaceholder(projectID = route.projectID)
     }
 }
 
@@ -1753,6 +1807,7 @@ private fun WorkItemEditorDestination(
 @Composable
 private fun SettingsDestination(
     port: SettingsPort,
+    router: Router,
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
@@ -1811,6 +1866,14 @@ private fun SettingsDestination(
         userDetails = model.userDetails,
         onUserDetailsChange = { details -> scope.launch { model.applyUserDetails(details) } },
         isAdmin = isAdmin,
+        // The two admin rows. The screen reports the tap; where it lands is navigation, so it
+        // goes through the router rather than holding a flag here — and through
+        // `openAdminMembers`/`openAdminProjects` rather than a `push`, because a section's
+        // entrance is the list *and* whatever selection the section was last left on, which is
+        // one stack and therefore one transition. See `adminMembersStack` for why the settings
+        // screen itself is part of that stack.
+        onManageMembers = { router.openAdminMembers() },
+        onManageProjects = { router.openAdminProjects() },
     )
 }
 
