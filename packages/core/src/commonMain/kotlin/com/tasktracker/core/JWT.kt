@@ -21,6 +21,15 @@ object JWT {
     data class Claims(
         val subject: String,
         val email: String?,
+        /**
+         * The account's system role (`admin` / `member`), read verbatim.
+         *
+         * Kept as the raw claim rather than a typed enum because this module is the
+         * bottom of the graph: the role vocabulary lives in `feature-auth-domain`, and a
+         * `core` type that named it would invert the dependency the layers exist to keep.
+         * The data layer maps it.
+         */
+        val role: String?,
         val expiry: Instant?,
         val issuedAt: Instant?,
         /** `access` or `refresh`; distinguishes the two tokens in the same vault. */
@@ -41,6 +50,7 @@ object JWT {
         return Claims(
             subject = json.stringClaim("sub") ?: "",
             email = json.stringClaim("email"),
+            role = json.stringClaim("role"),
             expiry = json.epochClaim("exp"),
             issuedAt = json.epochClaim("iat"),
             tokenType = json.stringClaim("typ"),

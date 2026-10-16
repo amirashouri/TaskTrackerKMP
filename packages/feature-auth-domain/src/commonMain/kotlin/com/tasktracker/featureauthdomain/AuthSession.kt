@@ -7,6 +7,33 @@ import kotlinx.serialization.Serializable
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
+ * The account's role on the server, as carried in the access token's `role` claim.
+ *
+ * It is the same vocabulary the server's `AdminOnly` middleware reads from the token it is
+ * authorizing, which is what keeps the app's admin gate and the server's in step: both
+ * answer from the one claim, on the one credential, with the same lifetime.
+ *
+ * ## Why an unrecognised value is [Member]
+ *
+ * [fromWire] resolves everything it does not recognise — an absent claim, a misspelling, a
+ * role a future server adds — to the *lowest* privilege rather than the highest. What this
+ * feeds is the gate on an admin-only screen, and a token that cannot be understood must not
+ * unlock it. Failing closed also means a server that grows a role this build has never
+ * heard of degrades to "not an admin" instead of to a crash.
+ */
+@Serializable
+enum class UserRole(val wire: String) {
+    Admin("admin"),
+    Member("member");
+
+    companion object {
+        /** Maps the token's `role` claim; anything unrecognised (or absent) is [Member]. */
+        fun fromWire(value: String?): UserRole =
+            entries.firstOrNull { it.wire == value } ?: Member
+    }
+}
+
+/**
  * Who is signed in.
  *
  * ## Why a bare ID was not enough
@@ -35,6 +62,11 @@ data class UserIdentity(
     val id: UserID,
     val email: String,
     val displayName: String? = null,
+    /**
+     * The account's system role. Defaulted so a profile cached by an older build — which
+     * wrote no `role` — still decodes, as [UserRole.Member] rather than as a failure.
+     */
+    val role: UserRole = UserRole.Member,
 ) {
 
     /**

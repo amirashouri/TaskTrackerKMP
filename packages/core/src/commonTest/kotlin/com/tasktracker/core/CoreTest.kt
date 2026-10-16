@@ -25,6 +25,15 @@ class JWTTest {
         assertEquals("tok-1", claims.tokenID)
         assertEquals(Instant.fromEpochSeconds(1_760_000_000), claims.expiry)
         assertEquals(Instant.fromEpochSeconds(1_759_999_600), claims.issuedAt)
+        // This fixture predates the claim: an absent `role` must read as absent, not as a
+        // fabricated value the auth layer would then have to distrust.
+        assertNull(claims.role)
+    }
+
+    @Test
+    fun parsesTheRoleClaim() {
+        val encoded = JWT.encodeBase64URL("""{"sub":"a","role":"admin"}""".encodeToByteArray())
+        assertEquals("admin", assertNotNull(JWT.parse("$header.$encoded.s")).role)
     }
 
     @Test

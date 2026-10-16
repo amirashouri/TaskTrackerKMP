@@ -8,6 +8,7 @@ import com.tasktracker.core.randomUserID
 import com.tasktracker.featureauthdomain.AuthTokens
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.keychain.InMemoryKeychain
 import com.tasktracker.keychain.KeychainStore
 import com.tasktracker.userdefaults.DefaultsKey
@@ -39,7 +40,8 @@ private fun token(
     subject: String = TestToken.DEFAULT_SUBJECT,
     email: String = TestToken.DEFAULT_EMAIL,
     expiresIn: Long = 3_600,
-) = TestToken.make(subject = subject, email = email, expiresIn = expiresIn)
+    role: String? = null,
+) = TestToken.make(subject = subject, email = email, expiresIn = expiresIn, role = role)
 
 class AuthRepositoryTest {
 
@@ -305,5 +307,80 @@ class AuthRepositoryTest {
             parseUserID(JWT.parse(token())!!.subject)!!.stringValue,
             identity.id.stringValue,
         )
+    }
+
+    @Test
+    fun anAdminTokenYieldsAnAdminIdentity() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(
+            listOf(Result.success(AuthTokens(token(role = "admin"), "r1"))),
+        )
+
+        val identity = subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+
+        // The gate on the admin settings screen reads this. Dropping the claim would hide the
+        // screen from the very user the server would let through it.
+        assertEquals(UserRole.Admin, identity.role)
+    }
+
+    @Test
+    fun aTokenWithNoRoleClaimIsAMemberRatherThanAnAdmin() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(listOf(Result.success(AuthTokens(token(), "r1"))))
+
+        val identity = subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+
+        // Fail closed: a token that names no role must not be read as the most privileged one.
+        assertEquals(UserRole.Member, identity.role)
+    }
+
+    @Test
+    fun aRoleTheClientDoesNotKnowIsAlsoJustAMember() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(
+            listOf(Result.success(AuthTokens(token(role = "superuser"), "r1"))),
+        )
+
+        val identity = subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+
+        assertEquals(UserRole.Member, identity.role)
+    }
+
+    @Test
+    fun restoringCarriesTheRoleOutOfTheStoredToken() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(
+            listOf(Result.success(AuthTokens(token(role = "admin"), "r1"))),
+        )
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        // A fresh repository over the same vault is the relaunch: the screen is gated before
+        // this makes any network call, so the role has to come back with the session.
+        val secondBus = SessionStateBus()
+        val second = AuthRepository(subject.vault, subject.remote, subject.defaults, secondBus)
+
+        val settled = second.restore()
+
+        val identity = assertIs<SessionState.SignedIn>(settled).identity
+        assertEquals(UserRole.Admin, identity.role)
+        subject.bus.finish()
+        secondBus.finish()
+    }
+
+    @Test
+    fun theCachedProfileKeepsTheRoleWhenTheTokenCanNoLongerBeRead() = runTest {
+        val subject = RepositorySubject()
+        subject.remote.setSignInResults(
+            listOf(Result.success(AuthTokens(token(role = "admin"), "r1"))),
+        )
+        subject.repository.signIn(email = "ada@example.com", password = "hunter2")
+        // The access token has expired past readability while the session is still good — the
+        // one case the cached profile exists for. The role has to survive in it, or an admin
+        // would lose the screen on a refresh that outlives the token they signed in with.
+        subject.vault.store(AuthTokens("not-a-jwt", "r1"))
+
+        val settled = subject.repository.restore()
+
+        val identity = assertIs<SessionState.SignedIn>(settled).identity
+        assertEquals(UserRole.Admin, identity.role)
     }
 }
