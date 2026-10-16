@@ -26,6 +26,15 @@ data class User(
     val avatarId: String? = null,
     val position: String? = null,
     val status: UserStatus = UserStatus.Active,
+    /**
+     * The account's system role, as the member list displays it.
+     *
+     * Defaulted so a directory payload or a cached row that predates this field still
+     * decodes, as [MemberRole.Member] rather than as a failure — the same rule
+     * `UserIdentity.role` follows. The signed-in account's own role is read from the access
+     * token's claim, not from here; this field is about *other* rows in the list.
+     */
+    val role: MemberRole = MemberRole.Member,
     val lastSeen: Instant? = null,
 ) {
 
