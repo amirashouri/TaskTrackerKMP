@@ -181,5 +181,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
 
     override suspend fun deleteWorkItem(id: WorkItemID): Unit = boom()
 
+    override suspend fun retryStuckChanges(now: Instant): Int = boom()
+
     override fun changes(): Flow<ProjectChange> = delegate.changes()
 }

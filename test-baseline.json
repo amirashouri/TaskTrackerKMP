@@ -23,7 +23,7 @@
       "target": "androidHost",
       "exit": "red",
       "why": "Robolectric viewport and rasteriser",
-      "tests": 1309,
+      "tests": 1311,
       "failures": 34,
       "errors": 0,
       "skipped": 0

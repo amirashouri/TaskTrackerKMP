@@ -620,6 +620,12 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override fun changes(): Flow<ProjectChange> = broadcaster.stream()
 
+    // A fake holds no outbox, so no change can ever be dead in it: there is nothing to
+    // revive. Returning zero keeps the retry affordance a no-op rather than faking a sync
+    // that cannot happen — the same answer `ViewPreviewData.PreviewRepository` gives, and
+    // the reason this double does not grow an outbox to satisfy the port.
+    override suspend fun retryStuckChanges(now: Instant): Int = 0
+
     // MARK: Test control
 
     /**
