@@ -362,6 +362,43 @@ class MemberAdminModelTest {
         assertEquals(1, port.createCalls.size)
     }
 
+    /**
+     * A create that lands counts, and one that fails does not.
+     *
+     * The count is what the wide window's pane keys its form on: a failure that counted would
+     * compose an empty form and throw away the values the admin was correcting, and a success that
+     * did not would leave the account just created in the fields for the next tap on Create.
+     */
+    @Test
+    fun onlyAFinishedCreateIsCounted() = runTest {
+        val port = RecordingMemberAdminPort()
+        val model = MemberAdminModel(port)
+        model.observe(this)
+        advanceUntilIdle()
+        port.created = newHire
+        assertEquals(0, model.completedCreates, "nothing has been created yet")
+
+        model.createMember(newHire.email, "correct horse", MemberRole.Member, null)
+        advanceUntilIdle()
+
+        assertEquals(
+            1,
+            model.completedCreates,
+            "a create that landed must count, or the pane's next form is the account just made",
+        )
+
+        port.createFailure = AppError.Validation("That email is already registered.")
+        model.createMember("ada@example.com", "hunter2", MemberRole.Member, null)
+        advanceUntilIdle()
+
+        assertEquals(
+            1,
+            model.completedCreates,
+            "a failed create must not count, or the pane replaces the form the admin is " +
+                "correcting with an empty one",
+        )
+    }
+
     @Test
     fun aFailedCreateHoldsTheFailureAndKeepsTheFormOpen() = runTest {
         val port = RecordingMemberAdminPort()

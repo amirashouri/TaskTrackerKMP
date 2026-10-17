@@ -51,6 +51,18 @@ class MembersAdminViewIosTest {
         runComposeUiTest(block = MembersAdminScenarios.aFailureIsShownAsItWasWorded)
 
     @Test
+    fun aListWithTheFormBesideItOffersNoAddButton() =
+        runComposeUiTest(block = MembersAdminScenarios.aListWithTheFormBesideItOffersNoAddButton)
+
+    @Test
+    fun theOverlayFormOffersCancelAndAsksForIt() =
+        runComposeUiTest(block = MembersAdminScenarios.theOverlayFormOffersCancelAndAsksForIt)
+
+    @Test
+    fun aFormWithNothingToDismissDrawsNoCancel() =
+        runComposeUiTest(block = MembersAdminScenarios.aFormWithNothingToDismissDrawsNoCancel)
+
+    @Test
     fun theChevronAsksTheShellToGoBack() =
         runComposeUiTest(block = MembersAdminScenarios.theChevronAsksTheShellToGoBack)
 }

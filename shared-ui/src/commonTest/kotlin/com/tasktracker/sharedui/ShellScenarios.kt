@@ -22,6 +22,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -58,7 +59,10 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.UserStatus
+import com.tasktracker.featureteamspresentation.AddMemberCreateTag
+import com.tasktracker.featureteamspresentation.AddMemberEmailFieldTag
 import com.tasktracker.featureteamspresentation.AddMemberFormTag
+import com.tasktracker.featureteamspresentation.AddMemberPasswordFieldTag
 import com.tasktracker.featureteamspresentation.MembersAddTag
 import com.tasktracker.featureteamspresentation.MembersAdminScreenTag
 import com.tasktracker.featureteamspresentation.MembersListTag
@@ -2424,16 +2428,24 @@ object ShellScenarios {
         }
 
     /**
-     * A wide window draws the members list and, once a member is being added, the form beside it.
+     * A wide window draws the members list with the add form in the pane beside it, from the start.
      *
      * This is the one place the members section is *not* a list-detail pair. There is no member
      * detail screen (D6): the second pane holds the create form, which on a phone is an overlay
      * over the list. So the claim here is that it is one form in two containers, and that on a
-     * wide window it is drawn beside the list rather than over it.
+     * wide window it is drawn beside the list rather than over it — with no tap first, because
+     * the pane *is* the form for as long as the section is open.
      *
      * Geometry, not presence, for the reason the Sprints twin gives: both panes existing is
      * satisfied by the form being drawn *over* the list, which is the phone's arrangement with the
      * list left composed underneath it.
+     *
+     * The last claim is the one a pane that is never torn down would otherwise lose. The fields
+     * are the form's own state, so on the phone they are cleared by the form leaving the
+     * composition; this one never leaves, and without the model's count of finished creates the
+     * next create would be the account just made. It is asserted through the Create button, which
+     * is live exactly while both required fields have something in them — an empty form is not
+     * otherwise visible in the semantics tree.
      */
     val aWideShellDrawsTheMembersListAndTheAddFormSideBySide: suspend ComposeUiTest.() -> Unit =
         wide@{
@@ -2454,29 +2466,11 @@ object ShellScenarios {
             onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
             waitForIdle()
 
-            onNodeWithTag(MembersAdminScreenTag).assertExists(
-                "a wide window should draw the members section in the left pane",
-            )
-            assertNothingTagged(
-                AddMemberFormTag,
-                "nothing is being added, so no form should be showing yet",
-            )
             val list = onNodeWithTag(MembersAdminScreenTag).getBoundsInRoot()
-            val emptyPane = onNodeWithTag(AdminDetailPlaceholderTag).getBoundsInRoot()
-            assertTrue(
-                list.right.value < emptyPane.left.value,
-                "with nothing being added the list runs to ${list.right.value}dp and the pane " +
-                    "beside it starts at ${emptyPane.left.value}dp, so they are not side by side",
-            )
-
-            onNodeWithTag(MembersAddTag).performClick()
-            waitForIdle()
-
-            val listWithFormOpen = onNodeWithTag(MembersAdminScreenTag).getBoundsInRoot()
             val form = onNodeWithTag(AddMemberFormTag).getBoundsInRoot()
             assertTrue(
-                listWithFormOpen.right.value <= form.left.value,
-                "the list runs to ${listWithFormOpen.right.value}dp and the form starts at " +
+                list.right.value <= form.left.value,
+                "the list runs to ${list.right.value}dp and the form starts at " +
                     "${form.left.value}dp. Both being present is not enough — the form drawn " +
                     "*over* the list satisfies that too, and that is the phone's arrangement",
             )
@@ -2486,6 +2480,31 @@ object ShellScenarios {
                 "the form is composed more than once on a wide window. The list draws its own " +
                     "overlay as well as the pane, so one tap produced two forms",
             )
+            assertTrue(
+                form.top.value > list.top.value,
+                "the pane starts at ${list.top.value}dp and the form at ${form.top.value}dp, so " +
+                    "the form is flush against the top of the pane it sits in",
+            )
+            assertNothingTagged(
+                MembersAddTag,
+                "the pane is already drawing the form, so the list's Add button opens what is " +
+                    "already open",
+            )
+
+            onNodeWithTag(AddMemberEmailFieldTag).performTextInput("grace@example.com")
+            onNodeWithTag(AddMemberPasswordFieldTag).performTextInput("correct horse battery")
+            waitForIdle()
+            onNodeWithTag(AddMemberCreateTag).assertIsEnabled()
+            onNodeWithTag(AddMemberCreateTag).performClick()
+            waitForIdle()
+
+            onNodeWithTag(AddMemberCreateTag).assert(
+                isNotEnabled(),
+            ) {
+                "the account was created, so the pane's form should hold nothing and Create " +
+                    "should be down again — a live Create here is the account just made, sent a " +
+                    "second time"
+            }
         }
 
     /**
