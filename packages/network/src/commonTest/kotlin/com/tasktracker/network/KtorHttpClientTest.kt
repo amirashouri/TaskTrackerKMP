@@ -469,7 +469,7 @@ class KtorHttpClientTest {
         val transport = StubTransport()
         transport.enqueueAll(Stub.json("", status = 404), Stub.json("""{"ok":true}"""))
 
-        assertFailsWith<AppError.Unknown> {
+        assertFailsWith<AppError.NotFound> {
             client(transport, policy = fast).send(HttpRequest(HttpMethod.Get, "/x", requiresAuth = false))
         }
         assertEquals(1, transport.requestCount)

@@ -148,18 +148,24 @@ class HttpAdminProjectsRemoteTest {
     @Test
     fun projectAnswersNullWhenTheServerDoesNotHaveIt() = runTest {
         val client = RecordingHttpClient()
-        client.respondWithFailure(AppError.Unknown("Not found (404)."))
+        client.respondWithFailure(AppError.NotFound("Not found (404)."))
 
         assertNull(HttpAdminProjectsRemote(client).project(randomProjectID()))
     }
 
-    /** Every failure that is not absence still reaches the caller. */
+    /**
+     * Every failure that is not absence still reaches the caller.
+     *
+     * The case is [AppError.Unknown] deliberately: a `404` used to arrive as exactly that, so a
+     * catch that widened back to `Unknown` would swallow this too — the two tests fail together
+     * rather than this one passing for the wrong reason.
+     */
     @Test
     fun projectPropagatesFailuresThatAreNotAbsence() = runTest {
         val client = RecordingHttpClient()
-        client.respondWithFailure(AppError.Server(503, "maintenance"))
+        client.respondWithFailure(AppError.Unknown("Unexpected status 405. "))
 
-        assertFailsWith<AppError.Server> {
+        assertFailsWith<AppError.Unknown> {
             HttpAdminProjectsRemote(client).project(randomProjectID())
         }
     }

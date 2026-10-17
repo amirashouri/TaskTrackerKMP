@@ -243,8 +243,12 @@ class ErrorMappingTest {
     }
 
     @Test
-    fun `not found and other statuses fall through to unknown`() {
-        assertEquals(AppError.Unknown("Not found (404)."), HttpErrorMapping.map(404, ByteArray(0)))
+    fun `not found is its own error and other statuses fall through to unknown`() {
+        assertEquals(AppError.NotFound("Not found (404)."), HttpErrorMapping.map(404, ByteArray(0)))
+        assertEquals(
+            AppError.NotFound("that project is gone"),
+            HttpErrorMapping.map(404, """{"message":"that project is gone"}""".encodeToByteArray()),
+        )
         assertTrue(HttpErrorMapping.map(418, ByteArray(0)) is AppError.Unknown)
     }
 

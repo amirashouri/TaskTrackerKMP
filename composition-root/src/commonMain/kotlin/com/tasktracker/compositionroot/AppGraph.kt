@@ -192,7 +192,7 @@ object AppGraph {
             registerPlatform(platforms)
             registerPersistence(platforms)
             registerProjects(platforms)
-            registerTeams()
+            registerTeams(platforms)
             registerAuth(platforms)
             registerSync(platforms)
             registerSession()
@@ -425,12 +425,12 @@ object AppGraph {
         // The admin half of the projects feature: the live server view of every project, and
         // the edit path that reaches the change feed.
         //
-        // Registered only when a backend is bound, and with the *sync* client rather than
-        // `resolve(HttpClient::class)`: there is no `HttpClient` registration in this graph —
-        // `registerAuth` and `registerSync` build one from `platforms.httpClient` — so the
-        // member-admin pair's `resolve(HttpClient::class)` finds nothing and is swallowed by
-        // the shell's `getOrNull`, leaving its screen on the placeholder. That is a defect in
-        // this graph, not a pattern to copy.
+        // Registered only when a backend is bound, and with a client built from
+        // `platforms.httpClient` rather than `resolve(HttpClient::class)`: there is no
+        // `HttpClient` registration in this graph — `registerAuth` and `registerSync` each build
+        // their own — so a `resolve` would find nothing, throw inside the factory, and be read by
+        // the shell's `getOrNull` as "no port". The member-admin pair made that mistake once and
+        // is wired the same way now.
         //
         // The bearer token is the point of the interceptor list: an admin API call is an
         // authenticated one, and a client without `AuthInterceptor` would reach the server
@@ -457,20 +457,34 @@ object AppGraph {
      * can always answer for the signed-in account. Registered after persistence and projects —
      * both depend only on [SessionCache], which persistence owns, and projects reads it too.
      */
-    private fun ResolverBuilder.registerTeams() {
+    private fun ResolverBuilder.registerTeams(platforms: PlatformBindings) {
         app<TeamPort> { resolver ->
             RoomTeamRepository(
                 sessionCache = resolver.resolve(SessionCache::class),
             )
         }
-        app<HttpMemberAdminRemote> { resolver ->
-            HttpMemberAdminRemote(client = resolver.resolve(HttpClient::class))
-        }
-        app<MemberAdminPort> { resolver ->
-            MemberAdminRepository(
-                remote = resolver.resolve(HttpMemberAdminRemote::class),
-                team = resolver.resolve(TeamPort::class),
-            )
+        // The admin half of the directory, and the same two rules the projects admin pair
+        // records: bind it only when a backend is configured, and build the client from
+        // `platforms.httpClient` rather than `resolve(HttpClient::class)`. This graph has no
+        // `HttpClient` registration — `registerAuth` and `registerSync` each build their own —
+        // so the old `resolve` threw `Unregistered` *inside* the factory, and the shell's
+        // `getOrNull` read that as "no port". The members screen therefore sat on its
+        // placeholder against a live server, with nothing red to say the wiring was dead.
+        platforms.apiBaseUrl?.let { url ->
+            app<HttpMemberAdminRemote> { resolver ->
+                HttpMemberAdminRemote(
+                    client = platforms.httpClient(
+                        url,
+                        listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                    ),
+                )
+            }
+            app<MemberAdminPort> { resolver ->
+                MemberAdminRepository(
+                    remote = resolver.resolve(HttpMemberAdminRemote::class),
+                    team = resolver.resolve(TeamPort::class),
+                )
+            }
         }
     }
 
