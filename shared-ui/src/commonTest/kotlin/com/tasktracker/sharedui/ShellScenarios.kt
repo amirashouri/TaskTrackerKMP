@@ -55,12 +55,20 @@ import com.tasktracker.featureauthpresentation.PasswordFieldTag
 import com.tasktracker.featureauthpresentation.PrimaryButtonTag
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.ProjectSummary
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.featureteamsdomain.UserStatus
+import com.tasktracker.featureteamspresentation.AddMemberFormTag
+import com.tasktracker.featureteamspresentation.MembersAddTag
+import com.tasktracker.featureteamspresentation.MembersAdminScreenTag
+import com.tasktracker.featureteamspresentation.MembersListTag
+import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
+import com.tasktracker.featureprojectspresentation.ProjectEditorTag
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.core.SprintID
-import com.tasktracker.core.UserID
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
@@ -204,6 +212,8 @@ object ShellScenarios {
         splashHold: Long = 0L,
         width: Dp? = PHONE_WIDTH,
         navigationEventOwner: NavigationEventDispatcherOwner? = null,
+        memberAdminPort: MemberAdminPort? = null,
+        adminProjectsPort: AdminProjectsPort? = null,
     ): FakeResolver {
         val resolver = if (omitProjects) {
             FakeResolver.withoutProjects(session = session, router = router, preferences = preferences)
@@ -214,6 +224,8 @@ object ShellScenarios {
                 projects = projects,
                 settings = settings,
                 preferences = preferences,
+                memberAdminPort = memberAdminPort,
+                adminProjectsPort = adminProjectsPort,
             )
         }
         // The driver starts *before* `setContent`, and that order is the point: it routes the
@@ -1699,16 +1711,6 @@ object ShellScenarios {
     private const val PHONE_TAB_COUNT = 5
 
     /**
-     * The member the admin section's scenarios select, and a second one to move to.
-     *
-     * Fixed ids rather than fixtures, because the tag an assertion reads carries the id: what the
-     * scenarios ask is whether the detail pane drew *the member that was chosen*, so the property
-     * that matters is that the two differ, not what either one is.
-     */
-    private val adminMemberID = UserID("66666666-6666-4666-8666-666666666666")
-    private val adminOtherMemberID = UserID("77777777-7777-4777-8777-777777777777")
-
-    /**
      * A desktop window, as a fixed number rather than a device's.
      *
      * 1000dp rather than something just over [ShellExpandedMinimumWidth], for the same reason
@@ -2368,10 +2370,7 @@ object ShellScenarios {
      * depth one, and the Settings tab button a no-op because the tab is already selected — leaving
      * the section with no way back to the screen it was opened from.
      *
-     * The narrow arrangement is asserted from the other side of the same fact as its Sprints twin:
-     * the list is *absent* when a member is chosen, not merely covered.
-     *
-     * The two presses are gated on [thisHostDeliversSystemBack]. Where the host delivers one — the
+     * The presses are gated on [thisHostDeliversSystemBack]. Where the host delivers one — the
      * JVM and the iOS simulator — the scenario drives the real chain end to end. Where it does not
      * — the Android host, whose press enters through `activity.onBackPressed()` and never reaches
      * the shell's `BackHandler`, the same host gap that leaves `systemBackPopsTheSprintDetail` red
@@ -2422,133 +2421,158 @@ object ShellScenarios {
                         "stack at all, and it was ${router.path(AppTab.Settings)}",
                 )
             }
-
-            // The chosen member is installed through the router rather than by tapping the row a
-            // second time. Under the compact arrangement the list has *replaced* the settings
-            // screen, so the row is only in the composition again if the press above put it back —
-            // and on a host that cannot press it is not. Going straight to the selection keeps the
-            // claim below, that the detail replaces the list, independent of the press.
-            router.openAdminMembers(adminMemberID)
-            waitForIdle()
-
-            onNodeWithTag(AdminMemberDetailTag(adminMemberID)).assertExists(
-                "at ${PHONE_WIDTH.value}dp the chosen member's detail should be showing",
-            )
-            assertNothingTagged(
-                AdminMembersListTag,
-                "at ${PHONE_WIDTH.value}dp the members list is still composed behind the detail. " +
-                    "It is meant to be replaced, not stacked",
-            )
-
-            if (deliversBack) {
-                pressSystemBack(dispatcher)
-                waitForIdle()
-                assertEquals(
-                    adminMembersStack(),
-                    router.path(AppTab.Settings),
-                    "system back should pop the member detail and land on the list, but the stack " +
-                        "is ${router.path(AppTab.Settings)}",
-                )
-                onNodeWithTag(AdminMembersListTag).assertExists(
-                    "after popping the detail the members list should be showing again",
-                )
-            }
         }
 
     /**
-     * A wide window draws the members list and the chosen member side by side.
+     * A wide window draws the members list and, once a member is being added, the form beside it.
+     *
+     * This is the one place the members section is *not* a list-detail pair. There is no member
+     * detail screen (D6): the second pane holds the create form, which on a phone is an overlay
+     * over the list. So the claim here is that it is one form in two containers, and that on a
+     * wide window it is drawn beside the list rather than over it.
      *
      * Geometry, not presence, for the reason the Sprints twin gives: both panes existing is
-     * satisfied by the detail being drawn *over* the list, which is the narrow arrangement with
-     * the list left composed underneath it.
-     *
-     * The no-selection state is asserted first and separately, because it is the arm where the
-     * arrangement can draw the list twice — the list is the left pane by construction, so a right
-     * pane that took the top route would draw it again.
-     *
-     * The selection is then moved, and the *tag* is what proves the right pane followed its route.
-     * These screens are placeholders with no words in them, so there is no text to read back the
-     * way `choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack` reads the sprint card; the
-     * id in the tag is the placeholder's equivalent, and it is why the tag carries one.
+     * satisfied by the form being drawn *over* the list, which is the phone's arrangement with the
+     * list left composed underneath it.
      */
-    val aWideShellDrawsTheAdminListAndDetailSideBySide: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellDrawsTheMembersListAndTheAddFormSideBySide: suspend ComposeUiTest.() -> Unit =
+        wide@{
+            val router = Router()
+            setUpShell(
+                session = ScriptedSession(restored = signedIn()),
+                router = router,
+                settings = FakeShellSettingsPort(),
+                preferences = adminPreferences(),
+                memberAdminPort = FakeMemberAdminPort(active = listOf(shellTestMember())),
+                width = DESKTOP_WIDTH,
+            )
+            waitForIdle()
+            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+            onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+            waitForIdle()
+            onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
+            waitForIdle()
+
+            onNodeWithTag(MembersAdminScreenTag).assertExists(
+                "a wide window should draw the members section in the left pane",
+            )
+            assertNothingTagged(
+                AddMemberFormTag,
+                "nothing is being added, so no form should be showing yet",
+            )
+            val list = onNodeWithTag(MembersAdminScreenTag).getBoundsInRoot()
+            val emptyPane = onNodeWithTag(AdminDetailPlaceholderTag).getBoundsInRoot()
+            assertTrue(
+                list.right.value < emptyPane.left.value,
+                "with nothing being added the list runs to ${list.right.value}dp and the pane " +
+                    "beside it starts at ${emptyPane.left.value}dp, so they are not side by side",
+            )
+
+            onNodeWithTag(MembersAddTag).performClick()
+            waitForIdle()
+
+            val listWithFormOpen = onNodeWithTag(MembersAdminScreenTag).getBoundsInRoot()
+            val form = onNodeWithTag(AddMemberFormTag).getBoundsInRoot()
+            assertTrue(
+                listWithFormOpen.right.value <= form.left.value,
+                "the list runs to ${listWithFormOpen.right.value}dp and the form starts at " +
+                    "${form.left.value}dp. Both being present is not enough — the form drawn " +
+                    "*over* the list satisfies that too, and that is the phone's arrangement",
+            )
+            assertEquals(
+                1,
+                onAllNodesWithTag(AddMemberFormTag).fetchSemanticsNodes().size,
+                "the form is composed more than once on a wide window. The list draws its own " +
+                    "overlay as well as the pane, so one tap produced two forms",
+            )
+        }
+
+    /**
+     * On a phone the same form is an overlay on the list rather than a pane beside it.
+     *
+     * The counterpart of the wide scenario, and the whole reason the form is two composables: a
+     * phone has no second pane to put it in, and the list stays composed underneath rather than
+     * being replaced the way a pushed route replaces it.
+     */
+    val aNarrowShellDrawsTheMemberFormOverTheList: suspend ComposeUiTest.() -> Unit = {
         val router = Router()
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             router = router,
             settings = FakeShellSettingsPort(),
             preferences = adminPreferences(),
-            width = DESKTOP_WIDTH,
+            memberAdminPort = FakeMemberAdminPort(active = listOf(shellTestMember())),
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
 
-        onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
         onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
         waitForIdle()
-
-        val listCopies = onAllNodesWithTag(AdminMembersListTag).fetchSemanticsNodes().size
-        assertEquals(
-            1,
-            listCopies,
-            "the members list is drawn $listCopies times with no member chosen. The list is the " +
-                "left pane, so a right pane rendering the top route draws it a second time — " +
-                "presence is satisfied by two, which is why this is a count",
-        )
-        val listWithNothingChosen = onNodeWithTag(AdminMembersListTag).getBoundsInRoot()
-        val emptyPane = onNodeWithTag(AdminDetailPlaceholderTag).getBoundsInRoot()
-        assertTrue(
-            listWithNothingChosen.right.value < emptyPane.left.value,
-            "with no member chosen the list runs to ${listWithNothingChosen.right.value}dp and the " +
-                "right pane starts at ${emptyPane.left.value}dp, so they are not side by side",
-        )
-
-        router.openAdminMembers(adminMemberID)
+        onNodeWithTag(MembersAddTag).performClick()
         waitForIdle()
 
-        val list = onNodeWithTag(AdminMembersListTag).getBoundsInRoot()
-        val detail = onNodeWithTag(AdminMemberDetailTag(adminMemberID)).getBoundsInRoot()
-        assertTrue(
-            list.right.value < detail.left.value,
-            "the list runs to ${list.right.value}dp and the detail starts at " +
-                "${detail.left.value}dp, so the panes are not side by side. Both being present is " +
-                "not enough — the detail drawn over the list satisfies that too, and it is the " +
-                "mistake this arrangement exists to remove",
+        val list = onNodeWithTag(MembersAdminScreenTag).getBoundsInRoot()
+        val form = onNodeWithTag(AddMemberFormTag).getBoundsInRoot()
+        onNodeWithTag(AddMemberFormTag).assertExists(
+            "tapping Add member on a phone should draw the form",
         )
         assertTrue(
-            detail.right.value - detail.left.value > 0f && list.right.value - list.left.value > 0f,
-            "the list is ${list.right.value - list.left.value}dp wide and the detail is " +
-                "${detail.right.value - detail.left.value}dp, so a pane has collapsed to nothing",
-        )
-
-        val depthAfterFirst = router.path(AppTab.Settings).size
-        router.openAdminMembers(adminOtherMemberID)
-        waitForIdle()
-
-        assertEquals(
-            depthAfterFirst,
-            router.path(AppTab.Settings).size,
-            "the stack was ${depthAfterFirst} deep, and choosing a second member made it " +
-                "${router.path(AppTab.Settings).size}. The detail pane follows the selection " +
-                "rather than pushing onto it, so a second member must land at the same depth — a " +
-                "pane implemented as a push grows the stack and then requires popping back " +
-                "through every member already visited",
-        )
-        onNodeWithTag(AdminMemberDetailTag(adminOtherMemberID)).assertExists(
-            "after choosing the second member the right pane should be drawing it. A static pane " +
-                "would still hold the first one, and only the right pane follows the selection",
-        )
-        assertNothingTagged(
-            AdminMemberDetailTag(adminMemberID),
-            "the right pane is still drawing the first member as well as the second, so it was " +
-                "added to rather than replaced",
-        )
-        onNodeWithTag(AdminMembersListTag).assertExists(
-            "the left pane is the section's list and must not be the thing that followed the " +
-                "selection",
+            form.left.value >= list.left.value && form.right.value <= list.right.value,
+            "the form spans ${form.left.value}..${form.right.value}dp and the list spans " +
+                "${list.left.value}..${list.right.value}dp, so the form is not drawn over the " +
+                "list it belongs to",
         )
     }
+
+    /**
+     * Selecting a project in the admin section opens the editor in the pane beside the list.
+     *
+     * The defect this exists for: `AdminProjectsDestination` took the `projectID` and never read
+     * it, so the pane meant for the detail drew the list a second time. Presence assertions cannot
+     * see that — two panes holding the same list satisfies all of them — which is why the claim
+     * is that the editor starts where the list ends.
+     */
+    val aSelectedAdminProjectOpensTheEditorBesideTheList: suspend ComposeUiTest.() -> Unit =
+        wide@{
+            val router = Router()
+            val project = shellTestProject(name = "Apollo")
+            setUpShell(
+                session = ScriptedSession(restored = signedIn()),
+                router = router,
+                settings = FakeShellSettingsPort(),
+                preferences = adminPreferences(),
+                adminProjectsPort = FakeAdminProjectsPort(
+                    seeded = listOf(shellTestAdminProject(project = project)),
+                ),
+                width = DESKTOP_WIDTH,
+            )
+            waitForIdle()
+            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+            onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+            waitForIdle()
+            onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
+            waitForIdle()
+
+            assertNothingTagged(
+                ProjectEditorTag,
+                "no project is selected, so the pane beside the list must not hold an editor",
+            )
+
+            router.openAdminProjects(project.id)
+            waitForIdle()
+
+            val list = onNodeWithTag(AdminProjectsScreenTag).getBoundsInRoot()
+            val editor = onNodeWithTag(ProjectEditorTag).getBoundsInRoot()
+            assertTrue(
+                list.right.value <= editor.left.value,
+                "the admin projects list runs to ${list.right.value}dp and the editor starts at " +
+                    "${editor.left.value}dp, so the editor is not in the pane beside the list. A " +
+                    "detail pane that drew the list again would satisfy every presence assertion",
+            )
+        }
 
     /**
      * The projects row opens the projects section, not the members one.

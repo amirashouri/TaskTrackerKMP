@@ -980,22 +980,26 @@ the `SRV-x` series this plan once cited was dropped when the two halves were rec
 
 ## Status (as of 2026-10-17)
 
-This section was reviewed against the code on `main`, not against its own task marks.
-The first slice is shipped and green; two acceptance criteria are **not** met, and one
-gap in the tests is why they went unnoticed.
+This section was reviewed against the code on `main`, not against its own task marks. As of
+`CLI-13` the first slice is shipped and green, and **every** acceptance criterion in it is met —
+including the two that were not when this section was written, and the test gap that let them go
+unnoticed for as long as they did.
 
-- **Landed:** `CLI-2`–`CLI-8`, the list halves of `CLI-9` and `CLI-10`, and `CLI-12` — the
-  admin project editor, as a model (`AdminProjectEditorModel`) beside the already-stateless
-  `ProjectEditorScreen`. Server `T8.9` (`GET /v1/admin/projects/{id}`) was mounted and
-  verified first, per the dual-engine ordering rule.
-- **Still not met:** `CLI-10`'s wide arrangements. A selected project now reaches an editor,
-  but the projects detail pane still draws the list. `CLI-13`.
-- **Hid behind:** the shell scenarios bind no admin port, so they exercise the
-  placeholder path rather than the real destinations. `CLI-14`.
+- **Landed:** `CLI-2`–`CLI-14`. Server `T8.9` (`GET /v1/admin/projects/{id}`) was mounted and
+  verified first, per the dual-engine ordering rule, and `CLI-12` was written against it.
+- **The two criteria that were not met** — `CLI-9`'s editor and `CLI-10`'s wide arrangements —
+  are closed by `CLI-12` and `CLI-13`. The projects pane draws the editor; the members pane draws
+  the add-member form, because there is no member detail to draw (**D6**).
+- **The test gap that hid them** — the shell scenarios bound no admin port, so they asserted
+  `AdminPanes`' placeholder tags and the real destinations were never composed by a test — is
+  closed by `CLI-14`. `AdminPortFakes` binds both ports, and three scenarios assert which pane
+  the real screen landed in, by geometry rather than by presence.
 - **Shipped differently than written:** `CLI-1` reads the access token's `role` claim
   rather than declaring a field on the auth token envelope; its section is rewritten
   below. `CLI-4` ships `feature-teams-domain/UserStatus`, not the `MemberStatus` the
-  section named.
+  section named. `CLI-12` ships a *model* beside the existing stateless editor rather than the
+  new screen the section named (**D7**), and `CLI-13` keeps the members section a list + form
+  pair rather than the list-detail pair the section named.
 
 ## Frozen decisions (agreed with the user)
 
@@ -1006,7 +1010,8 @@ gap in the tests is why they went unnoticed.
 | D3 | Deleted member = status value **`deleted`**. | Client maps a fresh `feature-teams-domain/UserStatus` (`active`/`inactive`/`deleted`); the settings `UserStatus` (Active/Away/Busy/BeRightBack) is a different enum in a different package. |
 | D4 | ≤1h access-token window after delete. | No client change beyond handling the eventual 401. |
 | D5 | The admin project editor is **port-backed**. | Seeds from `AdminProjectsPort.project(id)`, saves through `updateProject(...)`, so server `GET /v1/admin/projects/{id}` (`T8.9`) must be mounted. The local `ProjectEditorScreen` **cannot** serve it: a project the admin is not a member of is not in their Room store, and the sync push refuses a non-member. |
-| D6 | **No member detail screen.** | The members section is a list with inline delete/reactivate; the `memberID` threaded through `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` is vestigial and leaves in `CLI-13`. |
+| D6 | **No member detail screen.** | The members section is a list with inline delete/reactivate plus a create form. The `memberID` threaded through `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` was vestigial and left in `CLI-13`; **gained in `CLI-13`:** with no detail to draw, the wide arrangement's second pane is the create form itself, so the section is a list + form pair rather than a list-detail pair. |
+| D7 | The admin project editor is a **model beside the shared stateless screen**, not a new screen. | `AdminProjectEditorModel` extends the same `ProjectModel` base as `ProjectEditorModel` and renders the same `ProjectEditorScreen`; the two differ only in the seam — the admin port versus the local store (**D5**). It offers no archive control, matching the existing form, and it cannot borrow `ProjectEditorModel`: that one writes through the sync path, which refuses a project the writer is not a member of. |
 
 ## Architecture constraints this plan must respect (verified)
 
@@ -1017,7 +1022,7 @@ gap in the tests is why they went unnoticed.
   - `:packages:feature-projects-presentation` **already** depends on `:packages:feature-teams-domain`.
   - `:packages:feature-settings-presentation` does **not** depend on `feature-teams-domain` — so the admin gate is threaded as a plain `isAdmin: Boolean`, avoiding a new edge.
 - Presentation may **not** depend on a data module. New screens talk to **ports** in the domain module; `:composition-root` binds the data implementations; `:shared-ui` gains the presentation-module edge.
-- `NavigationHost.kt` and `:shared-ui` are **read and edited deliberately, never scripted** — the tree is large and a scripted replace has bitten before. *Fact corrected 2026-10-17:* the older wording here said most of the module is **untracked**; it is not — `git ls-files` lists the module and `git status --untracked-files=all shared-ui` is clean, so git can recover an edit. `shared-ui/AGENTS.md` still carries the untracked claim and needs its own correction.
+- `NavigationHost.kt` and `:shared-ui` are **read and edited deliberately, never scripted** — the tree is large and a scripted replace has bitten before. *Fact corrected 2026-10-17:* the older wording here said most of the module is **untracked**; it is not — `git ls-files` lists the module and `git status --untracked-files=all shared-ui` is clean, so git can recover an edit. **Both** files that still carried the untracked claim — `shared-ui/AGENTS.md` and the root `AGENTS.md` — were corrected in `CLI-13`.
 - `NavigationHost.kt`’s route `when` is exhaustive: a new `AppRoute` is a compile error until handled.
 - The only split-screen precedent is `shared-ui/.../SprintPanes.kt` (`Expanded` widths, Sprints-only); desktop-vs-mobile is width-driven via `LocalShellLayoutClass`, never platform branching.
 - `JSONCoding.ignoreUnknownKeys` is **off** — added server keys must be declared in Kotlin with a default first.
@@ -1035,11 +1040,11 @@ gap in the tests is why they went unnoticed.
 | CLI-7 | `feature-projects-domain`: admin-projects port | — | yes (domain API) | **done** |
 | CLI-8 | `feature-projects-data`: HTTP admin-projects remote | CLI-7 | yes (data API) | **done** |
 | CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes | **met** — the list and the editor both landed (`CLI-12`); the arrangement is `CLI-13` |
-| CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes | **not met** — the wide arrangements draw the list twice (`CLI-13`) |
-| CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — | **partial** — the admin shell scenarios never bind a port (`CLI-14`) |
+| CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes | **done** — projects: list + editor panes; members: list + the add-member form (`CLI-13`) |
+| CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — | **done** — the admin scenarios bind their ports now (`CLI-14`) |
 | CLI-12 | Wire the admin project editor through `AdminProjectsPort` | CLI-9, server `T8.9` | yes (wire) | **done** — a model beside the shared stateless screen |
-| CLI-13 | Fix both admin pane arrangements; drop the vestigial `memberID` | CLI-6, CLI-9 | yes (shared-ui/routing) | open |
-| CLI-14 | Bind the admin ports in host scenarios so the real destinations run | CLI-12, CLI-13 | yes (shared-ui) | open |
+| CLI-13 | Fix both admin pane arrangements; drop the vestigial `memberID` | CLI-6, CLI-9 | yes (shared-ui/routing) | **done** — the form is the members section's second pane |
+| CLI-14 | Bind the admin ports in host scenarios so the real destinations run | CLI-12, CLI-13 | yes (shared-ui) | **done** — folded into `CLI-13` |
 
 ---
 
@@ -1174,32 +1179,32 @@ screen. What remains of this section is the arrangement, not the screen: `CLI-13
 - Archived projects appear only under Archived.
 - Mutation-check: hard-code the Active filter → the archived-selection test goes red.
 - Selecting a project opens an editor seeded from `project(id)` and saving calls
-  `updateProject(...)` — landed in `CLI-12`; the destination-level assertion arrives with
-  the bound port in `CLI-14`.
+  `updateProject(...)` — landed in `CLI-12`, and asserted with a bound port in `CLI-14`
+  (`aSelectedAdminProjectOpensTheEditorBesideTheList`).
 
-## CLI-10 — Desktop split screen vs mobile page — NOT MET
+## CLI-10 — Desktop split screen vs mobile page — MET
 
-**What landed:** the routes and the pane scaffolding (`AdminPanes.kt`, the `Expanded`
-`when` arms). **What did not:** the arrangements themselves, in two ways.
+**What landed:** the routes and the pane scaffolding (`AdminPanes.kt`, the `Expanded` `when`
+arms), and, in `CLI-12`/`CLI-13`, the arrangements themselves. The two faults this section was
+written for, and their fixes:
 
-1. **The projects detail pane draws the list.** `NavigationHost.kt` hands `pushedPane` to
-   the projects pane, and the pushed route is `AdminProjects(projectID)` — whose
-   destination ignores that id and renders the list. This is the same screen on both
-   sides, the exact mistake the Sprints arm's own comment records as fixed.
-2. **Binding the members port collapses the two-pane.** The arm branches on
-   `memberAdminPort == null`: the placeholder path gets `AdminTwoPanes`, while the real
-   path is replaced by one full-width `AdminMembersDestination` — which also ignores
-   `memberID`, so the member detail exists only as a placeholder (D6 removes it).
+1. **The projects detail pane drew the list.** `NavigationHost.kt` hands `pushedPane` to the
+   projects pane, and the pushed route is `AdminProjects(projectID)` — whose destination ignored
+   that id and rendered the list. `CLI-12` made the destination read the id, so the pane now
+   draws the editor; no change was needed in `NavigationHost.kt` itself.
+2. **Binding the members port collapsed the two-pane**, while the placeholder path drew
+   `AdminTwoPanes` around a list that had nothing to select. Both are gone with **D6**: the
+   members section has no detail, so its wide arrangement is a list plus the create form in the
+   second pane, and the placeholder path is one pane like the real one.
 
 **Acceptance / tests**
-- `Expanded`: tapping the Settings entry shows list + detail side by side, with the detail
-  pane showing a *detail*, never the list. `Compact`: the entry pushes a full screen.
-- Mutation-check: treat both widths as `Compact` → the split-screen test goes red.
-- Both remainder items are `CLI-13`. They survived review because the shell scenarios
-  bind no admin port (`CLI-14`), so this acceptance was never exercised against the real
-  destinations.
+- `Expanded`: the Settings entry shows list + detail side by side, with the detail pane showing a
+  *detail*, never the list. `Compact`: the entry pushes a full screen. Both are asserted with the
+  ports bound (`CLI-14`).
+- Mutation-check: make the projects destination draw the list for a selected id → the editor
+  scenario goes red; drop `isWide` from the members arm → the members pane scenario goes red.
 
-## CLI-11 — Tests, baseline, verification
+## CLI-11 — Tests, baseline, verification — DONE
 
 **Files**
 - `test-baseline.json` — regenerate with `scripts/test-baseline.py` in the same change as the new tests (never hand-edit; `scripts/check-baseline.sh` enforces).
@@ -1207,6 +1212,12 @@ screen. What remains of this section is the arrangement, not the screen: `CLI-13
 
 **Acceptance**
 - `scripts/check.sh` green; the documented pre-existing host failures (`docs/TEST-HOSTS.md`) unchanged.
+
+**What was missing, and is now there:** the suite was green because the admin scenarios asserted
+`AdminPanes`' placeholders rather than the real screens. `CLI-14` binds both admin ports and
+asserts the arrangements, which is what makes the three mutations under `CLI-13` red instead of
+invisible. Nothing here was pixel-reading — the claims are pane geometry and node counts, which a
+source-level assertion can see — so no `test-reviewer` pass was required.
 
 ---
 
@@ -1251,60 +1262,99 @@ prevent. The missing unit was a *model*, and the screen is reused.
   an admin port into a shell scenario; until a port is bound the shell renders the
   `AdminPanes` placeholder and the destination is never composed.
 
-## CLI-13 — Fix both admin pane arrangements; drop the vestigial `memberID`
+## CLI-13 — Fix both admin pane arrangements; drop the vestigial `memberID` — DONE
 
-**Files**
-- `shared-ui/src/commonMain/.../NavigationHost.kt` — the projects `Expanded` arm draws the
-  list pane beside the **editor**, never `pushedPane` (which is the list again); the
-  members `Expanded` arm keeps `AdminTwoPanes` when the port is bound instead of
-  collapsing to one full-width screen.
-- `packages/routing/.../Routes.kt` + `Router.kt` — drop `memberID` from
-  `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` (**D6**). The
-  exhaustive `when` turns every stale call site into a compile error, which is the point.
-- `packages/routing/src/commonTest/.../RoutingTest.kt`; `shared-ui` host-split tests.
+**Corrected during implementation, twice.** The plan expected the *projects* arm to be the
+repair and the *members* arm to stay a two-pane pair. Reading the code said otherwise, and the
+user's answer settled the members half:
+
+- The projects arm needed **no change at all** once `CLI-12` landed. It hands its detail pane
+  `pushedPane`, whose `AppRoute.AdminProjects` branch renders `AdminProjectsDestination` — so the
+  "the pane draws the list twice" defect *was* the destination ignoring its `projectID`, and
+  reading the id is the whole fix.
+- The members arm is not a list-detail pair. There is no member detail screen (**D6**), so its
+  second pane has nothing of its own to hold. The user's answer: it holds the **add-member form**
+  — a popup on a phone, the right pane on a desktop.
+
+**Landed**
+- `packages/feature-teams-presentation/.../AddMemberForm.kt` (**new**) — the panel: four fields,
+  Cancel/Create, and the private helpers, tags and consts that are its contract.
+  `AddMemberDialog.kt` keeps the scrim and centres that panel, so the phone's arrangement is
+  unchanged; the scrim is the only thing that made it a popup.
+- `shared-ui/.../AdminMembersDestination.kt` — one model, two arrangements, chosen by a new
+  `isWide` parameter. Wide draws `AdminTwoPanes(list, form-or-placeholder)` and tells the list
+  `isAddFormOpen = false`, because the list draws its own overlay from that flag and would
+  otherwise compose a second form. Nothing else about the wiring is duplicated, which is why this
+  is a parameter rather than a second composable holding a second copy of it.
+- `packages/routing/.../Routes.kt` + `Router.kt` — `AppRoute.AdminMembers` is a `data object` and
+  `adminMembersStack()` takes no id. The exhaustive `when` turned every stale call site into a
+  compile error, as the plan said it would.
+- `shared-ui/.../AdminPanes.kt` — `AdminMembersPlaceholder()` loses its id, and
+  `AdminMemberDetailTag` is gone: its only producer was the member detail **D6** removed.
+- `packages/feature-projects-presentation/.../AdminProjectsScreen.kt` — one new tag,
+  `AdminProjectsScreenTag`. Beyond the approved list, and required by `CLI-14`: the members screen
+  was tagged and the projects screen was not, so a scenario with a bound port had no anchor for
+  "the real section landed in this pane".
 
 **Acceptance / tests**
-- `Expanded` with a selected project: the panes hold the list and the editor, and no arm
-  draws the same screen twice.
-- `Expanded` with a bound members port: still two panes.
-- Mutation-check: force the members arm down the `memberAdminPort == null` path → the
-  bound-port pane test goes red.
+- Both arrangements of the members form, asserted off geometry: on a wide window the form starts
+  where the list ends, on a phone it overlaps the list that stays composed under it.
+- The admin project editor in the pane beside the list — `CLI-12`'s own acceptance criterion,
+  which could not be asserted until a port was bound. That is why `CLI-14` is folded into this PR.
+- Three mutations, all caught: make the projects destination draw the list for a non-null id →
+  `aSelectedAdminProjectOpensTheEditorBesideTheList` goes red; drop `isWide` from the members arm →
+  `aWideShellDrawsTheMembersListAndTheAddFormSideBySide` goes red; let the list draw its own
+  overlay in the wide arrangement → the same scenario fails with *"Expected exactly '1' node but
+  found '2' nodes that satisfy: (TestTag = 'adminMembers.addForm')"*.
+- Two routing tests that asserted a member *selection* replaced rather than pushed are gone with
+  the selection. `RoutingTest` now holds that re-entering the section is a no-op, which is what a
+  re-introduced member route would break first.
 
-## CLI-14 — Bind the admin ports in host scenarios so the real destinations run
+## CLI-14 — Bind the admin ports in host scenarios so the real destinations run — DONE, folded into CLI-13
 
-**Why this is its own task.** Every admin shell scenario today runs with
-`memberAdminPort == null` and `adminProjectsPort == null`, so it asserts `AdminPanes`'
-placeholder tags — the only producer of `AdminMemberDetailTag`. The real destinations are
-never composed by the shell, which is exactly how `CLI-9` and `CLI-10` stayed green while
-unmet. A scenario that only ever runs the placeholder is not evidence about the screen.
+**Why it was its own task.** Every admin shell scenario ran with `memberAdminPort == null` and
+`adminProjectsPort == null`, so it asserted `AdminPanes`' placeholder tags. The real destinations
+were never composed by the shell, which is exactly how `CLI-9` and `CLI-10` stayed green while
+unmet. Once `CLI-13` had an arrangement worth asserting, keeping the arrangement and its proof in
+two PRs would have meant merging one that nothing could verify.
 
-**Files**
-- `shared-ui/src/commonTest/.../TaskTrackerAppScenarios.kt` + `ShellScenarios.kt` — let
-  `setUpShell` accept the admin ports and bind a recording fake, following the existing
-  recording-port pattern in `feature-projects-presentation`'s tests.
-- `shared-ui/src/commonTest/...` — scenarios for both sections **with the port bound**.
+**Landed**
+- `shared-ui/src/commonTest/.../AdminPortFakes.kt` (**new**) — `FakeMemberAdminPort`,
+  `FakeAdminProjectsPort`, and the fixtures the scenarios seed. Deliberately not recording doubles:
+  what these scenarios assert is *where* a screen lands, and the traffic claims belong to the
+  feature modules' own model tests, which already have one each.
+- `TestDoubles.kt` + `ShellScenarios.kt` — `FakeResolver.forSession` and `setUpShell` take the two
+  ports and bind them **only when a scenario asks**, so the placeholder path that three scenarios
+  still assert stays reachable.
+- Three scenarios, all three hosts: the wide members arrangement, the phone's overlay, and the
+  admin editor beside the list.
 
 **Acceptance / tests**
-- With a bound members port and a selected member, the *real* screen is asserted, not a
-  placeholder tag; likewise for projects and the editor.
-- Mutation-check: revert `CLI-13`'s pane fix → these scenarios go red. That is the whole
-  point: today they cannot.
+- The real screens are asserted with the ports bound, by tag and by pane geometry — not by
+  placeholder tag.
+- Mutation-check: the mutations listed under `CLI-13` are red *because* these scenarios exist.
+  Before this, reverting either arrangement left the suite green.
 
 ---
 
 ## Open assumptions (correct me before ACK)
 
 1. Role vocabulary is **deliberately duplicated**: `UserRole` in `feature-auth-domain` (identity) and `MemberRole` in `feature-teams-domain` (member admin), following the existing duplicated-`preferredGreeting` precedent — rather than adding a `feature-settings-presentation → feature-auth/teams-domain` edge.
-2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation`, so no new cross-presentation edge appears. **Revised by D5:** the admin project editor is a *new* port-backed screen in that same module rather than the existing `ProjectEditorScreen` — the "no new edge" half survives, the "reusable" half does not.
+2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation`, so no new cross-presentation edge appears. **Revised twice:** the admin project editor is *not* a new port-backed screen — it is `AdminProjectEditorModel` beside the existing stateless `ProjectEditorScreen`, which `CLI-12` shipped and the plan's own `CLI-12` text had wrong (**D7**). The "no new edge" half survives either way.
 3. Position choices for the add-member form come from the client's `UserPosition.all`; the server stores free text (matches server assumption 1).
 4. The admin members/projects screens are **online-only** (direct network, no Room/outbox), unlike the offline-first board/backlog surfaces. This is also *why* D5 holds: there is no local copy of a project the admin is not a member of, so the editor cannot be the local one.
 
 The server half of this plan is `../TaskTrackerServer/docs/PLAN.md`, Milestone 8
-(`T8.1`–`T8.9`). Its `T8.9` is the one open item and the prerequisite for `CLI-12`.
+(`T8.1`–`T8.9`). All nine are done: `T8.9` (`GET /v1/admin/projects/{id}`) landed first, as the
+dual-engine ordering rule requires, and `CLI-12` was written against it.
+
+D6 and D7 gained their second halves in `CLI-13`: D6's "no member detail" is what made the
+members section a list + form rather than a list-detail pair (so the form, not a member, is the
+second pane), and D7's "a model beside the screen" is why `CLI-12` changed no screen at all.
 
 ---
 
-## Test harness cleanup (in progress)
+## Test harness cleanup
 
 The client test-harness cleanup has its own plan: [`docs/TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md).
 It covers the honest gate, the named known-failure list, the three-host matrix, and CI.

@@ -4,7 +4,6 @@ import com.tasktracker.core.LogPrivacy
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TTLogger
-import com.tasktracker.core.UserID
 import com.tasktracker.core.logMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -249,28 +248,21 @@ class Router {
     // MARK: - Admin sections
 
     /**
-     * Opens the members administration section, or one member inside it, in a single
-     * transition.
+     * Opens the members administration section.
      *
-     * One entry point for both the list and a selection, exactly as [openSprint] is for a
-     * sprint list and a sprint, and for the same reason: the row tap and the shell's
-     * two-pane selection have to install the *same* stack or the wide and narrow
-     * arrangements disagree about what is behind the screen the user is looking at. A
-     * `push` of the selection would grow the stack by one per member visited — the drift
-     * `openSprint` exists to remove, and here it would also mean a wide window's left pane
-     * showed the first member selected rather than the list.
+     * One named entry point rather than a raw `push`, so the stack the Settings row installs is
+     * [adminMembersStack]'s answer and not a second one written at the call site.
      *
-     * A `null` [memberID] with no section open is the list; a non-null one is that member
-     * with the list beneath it. A `null` one *with* a member open is the selection being
-     * cleared, so it returns to the list rather than being ignored.
+     * There is no member to carry: the section has no detail screen (see
+     * [AppRoute.AdminMembers]).
      *
      * The active project is deliberately untouched: the admin sections are not
      * project-scoped, so entering them must not move the Board and Backlog tabs — the same
      * rule [AppRoute.WorkItemEditor] follows.
      */
-    fun openAdminMembers(memberID: UserID? = null) = update { state ->
+    fun openAdminMembers() = update { state ->
         state.copy(selectedTab = AppTab.Settings)
-            .withPath(AppTab.Settings, adminMembersStack(memberID))
+            .withPath(AppTab.Settings, adminMembersStack())
     }
 
     /**
@@ -436,8 +428,8 @@ fun sprintStack(projectID: ProjectID, sprintID: SprintID): List<AppRoute> =
     sprintListStack(projectID) + AppRoute.SprintDetail(projectID, sprintID)
 
 /**
- * The Settings tab's stack for the members administration section: the settings screen, the
- * list, and the member being edited if there is one.
+ * The Settings tab's stack for the members administration section: the settings screen and the
+ * section's list.
  *
  * ## Why the settings screen is *in* the stack
  *
@@ -455,20 +447,15 @@ fun sprintStack(projectID: ProjectID, sprintID: SprintID): List<AppRoute> =
  * `tasktracker://settings` link installs exactly that, so the shell renders the settings
  * screen from a pushed route and from the tab root identically.
  *
- * ## Why one function for three stacks
+ * ## Why this is still a function rather than a list literal
  *
- * The list, a selection and a cleared selection are the same question asked three times, and
- * the growth the two-pane arrangement depends on — a selection replaces rather than stacks —
- * is a property of this function rather than of any caller. [Router.openAdminMembers] is its
- * only writer, so the two cannot drift.
+ * It is a constant today, because there is no member detail to push onto it: the section is a
+ * list with delete, reactivate and a create form (see [AppRoute.AdminMembers], and D6 in
+ * `docs/PLAN.md`). It stays a function so that [Router.openAdminMembers] has one definition of
+ * the stack to install — the path a fresh open installs and the path a test expects are then
+ * the same value rather than two that agree today.
  */
-fun adminMembersStack(memberID: UserID? = null): List<AppRoute> =
-    listOf(AppRoute.Settings, AppRoute.AdminMembers()) +
-        if (memberID == null) {
-            emptyList()
-        } else {
-            listOf(AppRoute.AdminMembers(memberID))
-        }
+fun adminMembersStack(): List<AppRoute> = listOf(AppRoute.Settings, AppRoute.AdminMembers)
 
 /**
  * The Settings tab's stack for the projects administration section.

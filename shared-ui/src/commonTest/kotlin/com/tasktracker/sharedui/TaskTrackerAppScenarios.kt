@@ -110,8 +110,16 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
 
     @Test
-    fun aWideShellDrawsTheAdminListAndDetailSideBySide() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheAdminListAndDetailSideBySide)
+    fun aWideShellDrawsTheMembersListAndTheAddFormSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheMembersListAndTheAddFormSideBySide)
+
+    @Test
+    fun aNarrowShellDrawsTheMemberFormOverTheList() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheMemberFormOverTheList)
+
+    @Test
+    fun aSelectedAdminProjectOpensTheEditorBesideTheList() =
+        runComposeUiTest(block = ShellScenarios.aSelectedAdminProjectOpensTheEditorBesideTheList)
 
     @Test
     fun theAdminProjectsRowOpensTheProjectsSection() =

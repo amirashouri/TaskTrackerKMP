@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
@@ -62,7 +63,7 @@ fun AdminProjectsScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().padding(ttSpacing.lg)) {
+    Column(modifier = modifier.fillMaxSize().testTag(AdminProjectsScreenTag).padding(ttSpacing.lg)) {
         TTGlassSegmentedPicker(
             options = ProjectAdminStatus.entries,
             selection = status,
@@ -127,3 +128,13 @@ fun AdminProjectsScreen(
         }
     }
 }
+
+/**
+ * The sections screen's root, for a shell test asking which pane it landed in.
+ *
+ * The members twin is `MembersAdminScreenTag`, and both exist for the same reason: the shell's
+ * placeholder pages are tagged, so a scenario that bound a real port would otherwise have had no
+ * anchor at all for "the real section is in this pane" — the tag would have to come out of the
+ * placeholder when the port was bound, which is the wrong way round.
+ */
+const val AdminProjectsScreenTag = "adminProjects.screen"

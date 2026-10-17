@@ -2,7 +2,6 @@ package com.tasktracker.routing
 
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
-import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.WorkItemStatus
 
@@ -96,24 +95,22 @@ sealed interface AppRoute {
     /**
      * The members administration section, as a route on the Settings stack.
      *
-     * ## Why one route carries both the list and the detail
+     * ## Why there is no member in this route
      *
-     * [memberID] is `null` for the section's list and non-null for one member. That is the
-     * shape [SprintList] and [SprintDetail] have as two cases, collapsed into one, and the
-     * reason is the two-pane arrangement rather than saving a type: a wide window draws the
-     * list and the selected member side by side, and "which member is under the cursor" is a
-     * *selection* in the same stack rather than a destination in its own right. Two cases
-     * would work identically and would let a `when` grow a rule that never fires.
+     * There is no member detail screen: the section is a list whose rows carry delete and
+     * reactivate, plus a create form. It carried a `memberID` until 2026-10-17 (`D6` in
+     * `docs/PLAN.md`), and nothing ever pushed a non-null one — a route parameter no caller can
+     * set is a claim that a screen exists behind it, and the wide arrangement spent that claim
+     * on an empty right pane.
      *
-     * The pair is kept honest by [adminMembersStack], which is the one definition of the
-     * stack for both the list and a selection — see its note for why the settings screen
-     * sits *beneath* the list rather than the list being the tab root.
+     * The stack is still `[Settings, AdminMembers]` rather than the list being the tab root, for
+     * the reason [adminMembersStack] gives.
      */
-    data class AdminMembers(val memberID: UserID? = null) : AppRoute
+    data object AdminMembers : AppRoute
 
     /**
      * The projects administration section, in the same shape and for the same reasons as
-     * [AdminMembers]: `null` is the active/archived list, non-null is one project's editor.
+     * [AdminMembers] was: `null` is the active/archived list, non-null is one project's editor.
      */
     data class AdminProjects(val projectID: ProjectID? = null) : AppRoute
 }
@@ -130,7 +127,7 @@ val AppRoute.projectIDOrNull: ProjectID?
         // Admin sections are not project-scoped even though one names a project: managing a
         // project's settings is not showing that project's work, and `AdminProjects(projectID)`
         // must not become the active project any more than `WorkItemEditor` does.
-        is AppRoute.AdminProjects, AppRoute.Settings, is AppRoute.AdminMembers -> null
+        is AppRoute.AdminProjects, AppRoute.Settings, AppRoute.AdminMembers -> null
     }
 
 /**
