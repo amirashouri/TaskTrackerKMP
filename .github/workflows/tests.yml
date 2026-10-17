@@ -1,9 +1,16 @@
 name: tests
 
+# On demand and nightly; deliberately not on every push. PRs are verified with
+# `scripts/check.sh`, which `AGENTS.md` already names as the deciding command; this
+# matrix is a drift backstop for main. Measured on run 39042728812: a cold iOS leg is
+# 35m04s and a cache-warm one ~15m, against ~5-6m for JVM and Android. That is wall
+# clock in front of every commit, which is the cost — the repository is public, so the
+# Actions minutes were never billed.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # 04:17 UTC: off the hour, so the run does not queue behind the top-of-hour cron spike.
+    - cron: '17 4 * * *'
 
 concurrency:
   group: tests-${{ github.ref }}

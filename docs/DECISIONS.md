@@ -121,3 +121,24 @@ Do not file these as bugs you introduced:
 - Test counts come from the JUnit XML the build writes, cross-checked against `@Test`
   — never `grep -c`, which over-counts KDoc mentions. `Project.md` holds the current
   baseline; update it in the same change as any test addition.
+
+## Continuous integration
+
+`tests.yml` runs on `workflow_dispatch` and a nightly schedule, **not on every push**.
+PRs are verified with `scripts/check.sh`; the three-host matrix is a drift backstop for
+`main`.
+
+- The gating was never real: the repository is public, so Actions minutes are free, and
+  `main` carries no branch protection, so these checks never blocked a merge. The cost
+  was wall clock in front of every commit.
+- No configuration reaches two minutes. The floor is 4787 tests (1723 JVM, 1672 iOS,
+  1392 Android) plus ~1.7 GB of cache restore, before Kotlin/Native links anything on
+  the iOS host. Warm, the legs measured 5m22s / 6m12s / ~15m (run 39045556483 and
+  39042728812); cold, iOS was 35m04s.
+- `~/.konan` is 1.9 GB and is **not** covered by `gradle/actions/setup-gradle`, which
+  caches `GRADLE_USER_HOME` only — so it was re-fetched and re-compiled every run until
+  the workflow cached it explicitly. Cache it; do not reintroduce a per-push iOS leg.
+- `main` was red on 2026-10-17 by choice, and it was infrastructure, not a regression:
+  `java.net.SocketException: Connection reset` while `gradlew` fetched the 143 MB
+  `gradle-9.8.0-bin.zip`, because no macOS job had ever cached the Gradle distribution.
+  Do not go looking for a defect in that commit.
