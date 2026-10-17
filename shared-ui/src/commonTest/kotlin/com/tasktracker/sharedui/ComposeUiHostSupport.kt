@@ -33,23 +33,27 @@ import androidx.compose.ui.test.runComposeUiTest
 internal expect fun thisHostRasterisesText(): Boolean
 
 /**
+ * Records the current test as skipped on a host that cannot rasterise.
+ *
+ * An assumption, not an early return: a test that returns before its assertions is recorded as
+ * a pass, and a green row for a host that measured nothing is the lie this harness exists to
+ * stop. The Android actual throws through `org.junit.Assume`; the JVM and iOS actuals do
+ * nothing. The annotation itself cannot live in `commonTest` — `org.junit` is not on the iOS
+ * or Native compilations — which is why this is an `expect` function.
+ */
+internal expect fun assumeHostRasterisesText()
+
+/**
  * Runs [body] only where a Compose frame can actually be rasterised.
  *
- * On the Android host this returns without asserting and the host records it as a **pass**,
- * not a skip. `kotlin.test` has no portable skip and `org.junit.Assume` does not exist on the
- * iOS and JVM compilations this same code must satisfy, so the reason is printed to the build
- * output instead of being recorded in the XML.
- *
- * The composition is entered here rather than by the caller so this check happens first:
+ * The guard is an assumption, so the Android host records a **skip** rather than a pass. The
+ * composition is entered here rather than by the caller so this check happens first:
  * `runComposeUiTest` is what fails on the Android host, and it fails in its own environment
  * setup, so a caller that invoked it before asking would die there instead of reaching the
  * branch that explains why.
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun rasterising(body: ComposeUiTest.() -> Unit) {
-    if (!thisHostRasterisesText()) {
-        println("skipped: this host cannot rasterise a Compose frame to read pixels from")
-        return
-    }
+    assumeHostRasterisesText()
     runComposeUiTest(block = body)
 }

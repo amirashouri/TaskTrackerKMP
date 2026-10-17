@@ -85,7 +85,6 @@ import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholderTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
-import com.tasktracker.featureprojectspresentation.SprintDetailReopenTag
 import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
 import com.tasktracker.featureprojectspresentation.SprintListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
@@ -99,6 +98,7 @@ import com.tasktracker.featuresettingspresentation.SettingsManageMembersTag
 import com.tasktracker.featuresettingspresentation.SettingsManageProjectsTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
 import com.tasktracker.featuresettingspresentation.SettingsSignOutTag
+import com.tasktracker.featuresettingspresentation.ThemeDropdownTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.tab_backlog
@@ -149,6 +149,16 @@ import kotlin.time.Instant
  * needs a Robolectric runner, and a runner annotation is not expressible in `commonTest`.
  */
 object ShellScenarios {
+
+    /**
+     * A hold longer than the compact editor's exit (350ms in `NavigationHost`).
+     *
+     * The editor keeps its route mounted while the slide plays, so a scenario that asserts the
+     * editor is gone has to move the test clock past that hold. 500 rather than the exact 350
+     * so the assertion is about "the dismissal completed" rather than about arithmetic on a
+     * production constant this module cannot see.
+     */
+    private const val EDITOR_EXIT_SLACK_MS = 500L
 
     /**
      * Sets the app up the way the graph does: bindings, then the session→router driver.
@@ -409,12 +419,13 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
-        // Scrolled to, not merely clicked: the User details header now leads the list, so on a
-        // short viewport the sign-out row is past the fold and — a LazyColumn that has not
-        // reached it leaves it out of the tree entirely, where a plain click finds nothing.
-        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
-        waitForIdle()
-        onNodeWithTag(SettingsSignOutTag).performClick()
+        // Scrolled to the true end, not merely into the viewport: the last rows sit under the
+        // floating tab bar, which takes the touch when a coordinate click lands there. The
+        // semantics action asserts the row's wiring rather than its geometry, and the scroll
+        // to the last index is what puts the row in front of the bar in the first place.
+        scrollSettingsListToEnd()
+        onNodeWithTag(SettingsSignOutTag)
+            .performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
 
         assertEquals(
@@ -591,7 +602,15 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
 
-        onNodeWithTag(WorkItemFileAwayTag).performScrollTo().performClick()
+        // The row's own OnClick action rather than a coordinate tap: the form scrolls, and
+        // where the button's centre lands is geometry rather than wiring. A click that misses
+        // would leave no write at all and read as a broken store call.
+        onNodeWithTag(WorkItemFileAwayTag).performScrollTo()
+        onNodeWithTag(WorkItemFileAwayTag).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        // The compact editor holds the route for its exit slide, so the dismissal completes
+        // on the test clock rather than on `waitForIdle` alone.
+        mainClock.advanceTimeBy(EDITOR_EXIT_SLACK_MS)
         waitForIdle()
 
         assertTrue(
@@ -618,10 +637,25 @@ object ShellScenarios {
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
         projects.seed(shellTestWorkItem(projectID = project.id, keyPrefix = project.keyPrefix))
-        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+        )
 
         waitForIdle()
         onNodeWithTag(ProjectRowTag(ProjectSummary(project, itemCount = 1))).performClick()
+        waitForIdle()
+        // The list opens a project on the *Board* tab, where the board is the tab root and
+        // `popToRoot` is a deliberate no-op — there is nothing to pop to. The switcher's way
+        // back to the list exists on a stack that has the board pushed onto it, which is the
+        // Projects tab's shape (and the shape a deep link installs). Putting the shell on that
+        // stack keeps the assertion about the control rather than about which tab is selected.
+        router.openProject(project.id, inTab = AppTab.Projects)
+        // `openProject` installs the path but leaves the selected tab alone when the target is
+        // Projects, so select it explicitly: `popToRoot()` acts on the selected tab.
+        router.selectTab(AppTab.Projects)
         waitForIdle()
         onNodeWithTag(ProjectBoardScreenTag).assertIsDisplayed()
 
@@ -1016,6 +1050,10 @@ object ShellScenarios {
         val sprint = shellTestSprint(projectID = project.id)
         projects.seedSprint(sprint)
 
+        // The whole claim is about a delivered back press, so a host that cannot deliver one
+        // skips rather than reaching the assertion with an untouched router.
+        assumeHostDeliversSystemBack()
+
         val router = Router()
         val dispatcher = NavigationEventDispatcher()
         val owner = object : NavigationEventDispatcherOwner {
@@ -1370,9 +1408,16 @@ object ShellScenarios {
         )
         waitForIdle()
         onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
-        // Reopen only draws for a finished sprint, so this also proves the link replaced
-        // the detail rather than leaving the active one under a matching tag.
-        onNodeWithTag(SprintDetailReopenTag).assertIsDisplayed()
+        // The detail list keeps its scroll position across the route change (same screen, new
+        // sprint), and the assertion above scrolled down to the active sprint's task row. Back
+        // to the top so the header is composed again before reading the finished sprint's name.
+        onNodeWithTag(SprintDetailScreenTag).performScrollToIndex(0)
+        waitForIdle()
+        // The finished sprint's own name, which proves the link replaced the detail rather than
+        // leaving the active sprint under a matching tag. Reopen is not asserted here: it lives
+        // on the summary screen (`SprintSummaryScreen`), not on the detail, and the detail's
+        // archived arm deliberately offers no action.
+        onNodeWithText(finished.name).assertIsDisplayed()
 
         onNodeWithTag(SprintDetailAddTag).assertIsNotEnabled()
         onNodeWithTag(WorkItemBacklogRowTag(done)).performScrollTo().assertIsDisplayed()
@@ -1452,7 +1497,12 @@ object ShellScenarios {
 
         // Cancel has to land back on that same sprint detail — closing the editor the user
         // opened over it, not on the board the background used to fall back to.
-        onNodeWithTag(WorkItemCancelTag).performScrollTo().performClick()
+        // The compact editor keeps the route mounted for EDITOR_EXIT_MS so the slide can
+        // finish. Drive the clock past that hold, and use the row's own action rather than a
+        // coordinate tap so the assertion is about dismissal rather than about geometry.
+        onNodeWithTag(WorkItemCancelTag).performScrollTo()
+        onNodeWithTag(WorkItemCancelTag).performSemanticsAction(SemanticsActions.OnClick)
+        mainClock.advanceTimeBy(EDITOR_EXIT_SLACK_MS)
         waitForIdle()
         assertTrue(
             onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
@@ -1965,14 +2015,11 @@ object ShellScenarios {
      */
     private fun ComposeUiTest.desktopWidthIsExpressible(requested: Dp): Boolean {
         if (thisHostExpressesDesktopWidth()) return true
-        println(
-            "skipped: this host cannot lay out a shell wider than the " +
-                "${ShellExpandedMinimumWidth.value}dp expanded threshold, so the " +
-                "${requested.value}dp shell these scenarios are about cannot be built here. A " +
-                "fixed width is a request rather than a guarantee — it is clamped by its parent's " +
-                "constraints — so asserting on a shell this host could not build would be " +
-                "asserting nothing. A desktop window is not a configuration the Android host has",
-        )
+        // Throws an assumption on a host that cannot build this shell, so the scenario is
+        // recorded as skipped rather than returning green having asserted nothing. A fixed width
+        // is a request rather than a guarantee — it is clamped by its parent's constraints — and
+        // a desktop window is not a configuration the Android host has.
+        assumeHostExpressesDesktopWidth()
         return false
     }
 
@@ -3056,7 +3103,15 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
-        onNodeWithTag(ThemeOptionTag(ThemeScheme.Dark)).performClick()
+        // The theme picker is a section of a LazyColumn, so on a phone viewport it is not
+        // composed until the list reaches it — and the schemes themselves live in the dropdown
+        // the row opens, which is a second composition root. Scroll to the row, expand it, then
+        // choose the scheme.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(ThemeDropdownTag))
+        waitForIdle()
+        onNodeWithTag(ThemeDropdownTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ThemeOptionTag(ThemeScheme.Dark)).assertIsDisplayed().performClick()
         waitForIdle()
 
         // Read the raw key rather than a second shell. Two `setContent` calls in one test body
@@ -3226,8 +3281,7 @@ object ShellScenarios {
         // reach to the scenario that owns it.
         onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
         waitForIdle()
-        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSignOutTag))
-        waitForIdle()
+        scrollSettingsListToEnd()
         assertLastRowClearsTheBar(
             tab = AppTab.Settings,
             rowTag = SettingsSignOutTag,
@@ -3254,6 +3308,26 @@ object ShellScenarios {
      * delete buttons, a backlog item's "put on board" and "file away" -- and the lowest of those
      * would be an action inside the last row rather than the row.
      */
+    /**
+     * Scrolls the Settings list to its true end rather than merely into view.
+     *
+     * `performScrollToNode` stops as soon as the node is inside the viewport, and the bottom of
+     * that viewport is behind the floating tab bar — which is how the sign-out row ended up 60px
+     * under the glass and a coordinate click landed on the bar. Scrolling to the last index
+     * reaches the end of the range, where the list's bottom content padding is applied.
+     * `CollectionInfo` carries the LazyColumn's item count, so this does not hardcode a count
+     * that changes with the admin and version rows.
+     */
+    private fun ComposeUiTest.scrollSettingsListToEnd() {
+        val list = onNodeWithTag(SettingsScreenTag)
+        val rows = list.fetchSemanticsNode().config
+            .getOrElseNullable(SemanticsProperties.CollectionInfo) { null }
+            ?.rowCount
+            ?: return
+        list.performScrollToIndex((rows - 1).coerceAtLeast(0))
+        waitForIdle()
+    }
+
     private fun ComposeUiTest.assertBottomMostRowClearsTheBar(tab: AppTab, rowTagPrefix: String) {
         val rows = onAllNodes(hasRowTagUnder(rowTagPrefix)).fetchSemanticsNodes()
         val lastRow = rows.maxByOrNull { it.boundsInRoot.bottom }
@@ -3487,3 +3561,22 @@ internal expect fun thisHostExpressesDesktopWidth(): Boolean
  * top level for the same reason, since `expect` cannot be a member.
  */
 internal expect fun thisHostDeliversSystemBack(): Boolean
+
+/**
+ * Records a scenario as skipped when this host cannot lay out the requested width.
+ *
+ * An assumption, not the early return [ShellScenarios.desktopWidthIsExpressible] used to make:
+ * a returning scenario is recorded as a pass, and three wide-layout scenarios reporting green
+ * on a phone host that never built the shell they are about is the false green this harness
+ * exists to remove. The Android actual throws through `org.junit.Assume`; the JVM and iOS
+ * actuals do nothing because both can express a desktop width.
+ */
+internal expect fun assumeHostExpressesDesktopWidth()
+
+/**
+ * Records a scenario as skipped when this host cannot deliver a system back press.
+ *
+ * Same contract as [assumeHostExpressesDesktopWidth], for the same reason: a scenario whose
+ * whole claim is about a back press must not report green where no press can be delivered.
+ */
+internal expect fun assumeHostDeliversSystemBack()

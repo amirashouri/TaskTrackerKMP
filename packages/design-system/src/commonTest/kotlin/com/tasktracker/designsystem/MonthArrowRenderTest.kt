@@ -163,14 +163,6 @@ class MonthArrowRenderTest {
         waitForIdle()
     }
 
-    private fun rasterising(body: androidx.compose.ui.test.ComposeUiTest.() -> Unit) {
-        if (!thisHostRasterisesText()) {
-            println("skipped: this host does not rasterise, so a chevron has no ink to measure")
-            return
-        }
-        runComposeUiTest { body() }
-    }
-
     /** The measured ink inside the arrow box tagged [TTMonthStepTag] of [step]. */
     private fun androidx.compose.ui.test.ComposeUiTest.slotInk(
         pixels: androidx.compose.ui.graphics.PixelMap,

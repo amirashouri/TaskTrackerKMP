@@ -121,7 +121,7 @@ class GlassSurfacePixelTest {
      */
     @Test
     fun `a caption on the rendered glass fill still clears the large-text bar`() {
-        if (!thisHostRasterisesText()) return
+        assumeHostRasterisesText()
         val reading = requireNotNull(measureGlassFill(ThemeScheme.Light)) { NO_READING }
         val caption = over(reading.secondary, reading.secondaryAlpha, reading.fill)
         val ratio = contrastRatio(caption, reading.fill)
@@ -150,7 +150,7 @@ class GlassSurfacePixelTest {
     /** The same relationship in dark, where the model said it was fine at 5.85:1. */
     @Test
     fun `a caption on the rendered glass fill clears the body-text bar in dark`() {
-        if (!thisHostRasterisesText()) return
+        assumeHostRasterisesText()
         val reading = requireNotNull(measureGlassFill(ThemeScheme.Dark)) { NO_READING }
         val caption = over(reading.secondary, reading.secondaryAlpha, reading.fill)
         val ratio = contrastRatio(caption, reading.fill)
@@ -181,7 +181,7 @@ class GlassSurfacePixelTest {
      */
     @Test
     fun `the hairline reads as a lit edge in light`() {
-        if (!thisHostRasterisesText()) return
+        assumeHostRasterisesText()
         val reading = requireNotNull(measureRim(ThemeScheme.Light)) { NO_READING }
         println(
             "light rim ${reading.rim.hex()} over fill ${reading.fill.hex()}, " +
@@ -205,7 +205,7 @@ class GlassSurfacePixelTest {
     /** The same measurement in dark, where the rim is doing real work. Green, and why. */
     @Test
     fun `the hairline reads as a lit edge in dark`() {
-        if (!thisHostRasterisesText()) return
+        assumeHostRasterisesText()
         val reading = requireNotNull(measureRim(ThemeScheme.Dark)) { NO_READING }
         println(
             "dark rim ${reading.rim.hex()} over fill ${reading.fill.hex()}, " +

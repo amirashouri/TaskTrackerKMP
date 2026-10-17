@@ -5,6 +5,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -295,12 +296,22 @@ object BoardLaneScenarios {
         boardShowing()
 
         WorkItemStatus.boardOrder.forEach { status ->
-            onNodeWithTag(BoardColumnTag(status)).assertIsDisplayed()
+            // Existence rather than display: the lane row scrolls, so the far lanes are
+            // composed and laid out but off a phone viewport. The bounds assertion below is
+            // what proves the row really scrolls rather than wrapping.
+            onNodeWithTag(BoardColumnTag(status)).assertExists()
         }
+        // Unclipped, because a lane scrolled past the viewport edge is *clipped* by the scrolling
+        // row: its clipped right edge reports the viewport's edge, which says nothing about
+        // whether the content is wider than the window. The unclipped right edge is the laid-out
+        // position, which is the claim.
+        val lastLaneRight = onNodeWithTag(BoardColumnTag(WorkItemStatus.Done))
+            .getUnclippedBoundsInRoot().right.value
+        val viewportWidth = onRoot().fetchSemanticsNode().size.width.toFloat()
         assertTrue(
-            onNodeWithTag(BoardColumnTag(WorkItemStatus.Done)).fetchSemanticsNode()
-                .boundsInRoot.right > onRoot().fetchSemanticsNode().size.width / 2,
-            "and the last lane is off past the middle, i.e. the row really does scroll",
+            lastLaneRight > viewportWidth / 2,
+            "and the last lane is off past the middle, i.e. the row really does scroll: " +
+                "the Done lane ends at ${lastLaneRight}px of a ${viewportWidth}px viewport",
         )
     }
 

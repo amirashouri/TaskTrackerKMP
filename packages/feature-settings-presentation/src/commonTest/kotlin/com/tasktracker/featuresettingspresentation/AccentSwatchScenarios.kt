@@ -69,10 +69,10 @@ object AccentSwatchScenarios {
 
     /** The selected cell's pane is lighter at the top and covers both the swatch and the label. */
     val theSelectedAccentSwatchCarriesTheGlassLens: suspend ComposeUiTest.() -> Unit = {
-        if (!thisHostRasterisesText()) {
-            println("skipped: the Android host rasterises differently, so the lens is not measured there")
-        } else {
-            setContent {
+        // A real skip, not a return: this test measures pixels, and a host that measured
+        // nothing must not be recorded as agreeing.
+        assumeHostRasterisesText()
+        setContent {
                 ttTheme(ThemeScheme.Light) {
                     // The app's own canvas, not a made-up one: the label's ink sits on it and its
                     // contrast is only meaningful against the surface it actually lands on.
@@ -121,7 +121,6 @@ object AccentSwatchScenarios {
                     "gradient, so its top and bottom rows are the same colour. Above noise " +
                     "means a lens is being drawn on an unselected swatch.",
             )
-        }
     }
 
     /**

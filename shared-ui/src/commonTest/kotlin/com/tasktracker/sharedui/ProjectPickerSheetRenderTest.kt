@@ -13,7 +13,6 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import com.tasktracker.core.ProjectID
@@ -99,7 +98,7 @@ class ProjectPickerSheetRenderTest {
     fun theSheetDoesNotTransmitThePageBehindIt() {
         for (scheme in APPEARANCES) {
             var reading: Reading? = null
-            runComposeUiTest { reading = measureTransmission(scheme) }
+            rasterising { reading = measureTransmission(scheme) }
             val measured = requireNotNull(reading) { "no reading in ${scheme.name} appearance" }
 
             assertTrue(
@@ -130,7 +129,11 @@ class ProjectPickerSheetRenderTest {
      */
     @Test
     fun theSheetIsFramedByTheSharedScaffold() {
-        runComposeUiTest {
+        // Guarded for the same reason as the measurement above: this class composes directly
+        // from `commonTest`, which the Android host can only run under Robolectric — and
+        // `@RunWith` cannot be written here. It asks for a skip instead of dying in
+        // `runComposeUiTest`'s environment setup.
+        rasterising {
             setContent {
                 ttTheme(ThemeScheme.Dark) {
                     Box(Modifier.fillMaxSize().background(PAGE_BLACK)) {

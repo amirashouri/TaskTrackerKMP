@@ -37,6 +37,20 @@ import androidx.compose.ui.test.runComposeUiTest
 internal expect fun thisHostRasterisesText(): Boolean
 
 /**
+ * Records the current test as skipped on a host that cannot rasterise.
+ *
+ * The contract is an *assumption*, not an early return: a test that returns before its
+ * assertions is recorded as a pass, which is the exact lie this harness exists to stop. The
+ * Android actual throws `org.junit.AssumptionViolatedException` through `Assume`, and the
+ * runner records the skip; the JVM and iOS actuals do nothing, because both can rasterise.
+ *
+ * The annotation cannot live in `commonTest` — `org.junit` is not on the iOS or Native
+ * compilations — which is why this is an `expect` function whose only platform-specific
+ * import sits in the Android source set.
+ */
+internal expect fun assumeHostRasterisesText()
+
+/**
  * Runs [body] only where a Compose frame can actually be rasterised.
  *
  * ## What the skip looks like in a report, honestly
@@ -57,13 +71,10 @@ internal expect fun thisHostRasterisesText(): Boolean
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun rasterising(body: ComposeUiTest.() -> Unit) {
-    if (!thisHostRasterisesText()) {
-        println("skipped: this host cannot rasterise a Compose frame to read pixels from")
-        return
-    }
-    // The composition is entered here rather than by the caller so that the host check
-    // happens first. `runComposeUiTest` is what fails on the Android host, and it fails in
-    // its own environment setup, so a test that called it before asking would die there
-    // instead of reaching the branch that explains why.
+    // The assumption is thrown before `runComposeUiTest`, which is what fails on the Android
+    // host in its own environment setup. It is deliberately not an early return: a return
+    // records a pass, and a pass on a host that measured nothing is the failure mode this
+    // whole file is about.
+    assumeHostRasterisesText()
     runComposeUiTest(block = body)
 }

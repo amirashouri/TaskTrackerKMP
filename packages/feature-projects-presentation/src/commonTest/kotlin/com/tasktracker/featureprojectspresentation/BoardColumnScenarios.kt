@@ -48,7 +48,11 @@ object BoardColumnScenarios {
 
         assertEquals(4, WorkItemStatus.boardOrder.size, "four lanes, from appearsOnBoard")
         WorkItemStatus.boardOrder.forEach { status ->
-            onNodeWithTag(BoardColumnTag(status)).assertIsDisplayed()
+            // Existence, not display: the lane row scrolls horizontally and a phone viewport
+            // shows two and a half of four lanes. The claim is that every lane is *drawn*, and
+            // the off-viewport ones are composed and laid out — asserting display would fail on
+            // a phone for a layout reason rather than a behavioural one.
+            onNodeWithTag(BoardColumnTag(status)).assertExists()
             // Addressed per lane: all four empty lanes say the same sentence, so the text
             // on its own matches four nodes and `onNodeWithText` would reject it.
             assertText(BoardColumnEmptyTag(status), getString(Res.string.board_empty_column))

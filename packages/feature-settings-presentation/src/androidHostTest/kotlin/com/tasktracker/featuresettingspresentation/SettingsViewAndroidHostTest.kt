@@ -1,8 +1,6 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.v2.runComposeUiTest
-import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -29,94 +27,4 @@ import org.robolectric.annotation.GraphicsMode
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-class SettingsViewAndroidHostTest {
-
-    @Test
-    fun aQuietScreenSaysNothingAboutCounts() = runComposeUiTest(block = SettingsScenarios.aQuietScreenSaysNothingAboutCounts)
-
-    @Test
-    fun offlineWorkIsExplainedRatherThanHidden() =
-        runComposeUiTest(block = SettingsScenarios.offlineWorkIsExplainedRatherThanHidden)
-
-    @Test
-    fun onlyARunningCycleDisablesSyncNow() = runComposeUiTest(block = SettingsScenarios.onlyARunningCycleDisablesSyncNow)
-
-    @Test
-    fun anOfflineTapIsAnsweredRatherThanIgnored() =
-        runComposeUiTest(block = SettingsScenarios.anOfflineTapIsAnsweredRatherThanIgnored)
-
-    @Test
-    fun aStartedCycleSaysNothing() = runComposeUiTest(block = SettingsScenarios.aStartedCycleSaysNothing)
-
-    @Test
-    fun theControlsDispatchTheirCommands() = runComposeUiTest(block = SettingsScenarios.theControlsDispatchTheirCommands)
-
-    @Test
-    fun theVersionRowHidesItselfWithNoVersion() =
-        runComposeUiTest(block = SettingsScenarios.theVersionRowHidesItselfWithNoVersion)
-
-    @Test
-    fun theUserDetailsSectionIsOnThePage() =
-        runComposeUiTest(block = SettingsScenarios.theUserDetailsSectionIsOnThePage)
-
-    @Test
-    fun choosingAnAvatarRoutesItsIdIntoTheDetails() =
-        runComposeUiTest(block = SettingsScenarios.choosingAnAvatarRoutesItsIdIntoTheDetails)
-
-    @Test
-    fun theStatusFieldSitsCentredInItsPill() =
-        runComposeUiTest(block = SettingsScenarios.theStatusFieldSitsCentredInItsPill)
-
-    /**
-     * [GlassIntensityScenarios] on the Android host.
-     *
-     * The same six scenarios run on every host; these are entry points only, and every
-     * assertion lives in the scenarios object.
-     */
-
-    @Test
-    fun theSliderOpensAtTheAmountTheAppIsShowing() = runComposeUiTest(block = GlassIntensityScenarios.theSliderOpensAtTheAmountTheAppIsShowing)
-
-    @Test
-    fun theReadoutIsTheRoundedPercentage() = runComposeUiTest(block = GlassIntensityScenarios.theReadoutIsTheRoundedPercentage)
-
-    @Test
-    fun theBottomOfTheTravelIsNamedReduceTransparency() = runComposeUiTest(block = GlassIntensityScenarios.theBottomOfTheTravelIsNamedReduceTransparency)
-
-    @Test
-    fun assistiveTechnologyCanSetTheAmount() = runComposeUiTest(block = GlassIntensityScenarios.assistiveTechnologyCanSetTheAmount)
-
-    @Test
-    fun aDragPreviewsEveryStepAndPersistsOnce() = runComposeUiTest(block = GlassIntensityScenarios.aDragPreviewsEveryStepAndPersistsOnce)
-
-    @Test
-    fun aTapOnTheTrackMovesItWithoutADrag() = runComposeUiTest(block = GlassIntensityScenarios.aTapOnTheTrackMovesItWithoutADrag)
-
-    /**
-     * [ThemeOptionScenarios] on the Android host.
-     *
-     * The caption scenario runs here. The wash scenario measures rendered pixels and skips on
-     * this host (the skip records as a pass) because Robolectric's rasteriser disagrees with
-     * Skia — same reason as the design system's own pixel gates.
-     */
-
-    @Test
-    fun theSelectedSchemeOptionIsWashedWithAccent() =
-        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent)
-
-    @Test
-    fun theLongAccentCaptionWrapsInsteadOfClipping() =
-        runComposeUiTest(block = ThemeOptionScenarios.theLongAccentCaptionWrapsInsteadOfClipping)
-
-    @Test
-    fun theSelectedAccentSwatchCarriesTheGlassLens() =
-        runComposeUiTest(block = AccentSwatchScenarios.theSelectedAccentSwatchCarriesTheGlassLens)
-
-    @Test
-    fun theAdminSectionIsHiddenFromAMember() =
-        runComposeUiTest(block = SettingsScenarios.theAdminSectionIsHiddenFromAMember)
-
-    @Test
-    fun anAdminSeesTheManagementEntriesAndTheyDispatch() =
-        runComposeUiTest(block = SettingsScenarios.anAdminSeesTheManagementEntriesAndTheyDispatch)
-}
+class SettingsViewAndroidHostTest : SettingsViewScenarios()

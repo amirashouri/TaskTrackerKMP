@@ -1,5 +1,8 @@
 package com.tasktracker.featuresettingspresentation
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -7,8 +10,10 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import com.tasktracker.designsystem.ThemeScheme
@@ -74,13 +79,38 @@ object GlassIntensityScenarios {
      * have none.
      */
     val theBottomOfTheTravelIsNamedReduceTransparency: suspend ComposeUiTest.() -> Unit = {
-        sliderShowing(intensity = 0f)
+        // One composition whose intensity changes, rather than three `setContent` calls. The
+        // property under test is the *label* the slider reports at each value, so recomposing
+        // is the same measurement — and Android's `ComponentActivity` rejects a second
+        // `setContent` outright, which three calls made a host-specific failure.
+        var intensity by mutableStateOf(0f)
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    glassIntensity = intensity,
+                )
+            }
+        }
+        // The slider is a section of a lazy list, so on a phone viewport it is not composed
+        // until the list reaches it.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(GlassSliderTag))
+        waitForIdle()
         onNodeWithText(getString(Res.string.settings_glass_reduced)).assertExists()
 
-        sliderShowing(intensity = 0.005f)
+        intensity = 0.005f
+        waitForIdle()
         onNodeWithText(getString(Res.string.settings_glass_reduced)).assertExists()
 
-        sliderShowing(intensity = 0.02f)
+        intensity = 0.02f
+        waitForIdle()
         onNodeWithText("2%").assertExists()
     }
 

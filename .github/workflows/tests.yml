@@ -1,0 +1,105 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jvm:
+    name: JVM + architecture graph
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Point Gradle at the runner's JDK
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+
+      - name: JVM tests, graph, baseline
+        run: ./scripts/check.sh fast
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jvm-test-results
+          path: |
+            **/build/test-results/jvmTest/*.xml
+            build/reports/test-summary.md
+          if-no-files-found: warn
+
+  android-host:
+    name: Android host (Robolectric)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Point Gradle at the runner's JDK
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+
+      - name: Android host tests + baseline
+        run: ./scripts/check.sh android
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-test-results
+          path: |
+            **/build/test-results/testAndroidHostTest/*.xml
+            build/reports/test-summary.md
+          if-no-files-found: warn
+
+  ios:
+    name: iOS simulator
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Point Gradle at the runner's JDK
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+
+      - name: Boot a simulator
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 -E 'iPhone' | sed -E 's/^ +//; s/ \\(.*$//')
+          echo "booting: $DEVICE"
+          xcrun simctl boot "$DEVICE" || true
+
+      - name: iOS simulator tests + baseline
+        run: ./scripts/check.sh ios
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-test-results
+          path: |
+            **/build/test-results/iosSimulatorArm64Test/*.xml
+            build/reports/test-summary.md
+          if-no-files-found: warn
