@@ -93,14 +93,16 @@ build does not mean the Kotlin you just edited is in it; check the Gradle task o
 scripts/check.sh
 ```
 
-It compiles the Android app, checks the architecture graph, and runs the JVM and iOS test
-hosts. `Project.md` lists the scopes (`jvm`, `ios`, `android`, `graph`, `lint`, `docs`) and
-the extras that are known-red.
+It compiles the Android app, checks the architecture graph, and runs the JVM tests by
+default. Use `scripts/check.sh full` for the complete matrix: the JVM, the iOS simulator,
+and Android under Robolectric. `docs/TESTING.md` is the authoritative command and host
+reference; `test-baseline.json` holds the generated totals and
+`test-known-failures.json` the named allowlist.
 
-Tests run on **three hosts**: the JVM, the iOS simulator, and Android under
-Robolectric. The Android host is deliberately stricter about some things and weaker
-about others (Robolectric's viewport is small; its `Build` fields are `null`) —
-`Project.md` records the exact split and which failures are known and documented.
+A failure not in the allowlist fails the gate even when the total failure count is
+unchanged. The Android host is deliberately stricter about some things and weaker about
+others (Robolectric's viewport is small; its `Build` fields are `null`); the policy and
+the phased cleanup live in `docs/TESTING.md` and `docs/TEST-HARNESS-PLAN.md`.
 
 ## Documentation
 

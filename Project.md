@@ -25,18 +25,14 @@ Without it the build dies immediately with `Unable to locate a Java Runtime`. Th
 ## The command that decides whether you are done
 
 ```bash
-scripts/check.sh
+scripts/check.sh          # fast: JVM + graph + baseline + summary
+scripts/check.sh full     # all three hosts + baseline; required for UI work
 ```
 
-That is `./gradlew jvmTest iosSimulatorArm64Test verifyArchitectureGraph verifyModuleImports
-:androidApp:compileDebugKotlin`, and the script also exports the JDK. Scopes: `jvm`, `ios`,
-`android`, `graph`, `lint`, `docs`.
-
-`./gradlew check` is that **plus** `testAndroidHostTest` **and** `:androidApp:lintDebug`. All of the
-red is pre-existing and documented: 34 Compose layout/raster failures on the Android host
-(Robolectric's small default viewport and its rasteriser), the same 12 on the JVM and iOS hosts,
-and one `[NotificationPermission]` lint error in `androidApp`'s manifest. Do not report any of it as
-a regression you caused — check whether it was already failing, and see [Tests](#tests) for the split.
+The script exports the JDK, runs Gradle with `--continue`, summarizes failures, and accepts only
+tests named in `test-known-failures.json`. Counts and identities are generated into
+`test-baseline.json`. Policy and host details: [`docs/TESTING.md`](docs/TESTING.md); rollout:
+[`docs/TEST-HARNESS-PLAN.md`](docs/TEST-HARNESS-PLAN.md).
 
 ---
 
@@ -160,10 +156,15 @@ for the two local hosts only; a deployment whose server is plain HTTP must add i
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast feedback; run this — **12 failed** (pre-existing); totals in `test-baseline.json` |
-| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels — **12 failed** (same 12); totals in `test-baseline.json` |
-| Android host | `testAndroidHostTest` | Robolectric; **34 failed** — all layout/raster, documented below; totals in `test-baseline.json` |
+| JVM | `jvmTest` | fast feedback; known failures named in `test-known-failures.json` |
+| iOS simulator | `iosSimulatorArm64Test` | slower; needed for anything touching `expect`/`actual` or rendered pixels |
+| Android host | `testAndroidHostTest` | Robolectric; known failures named in `test-known-failures.json` |
 | Desktop (the JVM app) | `:shared-ui:runDesktop` | **not a test host** — Desktop *is* the `jvm` target, so it is the row above; see the note below |
+
+**Counts and failure identities are generated.** The paragraphs below are historical measurement
+lore and predate the named-baseline gate; the current numbers live only in `test-baseline.json` and
+the current allowlist in `test-known-failures.json`. Phase 4 of `docs/TEST-HARNESS-PLAN.md` moves
+this lore to `docs/DECISIONS.md`.
 
 Those totals are now **generated**: `test-baseline.json` is written by `scripts/test-baseline.py`
 from the JUnit XML, and `scripts/check-baseline.sh` fails if the file and the build disagree. The

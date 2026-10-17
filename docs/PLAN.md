@@ -1152,3 +1152,10 @@ the server half lives in `../TaskTrackerServer/PLAN.md`.
 2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation` (so `ProjectEditorScreen` is reusable with no new cross-presentation edge).
 3. Position choices for the add-member form come from the client's `UserPosition.all`; the server stores free text (matches server assumption 1).
 4. The admin members/projects screens are **online-only** (direct network, no Room/outbox), unlike the offline-first board/backlog surfaces.
+
+---
+
+## Test harness cleanup (in progress)
+
+The client test-harness cleanup has its own plan: [`docs/TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md).
+It covers the honest gate, the named known-failure list, the three-host matrix, and CI.
