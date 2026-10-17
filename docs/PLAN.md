@@ -970,20 +970,40 @@ projects**. Members: create (email/password/role/position), list with Active/Del
 segments, delete (soft-delete, confirm popup), reactivate. Projects: Active/Archived
 segments, selecting one opens the edit-project page. Detail opens as a **new screen on
 mobile** and a **split screen on desktop**. This file is the repo-scoped breakdown;
-the server half lives in `../TaskTrackerServer/PLAN.md`.
+the server half lives in `../TaskTrackerServer/docs/PLAN.md`, as its `T8.x` tasks —
+the `SRV-x` series this plan once cited was dropped when the two halves were reconciled.
 
-> **Not in the repo.** Plan mode restricts edits to `~/.opencode/plan`. At
-> implementation time, each task becomes one `specs/<plan-id>-<slug>.md` (per
-> `specs/README.md`) + one `feat/` branch + one PR, exactly as `AGENTS.md` requires.
+> **Not in the repo (historically).** This plan was authored in plan mode, which then
+> restricted edits to `~/.opencode/plan`; it has since landed here. Each *remaining*
+> task becomes one `specs/<plan-id>-<slug>.md` (per `specs/README.md`) + one branch +
+> one PR, exactly as `AGENTS.md` requires. The first slice shipped without those specs.
+
+## Status (as of 2026-10-17)
+
+This section was reviewed against the code on `main`, not against its own task marks.
+The first slice is shipped and green; two acceptance criteria are **not** met, and one
+gap in the tests is why they went unnoticed.
+
+- **Landed:** `CLI-2`–`CLI-8`, plus the *list* halves of `CLI-9` and `CLI-10`.
+- **Not met:** `CLI-9`'s edit-project page and `CLI-10`'s wide arrangements — the
+  selected id never reaches a screen. `CLI-12` and `CLI-13` are the remainders.
+- **Hid behind:** the shell scenarios bind no admin port, so they exercise the
+  placeholder path rather than the real destinations. `CLI-14`.
+- **Shipped differently than written:** `CLI-1` reads the access token's `role` claim
+  rather than declaring a field on the auth token envelope; its section is rewritten
+  below. `CLI-4` ships `feature-teams-domain/UserStatus`, not the `MemberStatus` the
+  section named.
 
 ## Frozen decisions (agreed with the user)
 
 | # | Decision | Consequence |
 | --- | --- | --- |
-| D1 | Admin gate = new `role` on the auth responses, **declared client-first**. | `CLI-1` ships the field with a default **before** server `SRV-8` sends it. |
+| D1 | Admin gate = the access token's `role` claim, read client-side. | `CLI-1` reads the token's `role` claim into `UserIdentity.role`, failing closed to `Member`. **Revised:** it does **not** add a field to the auth token envelope — the server's `T8.7` records why sending one would break installed clients. |
 | D2 | Manage Projects lists **all** projects server-wide. | New admin projects network port; the local Room/outbox path is **not** used for the admin list. |
-| D3 | Deleted member = status value **`deleted`**. | Client maps a fresh `MemberStatus`; legacy settings `UserStatus` (Active/Away/Busy/BeRightBack) is unrelated. |
+| D3 | Deleted member = status value **`deleted`**. | Client maps a fresh `feature-teams-domain/UserStatus` (`active`/`inactive`/`deleted`); the settings `UserStatus` (Active/Away/Busy/BeRightBack) is a different enum in a different package. |
 | D4 | ≤1h access-token window after delete. | No client change beyond handling the eventual 401. |
+| D5 | The admin project editor is **port-backed**. | Seeds from `AdminProjectsPort.project(id)`, saves through `updateProject(...)`, so server `GET /v1/admin/projects/{id}` (`T8.9`) must be mounted. The local `ProjectEditorScreen` **cannot** serve it: a project the admin is not a member of is not in their Room store, and the sync push refuses a non-member. |
+| D6 | **No member detail screen.** | The members section is a list with inline delete/reactivate; the `memberID` threaded through `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` is vestigial and leaves in `CLI-13`. |
 
 ## Architecture constraints this plan must respect (verified)
 
@@ -994,43 +1014,57 @@ the server half lives in `../TaskTrackerServer/PLAN.md`.
   - `:packages:feature-projects-presentation` **already** depends on `:packages:feature-teams-domain`.
   - `:packages:feature-settings-presentation` does **not** depend on `feature-teams-domain` — so the admin gate is threaded as a plain `isAdmin: Boolean`, avoiding a new edge.
 - Presentation may **not** depend on a data module. New screens talk to **ports** in the domain module; `:composition-root` binds the data implementations; `:shared-ui` gains the presentation-module edge.
-- `NavigationHost.kt` + most of `:shared-ui` are **untracked** — read and edit deliberately, never scripted.
+- `NavigationHost.kt` and `:shared-ui` are **read and edited deliberately, never scripted** — the tree is large and a scripted replace has bitten before. *Fact corrected 2026-10-17:* the older wording here said most of the module is **untracked**; it is not — `git ls-files` lists the module and `git status --untracked-files=all shared-ui` is clean, so git can recover an edit. `shared-ui/AGENTS.md` still carries the untracked claim and needs its own correction.
 - `NavigationHost.kt`’s route `when` is exhaustive: a new `AppRoute` is a compile error until handled.
 - The only split-screen precedent is `shared-ui/.../SprintPanes.kt` (`Expanded` widths, Sprints-only); desktop-vs-mobile is width-driven via `LocalShellLayoutClass`, never platform branching.
 - `JSONCoding.ignoreUnknownKeys` is **off** — added server keys must be declared in Kotlin with a default first.
 
 ## Task order
 
-| ID | Title | Depends on | ACK |
-| --- | --- | --- | --- |
-| CLI-1 | Declare `role` on the auth token response + identity | — | yes (wire) |
-| CLI-2 | Admin section + entry rows in Settings, gated on role | CLI-1 | yes (2+ modules) |
-| CLI-3 | Admin `AppRoute`s + `NavigationHost` dispatch + desktop two-pane scaffolding | CLI-2 | yes (shared-ui/routing) |
-| CLI-4 | `feature-teams-domain`: member-admin port + role/status vocabulary | — | yes (domain API) |
-| CLI-5 | `feature-teams-data`: HTTP member-admin remote + network edge | CLI-4 | yes (graph) |
-| CLI-6 | New `:packages:feature-teams-presentation`: members screens | CLI-3, CLI-5 | yes (new module) |
-| CLI-7 | `feature-projects-domain`: admin-projects port | — | yes (domain API) |
-| CLI-8 | `feature-projects-data`: HTTP admin-projects remote | CLI-7 | yes (data API) |
-| CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes |
-| CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes |
-| CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — |
+| ID | Title | Depends on | ACK | State |
+| --- | --- | --- | --- | --- |
+| CLI-1 | Read `role` from the access token's claim into identity | — | yes (wire) | **done** — as the claim, not an envelope field |
+| CLI-2 | Admin section + entry rows in Settings, gated on role | CLI-1 | yes (2+ modules) | **done** |
+| CLI-3 | Admin `AppRoute`s + `NavigationHost` dispatch + desktop two-pane scaffolding | CLI-2 | yes (shared-ui/routing) | **done** |
+| CLI-4 | `feature-teams-domain`: member-admin port + role/status vocabulary | — | yes (domain API) | **done** — ships `UserStatus`, not `MemberStatus` |
+| CLI-5 | `feature-teams-data`: HTTP member-admin remote + network edge | CLI-4 | yes (graph) | **done** |
+| CLI-6 | New `:packages:feature-teams-presentation`: members screens | CLI-3, CLI-5 | yes (new module) | **done** |
+| CLI-7 | `feature-projects-domain`: admin-projects port | — | yes (domain API) | **done** |
+| CLI-8 | `feature-projects-data`: HTTP admin-projects remote | CLI-7 | yes (data API) | **done** |
+| CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes | **partial** — the list landed; selecting a project opens no editor (`CLI-12`) |
+| CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes | **not met** — the wide arrangements draw the list twice (`CLI-13`) |
+| CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — | **partial** — the admin shell scenarios never bind a port (`CLI-14`) |
+| CLI-12 | Wire the admin project editor through `AdminProjectsPort` | CLI-9, server `T8.9` | yes (wire) | open |
+| CLI-13 | Fix both admin pane arrangements; drop the vestigial `memberID` | CLI-6, CLI-9 | yes (shared-ui/routing) | open |
+| CLI-14 | Bind the admin ports in host scenarios so the real destinations run | CLI-12, CLI-13 | yes (shared-ui) | open |
 
 ---
 
-## CLI-1 — Declare `role` on the auth token response + identity
+## CLI-1 — Read `role` from the access token's claim into identity — DONE, rewritten
 
-**Why first:** the server may not send `role` until an installed client declares it
-(`ignoreUnknownKeys` is off). This is the client-first half of D1.
+**As originally written this task was wrong.** It specified a new `@SerialName("role")`
+field on the auth token *envelope*, which the server's `T8.7` records as the one thing
+that must not ship: the client leaves `ignoreUnknownKeys` off, so a key the server adds
+and the client has not declared is a decoding failure on every installed build, exactly
+as `token_type`/`expires_in` were in `T7.1`. There is no client-first ordering to
+preserve here, because nothing needs to be sent.
 
-**Files**
-- `packages/feature-auth-data/src/commonMain/kotlin/com/tasktracker/featureauthdata/HttpAuthRemote.kt` — `AuthTokenResponse` (line ~104) gains `@SerialName("role") val role: String? = null`; map it through the remote.
-- `packages/feature-auth-domain/src/commonMain/kotlin/com/tasktracker/featureauthdomain/AuthSession.kt` — `UserIdentity` (line ~34) gains `role: UserRole = UserRole.Member`; add `UserRole { Admin, Member }` here (auth vocabulary).
-- `packages/feature-auth-data/src/commonTest/.../HttpAuthRemoteTest.kt` — decoding with and without `role`.
+**As shipped**, the role was already on the access token: the server puts a `role` claim
+on the access token *and* the refresh token, and the client derives identity from the
+token rather than from the envelope's `user_*` fields. Reading that claim is a pure
+client change.
+
+**Landed**
+- `packages/feature-auth-domain/src/commonMain/kotlin/com/tasktracker/featureauthdomain/AuthSession.kt` — `UserRole { Admin, Member }` with `wire` + `fromWire`, and `UserIdentity.role: UserRole = UserRole.Member`.
+- `packages/feature-auth-data/src/commonMain/kotlin/com/tasktracker/featureauthdata/AuthRepository.kt` — sets `role = UserRole.fromWire(claims.role)`.
 
 **Acceptance / tests**
-- A token response **without** `role` still decodes (default `Member`) — the old-server case.
-- A response **with** `role: "admin"` yields `UserRole.Admin`.
-- `contract_test` counterpart (server) is updated in `SRV-8`, not here.
+- An absent, unknown or differently-cased `role` claim resolves to `Member` rather than
+  throwing — the fail-closed rule, so a role a future server adds cannot unlock a screen
+  this build has not shipped.
+- A claim of `admin` yields `UserRole.Admin`.
+- `AuthTokenResponse` gains **no** field, so the server's five-key envelope assertion in
+  `cmd/server/contract_test.go` stays true.
 
 ## CLI-2 — Admin section + entry rows in Settings
 
@@ -1059,16 +1093,20 @@ the server half lives in `../TaskTrackerServer/PLAN.md`.
 - `Expanded` → list and detail coexisting; selecting changes the detail pane without a push.
 - Mutation-check: force one layout branch → the opposite-width test goes red.
 
-## CLI-4 — `feature-teams-domain`: member-admin port + vocabulary
+## CLI-4 — `feature-teams-domain`: member-admin port + vocabulary — DONE
 
-**Files**
-- `packages/feature-teams-domain/.../MemberAdminPort.kt` (**new**) — `members(status: MemberStatus)`, `createMember(email, password, role, position)`, `softDeleteMember(id)`, `reactivateMember(id)`.
-- `packages/feature-teams-domain/.../MemberRole.kt` (**new**) — `Admin`/`Member` with `wireValue`.
-- `packages/feature-teams-domain/.../MemberStatus.kt` (**new**) — `Active`/`Deleted` with `wireValue` + a total `fromWireValue` fallback.
-- `packages/feature-teams-domain/src/commonTest/...` — vocabulary round-trip tests.
+**Landed.** Naming corrected: the status type is `UserStatus`, not the `MemberStatus`
+this section named — and it is a *second* `UserStatus`, distinct from the settings enum
+of that name in `feature-settings-domain`.
+- `packages/feature-teams-domain/.../MemberAdminPort.kt` — `members(status: UserStatus)`, `createMember(email, password, role, position)`, `softDeleteMember(id)`, `reactivateMember(id): User`.
+- `packages/feature-teams-domain/.../MemberRole.kt` — `Admin`/`Member` with `wireValue`.
+- `packages/feature-teams-domain/.../UserStatus.kt` — `active`/`inactive`/`deleted` with `wireValue` and a total `fromWireValue` fallback.
+- `packages/feature-teams-domain/src/commonTest/.../MemberVocabularyTest.kt` — wire-value round-trips.
 
 **Acceptance / tests**
-- Every wire value round-trips; an unknown status maps to a safe default rather than throwing.
+- Every wire value round-trips; an unknown status resolves to a safe default rather than throwing.
+- Only `active` and `deleted` name a bucket the server serves. `inactive` is a member who
+  can still sign in and be managed, so it is *not* withheld from the live list.
 - Extends the read-only `TeamPort` seam its KDoc already names as "the backend member API".
 
 ## CLI-5 — `feature-teams-data`: HTTP member-admin remote
@@ -1115,25 +1153,45 @@ the server half lives in `../TaskTrackerServer/PLAN.md`.
 - Active vs Archived selection maps to `?status=`; the edit patch sends only changed fields + `version`.
 - Mutation-check: swap the `status` query value → the segment test goes red.
 
-## CLI-9 — `feature-projects-presentation`: Manage-projects screen
+## CLI-9 — `feature-projects-presentation`: Manage-projects screen — PARTIAL
 
-**Files**
-- `packages/feature-projects-presentation/.../AdminProjectsScreen.kt` (**new**) — `TTGlassSegmentedPicker` Active/Archived over `ProjectRow`; selecting a project routes to the existing `ProjectEditorScreen` (already in this module — no new cross-presentation edge).
-- `.../AdminProjectsModel.kt`, host/common tests reusing `FakeProjectRepository` style.
+**Landed:** the list. `packages/feature-projects-presentation/.../AdminProjectsScreen.kt`
+renders a `TTGlassSegmentedPicker` (Active/Archived) over the port's `projects(status)`,
+and reports a selection upward through `onProjectSelected`.
+
+**Not met — the selection leads nowhere.** The instruction above ("routes to the existing
+`ProjectEditorScreen`") was wrong as a plan, not merely unfinished: that screen writes
+through the local Room/sync path, and a project the admin is not a member of is absent
+from their store and refused by the sync push. Per **D5** the editor has to be
+port-backed, which is `CLI-12`.
 
 **Acceptance / tests**
-- Archived projects appear only under Archived; selecting opens the editor with that project; saving calls `updateProject`.
+- Archived projects appear only under Archived.
 - Mutation-check: hard-code the Active filter → the archived-selection test goes red.
+- Selecting a project opens an editor seeded from `project(id)` and saving calls
+  `updateProject(...)` — **deferred to `CLI-12`**, which is why this task stays partial.
 
-## CLI-10 — Desktop split screen vs mobile page
+## CLI-10 — Desktop split screen vs mobile page — NOT MET
 
-**Files**
-- `shared-ui/.../NavigationHost.kt` — wire `AdminMembers`/`AdminProjects` through `AdminPanes` on `Expanded`, pushed screens on `Compact`.
-- `shared-ui` host-split tests.
+**What landed:** the routes and the pane scaffolding (`AdminPanes.kt`, the `Expanded`
+`when` arms). **What did not:** the arrangements themselves, in two ways.
+
+1. **The projects detail pane draws the list.** `NavigationHost.kt` hands `pushedPane` to
+   the projects pane, and the pushed route is `AdminProjects(projectID)` — whose
+   destination ignores that id and renders the list. This is the same screen on both
+   sides, the exact mistake the Sprints arm's own comment records as fixed.
+2. **Binding the members port collapses the two-pane.** The arm branches on
+   `memberAdminPort == null`: the placeholder path gets `AdminTwoPanes`, while the real
+   path is replaced by one full-width `AdminMembersDestination` — which also ignores
+   `memberID`, so the member detail exists only as a placeholder (D6 removes it).
 
 **Acceptance / tests**
-- `Expanded`: tapping the Settings entry shows list + detail side by side. `Compact`: the entry pushes a full screen.
+- `Expanded`: tapping the Settings entry shows list + detail side by side, with the detail
+  pane showing a *detail*, never the list. `Compact`: the entry pushes a full screen.
 - Mutation-check: treat both widths as `Compact` → the split-screen test goes red.
+- Both remainder items are `CLI-13`. They survived review because the shell scenarios
+  bind no admin port (`CLI-14`), so this acceptance was never exercised against the real
+  destinations.
 
 ## CLI-11 — Tests, baseline, verification
 
@@ -1146,12 +1204,78 @@ the server half lives in `../TaskTrackerServer/PLAN.md`.
 
 ---
 
+## CLI-12 — Wire the admin project editor through `AdminProjectsPort`
+
+**Depends on** server `T8.9` (`GET /v1/admin/projects/{id}`): the route is verified on the
+server first, per the dual-engine ordering rule. Do not write this against an unverified
+stub.
+
+**Files**
+- `packages/feature-projects-presentation/.../AdminProjectEditor.kt` (**new**) — seeded
+  from `port.project(id)`. A `null` answer means "this project is not on the server", not
+  an error, which is what the port's KDoc already says.
+- `shared-ui/.../AdminProjectsDestination.kt` — stop ignoring `projectID`: a non-null id
+  renders the editor, a null one the list.
+- `packages/feature-projects-presentation/src/commonTest/...` — a fake port that records
+  both the seed read and the save.
+
+**Acceptance / tests**
+- Selecting a project reads `project(id)` and renders that project's fields; saving calls
+  `updateProject(project, version)` with the version the seed returned, so the optimistic
+  lock is carried rather than invented.
+- Mutation-check: ignore `projectID` again → the "selection opens the editor" test goes red.
+- A `null` seed offers no save and says the project is not on the server.
+
+## CLI-13 — Fix both admin pane arrangements; drop the vestigial `memberID`
+
+**Files**
+- `shared-ui/src/commonMain/.../NavigationHost.kt` — the projects `Expanded` arm draws the
+  list pane beside the **editor**, never `pushedPane` (which is the list again); the
+  members `Expanded` arm keeps `AdminTwoPanes` when the port is bound instead of
+  collapsing to one full-width screen.
+- `packages/routing/.../Routes.kt` + `Router.kt` — drop `memberID` from
+  `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` (**D6**). The
+  exhaustive `when` turns every stale call site into a compile error, which is the point.
+- `packages/routing/src/commonTest/.../RoutingTest.kt`; `shared-ui` host-split tests.
+
+**Acceptance / tests**
+- `Expanded` with a selected project: the panes hold the list and the editor, and no arm
+  draws the same screen twice.
+- `Expanded` with a bound members port: still two panes.
+- Mutation-check: force the members arm down the `memberAdminPort == null` path → the
+  bound-port pane test goes red.
+
+## CLI-14 — Bind the admin ports in host scenarios so the real destinations run
+
+**Why this is its own task.** Every admin shell scenario today runs with
+`memberAdminPort == null` and `adminProjectsPort == null`, so it asserts `AdminPanes`'
+placeholder tags — the only producer of `AdminMemberDetailTag`. The real destinations are
+never composed by the shell, which is exactly how `CLI-9` and `CLI-10` stayed green while
+unmet. A scenario that only ever runs the placeholder is not evidence about the screen.
+
+**Files**
+- `shared-ui/src/commonTest/.../TaskTrackerAppScenarios.kt` + `ShellScenarios.kt` — let
+  `setUpShell` accept the admin ports and bind a recording fake, following the existing
+  recording-port pattern in `feature-projects-presentation`'s tests.
+- `shared-ui/src/commonTest/...` — scenarios for both sections **with the port bound**.
+
+**Acceptance / tests**
+- With a bound members port and a selected member, the *real* screen is asserted, not a
+  placeholder tag; likewise for projects and the editor.
+- Mutation-check: revert `CLI-13`'s pane fix → these scenarios go red. That is the whole
+  point: today they cannot.
+
+---
+
 ## Open assumptions (correct me before ACK)
 
 1. Role vocabulary is **deliberately duplicated**: `UserRole` in `feature-auth-domain` (identity) and `MemberRole` in `feature-teams-domain` (member admin), following the existing duplicated-`preferredGreeting` precedent — rather than adding a `feature-settings-presentation → feature-auth/teams-domain` edge.
-2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation` (so `ProjectEditorScreen` is reusable with no new cross-presentation edge).
+2. Members UI lives in a **new `feature-teams-presentation`** module; projects UI stays in the existing `feature-projects-presentation`, so no new cross-presentation edge appears. **Revised by D5:** the admin project editor is a *new* port-backed screen in that same module rather than the existing `ProjectEditorScreen` — the "no new edge" half survives, the "reusable" half does not.
 3. Position choices for the add-member form come from the client's `UserPosition.all`; the server stores free text (matches server assumption 1).
-4. The admin members/projects screens are **online-only** (direct network, no Room/outbox), unlike the offline-first board/backlog surfaces.
+4. The admin members/projects screens are **online-only** (direct network, no Room/outbox), unlike the offline-first board/backlog surfaces. This is also *why* D5 holds: there is no local copy of a project the admin is not a member of, so the editor cannot be the local one.
+
+The server half of this plan is `../TaskTrackerServer/docs/PLAN.md`, Milestone 8
+(`T8.1`–`T8.9`). Its `T8.9` is the one open item and the prerequisite for `CLI-12`.
 
 ---
 
