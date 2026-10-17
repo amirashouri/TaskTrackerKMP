@@ -6,3 +6,6 @@ package com.tasktracker.sharedui
  * See the common declaration for why the Android host answers differently.
  */
 internal actual fun thisHostRasterisesText(): Boolean = true
+
+/** No-op: this host rasterises, so there is nothing to skip. */
+internal actual fun assumeHostRasterisesText() = Unit

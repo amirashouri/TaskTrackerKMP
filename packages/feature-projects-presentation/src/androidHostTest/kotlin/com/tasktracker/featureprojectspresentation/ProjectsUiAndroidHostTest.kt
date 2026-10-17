@@ -135,6 +135,9 @@ class ProjectsUiAndroidHostTest {
     fun everyLaneIsStillDrawn() = runComposeUiTest(block = BoardLaneScenarios.everyLaneIsStillDrawn)
 
     @Test
+    fun theMyTasksFilterButtonIsDisplayed() = runComposeUiTest(block = BoardLaneScenarios.theMyTasksFilterButtonIsDisplayed)
+
+    @Test
     fun aRunningSprintHidesEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.aRunningSprintHidesEveryLaneAdd)
 
     @Test

@@ -6,8 +6,10 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
@@ -319,7 +321,10 @@ object BacklogSectionScenarios {
         backlogShowing(backlog = backlog, onSelect = { opened += it })
 
         onNodeWithTag(BacklogPutOnBoardTag(backlog.first())).assertIsDisplayed()
-        onNodeWithTag(WorkItemBacklogRowTag(backlog.first())).performClick()
+        // The row's own OnClick action rather than a coordinate tap: the row sits in a lazy
+        // list and where its centre lands is geometry, while the wiring is the claim.
+        onNodeWithTag(WorkItemBacklogRowTag(backlog.first()))
+            .performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
 
         assertEquals(

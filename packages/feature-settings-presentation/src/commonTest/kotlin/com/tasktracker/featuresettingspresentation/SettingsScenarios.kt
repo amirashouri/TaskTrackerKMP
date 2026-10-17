@@ -37,7 +37,6 @@ import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
 import com.tasktracker.resources.settings_sync_waiting
-import com.tasktracker.resources.settings_user_details_section
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -227,20 +226,23 @@ object SettingsScenarios {
     }
 
     /**
-     * The User details section leads the Settings page: its heading, the identity row and the
-     * position picker, all read **on mount, without scrolling**.
+     * The User details section leads the Settings page: the identity row and the position
+     * picker, both read **on mount, without scrolling**.
      *
      * The missing scroll is the assertion. A LazyColumn drops items below its composition
      * window from the tree entirely, so these nodes exist on first frame only when the section
      * is at the top — filed anywhere past the fold the same assertions go red with "could not
      * find any node". `assertIsDisplayed`, not `assertExists`: existence alone would pass for a
      * section composed one screen down.
+     *
+     * There is deliberately no heading assertion: section titles were removed from Settings in
+     * `61fb776`, and the identity row is the section's first visible content. The row tags are
+     * the contract now; the old `settings_user_details_section` string is unused.
      */
     val theUserDetailsSectionIsOnThePage: suspend ComposeUiTest.() -> Unit = {
         screenShowing()
         onNodeWithTag(SettingsUserDetailsTag).assertIsDisplayed()
         onNodeWithTag(SettingsPositionRowTag).assertIsDisplayed()
-        onNodeWithText(getString(Res.string.settings_user_details_section)).assertIsDisplayed()
         // The position picker labels itself, which is the string the section ships with.
         onNodeWithText(getString(Res.string.settings_position_label)).assertIsDisplayed()
     }
@@ -296,17 +298,34 @@ object SettingsScenarios {
 
     /** The About row is present when there is a version and absent when there is not. */
     val theVersionRowHidesItselfWithNoVersion: suspend ComposeUiTest.() -> Unit = {
-        screenShowing(version = SettingsPreviewData.version)
+        // One composition whose version argument changes, rather than two `setContent` calls.
+        // The property under test is the row's *presence*, which is decided by a `?.let` at
+        // composition rather than by a null check at draw, so recomposing with the versionless
+        // value is the same measurement — and Android's `ComponentActivity` rejects a second
+        // `setContent` outright, which two calls made this scenario a host-specific failure.
+        var version by mutableStateOf(SettingsPreviewData.version)
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                )
+            }
+        }
         // 5: the User details section leads the list (index 0), pushing About to 5. The title
         // used to sit at 0 and the number was 6; it was 6 because of the title, not because
         // the list is long.
         onNodeWithTag(SettingsScreenTag).performScrollToIndex(5)
         onNodeWithTag(SettingsVersionRowTag).assertIsDisplayed()
 
-        // Remounted rather than re-composed with a new argument: `AppVersion.display` is a
-        // computed property, and the point of the scenario is the row's *presence*, which is
-        // decided by a `?.let` at composition rather than by a null check at draw.
-        screenShowing(version = SettingsPreviewData.versionless)
+        version = SettingsPreviewData.versionless
+        waitForIdle()
         onNodeWithTag(SettingsVersionRowTag).assertDoesNotExist()
     }
 

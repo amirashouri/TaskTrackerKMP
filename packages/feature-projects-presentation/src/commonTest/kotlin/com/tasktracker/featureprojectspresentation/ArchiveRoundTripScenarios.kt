@@ -1,9 +1,12 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.WorkItem
@@ -104,7 +107,11 @@ object ArchiveRoundTripScenarios {
         onNested(BoardFileAwayTag(busy)).performClick()
         assertNull(filedAway, "the card that is moving does not accept a second press")
 
-        onNested(BoardFileAwayTag(idle)).performClick()
+        // The button's own OnClick action rather than a coordinate tap: the lane row scrolls and
+        // the card's centre may be off a phone viewport, so where the click lands is geometry
+        // while the wiring is the claim.
+        onNested(BoardFileAwayTag(idle)).performScrollTo()
+        onNested(BoardFileAwayTag(idle)).performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(idle.id, filedAway, "and the rest of the board is still live")
     }
 

@@ -14,3 +14,12 @@ package com.tasktracker.featuresettingspresentation
  * run the assertion.
  */
 internal expect fun thisHostRasterisesText(): Boolean
+
+/**
+ * Records the current test as skipped on a host that cannot measure a frame honestly.
+ *
+ * An assumption rather than an early return: a returning test is recorded as a pass, and a pass
+ * for a host that measured nothing is the false green this whole split exists to prevent. The
+ * Android actual throws through `org.junit.Assume`, which the runner records as a skip.
+ */
+internal expect fun assumeHostRasterisesText()

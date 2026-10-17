@@ -334,10 +334,7 @@ class DateFieldTest {
      * anything about the labels.
      */
     private fun withComposedLabels(body: @Composable () -> Unit) {
-        if (!thisHostRasterisesText()) {
-            println("skipped: this host cannot compose, so no label can be resolved here")
-            return
-        }
+        assumeHostRasterisesText()
         runComposeUiTest {
             setContent { ttTheme(ThemeScheme.Light) { body() } }
             waitForIdle()

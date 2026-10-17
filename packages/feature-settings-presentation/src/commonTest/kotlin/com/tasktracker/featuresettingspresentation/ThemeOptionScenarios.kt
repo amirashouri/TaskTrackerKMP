@@ -14,9 +14,11 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
@@ -64,10 +66,10 @@ object ThemeOptionScenarios {
 
     /** The selected theme option is washed in accent; the others paint nothing at all. */
     val theSelectedSchemeOptionIsWashedWithAccent: suspend ComposeUiTest.() -> Unit = {
-        if (!thisHostRasterisesText()) {
-            println("skipped: the Android host rasterises differently from Skia, so the wash is not measured there")
-        } else {
-            setContent {
+        // A real skip, not a return: this test measures pixels, and a host that measured
+        // nothing must not be recorded as agreeing.
+        assumeHostRasterisesText()
+        setContent {
                 ttTheme(ThemeScheme.Dark) {
                     // Opaque paper, so the wash is read against a known backdrop instead of
                     // whatever the transparent area of a captured frame shows through to.
@@ -116,19 +118,19 @@ object ThemeOptionScenarios {
                     "against the $OptionBackdrop backdrop, but it has no wash and no border — " +
                     "anything above backdrop noise is the capsule border creeping back",
             )
-        }
     }
 
     /**
      * The second accent palette's caption shows whole by wrapping; it was clipped at one line.
      *
-     * "Classic Light" is 13 characters on a six-column row. The screen is drawn at a fixed
-     * 320dp width (and no host needs to be able to see more than that — the assertion is on
-     * layout bounds, which are read regardless of what is on screen), so the caption has to
-     * wrap. [AccentPalette.ClassicLight] and Music are the same font size, so the ratio of
-     * their text-box heights is a pure "how many lines" signal with no font or rasteriser
-     * dependency: two lines against one. A truncated caption collapses back to that one line
-     * and the ratio falls below the bar.
+     * "Navy Blue" is the longest title still shipped (9 characters) on a six-column row. The
+     * screen is drawn at a fixed 320dp width, so that caption has to wrap. [AccentPalette.NavyBlue]
+     * and Music are the same font size, so the ratio of their text-box heights is a pure "how
+     * many lines" signal with no font or rasteriser dependency: two lines against one. A
+     * truncated caption collapses back to that one line and the ratio falls below the bar.
+     *
+     * "Classic Light" used to be this test's long title; it was shortened to "C-Light", which
+     * is why the old matcher found no node at all rather than measuring a clipped caption.
      */
     val theLongAccentCaptionWrapsInsteadOfClipping: suspend ComposeUiTest.() -> Unit = {
         setContent {
@@ -143,12 +145,20 @@ object ThemeOptionScenarios {
                         onThemeChange = {},
                         onSyncNow = {},
                         onSignOut = {},
-                        accentPalette = AccentPalette.ClassicLight,
+                        accentPalette = AccentPalette.NavyBlue,
                         onAccentPaletteChange = {},
                     )
                 }
             }
         }
+        // The accent palette is the second section on the page, so on a 320dp-wide phone it
+        // starts below the fold — and a LazyColumn does not compose items that have not been
+        // scrolled into range, which is why this used to fail with "could not find any node"
+        // rather than measuring a wrapped caption. Scroll to the palette first; the claim is
+        // about wrapping, not about where the row initially sits.
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText("Navy Blue"))
+        waitForIdle()
+
         // The caption is read from the unmerged tree. `selectable` merges its descendants, so
         // text matched in the merged tree is the whole palette column (swatch + caption +
         // spacing); the unmerged text node is the caption and only the caption, whose height
@@ -156,15 +166,15 @@ object ThemeOptionScenarios {
         // every host, so it is the reference a two-line caption should clearly beat. Asserting
         // a ratio rather than an absolute height keeps the test independent of the theme's font
         // metrics.
-        val twoLineCaption = onNodeWithText("Classic Light", useUnmergedTree = true).getUnclippedBoundsInRoot().height.value
+        val twoLineCaption = onNodeWithText("Navy Blue", useUnmergedTree = true).getUnclippedBoundsInRoot().height.value
         val oneLineCaption = onNodeWithText("Music", useUnmergedTree = true).getUnclippedBoundsInRoot().height.value
         assertTrue(
             twoLineCaption > oneLineCaption * 1.4f,
-            "the 'Classic Light' caption measured ${twoLineCaption.roundToInt()}dp against " +
+            "the 'Navy Blue' caption measured ${twoLineCaption.roundToInt()}dp against " +
                 "'Music's single line at ${oneLineCaption.roundToInt()}dp — a wrapped caption " +
                 "is two lines and should beat one by a wide margin. A ratio near 1 means the " +
                 "caption was clipped back to one line (the defect: maxLines = 1 ended the " +
-                "second palette's name in an ellipsis)",
+                "longest palette's name in an ellipsis)",
         )
     }
 

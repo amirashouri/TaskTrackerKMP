@@ -377,10 +377,7 @@ class DateFieldInteractionTest {
         // compared against each other on a host that cannot compose a popup: the density test
         // then passed **vacuously** (0 == 0) and the short-window test failed on 0px. A skip
         // that is allowed to reach an assertion is not a skip.
-        if (!thisHostRasterisesText()) {
-            println("skipped: this host cannot compose a popup, so the calendar cannot be measured")
-            return
-        }
+        assumeHostRasterisesText()
         val atOne = probePopup(densityScale = 1f)
         val atOneAndAQuarter = probePopup(densityScale = 1.25f)
 
@@ -417,10 +414,7 @@ class DateFieldInteractionTest {
      */
     @Test
     fun `in a window shorter than the calendar the card is capped and the grid scrolls`() {
-        if (!thisHostRasterisesText()) {
-            println("skipped: this host cannot compose a popup, so the calendar cannot be measured")
-            return
-        }
+        assumeHostRasterisesText()
         val roomy = probePopup(densityScale = 1f)
         // 1.75, and the number matters. The test window is 768px, so this is about 439dp of
         // height for a card that wants 419dp — **between 90% and 100% of the window**, which is
@@ -521,10 +515,7 @@ class DateFieldInteractionTest {
         picked: MutableList<LocalDate> = mutableListOf(),
         body: (ComposeUiTest) -> Unit,
     ) {
-        if (!thisHostRasterisesText()) {
-            println("skipped: this host cannot compose a popup, so the calendar cannot be operated")
-            return
-        }
+        assumeHostRasterisesText()
         runComposeUiTest {
             setContent {
                 ttTheme(ThemeScheme.Light) {

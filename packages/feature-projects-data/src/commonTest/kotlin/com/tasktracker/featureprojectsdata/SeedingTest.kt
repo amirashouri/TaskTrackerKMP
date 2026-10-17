@@ -79,7 +79,9 @@ class SeedingTest {
             // Sorted, because the read order is not the seed order: every seeded item shares
             // a rank on purpose, so the tie-break chain decides — and that is exactly the chain
             // this fixture exists to exercise.
-            val keys = harness.repository.workItems(project.id).map { it.key.rawValue }.sorted()
+            val keys = harness.repository.workItems(project.id)
+                .map { it.key.rawValue }
+                .sortedBy { it.substringAfterLast('-').toInt() }
             assertEquals(
                 keys.indices.map { "${project.keyPrefix}-${it + 1}" },
                 keys,
@@ -96,17 +98,24 @@ class SeedingTest {
         val harness = Harness()
         harness.repository.seedSampleDataIfNeeded()
         val project = harness.repository.projects(includeArchived = true).first { it.keyPrefix == "APO" }
+        // The fixture's own counter, not a hardcoded "8": the seeded board is allowed to grow,
+        // and a test that names the next key cannot keep up with it.
+        val expectedNumber = project.nextItemNumber
 
         val item = harness.repository.createWorkItem(
             project.id, "Mine", "", WorkItemStatus.Todo,
             Priority.Medium, null, null, null, null, Moments.later,
         )
 
-        assertEquals("APO-9", item.key.rawValue)
+        assertEquals("APO-$expectedNumber", item.key.rawValue)
         // Compared as numbers rather than as strings, because "APO-10" < "APO-9" — and a board
         // with ten cards is the first place that would show.
         val numbers = harness.repository.workItems(project.id).map { it.key.rawValue.substringAfterLast('-').toInt() }
-        assertEquals((1..9).toList(), numbers.sorted(), "the keys are a gapless run from one")
+        assertEquals(
+            (1..expectedNumber).toList(),
+            numbers.sorted(),
+            "the keys are a gapless run from one",
+        )
     }
 
     @Test
@@ -279,6 +288,9 @@ class SeedingTest {
         // Keyed rather than positional, for the reason in the numbering test: read order is
         // the tie-break chain's answer, not the order the fixture lists them in.
         assertEquals(
+            // Pinned deliberately: the sample board is documentation, so growing it is a
+            // change to the docs and should require a deliberate edit here. The eight original
+            // cards keep their columns; the ten backlog cards added later are all Todo.
             listOf(
                 "APO-1" to WorkItemStatus.Done,
                 "APO-2" to WorkItemStatus.Done,
@@ -288,7 +300,7 @@ class SeedingTest {
                 "APO-6" to WorkItemStatus.Backlog,
                 "APO-7" to WorkItemStatus.Backlog,
                 "APO-8" to WorkItemStatus.Backlog,
-            ),
+            ) + (9..18).map { "APO-$it" to WorkItemStatus.Todo },
             harness.repository.workItems(project.id)
                 .map { it.key.rawValue to it.status }
                 .sortedBy { (key, _) -> key.substringAfterLast('-').toInt() },
