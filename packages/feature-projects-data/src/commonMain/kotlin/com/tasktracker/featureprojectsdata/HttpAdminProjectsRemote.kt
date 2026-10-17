@@ -4,13 +4,16 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.roundedToSecond
+import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
-import com.tasktracker.featureprojectsdomain.Project
+import com.tasktracker.domain.Project
 import com.tasktracker.network.Endpoint
 import com.tasktracker.network.HttpClient
 import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpQueryItem
+import com.tasktracker.network.HttpRequest
 import com.tasktracker.network.jsonBody
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -70,9 +73,9 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
      * strings here, not epoch millis, because the admin API sits on the sync entity contract
      * rather than the older user-object contract.
      *
-     * `version` is declared because the server sends it, and it is the value the caller saves
-     * against next time. It is then dropped when mapping into the domain [Project], which has
-     * no such property — the same thing `MemberResponse` does with `created_at`.
+     * `version` is the compare-and-swap the caller saves against next time; it is not part of
+     * [Project], so [toAdminProject] pairs the two rather than dropping it — the same thing
+     * `MemberResponse` does with `created_at`, except the caller needs this one back.
      */
     @Serializable
     private data class ProjectResponseBody(
@@ -100,6 +103,10 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         createdAt = createdAtInstant(),
         updatedAt = updatedAtInstant(),
     )
+
+    /** The row, with the version token the caller echoes back on the next edit. */
+    private fun ProjectResponseBody.toAdminProject(): AdminProject =
+        AdminProject(project = toProject(), version = version)
 
     /** An id the API cannot parse is a decoding failure, not a `null` project. */
     private fun ProjectResponseBody.projectID(): ProjectID =
@@ -132,7 +139,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val version: String,
     )
 
-    private fun ProjectRequestBody.create(
+    private fun projectRequestBody(
         project: Project,
         version: String,
     ): ProjectRequestBody = ProjectRequestBody(
@@ -156,43 +163,44 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
      * a project back to a client that might otherwise hold a reference and watch it change.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun projects(status: ProjectAdminStatus): List<Project> = client.send(
+    suspend fun projects(status: ProjectAdminStatus): List<AdminProject> = client.send(
         ListProjectsEndpoint(status).request,
         decoding = ListSerializer(ProjectResponseBody.serializer()),
-    ).map { it.toProject() }
+    ).map { it.toAdminProject() }
 
     /**
-     * One project, by id.
+     * One project, by id, or `null` when the server does not have it.
      *
-     * The edit screen is seeded from this, so a `404` is surfaced rather than silently turned
-     * into an empty project the caller would then edit against nothing.
+     * The transport maps `404` to [AppError.Unknown], which is the only signal this layer gets:
+     * the status table has no dedicated not-found error, so a 404 is caught here and answered
+     * as absence while every other failure propagates. If that table ever grows a not-found
+     * case, this catch should narrow to it — anything else that currently arrives as `Unknown`
+     * (a `405`, a proxy's `410`) is being read as "gone" today.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun project(id: ProjectID): Project? {
-        return try {
-            client.send(
-                HttpRequest(
-                    method = HttpMethod.Get,
-                    path = "/v1/admin/projects/${id.stringValue}",
-                    requiresAuth = true,
-                ),
-                decoding = ProjectResponseBody.serializer(),
-            ).toProject()
-        } catch (e: AppError) {
-            throw e
-        }
+    suspend fun project(id: ProjectID): AdminProject? = try {
+        client.send(
+            HttpRequest(
+                method = HttpMethod.Get,
+                path = "/v1/admin/projects/${id.stringValue}",
+                requiresAuth = true,
+            ),
+            decoding = ProjectResponseBody.serializer(),
+        ).toAdminProject()
+    } catch (_: AppError.Unknown) {
+        null
     }
 
     /**
-     * Applies an edit to a project and returns the stored version.
+     * Applies an edit to a project and returns the stored row with its new version.
      *
      * The response carries the server's `version` and `updatedAt`, which are what the caller
      * saves against next time.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun updateProject(project: Project, version: String): Project =
+    suspend fun updateProject(project: Project, version: String): AdminProject =
         client.send(
-            UpdateProjectEndpoint(project.id, ProjectRequestBody.create(project, version)).request,
+            UpdateProjectEndpoint(project.id, projectRequestBody(project, version)).request,
             decoding = ProjectResponseBody.serializer(),
-        ).toProject()
+        ).toAdminProject()
 }

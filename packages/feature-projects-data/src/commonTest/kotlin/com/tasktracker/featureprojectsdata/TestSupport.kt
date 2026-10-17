@@ -1,5 +1,6 @@
 package com.tasktracker.featureprojectsdata
 
+import com.tasktracker.core.AppError
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -21,12 +22,16 @@ import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.network.HttpClient
+import com.tasktracker.network.HttpRequest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.serialization.KSerializer
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
@@ -282,3 +287,78 @@ internal fun aSprint(
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
+
+/**
+ * Captures the requests a data-layer remote builds and replays scripted replies.
+ *
+ * The same double `feature-teams-data`'s `RecordingHttpClient` is, and here for the same
+ * reason: the admin projects surface points the real client at a live host, so without a stub
+ * the one type that builds its requests would have no coverage at all. Requests are kept rather
+ * than merely answered so a test can assert the wire shape — method, path, the `status` query,
+ * and `requiresAuth`, which is invisible in the response and decides whether a bearer token is
+ * attached in the first place.
+ *
+ * Replies are a queue consumed in call order, with the last one repeating, so one test can
+ * drive several calls whose bodies differ (a list is an array, an edit is an object). A body is
+ * not the only scripted reply: the real client answers a `404` by *throwing*
+ * [AppError.Unknown] rather than by returning bytes, so [respondWithFailure] scripts that too —
+ * a double that could only answer with a body could not exercise the port's "the project is
+ * gone" path at all.
+ *
+ * The decode path mirrors the real client's: an unknown key is an [AppError.Decoding] because
+ * `JSONCoding` leaves `ignoreUnknownKeys` off, which is the behaviour a DTO's `@SerialName`
+ * list exists to satisfy.
+ */
+internal class RecordingHttpClient : HttpClient {
+
+    val requests: MutableList<HttpRequest> = mutableListOf()
+
+    private val scripted: MutableList<Reply> = mutableListOf()
+
+    /** Enqueues the next reply body, consumed in call order. */
+    fun respondWith(body: ByteArray) {
+        scripted += Reply.Body(body)
+    }
+
+    fun respondWith(json: String) {
+        respondWith(json.encodeToByteArray())
+    }
+
+    /** Enqueues the next failure, for the answers the real client gives by throwing. */
+    fun respondWithFailure(error: AppError) {
+        scripted += Reply.Failure(error)
+    }
+
+    private fun nextReply(): Reply =
+        if (scripted.size > 1) scripted.removeFirst() else scripted.firstOrNull() ?: Reply.Body(ByteArray(0))
+
+    private fun nextBody(): ByteArray = when (val reply = nextReply()) {
+        is Reply.Body -> reply.body
+        is Reply.Failure -> throw reply.error
+    }
+
+    override suspend fun send(request: HttpRequest): ByteArray {
+        requests += request
+        return nextBody()
+    }
+
+    override suspend fun <T> send(request: HttpRequest, decoding: KSerializer<T>): T {
+        val payload = send(request)
+        return try {
+            JSONCoding.json.decodeFromString(decoding, payload.decodeToString())
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            throw AppError.Decoding(error.message ?: error::class.simpleName ?: "unreadable body")
+        }
+    }
+
+    override suspend fun <T> send(request: HttpRequest, encoding: KSerializer<T>, body: T) {
+        send(request)
+    }
+
+    private sealed interface Reply {
+        class Body(val body: ByteArray) : Reply
+        class Failure(val error: AppError) : Reply
+    }
+}

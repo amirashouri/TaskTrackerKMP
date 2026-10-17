@@ -557,6 +557,8 @@
     <!-- The admin projects screen, reached from the same admin-only Settings row as members. -->
     <string name="admin_projects_title">Projects</string>
     <string name="admin_project_scope">Show</string>
+    <string name="admin_projects_segment_active">Active</string>
+    <string name="admin_projects_segment_archived">Archived</string>
     <string name="admin_projects_loading">Loading projects…</string>
     <string name="admin_projects_empty">No %1$s projects.</string>
 

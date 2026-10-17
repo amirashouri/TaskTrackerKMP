@@ -23,9 +23,12 @@ import com.tasktracker.featureauthdata.SessionStateBus
 import com.tasktracker.featureauthdata.TokenVault
 import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
+import com.tasktracker.featureprojectsdata.AdminProjectsRepository
+import com.tasktracker.featureprojectsdata.HttpAdminProjectsRemote
 import com.tasktracker.featureprojectsdata.LocalDataSyncSink
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
@@ -417,6 +420,33 @@ object AppGraph {
                 database = resolver.resolve(TaskTrackerDatabase::class),
                 changeBus = resolver.resolve(ProjectChangeBus::class),
             )
+        }
+
+        // The admin half of the projects feature: the live server view of every project, and
+        // the edit path that reaches the change feed.
+        //
+        // Registered only when a backend is bound, and with the *sync* client rather than
+        // `resolve(HttpClient::class)`: there is no `HttpClient` registration in this graph —
+        // `registerAuth` and `registerSync` build one from `platforms.httpClient` — so the
+        // member-admin pair's `resolve(HttpClient::class)` finds nothing and is swallowed by
+        // the shell's `getOrNull`, leaving its screen on the placeholder. That is a defect in
+        // this graph, not a pattern to copy.
+        //
+        // The bearer token is the point of the interceptor list: an admin API call is an
+        // authenticated one, and a client without `AuthInterceptor` would reach the server
+        // anonymous. A demo graph has no projects API to administer, so it binds no port and
+        // the shell renders the placeholder — the `null` the destination documents.
+        platforms.apiBaseUrl?.let { url ->
+            app<AdminProjectsPort> { resolver ->
+                AdminProjectsRepository(
+                    remote = HttpAdminProjectsRemote(
+                        client = platforms.httpClient(
+                            url,
+                            listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                        ),
+                    ),
+                )
+            }
         }
     }
 

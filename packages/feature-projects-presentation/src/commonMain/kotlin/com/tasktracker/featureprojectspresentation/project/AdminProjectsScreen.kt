@@ -15,20 +15,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
-import com.tasktracker.core.randomProjectID
-import com.tasktracker.core.randomUserID
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
-import com.tasktracker.featureprojectsdomain.Project
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.admin_projects_empty
+import com.tasktracker.resources.admin_projects_loading
+import com.tasktracker.resources.admin_projects_segment_active
+import com.tasktracker.resources.admin_projects_segment_archived
 import org.jetbrains.compose.resources.stringResource
-import kotlin.time.Instant
 
 @Composable
 fun AdminProjectsScreen(
@@ -37,7 +38,7 @@ fun AdminProjectsScreen(
     modifier: Modifier = Modifier,
 ) {
     var status by remember { mutableStateOf(ProjectAdminStatus.Active) }
-    var projects by remember { mutableStateOf<List<Project>>(emptyList()) }
+    var projects by remember { mutableStateOf<List<AdminProject>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -56,12 +57,18 @@ fun AdminProjectsScreen(
 
     Column(modifier = modifier.fillMaxSize().padding(ttSpacing.lg)) {
         TTGlassSegmentedPicker(
-            selected = status,
             options = ProjectAdminStatus.entries,
-            label = stringResource(Res.string.admin_project_scope),
-        ) { next ->
-            status = next
-        }
+            selection = status,
+            onSelect = { next -> status = next },
+            title = { option ->
+                when (option) {
+                    ProjectAdminStatus.Active ->
+                        stringResource(Res.string.admin_projects_segment_active)
+                    ProjectAdminStatus.Archived ->
+                        stringResource(Res.string.admin_projects_segment_archived)
+                }
+            },
+        )
 
         when {
             isLoading -> {
@@ -82,7 +89,7 @@ fun AdminProjectsScreen(
             }
             projects.isEmpty() -> {
                 ttText(
-                    text = stringResource(Res.string.admin_projects_empty, status.name.lowercase()),
+                    text = stringResource(Res.string.admin_projects_empty, status.wireValue),
                     style = ttTypography.body,
                     color = ttLabel(),
                     modifier = Modifier.padding(ttSpacing.xl),
@@ -95,69 +102,17 @@ fun AdminProjectsScreen(
                 ) {
                     items(
                         items = projects,
-                        key = { it.id.stringValue },
-                    ) { project ->
+                        key = { adminProject -> adminProject.project.id.stringValue },
+                    ) { adminProject ->
                         ProjectRowView(
-                            project = ProjectSummary(project, itemCount = 0),
-                            onOpen = { onProjectSelected(project.id) },
+                            project = ProjectSummary(adminProject.project, itemCount = 0),
+                            onOpen = { onProjectSelected(adminProject.project.id) },
                             onRemove = { /* admin project deletion is not in scope for this screen */ },
-                            onEdit = { onProjectSelected(project.id) },
+                            onEdit = { onProjectSelected(adminProject.project.id) },
                         )
                     }
                 }
             }
         }
-    }
-}
-
-/**
- * A fake admin-projects port for host tests that needs one, modelled on the member-admin test
- * doubles: it records the calls a test can assert on and hands back whatever the test seeded.
- */
-class RecordingAdminProjectsPort(
-    private val byStatus: Map<ProjectAdminStatus, List<Project>> = emptyMap(),
-    private val projectByID: Map<ProjectID, Project> = emptyMap(),
-    private val updateResult: ((Project) -> Project)? = null,
-) : AdminProjectsPort {
-    val projectsCalls = mutableListOf<ProjectAdminStatus>()
-    val projectCalls = mutableListOf<ProjectID>()
-    val updateCalls = mutableListOf<Project>()
-
-    override suspend fun projects(status: ProjectAdminStatus): List<Project> {
-        projectsCalls += status
-        return byStatus[status] ?: emptyList()
-    }
-
-    override suspend fun project(id: ProjectID): Project? {
-        projectCalls += id
-        return projectByID[id]
-    }
-
-    override suspend fun updateProject(project: Project): Project {
-        updateCalls += project
-        return updateResult?.invoke(project) ?: project
-    }
-
-    companion object {
-        fun singleActiveProject(name: String = "Demo", isArchived: Boolean = false): RecordingAdminProjectsPort {
-            val id = randomProjectID()
-            val project = Project(
-                id = id,
-                keyPrefix = "DM",
-                name = name,
-                details = "",
-                memberIDs = listOf(com.tasktracker.core.randomUserID()),
-                isArchived = isArchived,
-                nextItemNumber = 1,
-                createdAt = createdAt,
-                updatedAt = createdAt,
-            )
-            return RecordingAdminProjectsPort(
-                byStatus = mapOf(ProjectAdminStatus.Active to listOf(project)),
-                projectByID = mapOf(id to project),
-            )
-        }
-
-        private val createdAt = Instant.fromEpochSeconds(1_700_000_000)
     }
 }

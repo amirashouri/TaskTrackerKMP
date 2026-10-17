@@ -30,6 +30,7 @@ import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -152,6 +153,7 @@ fun RootScreen(
                 resolver.getOrNull(TeamPort::class),
                 resolver.getOrNull(MemberAdminPort::class),
                 resolver.getOrNull(FilePicker::class),
+                resolver.getOrNull(AdminProjectsPort::class),
             )
         }
     }

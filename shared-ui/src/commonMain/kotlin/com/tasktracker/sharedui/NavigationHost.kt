@@ -76,6 +76,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
@@ -371,6 +372,7 @@ fun NavigationHost(
                         themeScheme = themeScheme,
                         scope = scope,
                         memberAdminPort = memberAdminPort,
+                        adminProjectsPort = adminProjectsPort,
                     )
                 }
                 // The detail pane's own empty state, a value for the same reason `tabRoot` and
@@ -472,12 +474,14 @@ fun NavigationHost(
                             listPane = adminProjectsListPane,
                             detailPane = if (backgroundPushed.projectID == null) {
                                 noAdminSelected
+                            } else if (adminProjectsPort == null) {
+                                // A lambda, not the call itself: both branches of a `detailPane`
+                                // must be panes, and `AdminProjectsPlaceholder(...)` is a `Unit`
+                                // — which widened this `if` to `Any` and failed to type-check
+                                // against the `@Composable () -> Unit` the pane slot wants.
+                                { AdminProjectsPlaceholder(projectID = backgroundPushed.projectID) }
                             } else {
-                                if (adminProjectsPort == null) {
-                                    AdminProjectsPlaceholder(projectID = backgroundPushed.projectID)
-                                } else {
-                                    pushedPane
-                                }
+                                pushedPane
                             },
                         )
 
@@ -695,6 +699,7 @@ private fun PushedRoute(
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
     memberAdminPort: MemberAdminPort?,
+    adminProjectsPort: AdminProjectsPort?,
 ) {
     when (route) {
         // The Board as a destination in its own right, reachable through a deep link and
@@ -788,13 +793,13 @@ private fun PushedRoute(
         }
 
         is AppRoute.AdminProjects ->
-            if (environment.adminProjectsPort == null) {
+            if (adminProjectsPort == null) {
                 AdminProjectsPlaceholder(projectID = route.projectID)
             } else {
                 AdminProjectsDestination(
                     projectID = route.projectID,
                     router = router,
-                    adminProjectsPort = environment.adminProjectsPort,
+                    adminProjectsPort = adminProjectsPort,
                     scope = scope,
                 )
             }
