@@ -2,7 +2,24 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
+import com.tasktracker.domain.Project
 import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * One project as the admin API hands it back: the entity, plus the compare-and-swap token
+ * the next save has to carry.
+ *
+ * The version is deliberately not a field on [Project]. It is not project state — the sync
+ * side keeps the same token in the store (`serverVersion`) rather than on the entity, and
+ * an entity carrying its own wire revision would have to be written on every read. Pairing
+ * the two here is what lets an edit send back the version it was seeded from, so the server
+ * answers `409` instead of silently overwriting whoever saved first.
+ */
+data class AdminProject(
+    val project: Project,
+    /** The `version` the server returned with this row; echoed back on the next edit. */
+    val version: String,
+)
 
 /**
  * The project administration surface: every project on the server, in the active or
@@ -31,16 +48,18 @@ interface AdminProjectsPort {
      * the wrong set.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun projects(status: ProjectAdminStatus): List<Project>
+    suspend fun projects(status: ProjectAdminStatus): List<AdminProject>
 
     /**
      * One project, by id.
      *
      * The edit screen is seeded from this: tapping a row in the admin list opens the editor
-     * with the project this returns.
+     * with the project this returns. `null` means the server no longer has that project, and
+     * is deliberately not the same answer as a failed call — the screen shows "gone" for one
+     * and a retry for the other.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun project(id: ProjectID): Project?
+    suspend fun project(id: ProjectID): AdminProject?
 
     /**
      * Applies an edit to a project the way the sync path does: the row and its change-feed
@@ -48,14 +67,16 @@ interface AdminProjectsPort {
      * as they would one their own client pushed.
      *
      * [project] is the whole project as the client holds it. `id` and `createdAt` are taken
-     * from the stored row; `version` is the compare-and-swap the caller read the project
-     * against, and omitting it is last-write-wins, exactly as in a push.
+     * from the stored row; [version] is the compare-and-swap the caller read the project
+     * against — the token from the [AdminProject] it was seeded with, or the one the previous
+     * save returned. An empty [version] is an unconditional overwrite, which is what the
+     * server does with a push that carries none.
      *
-     * Returns the stored project, carrying the new `version` the caller saves against next
+     * Returns the stored project, carrying the new version the caller saves against next
      * time.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun updateProject(project: Project): Project
+    suspend fun updateProject(project: Project, version: String): AdminProject
 }
 
 /**

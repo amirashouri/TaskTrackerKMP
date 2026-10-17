@@ -22,6 +22,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -72,6 +73,19 @@ class ProjectEnvironment(
      * platform host; a test graph supplies a fake.
      */
     val filePicker: FilePicker? = null,
+    /**
+     * The project administration port, or `null` when the graph supplied none.
+     *
+     * Nullable for the same reason [memberAdminPort] is: the admin section is online-only, so
+     * a demo graph with no backend binds nothing here and the shell renders its placeholder.
+     * Dimming an offline project list would be the wrong fallback — an administrator editing a
+     * project the server never saw is an edit that did not happen.
+     *
+     * Last in the list because `RootScreen` builds this positionally; a field inserted among
+     * the others would silently hand [filePicker]'s slot to a new port and type-check only
+     * because both are nullable.
+     */
+    val adminProjectsPort: AdminProjectsPort? = null,
 )
 
 /**

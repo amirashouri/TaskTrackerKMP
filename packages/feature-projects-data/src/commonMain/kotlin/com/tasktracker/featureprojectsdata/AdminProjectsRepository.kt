@@ -2,8 +2,9 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
+import com.tasktracker.domain.Project
+import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
-import com.tasktracker.featureprojectsdomain.Project
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -35,20 +36,17 @@ class AdminProjectsRepository(
 ) : AdminProjectsPort {
 
     @Throws(AppError::class, CancellationException::class)
-    override suspend fun projects(status: ProjectAdminStatus): List<Project> =
+    override suspend fun projects(status: ProjectAdminStatus): List<AdminProject> =
         remote.projects(status)
 
     @Throws(AppError::class, CancellationException::class)
-    override suspend fun project(id: ProjectID): Project? =
+    override suspend fun project(id: ProjectID): AdminProject? =
         remote.project(id)
 
     @Throws(AppError::class, CancellationException::class)
-    override suspend fun updateProject(project: Project): Project {
-        // The edit screen is seeded with the project it is editing, which is where `version`
-        // comes from. A project this build does not carry a version for is one it did not read
-        // from the server, and sending it back without one is last-write-wins on purpose — the
-        // server treats an absent version as unconditional overwrite, exactly as a push does.
-        val version = project.version.takeIf { it.isNotBlank() } ?: ""
-        return remote.updateProject(project, version)
-    }
+    override suspend fun updateProject(project: Project, version: String): AdminProject =
+        // The version is forwarded verbatim rather than defaulted away: a blank one is the
+        // caller saying "overwrite whatever is there", which is exactly what the server does
+        // with a push that carries none.
+        remote.updateProject(project, version)
 }
