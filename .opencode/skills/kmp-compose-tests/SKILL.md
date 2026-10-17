@@ -16,17 +16,22 @@ most of the difficulty.
 ## The three hosts
 
 ```bash
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew jvmTest iosSimulatorArm64Test          # both green
-./gradlew check                                  # adds the red Android host
+scripts/check.sh                                 # fast: JVM + graph + baseline
+scripts/check.sh full                            # JVM + iOS + Android
 ```
+
+The script exports the JDK and runs Gradle with `--continue`. A failure is a gate failure
+only when it is not named in `test-known-failures.json`; the generated totals live in
+`test-baseline.json`. `docs/TESTING.md` is the authoritative policy, and
+`docs/TEST-HARNESS-PLAN.md` is the phased cleanup that empties the allowlist.
 
 `jvmTest` is the fast loop (seconds, no simulator). `iosSimulatorArm64Test` is slower but is
 the only host that catches iOS-specific rendering behaviour, which is not a theoretical
 concern — see the next section.
 
-`testAndroidHostTest` is red with 30 failures of 1116. Do not fix it incidentally and do not
-report it as your regression. Two distinct causes remain:
+`testAndroidHostTest` has a standing allowlist. Do not fix it incidentally and do not
+report it as your regression. The current causes are named per test in
+`test-known-failures.json`; the two structural ones are:
 
 1. **Five `:composition-root` assertions need a `Context`.** They resolve
    `TaskTrackerDatabase`, and `inMemoryDatabaseBuilder` needs a `Context` that only a

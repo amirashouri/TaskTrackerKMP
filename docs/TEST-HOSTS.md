@@ -1,5 +1,10 @@
 # Test Hosts — Pre-Existing Failures & Known Gaps
 
+> **Historical during the harness cleanup.** The authoritative policy is
+> [`docs/TESTING.md`](TESTING.md); the current allowlist is `test-known-failures.json`.
+> This catalog is kept as measurement lore and is being folded into `docs/DECISIONS.md`
+> by Phase 4 of [`docs/TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md).
+
 Reference document, not working instructions. Read this when a test fails and you need to
 know whether it was already failing. For the rules, see `AGENTS.md`.
 

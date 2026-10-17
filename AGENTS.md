@@ -63,24 +63,24 @@ applies.
 ## The command that decides whether you are done
 
 ```bash
-scripts/check.sh
+scripts/check.sh          # fast: JVM + graph + baseline + summary
+scripts/check.sh full     # all three hosts; required for UI / expect-actual work
 ```
 
-That script exports the JDK and runs the five-task Gradle line. Scopes and details: `Project.md`.
-
-`./gradlew check` adds `testAndroidHostTest` and `:androidApp:lintDebug`. Both are **red for
-documented, pre-existing reasons** — see `docs/TEST-HOSTS.md`. Do not report them as regressions.
+The script exports the JDK, runs Gradle with `--continue`, and treats only failures named in
+`test-known-failures.json` as acceptable. Counts and identities live in `test-baseline.json`.
+Policy: `docs/TESTING.md`; rollout: `docs/TEST-HARNESS-PLAN.md`.
 
 ## Test hosts (summary)
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | 12 pre-existing failures (see `docs/TEST-HOSTS.md`) |
-| iOS | `iosSimulatorArm64Test` | same 12 |
-| Android | `testAndroidHostTest` | 34 pre-existing Robolectric failures (see `docs/TEST-HOSTS.md`) |
+| JVM | `jvmTest` | fast gate; known failures named in `test-known-failures.json` |
+| iOS | `iosSimulatorArm64Test` | required for rendering / expect-actual; same named allowlist |
+| Android | `testAndroidHostTest` | Robolectric; same named allowlist |
 
-Full failure catalog, host-specific gotchas, and the `thisHostRasterisesText()` rasterisation
-skip: **`docs/TEST-HOSTS.md`**. Read it when a test fails, not before every task.
+Host-specific gotchas and the pixel-skip contract: **`docs/TESTING.md`**. Read it when a test
+fails, not before every task.
 
 ## When a UI change needs a rendered-pixel test
 Default to a structural assertion. Render pixels only when the property does not survive
