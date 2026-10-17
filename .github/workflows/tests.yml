@@ -21,7 +21,17 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu image already ships a complete Android SDK at
+      # /usr/local/lib/android/sdk with ANDROID_HOME set. `android-actions/setup-android@v3`
+      # re-downloads cmdline-tools and then runs `sdkmanager --licenses`, whose "(y/N)?"
+      # prompt it fails to answer on this image, exiting the job before Gradle runs. Accept
+      # the licences directly instead; AGP then auto-downloads the compileSdk platform.
+      - name: Accept the Android SDK licences
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -51,7 +61,17 @@ jobs:
           distribution: temurin
           java-version: '25'
 
-      - uses: android-actions/setup-android@v3
+      # The ubuntu image already ships a complete Android SDK at
+      # /usr/local/lib/android/sdk with ANDROID_HOME set. `android-actions/setup-android@v3`
+      # re-downloads cmdline-tools and then runs `sdkmanager --licenses`, whose "(y/N)?"
+      # prompt it fails to answer on this image, exiting the job before Gradle runs. Accept
+      # the licences directly instead; AGP then auto-downloads the compileSdk platform.
+      - name: Accept the Android SDK licences
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -88,7 +108,7 @@ jobs:
 
       - name: Boot a simulator
         run: |
-          DEVICE=$(xcrun simctl list devices available | grep -m1 -E 'iPhone' | sed -E 's/^ +//; s/ \\(.*$//')
+          DEVICE=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ { gsub(/^[ \t]+|[ \t]+$/, "", $1); print $1; exit }')
           echo "booting: $DEVICE"
           xcrun simctl boot "$DEVICE" || true
 
