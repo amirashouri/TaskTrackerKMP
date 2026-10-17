@@ -114,6 +114,18 @@ class MemberAdminModel(private val port: MemberAdminPort) {
     var createFailure: AppError? by mutableStateOf(null)
         private set
 
+    /**
+     * How many creates have finished successfully.
+     *
+     * The wide window keeps the form in its pane for as long as the section is open, so a
+     * successful create cannot empty the fields the way the phone's form is emptied — by leaving
+     * the composition. The pane keys the form on this count instead, which starts the next create
+     * from an empty form rather than from the account just made, where a second tap on Create
+     * would be a second account for one address.
+     */
+    var completedCreates: Int by mutableStateOf(0)
+        private set
+
     private var observation: Job? = null
 
     /**
@@ -220,8 +232,10 @@ class MemberAdminModel(private val port: MemberAdminPort) {
      * Creates an account and, on success, appends it if it belongs in the bucket on screen.
      *
      * Returns whether the call succeeded, so the caller can close the form on `true` without
-     * re-reading [createFailure]. A failure leaves the form open with [createFailure] set —
-     * the fields keep their values, so the admin corrects a typo rather than retyping the form.
+     * re-reading [createFailure]. A success is also counted in [completedCreates], which is what
+     * gives a form that is never torn down — the wide window's pane — empty fields again. A
+     * failure leaves the form open with [createFailure] set — the fields keep their values, so
+     * the admin corrects a typo rather than retyping the form.
      * [MemberRole] and the position are the account's own, not this screen's.
      */
     suspend fun createMember(
@@ -235,6 +249,7 @@ class MemberAdminModel(private val port: MemberAdminPort) {
         return try {
             val created = port.createMember(email, password, role, position)
             if (created.status == bucket.status) members = members + created
+            completedCreates++
             true
         } catch (cancelled: CancellationException) {
             throw cancelled

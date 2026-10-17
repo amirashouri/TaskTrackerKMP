@@ -989,7 +989,8 @@ unnoticed for as long as they did.
   verified first, per the dual-engine ordering rule, and `CLI-12` was written against it.
 - **The two criteria that were not met** — `CLI-9`'s editor and `CLI-10`'s wide arrangements —
   are closed by `CLI-12` and `CLI-13`. The projects pane draws the editor; the members pane draws
-  the add-member form, because there is no member detail to draw (**D6**).
+  the add-member form, because there is no member detail to draw (**D6**) — and since `CLI-15` it
+  draws it for as long as the section is open rather than behind the list's `+` (**D8**).
 - **The test gap that hid them** — the shell scenarios bound no admin port, so they asserted
   `AdminPanes`' placeholder tags and the real destinations were never composed by a test — is
   closed by `CLI-14`. `AdminPortFakes` binds both ports, and three scenarios assert which pane
@@ -1012,6 +1013,7 @@ unnoticed for as long as they did.
 | D5 | The admin project editor is **port-backed**. | Seeds from `AdminProjectsPort.project(id)`, saves through `updateProject(...)`, so server `GET /v1/admin/projects/{id}` (`T8.9`) must be mounted. The local `ProjectEditorScreen` **cannot** serve it: a project the admin is not a member of is not in their Room store, and the sync push refuses a non-member. |
 | D6 | **No member detail screen.** | The members section is a list with inline delete/reactivate plus a create form. The `memberID` threaded through `AppRoute.AdminMembers`, `adminMembersStack` and `AdminMembersDestination` was vestigial and left in `CLI-13`; **gained in `CLI-13`:** with no detail to draw, the wide arrangement's second pane is the create form itself, so the section is a list + form pair rather than a list-detail pair. |
 | D7 | The admin project editor is a **model beside the shared stateless screen**, not a new screen. | `AdminProjectEditorModel` extends the same `ProjectModel` base as `ProjectEditorModel` and renders the same `ProjectEditorScreen`; the two differ only in the seam — the admin port versus the local store (**D5**). It offers no archive control, matching the existing form, and it cannot borrow `ProjectEditorModel`: that one writes through the sync path, which refuses a project the writer is not a member of. |
+| D8 | The wide members pane holds the form **whenever the section is open**, not behind a trigger. | Revised the `CLI-13` arrangement on the user's instruction (**`CLI-15`**): the pane *is* the form, so the list's header `+` is not drawn in that arrangement and the pane's form draws no Cancel — a pane that is never dismissed has nothing to cancel. The phone is untouched: the `+` opens the overlay and Cancel closes it. The pane is keyed on `MemberAdminModel.completedCreates`, because a form that is never torn down would otherwise keep the account it just made. |
 
 ## Architecture constraints this plan must respect (verified)
 
@@ -1045,6 +1047,7 @@ unnoticed for as long as they did.
 | CLI-12 | Wire the admin project editor through `AdminProjectsPort` | CLI-9, server `T8.9` | yes (wire) | **done** — a model beside the shared stateless screen |
 | CLI-13 | Fix both admin pane arrangements; drop the vestigial `memberID` | CLI-6, CLI-9 | yes (shared-ui/routing) | **done** — the form is the members section's second pane |
 | CLI-14 | Bind the admin ports in host scenarios so the real destinations run | CLI-12, CLI-13 | yes (shared-ui) | **done** — folded into `CLI-13` |
+| CLI-15 | The wide members pane holds the form from the moment the section opens | CLI-13, CLI-14 | yes (2 modules) | **done** — the pane is the form; the `+` and the pane's Cancel are gone |
 
 ---
 
@@ -1285,7 +1288,9 @@ user's answer settled the members half:
   `isWide` parameter. Wide draws `AdminTwoPanes(list, form-or-placeholder)` and tells the list
   `isAddFormOpen = false`, because the list draws its own overlay from that flag and would
   otherwise compose a second form. Nothing else about the wiring is duplicated, which is why this
-  is a parameter rather than a second composable holding a second copy of it.
+  is a parameter rather than a second composable holding a second copy of it. **Revised in
+  `CLI-15`:** the pane no longer waits for the `+` — the wide arrangement's detail pane is the form
+  itself (**D8**).
 - `packages/routing/.../Routes.kt` + `Router.kt` — `AppRoute.AdminMembers` is a `data object` and
   `adminMembersStack()` takes no id. The exhaustive `when` turned every stale call site into a
   compile error, as the plan said it would.
@@ -1334,6 +1339,47 @@ two PRs would have meant merging one that nothing could verify.
   placeholder tag.
 - Mutation-check: the mutations listed under `CLI-13` are red *because* these scenarios exist.
   Before this, reverting either arrangement left the suite green.
+
+## CLI-15 — The wide members pane holds the form from the moment the section opens — DONE
+
+**Why.** `CLI-13` made the form the members section's second pane but left it behind the same
+trigger the phone uses: the pane drew `AdminDetailPlaceholder` until the list's `+` was tapped, and
+took back the placeholder on Cancel. The user's report: the form sat flush against the top of the
+pane, the `+` was still there with the form already beside it, and the form should simply be in the
+right pane when the members page is open.
+
+**Landed**
+- `shared-ui/.../AdminMembersDestination.kt` — the wide `detailPane` draws `AddMemberForm`
+  unconditionally, on the list's own top gutter (`ttSpacing.screenGutterLarge`; not centred, so a
+  failed create's banner does not move the panel under the cursor typing into it) and keyed on
+  `model.completedCreates`. It passes `showsAddAction = !isWide` and `onDismiss = null`, and its
+  `onCreate` now uses the `Boolean` `createMember` documents for the caller, so the phone's overlay
+  closes on a create that landed instead of sitting open over the row it just added.
+- `packages/feature-teams-presentation/.../MembersAdminScreen.kt` — a new
+  `showsAddAction: Boolean = true` gates the header's `+`. The back control is not gated with it:
+  it is the screen's only way out on the hosts with no system back.
+- `packages/feature-teams-presentation/.../AddMemberForm.kt` — `onDismiss` is optional and Cancel is
+  drawn only when it is given; Create then takes the width the pair had split.
+- `packages/feature-teams-presentation/.../MemberAdminModel.kt` — `completedCreates`, moved only by
+  a create that landed. It exists because the pane's form is never torn down: on the phone the
+  fields are cleared by the form leaving the composition, and this count is that same clearing
+  reached from the other side.
+
+**Acceptance / tests**
+- `aWideShellDrawsTheMembersListAndTheAddFormSideBySide` rewritten: the form is in the pane with no
+  tap, right of the list, below the pane's top edge, exactly one form, no `MembersAddTag` anywhere,
+  and a create that lands leaves the Create button down again.
+- Three new scenarios in `MembersAdminScenarios`, on all three hosts: a list with the form beside it
+  keeps its back control and offers no `+`; the overlay's form still offers Cancel and dispatches
+  it; a form with no dismiss draws no Cancel. The middle one is the positive half of the pair — a
+  change that stopped drawing Cancel anywhere would otherwise pass both.
+- `onlyAFinishedCreateIsCounted` in `MemberAdminModelTest`: a create that landed counts, a failed one
+  does not.
+- Mutations, all caught: drop the top gutter → the flush assertion, naming both edges; drop the
+  `key` → *"the account was created, so the pane's form should hold nothing and Create should be
+  down again"*; `showsAddAction = true` on wide → *"the pane is already drawing the form, so the
+  list's Add button opens what is already open"*; drop `completedCreates++` →
+  `onlyAFinishedCreateIsCounted`.
 
 ---
 

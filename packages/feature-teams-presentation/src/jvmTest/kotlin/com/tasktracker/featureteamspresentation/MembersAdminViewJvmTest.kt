@@ -7,7 +7,7 @@ import kotlin.test.Test
 /**
  * [MembersAdminScenarios] on the JVM.
  *
- * The JVM host is the fast loop for this screen: the same nine scenarios run on the iOS simulator
+ * The JVM host is the fast loop for this screen: the same scenarios run on the iOS simulator
  * ([MembersAdminViewIosTest]) and the Android host ([MembersAdminViewAndroidHostTest]), and this
  * one runs in seconds with no simulator.
  *
@@ -57,6 +57,18 @@ class MembersAdminViewJvmTest {
     @Test
     fun aFailureIsShownAsItWasWorded() =
         runComposeUiTest(block = MembersAdminScenarios.aFailureIsShownAsItWasWorded)
+
+    @Test
+    fun aListWithTheFormBesideItOffersNoAddButton() =
+        runComposeUiTest(block = MembersAdminScenarios.aListWithTheFormBesideItOffersNoAddButton)
+
+    @Test
+    fun theOverlayFormOffersCancelAndAsksForIt() =
+        runComposeUiTest(block = MembersAdminScenarios.theOverlayFormOffersCancelAndAsksForIt)
+
+    @Test
+    fun aFormWithNothingToDismissDrawsNoCancel() =
+        runComposeUiTest(block = MembersAdminScenarios.aFormWithNothingToDismissDrawsNoCancel)
 
     @Test
     fun theChevronAsksTheShellToGoBack() =

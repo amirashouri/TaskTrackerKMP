@@ -87,6 +87,13 @@ import org.jetbrains.compose.resources.stringResource
  * [errorMessage] becomes non-null. Everything that outlives one visit to the form — the list,
  * the failure, whether a create is in flight — is the model's, and arrives as a parameter.
  *
+ * ## Why the dismiss is optional
+ *
+ * On the phone the form is drawn over a scrim, so it is Cancel that closes it. In the wide
+ * window's pane the form *is* the pane, for as long as the members section is open: there is
+ * nothing to dismiss, so the pane passes `null` and no Cancel is drawn. A Cancel wired to
+ * nothing would be a control claiming an action the arrangement does not have.
+ *
  * ## The role picker may set `Admin`, and that is the point of it
  *
  * This is the only screen in the app that can mint another administrator. [MemberRole.Member]
@@ -107,7 +114,7 @@ fun AddMemberForm(
     isCreating: Boolean,
     errorMessage: String?,
     onCreate: (email: String, password: String, role: MemberRole, position: String?) -> Unit,
-    onDismiss: () -> Unit,
+    onDismiss: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var email by remember { mutableStateOf("") }
@@ -187,11 +194,15 @@ fun AddMemberForm(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
-            ttGlassButton(
-                label = stringResource(Res.string.common_cancel),
-                onClick = onDismiss,
-                modifier = Modifier.weight(1f).testTag(AddMemberCancelTag),
-            )
+            // No dismiss means no Cancel, and Create then takes the width the pair would have
+            // split between them.
+            if (onDismiss != null) {
+                ttGlassButton(
+                    label = stringResource(Res.string.common_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).testTag(AddMemberCancelTag),
+                )
+            }
             ttGlassButton(
                 label = stringResource(Res.string.admin_members_create),
                 onClick = {

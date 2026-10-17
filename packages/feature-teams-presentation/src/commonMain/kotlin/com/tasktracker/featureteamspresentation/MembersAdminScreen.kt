@@ -43,7 +43,8 @@ import com.tasktracker.resources.common_delete
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The members screen: one bucket at a time, with the action each row allows and a way to add.
+ * The members screen: one bucket at a time, with the action each row allows, and a way to add
+ * wherever the arrangement has not already put the form on screen.
  *
  * ## A function of its arguments, like every other screen here
  *
@@ -76,6 +77,7 @@ fun MembersAdminScreen(
     isAddFormOpen: Boolean,
     isCreating: Boolean,
     createErrorMessage: String?,
+    showsAddAction: Boolean = true,
     onBack: () -> Unit,
     onSelectBucket: (MembersBucket) -> Unit,
     onRequestDelete: (User) -> Unit,
@@ -104,7 +106,11 @@ fun MembersAdminScreen(
                 .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            MembersHeader(onBack = onBack, onOpenAddForm = onOpenAddForm)
+            MembersHeader(
+                onBack = onBack,
+                onOpenAddForm = onOpenAddForm,
+                showsAddAction = showsAddAction,
+            )
 
             if (errorMessage != null) {
                 ttBanner(message = errorMessage, onDismiss = onDismissError)
@@ -197,11 +203,16 @@ fun MembersAdminScreen(
  * because the shell cannot draw it: on the desktop window there is no system back, re-selecting
  * the active tab does nothing, and the rail therefore has no route back to Settings. It sits where
  * a reader looks for it — before the title — so this screen leaves the same way on all four hosts.
+ *
+ * The create action can be absent. In a wide window the form is the pane beside this list and is
+ * on screen the whole time the section is open, so a button that opened it would open what is
+ * already open; the shell says so with [showsAddAction].
  */
 @Composable
 private fun MembersHeader(
     onBack: () -> Unit,
     onOpenAddForm: () -> Unit,
+    showsAddAction: Boolean,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -216,12 +227,14 @@ private fun MembersHeader(
             color = ttLabel(),
             modifier = Modifier.weight(1f),
         )
-        ttGlassIconButton(
-            image = ttActionIcons.add,
-            contentDescription = stringResource(Res.string.admin_members_add),
-            onClick = onOpenAddForm,
-            modifier = Modifier.testTag(MembersAddTag),
-        )
+        if (showsAddAction) {
+            ttGlassIconButton(
+                image = ttActionIcons.add,
+                contentDescription = stringResource(Res.string.admin_members_add),
+                onClick = onOpenAddForm,
+                modifier = Modifier.testTag(MembersAddTag),
+            )
+        }
     }
 }
 

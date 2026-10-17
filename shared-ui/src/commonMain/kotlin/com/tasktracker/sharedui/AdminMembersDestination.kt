@@ -1,9 +1,13 @@
 package com.tasktracker.sharedui
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.MemberRole
 import com.tasktracker.featureteamspresentation.AddMemberForm
@@ -18,21 +22,40 @@ import kotlinx.coroutines.launch
  *
  * ## Why the arrangement is a parameter and not two composables
  *
- * The two arrangements differ in one thing: what the add-member form is drawn *in*. A phone
- * draws it over a scrim, full screen; a wide window draws the very same panel in the pane beside
- * the list. Everything else — the model, the list, every callback — is identical, so a second
- * composable would be a second copy of this wiring, and the two would drift in the way that
- * costs the most here: one arm wired to a model the other one is not.
+ * The two arrangements differ in two things: what the add-member form is drawn *in*, and whether
+ * the list carries a button to open it. A phone draws the form over a scrim, full screen, opened
+ * by that button; a wide window draws the very same panel in the pane beside the list, where it is
+ * on screen from the moment the section opens. Everything else — the model, the list, every
+ * callback — is identical, so a second composable would be a second copy of this wiring, and the
+ * two would drift in the way that costs the most here: one arm wired to a model the other one is
+ * not.
  *
  * The decision stays in [NavigationHost], which is the only place that knows the layout class;
  * this composable draws what it is told.
  *
- * ## Why `isAddFormOpen` is forced down when wide
+ * ## Why `isAddFormOpen` is forced down when wide, and the button with it
  *
- * [MembersAdminScreen] draws the form as its own overlay when it is open. In a wide window the
- * form is the right pane instead, so the list is told `false` — otherwise the panel would be
- * composed twice, once over a list the form is not covering. The model's flag is still the one
- * state: the list's "Add member" button opens the pane, and the pane's Cancel closes it.
+ * [MembersAdminScreen] draws the form as its own overlay when it is open, and carries the button
+ * that opens it. In a wide window the form is the right pane for as long as the section is open,
+ * so the list is told `false` — otherwise the panel would be composed twice, once over a list the
+ * form is not covering — and `showsAddAction = false`, because a button that opened a form
+ * already on screen would be a button that does nothing. The model's flag stays the phone's: the
+ * wide pane never reads it.
+ *
+ * ## Why the pane is given a key
+ *
+ * A pane that is never torn down keeps whatever the form holds, so the fields the admin typed
+ * would survive a successful create and the next tap on Create would be a duplicate account for
+ * one address. `key`ing the form on the model's count of finished creates composes a new one —
+ * empty — after each success. On the phone the form is cleared by being removed, which is the
+ * same thing arrived at from the other side.
+ *
+ * ## Why the form sits on the list's own top gutter
+ *
+ * Both panes are one section and their first lines should agree; the members screen pads its top
+ * by `ttSpacing.screenGutterLarge`, so the form is given the same number rather than a literal.
+ * Not centring: the form grows when a create fails and shows its banner, and a centred panel
+ * would move the whole form under the cursor typing into it.
  *
  * ## There is no member detail, and no `memberID`
  *
@@ -61,7 +84,12 @@ fun AdminMembersDestination(
     }
     val onCreate: (String, String, MemberRole, String?) -> Unit =
         { email, password, role, position ->
-            scope.launch { model.createMember(email, password, role, position) }
+            scope.launch {
+                // `createMember` answers whether the account was made, and its doc says the caller
+                // closes the form on `true` for exactly this reason: a form left open over a list
+                // that now shows the new row reads as a create that did not happen.
+                if (model.createMember(email, password, role, position)) model.closeAddForm()
+            }
         }
 
     // A name for the list, because the wide arrangement hands it to a pane slot and the narrow
@@ -76,6 +104,7 @@ fun AdminMembersDestination(
             isAddFormOpen = !isWide && model.isAddFormOpen,
             isCreating = model.isCreating,
             createErrorMessage = model.createFailure?.message,
+            showsAddAction = !isWide,
             onBack = onBack,
             onSelectBucket = { bucket -> scope.launch { model.selectBucket(bucket) } },
             onRequestDelete = { user -> model.requestDelete(user) },
@@ -97,18 +126,14 @@ fun AdminMembersDestination(
     AdminTwoPanes(
         listPane = listPane,
         detailPane = {
-            if (model.isAddFormOpen) {
+            key(model.completedCreates) {
                 AddMemberForm(
                     isCreating = model.isCreating,
                     errorMessage = model.createFailure?.message,
                     onCreate = onCreate,
-                    onDismiss = { model.closeAddForm() },
+                    onDismiss = null,
+                    modifier = Modifier.padding(top = ttSpacing.screenGutterLarge),
                 )
-            } else {
-                // The pane is empty rather than worded while nothing is being added: the
-                // sentence belongs with the section's own strings, and this pane's job is to
-                // say "nothing here yet" without inventing copy for a state that has a button.
-                AdminDetailPlaceholder()
             }
         },
     )

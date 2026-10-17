@@ -275,6 +275,70 @@ object MembersAdminScenarios {
 
         onNodeWithText("That email is already registered.").assertIsDisplayed()
     }
+
+    /**
+     * A list whose section already holds the form beside it offers no second way to open one.
+     *
+     * The wide window's arrangement in one assertion: the pane *is* the form for as long as the
+     * section is open, so the shell tells the screen its header action has nothing to do. A button
+     * that opened what is already open is a control that does nothing — and it would also compose
+     * the form a second time, over the list, beside the pane holding it.
+     *
+     * The back control is asserted with it because the header is what is being narrowed: a change
+     * that dropped the header to drop the button would take the only way out with it.
+     */
+    val aListWithTheFormBesideItOffersNoAddButton: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(members = listOf(ada), showsAddAction = false)
+
+        onNodeWithTag(MembersAdminScreenTag).assertIsDisplayed()
+        onNodeWithTag(MembersAddTag).assertDoesNotExist()
+        onNodeWithTag(TTGlassBackButtonTag).assertIsDisplayed()
+    }
+
+    /**
+     * The phone's form is drawn over a scrim, and Cancel is what dismisses it.
+     *
+     * The positive half of [aFormWithNothingToDismissDrawsNoCancel]. The pane's form has no Cancel
+     * because it has nothing to dismiss; this is the arrangement where the button *is* the way out.
+     * Without this half, a change that stopped drawing Cancel anywhere would pass both.
+     */
+    val theOverlayFormOffersCancelAndAsksForIt: suspend ComposeUiTest.() -> Unit = {
+        var closes = 0
+        screenShowing(
+            members = listOf(ada),
+            isAddFormOpen = true,
+            onCloseAddForm = { closes++ },
+        )
+
+        onNodeWithTag(AddMemberCancelTag).assertIsDisplayed()
+        onNodeWithTag(AddMemberCancelTag).performClick()
+
+        assertEquals(1, closes, "Cancel must ask for the form it belongs to be closed")
+    }
+
+    /**
+     * A form with nothing to dismiss draws no Cancel.
+     *
+     * The wide window's form *is* the pane: it is on screen for as long as the members section is
+     * open, so the pane passes no dismiss and no Cancel is drawn. A Cancel drawn anyway would be a
+     * control claiming an action the arrangement does not have.
+     */
+    val aFormWithNothingToDismissDrawsNoCancel: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            Themed {
+                AddMemberForm(
+                    isCreating = false,
+                    errorMessage = null,
+                    onCreate = { _, _, _, _ -> },
+                    onDismiss = null,
+                )
+            }
+        }
+
+        onNodeWithTag(AddMemberFormTag).assertIsDisplayed()
+        onNodeWithTag(AddMemberCreateTag).assertIsDisplayed()
+        onNodeWithTag(AddMemberCancelTag).assertDoesNotExist()
+    }
 }
 
 /**
@@ -294,6 +358,7 @@ private fun ComposeUiTest.screenShowing(
     isAddFormOpen: Boolean = false,
     isCreating: Boolean = false,
     createErrorMessage: String? = null,
+    showsAddAction: Boolean = true,
     onBack: () -> Unit = {},
     onSelectBucket: (MembersBucket) -> Unit = {},
     onRequestDelete: (User) -> Unit = {},
@@ -316,6 +381,7 @@ private fun ComposeUiTest.screenShowing(
                 isAddFormOpen = isAddFormOpen,
                 isCreating = isCreating,
                 createErrorMessage = createErrorMessage,
+                showsAddAction = showsAddAction,
                 onBack = onBack,
                 onSelectBucket = onSelectBucket,
                 onRequestDelete = onRequestDelete,
