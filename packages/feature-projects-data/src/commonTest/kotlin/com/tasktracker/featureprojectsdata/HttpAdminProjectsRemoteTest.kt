@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdata
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomUserID
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpQueryItem
@@ -11,6 +12,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -213,6 +215,100 @@ class HttpAdminProjectsRemoteTest {
         assertFailsWith<AppError.Conflict> {
             HttpAdminProjectsRemote(client)
                 .updateProject(aProject(), version = "stale")
+        }
+    }
+
+    @Test
+    fun createProjectPostsTheFieldsAndAnIdItMinted() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWith(projectBody(name = "Gemini", keyPrefix = "GE", version = "v1"))
+        val memberID = randomUserID()
+
+        val created = HttpAdminProjectsRemote(client)
+            .createProject("Gemini", "GE", "Two milestones.", listOf(memberID))
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/v1/admin/projects", request.path)
+        assertEquals(true, request.requiresAuth)
+        // Opted into replay, and the id in the body is what makes that safe: an attempt replayed
+        // after a dropped response is refused for an id the server already holds rather than
+        // creating a second project. Nothing else in this body is the server's to decide.
+        assertEquals(
+            true,
+            request.effectiveIdempotency,
+            "the create is not replayable, so a response lost after the row landed reads as a " +
+                "create that failed",
+        )
+
+        val body = Json.decodeFromString<JsonObject>(request.body!!.decodeToString())
+        assertNotNull(
+            body["id"]?.jsonPrimitive?.content,
+            "the client minted no id, so a `409` for an id it holds cannot be read back as this " +
+                "call's own project",
+        )
+        assertEquals("Gemini", body["name"]?.jsonPrimitive?.content)
+        assertEquals("GE", body["keyPrefix"]?.jsonPrimitive?.content)
+        assertEquals("Two milestones.", body["details"]?.jsonPrimitive?.content)
+        assertEquals(
+            listOf(memberID.stringValue),
+            body["memberIds"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals(
+            setOf("id", "name", "keyPrefix", "details", "memberIds"),
+            body.keys,
+            "the create body carries a field the server owns, which the server then has to " +
+                "ignore or be overwritten by",
+        )
+
+        assertEquals("Gemini", created.project.name)
+        assertEquals("v1", created.version)
+    }
+
+    /**
+     * A create whose reply was lost is read back rather than reported as a failure.
+     *
+     * The server refuses a create for an id it already holds — replacing the row would rewind a
+     * key counter the project has already spent — so a `409` on this call's own freshly minted id
+     * can only be the row an earlier attempt of this call made. The re-read asks for exactly the
+     * id the create sent, which is the whole reason the client mints one.
+     */
+    @Test
+    fun createProjectReadsAConflictBackAsTheProjectThatWonIt() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWithFailure(AppError.Conflict(entity = "project"))
+        client.respondWith(projectBody(name = "Gemini", version = "v3"))
+
+        val created = HttpAdminProjectsRemote(client)
+            .createProject("Gemini", "GE", "", emptyList())
+
+        val post = client.requests.first()
+        val reread = client.requests.last()
+        val sentID = Json.decodeFromString<JsonObject>(post.body!!.decodeToString())["id"]!!
+            .jsonPrimitive.content
+        assertEquals(HttpMethod.Get, reread.method)
+        assertEquals(
+            "/v1/admin/projects/$sentID",
+            reread.path,
+            "the re-read asked for an id other than the one the create sent, so a lost reply " +
+                "would surface as a failed create whose obvious answer is to create it again",
+        )
+        assertEquals("Gemini", created.project.name)
+        assertEquals("v3", created.version)
+    }
+
+    /**
+     * The conflict is only recoverable while the row is there: a `404` behind it means the project
+     * was removed between the two calls, and there is nothing to hand back.
+     */
+    @Test
+    fun createProjectPropagatesAConflictForAnIdTheServerDoesNotHave() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWithFailure(AppError.Conflict(entity = "project"))
+        client.respondWithFailure(AppError.NotFound("Not found (404)."))
+
+        assertFailsWith<AppError.Conflict> {
+            HttpAdminProjectsRemote(client).createProject("Gemini", "GE", "", emptyList())
         }
     }
 

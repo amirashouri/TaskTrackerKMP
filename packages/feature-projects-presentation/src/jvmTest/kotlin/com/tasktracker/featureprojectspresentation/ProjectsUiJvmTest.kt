@@ -225,4 +225,7 @@ class ProjectsUiJvmTest {
 
     @Test
     fun wrappingPillsDoNotOverflowTheFirstRow() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.wrappingPillsDoNotOverflowTheFirstRow)
+
+    @Test
+    fun eachBucketSegmentReadsItsOwnBucket() = runComposeUiTest(block = AdminProjectsListScenarios.eachBucketSegmentReadsItsOwnBucket)
 }

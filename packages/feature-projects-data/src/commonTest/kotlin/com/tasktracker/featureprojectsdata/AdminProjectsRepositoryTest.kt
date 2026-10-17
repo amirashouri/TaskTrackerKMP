@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
+import com.tasktracker.network.HttpMethod
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -102,6 +103,27 @@ class AdminProjectsRepositoryTest {
         assertFailsWith<AppError.Conflict> {
             repositoryOver(client).updateProject(aProject(), version = "stale")
         }
+    }
+
+    @Test
+    fun createProjectReachesTheWireAndReturnsTheStoredRow() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWith(projectBody(name = "Gemini", version = "v1"))
+
+        val stored = repositoryOver(client)
+            .createProject("Gemini", "GE", "Two milestones.", emptyList())
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/v1/admin/projects", request.path)
+        val body = Json.decodeFromString<JsonObject>(request.body!!.decodeToString())
+        assertEquals("Gemini", body["name"]?.jsonPrimitive?.content)
+        assertEquals("GE", body["keyPrefix"]?.jsonPrimitive?.content)
+        assertEquals("Two milestones.", body["details"]?.jsonPrimitive?.content)
+        // The version the server returned is what the pane's next operation would save against;
+        // a create that dropped it would leave the section editing a row it cannot compare-and-swap.
+        assertEquals("v1", stored.version)
+        assertEquals("Gemini", stored.project.name)
     }
 
     private fun repositoryOver(client: RecordingHttpClient): AdminProjectsRepository =

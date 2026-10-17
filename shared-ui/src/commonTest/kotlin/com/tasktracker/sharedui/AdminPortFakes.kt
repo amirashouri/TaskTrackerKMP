@@ -83,17 +83,39 @@ class FakeMemberAdminPort(
  * [project] answers `null` for every id it was not seeded with, which is the "the server no
  * longer has this project" answer the editor's missing state exists to tell apart from a
  * failure.
+ *
+ * `createProject` really does add a row, and the list reports it afterwards. That is the point of
+ * the fake here: the section's create form lands on the server and the list is re-read rather
+ * than appended to, so a scenario can only assert the new project appeared if the double holds
+ * it the way the server would — the traffic claims still belong to the feature module's own
+ * recording fake.
  */
 class FakeAdminProjectsPort(
     private val seeded: List<AdminProject> = emptyList(),
 ) : AdminProjectsPort {
 
-    private val byID = seeded.associateBy { it.project.id }
+    private val created = mutableListOf<AdminProject>()
+
+    private val byID = seeded.associateBy { it.project.id }.toMutableMap()
 
     override suspend fun projects(status: ProjectAdminStatus): List<AdminProject> =
-        seeded.filter { it.project.isArchived == (status == ProjectAdminStatus.Archived) }
+        (seeded + created).filter { it.project.isArchived == (status == ProjectAdminStatus.Archived) }
 
     override suspend fun project(id: ProjectID): AdminProject? = byID[id]
+
+    override suspend fun createProject(
+        name: String,
+        keyPrefix: String,
+        details: String,
+        memberIDs: List<UserID>,
+    ): AdminProject {
+        val project = shellTestProject(name = name, keyPrefix = keyPrefix)
+            .copy(details = details, memberIDs = memberIDs)
+        val stored = AdminProject(project, version = "1")
+        created += stored
+        byID[project.id] = stored
+        return stored
+    }
 
     /**
      * Returns what it was handed, with the version it was sent.

@@ -25,6 +25,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isNotEnabled
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import com.tasktracker.designsystem.NavigationRailLensTag
@@ -49,6 +50,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureauthpresentation.EmailFieldTag
@@ -66,6 +68,7 @@ import com.tasktracker.featureteamspresentation.AddMemberPasswordFieldTag
 import com.tasktracker.featureteamspresentation.MembersAddTag
 import com.tasktracker.featureteamspresentation.MembersAdminScreenTag
 import com.tasktracker.featureteamspresentation.MembersListTag
+import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
 import com.tasktracker.domain.Project
@@ -77,7 +80,7 @@ import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
-import com.tasktracker.featureprojectspresentation.NewProjectSheetTag
+import com.tasktracker.featureprojectspresentation.NewProjectFormTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
@@ -728,14 +731,14 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(NewProjectSheetTag).assertIsDisplayed()
+        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
 
         onNodeWithTag("name").performTextInput("Gemini")
         onNodeWithTag(NewProjectCreateTag).performClick()
         waitForIdle()
 
         assertTrue(
-            onAllNodes(hasTestTag(NewProjectSheetTag)).fetchSemanticsNodes().isEmpty(),
+            onAllNodes(hasTestTag(NewProjectFormTag)).fetchSemanticsNodes().isEmpty(),
             "expected the sheet to close once the project was created",
         )
         onNodeWithText("Gemini").assertIsDisplayed()
@@ -2594,6 +2597,155 @@ object ShellScenarios {
         }
 
     /**
+     * A wide window draws the admin projects list with the create form in the pane beside it,
+     * from the start.
+     *
+     * The projects section's right pane is the editor while a project is selected and the create
+     * form while none is, so the claim here is that second half — with no tap first, because the
+     * pane *is* the form for as long as the section is open. Geometry rather than presence, for
+     * the reason the members twin gives: both panes existing is satisfied by the form being drawn
+     * *over* the list, which is the phone's arrangement with the list left composed underneath it.
+     *
+     * The last two claims are the ones a pane that is never torn down would otherwise lose. The
+     * created project has to appear without anything appending it — the list re-reads the bucket,
+     * which is what the section's refresh key is for — and the form has to be empty afterwards,
+     * asserted by tapping Create a second time and finding no second row: a form that kept the
+     * values it submitted would send the project just made a second time.
+     */
+    val aWideShellDrawsTheProjectsListAndTheCreateFormSideBySide: suspend ComposeUiTest.() -> Unit =
+        wide@{
+            val router = Router()
+            setUpShell(
+                session = ScriptedSession(restored = signedIn()),
+                router = router,
+                settings = FakeShellSettingsPort(),
+                preferences = adminPreferences(),
+                adminProjectsPort = FakeAdminProjectsPort(
+                    seeded = listOf(shellTestAdminProject(project = shellTestProject(name = "Apollo"))),
+                ),
+                memberAdminPort = FakeMemberAdminPort(active = listOf(shellTestMember())),
+                width = DESKTOP_WIDTH,
+            )
+            waitForIdle()
+            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+            onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
+            waitForIdle()
+            onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
+            waitForIdle()
+
+            val list = onNodeWithTag(AdminProjectsScreenTag).getBoundsInRoot()
+            val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
+            assertTrue(
+                list.right.value <= form.left.value,
+                "the list runs to ${list.right.value}dp and the form starts at " +
+                    "${form.left.value}dp. Both being present is not enough — the form drawn " +
+                    "*over* the list satisfies that too, and that is the phone's arrangement",
+            )
+            assertEquals(
+                1,
+                onAllNodesWithTag(NewProjectFormTag).fetchSemanticsNodes().size,
+                "the form is composed more than once on a wide window. The list draws its own " +
+                    "sheet as well as the pane, so the section is drawing two forms",
+            )
+            assertNothingTagged(
+                AdminProjectsAddTag,
+                "the pane is already drawing the form, so the list's + opens what is already open",
+            )
+
+            onNodeWithTag("name").performTextInput("Gemini")
+            waitForIdle()
+            onNodeWithTag(NewProjectCreateTag).performClick()
+            waitForIdle()
+
+            onNodeWithTag("$ProjectRowTagPrefix.GE").assertExists(
+                "the project was created, so the list must have re-read the bucket and be " +
+                    "drawing it — nothing appends a created project to an admin list",
+            )
+
+            onNodeWithTag(NewProjectCreateTag).performClick()
+            waitForIdle()
+            assertEquals(
+                1,
+                onAllNodesWithText("Gemini", substring = true).fetchSemanticsNodes().size,
+                "the pane's form kept the values it submitted, so the second tap on Create sent " +
+                    "the project just made a second time",
+            )
+        }
+
+    /**
+     * On a phone the same form is a sheet over the admin list, opened by the list's own +.
+     *
+     * The counterpart of the wide scenario, and the reason the form is two composables: a phone has
+     * no second pane to put it in, so the section's + is the only way in, and the list stays
+     * composed underneath rather than being replaced the way a pushed route replaces it.
+     *
+     * The back control is asserted here as well, because this is the screen that had none: the
+     * section is a pushed route on the Settings stack, and a desktop window has no system back to
+     * supply one.
+     */
+    val aNarrowShellDrawsTheProjectFormOverTheAdminList: suspend ComposeUiTest.() -> Unit = {
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+            adminProjectsPort = FakeAdminProjectsPort(),
+            memberAdminPort = FakeMemberAdminPort(active = listOf(shellTestMember())),
+        )
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
+        waitForIdle()
+
+        assertNothingTagged(
+            NewProjectFormTag,
+            "nothing has been tapped yet, so a phone must not be drawing the form — a form in a " +
+                "pane is the wide window's arrangement",
+        )
+
+        onNodeWithTag(AdminProjectsAddTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(NewProjectFormTag).assertExists(
+            "tapping + on the admin projects list should draw the form",
+        )
+        val list = onNodeWithTag(AdminProjectsScreenTag).getBoundsInRoot()
+        val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
+        assertTrue(
+            form.left.value >= list.left.value && form.right.value <= list.right.value,
+            "the form spans ${form.left.value}..${form.right.value}dp and the list spans " +
+                "${list.left.value}..${list.right.value}dp, so the form is not drawn over the " +
+                "list it belongs to",
+        )
+
+        onNodeWithTag("name").performTextInput("Gemini")
+        waitForIdle()
+        onNodeWithTag(NewProjectCreateTag).performClick()
+        waitForIdle()
+
+        assertTrue(
+            onAllNodes(hasTestTag(NewProjectFormTag)).fetchSemanticsNodes().isEmpty(),
+            "expected the sheet to close once the project was created",
+        )
+        onNodeWithText("Gemini", substring = true).assertExists(
+            "the created project should be in the list the section re-read",
+        )
+
+        onNodeWithTag(TTGlassBackButtonTag).performClick()
+        waitForIdle()
+        assertEquals(
+            listOf(AppRoute.Settings),
+            router.path(AppTab.Settings),
+            "the header's back control should leave the section for the settings screen it was " +
+                "opened from, so a phone that hides its system bar still has a way out",
+        )
+    }
+
+    /**
      * The projects row opens the projects section, not the members one.
      *
      * Two rows, two callbacks, one screen. The failure this exists for is both rows wired to the
@@ -2668,11 +2820,13 @@ object ShellScenarios {
     /**
      * A wide shell presents a modal as a window: centred, not parked at the bottom edge.
      *
-     * Geometry, read off the real bounds: the sheet's distance from the top of the root and
-     * from its bottom are equal within a rounding pixel. This is only half the claim — the
-     * pair with [aNarrowShellAnchorsTheSheetToTheBottomEdge] is what makes it mutation-proof
-     * from both directions: a shell that always anchors fails this one, a shell that always
-     * windows fails that one, and neither passes by merely drawing the sheet.
+     * Geometry, read off the real bounds: the form's distance from the top of the root and from
+     * its bottom are equal within a rounding pixel. The form is what carries the tag — the
+     * sheet's own surface is untagged — and it sits inside the sheet, so forcing the presentation
+     * to anchor moves both and widens the gap this reads. This is only half the claim — the pair
+     * with [aNarrowShellAnchorsTheSheetToTheBottomEdge] is what makes it mutation-proof from both
+     * directions: a shell that always anchors fails this one, a shell that always windows fails
+     * that one, and neither passes by merely drawing the sheet.
      */
     val aWideShellCentresTheSheetLikeAWindow: suspend ComposeUiTest.() -> Unit = wide@{
         val projects = FakeProjectRepository()
@@ -2687,16 +2841,16 @@ object ShellScenarios {
 
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(NewProjectSheetTag).assertExists()
+        onNodeWithTag(NewProjectFormTag).assertExists()
 
-        val sheet = onNodeWithTag(NewProjectSheetTag).getBoundsInRoot()
+        val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
         val root = onRoot().getBoundsInRoot()
-        val topGap = sheet.top.value - root.top.value
-        val bottomGap = root.bottom.value - sheet.bottom.value
+        val topGap = form.top.value - root.top.value
+        val bottomGap = root.bottom.value - form.bottom.value
         assertTrue(
             abs(topGap - bottomGap) <= VERTICAL_CENTRE_TOLERANCE,
-            "the sheet sits ${topGap}dp from the top and ${bottomGap}dp from the bottom, so " +
-                "it is anchored rather than centred — parking a desktop modal at the bottom " +
+            "the sheet's form sits ${topGap}dp from the top and ${bottomGap}dp from the bottom, " +
+                "so it is anchored rather than centred — parking a desktop modal at the bottom " +
                 "edge of a 1000dp window is the phone vocabulary applied where the thumb is " +
                 "not, which is what this layout exists to remove",
         )
@@ -2705,7 +2859,7 @@ object ShellScenarios {
         // in. A sheet that fills the window has stopped being a modal over anything.
         assertTrue(
             topGap > CENTRED_SHEET_MIN_CLEARANCE && bottomGap > CENTRED_SHEET_MIN_CLEARANCE,
-            "the sheet leaves ${topGap}dp above and ${bottomGap}dp below, which is not a " +
+            "the sheet's form leaves ${topGap}dp above and ${bottomGap}dp below, which is not a " +
                 "surface floating in a window but one filling it — centring an element that " +
                 "covers the screen asserts nothing about where it was placed",
         )
@@ -2739,18 +2893,18 @@ object ShellScenarios {
 
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(NewProjectSheetTag).assertExists()
-        val sheet = onNodeWithTag(NewProjectSheetTag).getBoundsInRoot()
+        onNodeWithTag(NewProjectFormTag).assertExists()
+        val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
 
         val root = onRoot().getBoundsInRoot()
 
         // Whether this viewport can tell anchoring from centring at all. A centred
-        // sheet's bottom sits half the leftover above the root, so the bound below can
+        // sheet's content box sits half the leftover above the root, so the bound below can
         // only see an anchored sheet when that half still clears it. The Android host's
         // cramped viewport cannot — the forced-window mutation also lands at ~46dp there
         // — so it returns here: the same bargain as every wide scenario's width gate, a
         // test the host cannot render registers as a pass rather than certifying nothing.
-        val roomAboveAndBelow = (root.bottom - root.top - (sheet.bottom - sheet.top)).value
+        val roomAboveAndBelow = (root.bottom - root.top - (form.bottom - form.top)).value
         // The windowed placement always reports a smaller bottom gap than the anchored
         // one — centering moves the sheet's bottom *up*, and the viewport being short
         // only makes it worse. So the windowed placement can never trip the 150dp
@@ -2763,10 +2917,10 @@ object ShellScenarios {
         // nothing.
         return@narrow
 
-        val bottomGap = root.bottom.value - sheet.bottom.value
+        val bottomGap = root.bottom.value - form.bottom.value
         assertTrue(
             bottomGap < ANCHORED_SHEET_BOTTOM_CLEARANCE,
-            "the sheet's bottom sits ${bottomGap}dp above the root bottom, so it is " +
+            "the sheet's form sits ${bottomGap}dp above the root bottom, so it is " +
                 "floating mid-screen — a phone presents forms at the bottom edge, where " +
                 "the thumb already is, and a shell that windows every sheet at 390dp " +
                 "parks the form where the hand is not",

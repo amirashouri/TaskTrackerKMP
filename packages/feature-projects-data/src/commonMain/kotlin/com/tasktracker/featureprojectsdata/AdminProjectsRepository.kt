@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Project
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
@@ -15,7 +16,9 @@ import kotlin.coroutines.cancellation.CancellationException
  * This is the seam that satisfies [AdminProjectsPort] by holding one remote and answering the
  * bucket reads and the single-project read through it. The edit goes to the remote directly;
  * there is no local store involved, because the admin list is an online view of the live server
- * and an edit the server never saw is not an edit.
+ * and an edit the server never saw is not an edit. The create is the same trade, for a sharper
+ * reason: the offline-first create pushes a new project into the caller's member list, and an
+ * admin creating one for other people is not on it.
  *
  * ## The admin calls are online-only, by design
  *
@@ -42,6 +45,14 @@ class AdminProjectsRepository(
     @Throws(AppError::class, CancellationException::class)
     override suspend fun project(id: ProjectID): AdminProject? =
         remote.project(id)
+
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun createProject(
+        name: String,
+        keyPrefix: String,
+        details: String,
+        memberIDs: List<UserID>,
+    ): AdminProject = remote.createProject(name, keyPrefix, details, memberIDs)
 
     @Throws(AppError::class, CancellationException::class)
     override suspend fun updateProject(project: Project, version: String): AdminProject =
