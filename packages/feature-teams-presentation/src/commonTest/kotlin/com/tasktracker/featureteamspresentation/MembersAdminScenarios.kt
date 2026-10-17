@@ -224,7 +224,7 @@ object MembersAdminScenarios {
             },
         )
 
-        onNodeWithTag(AddMemberDialogTag).assertIsDisplayed()
+        onNodeWithTag(AddMemberFormTag).assertIsDisplayed()
         onNodeWithTag(AddMemberEmailFieldTag).performTextInput("grace@example.com")
         onNodeWithTag(AddMemberPasswordFieldTag).performTextInput("correct horse battery")
         onNodeWithTag(addMemberRoleOptionTag(MemberRole.Admin)).performClick()

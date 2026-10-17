@@ -9,7 +9,9 @@ import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
+import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -108,6 +110,8 @@ class FakeResolver(private val bindings: Map<KClass<*>, Any>) : Resolver {
             projects: ProjectRepositoryPort = FakeProjectRepository(),
             settings: SettingsPort? = null,
             preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
+            memberAdminPort: MemberAdminPort? = null,
+            adminProjectsPort: AdminProjectsPort? = null,
         ): FakeResolver = FakeResolver(
             mapOf(
                 AuthSessionPort::class to session,
@@ -118,7 +122,12 @@ class FakeResolver(private val bindings: Map<KClass<*>, Any>) : Resolver {
                 // rather than per-scenario: a test that had to remember it is a test that can
                 // forget it, and the failure would be a `DiException` rather than an assertion.
                 UserDefaultsStore::class to preferences,
-            ) + (settings?.let { mapOf(SettingsPort::class to it) } ?: emptyMap()),
+            ) + (settings?.let { mapOf(SettingsPort::class to it) } ?: emptyMap()) +
+                // Bound only when a scenario asks. `RootScreen` reads both with `getOrNull`,
+                // and leaving them unbound is what makes the shell draw its placeholder page —
+                // a path three scenarios still assert, so it has to stay reachable.
+                (memberAdminPort?.let { mapOf(MemberAdminPort::class to it) } ?: emptyMap()) +
+                (adminProjectsPort?.let { mapOf(AdminProjectsPort::class to it) } ?: emptyMap()),
         )
 
         /**

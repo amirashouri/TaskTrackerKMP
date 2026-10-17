@@ -385,13 +385,6 @@ fun NavigationHost(
                 // Drawing the list from a constant route rather than from whichever route is on
                 // top is also what keeps the right pane from being handed the list when nothing
                 // is selected — the mistake the Sprints branch below documents.
-                val adminMembersListPane: @Composable () -> Unit = {
-                    if (memberAdminPort == null) {
-                        AdminMembersPlaceholder(memberID = null)
-                    } else {
-                        AdminMembersDestination(memberID = null, router = router, memberAdminPort = memberAdminPort, scope = scope)
-                    }
-                }
                 val adminProjectsListPane: @Composable () -> Unit = {
                     if (adminProjectsPort == null) {
                         AdminProjectsPlaceholder(projectID = null)
@@ -417,10 +410,17 @@ fun NavigationHost(
                 // two tabs and would need a second notion of "the project under the cursor" to
                 // reconcile them. Backlog's three sections are one screen, not pushes.
                 //
-                // The Settings tab's two admin sections are the second pair, and they qualify
-                // for the same reason Sprints does: the selection is a route in this stack. The
+                // The Settings tab's projects section is the second pair, and it qualifies for
+                // the same reason Sprints does: the selection is a route in this stack. The
                 // difference is only which element the left pane draws — the tab root for
                 // Sprints, the section's list route for admin — and the branch says so.
+                //
+                // The members section is deliberately *not* a pair. It has no detail screen
+                // (D6): its one screen is a list whose rows carry delete and reactivate, and
+                // the second pane on a wide window is the create form the section itself owns,
+                // which is neither a route nor a selection. Hence one pane here when no port
+                // is bound, and a single destination — which draws its own two panes — when
+                // one is.
                 //
                 // Nothing here is animated and nothing is remembered. The panes are the same
                 // composables the single-pane path renders, so a tap, a deep link and a restored
@@ -448,25 +448,17 @@ fun NavigationHost(
                         )
 
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
-                        backgroundPushed is AppRoute.AdminMembers -> {
+                        backgroundPushed is AppRoute.AdminMembers ->
                         if (memberAdminPort == null) {
-                            AdminTwoPanes(
-                                listPane = adminMembersListPane,
-                                detailPane = if (backgroundPushed.memberID == null) {
-                                    noAdminSelected
-                                } else {
-                                    pushedPane
-                                },
-                            )
+                            AdminMembersPlaceholder()
                         } else {
                             AdminMembersDestination(
-                                memberID = backgroundPushed.memberID,
                                 router = router,
                                 memberAdminPort = memberAdminPort,
                                 scope = scope,
+                                isWide = true,
                             )
                         }
-                    }
 
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminProjects ->
@@ -776,15 +768,14 @@ private fun PushedRoute(
 
         // The two admin sections. Unlike every other route here they are reached only from a
         // screen rather than from a link, and the Settings tab's own root is the settings
-        // screen — so these are the *first pushed* routes on its stack, never tab roots. The
-        // screen they render is a placeholder in this task; what is real about them is which
-        // pane they land in, which is why the branch below carries the pane argument.
-        is AppRoute.AdminMembers -> {
+        // screen — so these are the *first pushed* routes on its stack, never tab roots. Each
+        // renders its real section when the app bound that section's port, and a bare
+        // placeholder when it did not, which is what the branch below chooses between.
+        AppRoute.AdminMembers -> {
             if (memberAdminPort == null) {
-                AdminMembersPlaceholder(memberID = route.memberID)
+                AdminMembersPlaceholder()
             } else {
                 AdminMembersDestination(
-                    memberID = route.memberID,
                     router = router,
                     memberAdminPort = memberAdminPort,
                     scope = scope,

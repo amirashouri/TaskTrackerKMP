@@ -1,7 +1,9 @@
 # Test Harness Cleanup — Plan
 
-Status: **in progress**  
-Branch: `feat/test-harness-cleanup`  
+Status: **landed, with two open rows** — the gate, the empty allowlist and the three-host
+matrix all hold; what remains is `scripts/check-test-matrix.py` running in no gate and
+`docs/TEST-HOSTS.md` not yet folded into `docs/TESTING.md`. See the progress log at the end.
+Branch: landed on `main`; there is no open branch for this plan.
 Scope: the KMP client only (`TaskTrackerKMP`). No server or wire-format changes.
 
 This is the working plan for making the client test matrix trustworthy. It is not the
@@ -318,10 +320,15 @@ removed.
 
 ## Progress log
 
+Rewritten 2026-10-17 (`CLI-13`) against the tree rather than against the phase marks. The four
+phases that read "not started" here had in fact largely landed, which is the cost of a log nobody
+owns; the notes below name the evidence instead of a status word, and the two rows that are not
+"done" are the reason this document still has an owner.
+
 | Phase | State | Notes |
 |---|---|---|
-| 0 — honest gate | done | `scripts/check.sh` / `full` green on the current allowlist; summary and named baseline check in place |
-| 1 — JVM/iOS green | not started | |
-| 2 — Android green | not started | |
-| 3 — matrix integrity | not started | |
-| 4 — CI and docs | not started | |
+| 0 — honest gate | done | `scripts/check.sh` and `full` run the three hosts through `test-summary.py`, then `scripts/check-baseline.sh` compares the result against `test-baseline.json` — so a fixed test plus a new failure cannot cancel out, which is the defect this phase exists for. |
+| 1 — JVM/iOS green | done | Zero failures on both hosts, and `test-known-failures.json` is **empty for all three**. Nothing is expected to fail, so an unexpected failure fails the gate rather than being absorbed by the allowlist. |
+| 2 — Android green | done | `testAndroidHostTest` runs inside `check.sh full` with zero failures. The skipped tests are the documented capability gaps (`docs/TESTING.md`) and report as *skipped*, not as passes — which is the phase's acceptance criterion. |
+| 3 — matrix integrity | **partly** | The abstract base is real (`TaskTrackerAppScenarios`, inherited by all three host classes), so a scenario body with no host entry point is a compile error — the strong half of the goal. `scripts/check-test-matrix.py` exists as the fallback the spike did not need, but **no gate runs it**, so a scenario wired into fewer hosts than it claims is a review catch and not a failure. The spike result is also still not written down here, which is this phase's own outstanding item. |
+| 4 — CI and docs | **partly** | `.github/workflows/tests.yml` runs the matrix, on `workflow_dispatch` and a nightly schedule rather than per push (see the amendment above; PRs are gated by `scripts/check.sh`). Host totals are not hand-copied — `test-baseline.json` is the only source. But `docs/TEST-HOSTS.md` still exists beside `docs/TESTING.md` instead of being merged into it and deleted, so the "one place the policy is written down" item of the definition of done is not met. |

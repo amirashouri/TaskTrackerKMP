@@ -112,7 +112,7 @@ assertion goes red (seconds, not a build cycle). The expensive form is what the
 When multiple agent instances operate simultaneously across separate branches or git worktrees, they must adhere to strict synchronization boundaries to prevent state corruption, stale compilation locks, and logical merge conflicts.
 
 ### 1. Worktree Path & Workspace Isolation
-* **Untracked State Trashing:** Files designated as untracked or gitignored (such as `NavigationHost.kt` and parts of `:shared-ui`) are shared across local environments if using standard directory switches. You must use `git worktree add <path> <branch>` to completely isolate files, local build caches, and test artifacts.
+* **Worktree Isolation:** `git worktree add <path> <branch>` completely isolates files, local build caches, and test artifacts; a standard directory switch shares them, so two agents on one working tree will overwrite each other's ignored and generated state.
 * **Gradle Daemon Collision:** Running parallel builds across different worktrees simultaneously on the same host can lead to lock collisions on the Gradle build cache and configuration cache. Always pass `--no-daemon` or explicitly target isolated project cache directories if executing tasks concurrently:
   ```bash
   ./gradlew jvmTest --no-daemon -Dorg.gradle.project.cachedir=.gradle-worktree-cache
@@ -270,7 +270,7 @@ live next to the code they govern — a local file may only contain rules that a
 *   `packages/design-system/AGENTS.md` — token ownership, `compose.resources`, pixel tests
 *   `packages/database/AGENTS.md` — foreign keys, DAO ownership, migrations
 *   `packages/feature-projects-presentation/AGENTS.md` — file splitting, fixtures, previews
-*   `shared-ui/AGENTS.md` — untracked files, router ownership, host-split tests
+*   `shared-ui/AGENTS.md` — router ownership, host-split tests, deliberate edits in a large tree
 
 Working in one of those packages, read both files. Working anywhere else, the root file
 is the whole contract.
@@ -284,7 +284,7 @@ Routine tuning does not need a paragraph.
   the build disagree. Regenerate it in the same change as any test addition. Do not hand-copy a
   total into `Project.md`, `AGENTS.md` or a spec. Cross-check a suspicious count against the `@Test`
   declarations in the source, never `grep -c` alone.
-*   `NavigationHost.kt` and most of `shared-ui` are untracked. Git cannot recover an accidental edit. Do not use broad scripted search-and-replace in this tree; read the file and edit deliberately.
+*   `NavigationHost.kt` and `:shared-ui` are large, and edits to them are read deliberately. *Corrected 2026-10-17:* this line used to say most of `:shared-ui` is **untracked**, so git could not recover an edit. The module has always been tracked — `git ls-files` lists it and `git status --untracked-files=all shared-ui` is clean. What survives of the rule is the reason for it: a broad scripted replace across a tree this size produces a diff nobody reads.
 *   **Compose Multiplatform 1.12.1 specifics** bite regularly: `BasicText` has no `textAlign` parameter (it goes in the style), `TextStyle` has no `overflow` property, and `ImageVector.Builder.addPath` takes a `Brush` fill rather than a colour — omitting it renders nothing at all, silently, even with a `ColorFilter` tint.
 *   **No drive-by cleanup.** While changing code, do not also delete what looks unused — imports, private helpers, parameters, files. "Unused" is a claim that needs its own proof and its own diff. Dead code you notice incidentally goes in your report to the user, never in the diff; sweeping it is a separate, separately acknowledged task.
 

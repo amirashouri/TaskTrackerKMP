@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
-import com.tasktracker.core.UserID
 
 /**
  * An admin section's list-detail pair, side by side.
@@ -26,11 +25,15 @@ import com.tasktracker.core.UserID
  *
  * ## Why two lambdas and not two screens
  *
- * For the reason `SprintTwoPanes` gives: [NavigationHost] already renders both screens — the
- * list from the section's own route and the detail from the pushed one — and it renders them
- * from the router, which is the only navigation state in this module. A component handed the
- * member list and the member detail directly would have to build the screens itself, which is a
- * second answer to a question the router has already answered.
+ * For the reason `SprintTwoPanes` gives: the caller has already rendered both screens — for the
+ * projects section, [NavigationHost] draws the list from the section's own route and the editor
+ * from the pushed one, off the router, which is the only navigation state in this module. A
+ * component handed the two screens directly would have to build them itself, which is a second
+ * answer to a question the router has already answered.
+ *
+ * The members section's right pane is not a route at all: it is the section's create form, open
+ * or closed by its model, and it is the one pane here filled from state rather than from the
+ * stack.
  *
  * Nothing here is animated and nothing is remembered, so a tap, a restored stack and a
  * re-layout all land on the same pair of screens and differ only in where they are drawn.
@@ -59,39 +62,23 @@ fun AdminTwoPanes(
  * These tasks land in order — routes and panes first, then the domain that can list members,
  * then the screen that draws them — so there is a window in which the navigation is real and
  * the screen is not written yet. This is that window's screen: a tagged surface where the list
- * or the selected member will be, so the routing and the pane arrangement are exercised by a
- * test rather than assumed, and the shell does not carry a branch that renders nothing.
+ * will be, so the routing and the pane arrangement are exercised by a test rather than assumed,
+ * and the shell does not carry a branch that renders nothing.
  *
  * It is deliberately **empty**. A placeholder that invented copy would be a second set of words
  * for the real screen to delete, and this module owns no user-facing strings; the section's
  * title already lives in the design system as `settings_manage_members`, which is what the
- * Settings row that opens this is labelled with. The tag is the placeholder's whole contract,
- * and the id in the detail's tag is what lets a test hold the pane to its route.
+ * Settings row that opens this is labelled with. The tag is the placeholder's whole contract.
  *
- * ## Why the tag carries the id
+ * ## Why its tag carries no id, unlike its projects twin
  *
- * A single "detail" tag would be satisfied by a pane that drew the *previous* selection, which
- * is exactly the defect a two-pane arrangement invites — the pane is a fixed slot and what has
- * to follow the selection is what is inside it. Tagging the selection makes "the pane is
- * drawing the member that was asked for" the assertion rather than something inferred from the
- * router, which cannot see what was drawn.
+ * It did, until the member detail it named was removed (`D6`): the members section has nothing
+ * you can select, so there is no "which member is this surface showing" to ask. The projects
+ * twin keeps the id because a project *is* selectable — selecting one opens the editor.
  */
 @Composable
-fun AdminMembersPlaceholder(
-    memberID: UserID?,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag(
-                if (memberID == null) {
-                    AdminMembersListTag
-                } else {
-                    AdminMemberDetailTag(memberID)
-                },
-            ),
-    )
+fun AdminMembersPlaceholder(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize().testTag(AdminMembersListTag))
 }
 
 /** The projects administration screen, in the same shape and for the same reasons as its members twin. */
@@ -129,18 +116,10 @@ fun AdminDetailPlaceholder(modifier: Modifier = Modifier) {
 /** The members section's list screen. */
 const val AdminMembersListTag = "shell.admin.members"
 
-/**
- * The members section's detail screen for one member.
- *
- * A function rather than a constant, like [TabButtonTag], so that "the pane is showing *this*
- * member" is askable. See [AdminMembersPlaceholder] for why that question has to be askable.
- */
-fun AdminMemberDetailTag(memberID: UserID): String = "shell.admin.member.${memberID.stringValue}"
-
 /** The projects section's list screen. */
 const val AdminProjectsListTag = "shell.admin.projects"
 
-/** The projects section's detail screen for one project. See [AdminMemberDetailTag]. */
+/** The projects section's detail screen for one project — the editor, once a project is selected. */
 fun AdminProjectDetailTag(projectID: ProjectID): String =
     "shell.admin.project.${projectID.stringValue}"
 
