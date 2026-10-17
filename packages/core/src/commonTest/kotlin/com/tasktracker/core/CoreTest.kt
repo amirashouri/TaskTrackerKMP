@@ -205,6 +205,7 @@ class AppErrorTest {
         val all = listOf(
             AppError.Offline, AppError.Transport("x"), AppError.Timeout,
             AppError.Unauthorized, AppError.Forbidden, AppError.Server(500, "boom"),
+            AppError.NotFound("x"),
             AppError.Decoding("x"), AppError.Conflict("task"), AppError.Validation("x"),
             AppError.Cancelled, AppError.Storage("x"), AppError.Unknown("x"),
         )
@@ -216,6 +217,7 @@ class AppErrorTest {
         val all = listOf(
             AppError.Offline, AppError.Transport("x"), AppError.Timeout,
             AppError.Unauthorized, AppError.Forbidden, AppError.Server(500, "boom"),
+            AppError.NotFound("x"),
             AppError.Decoding("x"), AppError.Conflict("task"), AppError.Validation("x"),
             AppError.Cancelled, AppError.Storage("x"), AppError.Unknown("x"),
         )

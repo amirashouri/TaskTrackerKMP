@@ -64,7 +64,7 @@ internal object HttpErrorMapping {
             400 -> AppError.Validation(message.ifEmpty { "The server rejected the request." })
             401 -> AppError.Unauthorized
             403 -> AppError.Forbidden
-            404 -> AppError.Unknown(message.ifEmpty { "Not found (404)." })
+            404 -> AppError.NotFound(message.ifEmpty { "Not found (404)." })
             409 -> AppError.Conflict(entity = message.ifEmpty { "record" })
             422 -> AppError.Validation(message.ifEmpty { "The request was not processable." })
             in 500..599 -> AppError.Server(statusCode, message)

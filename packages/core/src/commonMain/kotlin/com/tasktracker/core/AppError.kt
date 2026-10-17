@@ -63,6 +63,18 @@ sealed class AppError(message: String) : Exception(message) {
     data class Server(val statusCode: Int, val detail: String) :
         AppError("Server error ($statusCode). $detail")
 
+    /**
+     * 404 — the server does not have the resource.
+     *
+     * Its own case rather than [Unknown] because the two mean opposite things to a caller: an
+     * absent row is an *answer*, not a failure, and the admin projects screen reads it as one by
+     * turning it into `null`. Folded into [Unknown], that read could not tell it from a `500`,
+     * and a server failure rendered as a project that had been deleted.
+     *
+     * Not retryable: the same request finds the same absent row.
+     */
+    data class NotFound(val detail: String) : AppError(detail)
+
     /** The payload did not match the expected contract. */
     data class Decoding(val detail: String) :
         AppError("The server sent something unexpected. $detail")
@@ -102,7 +114,7 @@ sealed class AppError(message: String) : Exception(message) {
     val isRetryable: Boolean
         get() = when (this) {
             is Transport, is Timeout, is Offline, is Server -> true
-            is Unauthorized, is Forbidden, is Decoding, is Conflict,
+            is Unauthorized, is Forbidden, is NotFound, is Decoding, is Conflict,
             is Validation, is Cancelled, is Storage, is Unknown,
             -> false
         }
@@ -118,7 +130,7 @@ sealed class AppError(message: String) : Exception(message) {
     val requiresSignOut: Boolean
         get() = when (this) {
             is Unauthorized, is Forbidden -> true
-            is Offline, is Transport, is Timeout, is Server, is Decoding,
+            is Offline, is Transport, is Timeout, is Server, is NotFound, is Decoding,
             is Conflict, is Validation, is Cancelled, is Storage, is Unknown,
             -> false
         }
@@ -131,7 +143,7 @@ sealed class AppError(message: String) : Exception(message) {
     val isConnectivityFailure: Boolean
         get() = when (this) {
             is Offline, is Transport, is Timeout -> true
-            is Unauthorized, is Forbidden, is Server, is Decoding, is Conflict,
+            is Unauthorized, is Forbidden, is Server, is NotFound, is Decoding, is Conflict,
             is Validation, is Cancelled, is Storage, is Unknown,
             -> false
         }
@@ -152,6 +164,7 @@ sealed class AppError(message: String) : Exception(message) {
             is Unauthorized -> "unauthorized"
             is Forbidden -> "forbidden"
             is Server -> "server($statusCode, $detail)"
+            is NotFound -> "notfound($detail)"
             is Decoding -> "decoding($detail)"
             is Conflict -> "conflict($entity)"
             is Validation -> "validation($detail)"

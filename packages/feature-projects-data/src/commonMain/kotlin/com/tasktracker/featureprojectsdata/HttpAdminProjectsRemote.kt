@@ -171,11 +171,10 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
     /**
      * One project, by id, or `null` when the server does not have it.
      *
-     * The transport maps `404` to [AppError.Unknown], which is the only signal this layer gets:
-     * the status table has no dedicated not-found error, so a 404 is caught here and answered
-     * as absence while every other failure propagates. If that table ever grows a not-found
-     * case, this catch should narrow to it — anything else that currently arrives as `Unknown`
-     * (a `405`, a proxy's `410`) is being read as "gone" today.
+     * The transport maps `404` to [AppError.NotFound], which is what this catches, so an absent
+     * project answers as absence while a server failure propagates — the two are different
+     * things, and a screen that showed "gone" for a `500` would be sending an administrator to
+     * recreate a project that is still there.
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun project(id: ProjectID): AdminProject? = try {
@@ -187,7 +186,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
             ),
             decoding = ProjectResponseBody.serializer(),
         ).toAdminProject()
-    } catch (_: AppError.Unknown) {
+    } catch (_: AppError.NotFound) {
         null
     }
 

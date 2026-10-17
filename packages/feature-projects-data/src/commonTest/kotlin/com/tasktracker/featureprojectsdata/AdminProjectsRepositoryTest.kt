@@ -59,7 +59,7 @@ class AdminProjectsRepositoryTest {
     @Test
     fun projectAnswersNullWhenTheServerHasNone() = runTest {
         val client = RecordingHttpClient()
-        client.respondWithFailure(AppError.Unknown("Not found (404)."))
+        client.respondWithFailure(AppError.NotFound("Not found (404)."))
 
         assertNull(repositoryOver(client).project(randomProjectID()))
     }

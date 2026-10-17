@@ -24,9 +24,13 @@ HOSTS = ["jvmTest", "iosSimulatorArm64Test", "testAndroidHostTest"]
 
 # Which module owns how many failures — only the Android host fails in bulk, and the
 # split is the interesting part (it is a viewport fact, not a behaviour fact).
+#
+# `why` names the causes rather than counting them (`docs/TEST-HOSTS.md` lists the cases):
+# the failure count already sits beside it in this file, generated, and a second hand-written
+# copy of it is exactly how the figures drifted before.
 META = {
-    "jvmTest": {"target": "jvm", "exit": "red", "why": "three pre-existing failures"},
-    "iosSimulatorArm64Test": {"target": "iosSimulatorArm64", "exit": "red", "why": "the same three"},
+    "jvmTest": {"target": "jvm", "exit": "red", "why": "pre-existing: seeding, settings and shell scenarios"},
+    "iosSimulatorArm64Test": {"target": "iosSimulatorArm64", "exit": "red", "why": "the same set"},
     "testAndroidHostTest": {"target": "androidHost", "exit": "red", "why": "Robolectric viewport and rasteriser"},
 }
 

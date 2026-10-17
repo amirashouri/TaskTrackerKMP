@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttLabel
@@ -29,6 +30,7 @@ import com.tasktracker.resources.admin_projects_empty
 import com.tasktracker.resources.admin_projects_loading
 import com.tasktracker.resources.admin_projects_segment_active
 import com.tasktracker.resources.admin_projects_segment_archived
+import kotlin.coroutines.cancellation.CancellationException
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -40,15 +42,20 @@ fun AdminProjectsScreen(
     var status by remember { mutableStateOf(ProjectAdminStatus.Active) }
     var projects by remember { mutableStateOf<List<AdminProject>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var failure by remember { mutableStateOf<AppError?>(null) }
 
     LaunchedEffect(status) {
         isLoading = true
-        errorMessage = null
+        failure = null
         projects = try {
             port.projects(status)
-        } catch (e: Exception) {
-            errorMessage = e.message ?: "could not load projects"
+        } catch (cancelled: CancellationException) {
+            // Leaving the screen cancels this effect; that is not a load that failed, and
+            // holding it as one both leaks a stale error onto the next status and stops the
+            // cancellation propagating.
+            throw cancelled
+        } catch (error: AppError) {
+            failure = error
             emptyList()
         } finally {
             isLoading = false
@@ -70,6 +77,10 @@ fun AdminProjectsScreen(
             },
         )
 
+        // Held as the AppError rather than as a sentence, and read through this local: `AppError`
+        // owns the wording of every failure in the app, so re-wording it here would make the same
+        // error read two ways. The local is what lets the `when` below smart-cast it.
+        val error = failure
         when {
             isLoading -> {
                 ttText(
@@ -79,9 +90,9 @@ fun AdminProjectsScreen(
                     modifier = Modifier.padding(ttSpacing.xl),
                 )
             }
-            errorMessage != null -> {
+            error != null -> {
                 ttText(
-                    text = errorMessage!!,
+                    text = error.message.orEmpty(),
                     style = ttTypography.body,
                     color = ttLabel(),
                     modifier = Modifier.padding(ttSpacing.xl),

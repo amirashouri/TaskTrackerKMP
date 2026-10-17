@@ -301,7 +301,7 @@ internal fun aSprint(
  * Replies are a queue consumed in call order, with the last one repeating, so one test can
  * drive several calls whose bodies differ (a list is an array, an edit is an object). A body is
  * not the only scripted reply: the real client answers a `404` by *throwing*
- * [AppError.Unknown] rather than by returning bytes, so [respondWithFailure] scripts that too —
+ * [AppError.NotFound] rather than by returning bytes, so [respondWithFailure] scripts that too —
  * a double that could only answer with a body could not exercise the port's "the project is
  * gone" path at all.
  *

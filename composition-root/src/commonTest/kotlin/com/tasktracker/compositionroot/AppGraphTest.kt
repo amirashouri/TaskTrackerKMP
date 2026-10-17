@@ -15,6 +15,8 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featureteamsdata.HttpMemberAdminRemote
+import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.keychain.InMemoryKeychain
 import com.tasktracker.network.AuthInterceptor
 import com.tasktracker.network.HttpClient
@@ -36,6 +38,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -223,6 +226,83 @@ class AppGraphTest {
             opened[1][0],
             "the sync client's one interceptor must be the bearer-token one, or every push " +
                 "and pull reaches the server unauthenticated",
+        )
+    }
+
+    /**
+     * The members admin port, and the wiring defect this test exists for.
+     *
+     * Its remote was built with `resolver.resolve(HttpClient::class)`, and this graph registers
+     * no `HttpClient` — `registerAuth` and `registerSync` each build one from
+     * `platforms.httpClient`, and [the graph registers the ported features and still nothing
+     * more] pins that no client is registered under a name of its own. So the factory threw
+     * `Unregistered` the moment the port was asked for, the shell's `getOrNull` read that as "no
+     * port", and the members screen sat on its placeholder against a live server with nothing red
+     * to say the wiring was dead. No test resolved the port by type, which is how it stayed green.
+     *
+     * The *remote* is resolved rather than the port on purpose. The port also pulls `TeamPort`,
+     * which opens a Room store, and the Android host has none — `thisHostOpensRoomStores()` is
+     * `false` there, and `AppGraphTest` runs on that host. The remote is the object whose factory
+     * carried the defect and it needs only the client, so this asserts on all three hosts instead
+     * of skipping on the one where the bug would have shipped.
+     */
+    @Test
+    fun `the members admin port is bound only with a backend and its client is authenticated`() {
+        val opened = mutableListOf<List<RequestInterceptor>>()
+        val offline = testGraph()
+        val online = AppGraph.start(
+            testBindings(
+                startServices = false,
+                apiBaseUrl = "http://127.0.0.1:8080",
+                httpClient = { _, interceptors ->
+                    opened += interceptors
+                    InertHttpClient()
+                },
+            ),
+        )
+
+        try {
+            assertNull(
+                offline.getOrNull(MemberAdminPort::class),
+                "with no base URL there is no members API to administer, so the graph must bind " +
+                    "no port and the shell draws the placeholder it documents",
+            )
+            assertTrue(
+                online.isRegistered(MemberAdminPort::class),
+                "a bound backend must register the members admin port, or the members screen " +
+                    "resolves nothing and stays on its placeholder",
+            )
+            // The auth remote first, so the vault's client is already built and the next opening
+            // is the members-admin one — the order the assertions below name. Resolving the
+            // remote also pulls `TokenVault` for its interceptor, which is the same client the
+            // auth remote just built rather than a third.
+            online.resolve(AuthRemotePort::class)
+            assertNotNull(
+                online.resolve(HttpMemberAdminRemote::class),
+                "the members admin remote must resolve; it used to ask for an HttpClient this " +
+                    "graph never registers, and threw Unregistered instead",
+            )
+        } finally {
+            offline.stop()
+            online.stop()
+        }
+
+        assertEquals(
+            2,
+            opened.size,
+            "a bound backend must open the vault's client and the members-admin client, " +
+                "opened ${opened.size}",
+        )
+        assertEquals(
+            1,
+            opened[1].size,
+            "the members-admin client must carry exactly one interceptor; found " +
+                "${opened[1].map { it::class.simpleName }}",
+        )
+        assertIs<AuthInterceptor>(
+            opened[1][0],
+            "the members-admin client's one interceptor must be the bearer-token one, or every " +
+                "member read reaches the server unauthenticated",
         )
     }
 
