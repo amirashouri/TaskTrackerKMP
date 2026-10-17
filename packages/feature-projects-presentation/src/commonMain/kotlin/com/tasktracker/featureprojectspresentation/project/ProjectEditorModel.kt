@@ -156,12 +156,4 @@ class ProjectEditorModel(
         savedProjectID = saved.id
         return true
     }
-
-    private fun suggestKeyPrefix(value: String): String {
-        val words = value.split(' ', '-', '_').filter(String::isNotBlank)
-        val initials = words.take(2).mapNotNull { it.firstOrNull(Char::isLetterOrDigit) }
-            .joinToString("").uppercase()
-        if (initials.length >= 2) return initials
-        return words.firstOrNull()?.filter(Char::isLetterOrDigit)?.take(2)?.uppercase().orEmpty()
-    }
 }

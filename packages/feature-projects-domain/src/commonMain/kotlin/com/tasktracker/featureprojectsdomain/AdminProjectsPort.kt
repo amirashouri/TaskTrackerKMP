@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.Project
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -60,6 +61,35 @@ interface AdminProjectsPort {
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun project(id: ProjectID): AdminProject?
+
+    /**
+     * Creates a project on the server, and returns it with the version its first edit saves
+     * against.
+     *
+     * It is the create half of the admin section, and it is on *this* interface rather than
+     * [ProjectRepositoryPort] because that interface's create is offline-first: it writes a
+     * local row plus an outbox row and lets the sync push carry it, and a push authorizes the
+     * creation by membership. An admin creating a project for other people is not on its
+     * member list, so that path would push them into it — and a push the server refused would
+     * land in an outbox no admin screen reads. This call is what makes the section's create
+     * land where the section reads from.
+     *
+     * The id is minted by the caller and sent, the way a client names a project it pushes;
+     * `isArchived`, `nextItemNumber` and the timestamps are the server's, because a project
+     * being created has no archived state, no items and no history to carry.
+     *
+     * The server answers a create for an id it already holds with `409` rather than replacing
+     * the row — a replace would write this create's `nextItemNumber` over a project that has
+     * issued keys since — so a caller that lost the first response re-reads through [project]
+     * rather than sending the same create again.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun createProject(
+        name: String,
+        keyPrefix: String,
+        details: String,
+        memberIDs: List<UserID>,
+    ): AdminProject
 
     /**
      * Applies an edit to a project the way the sync path does: the row and its change-feed

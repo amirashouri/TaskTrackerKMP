@@ -3,7 +3,9 @@ package com.tasktracker.featureprojectsdata
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.roundedToSecond
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
@@ -46,6 +48,25 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
     }
 
     /**
+     * `POST /v1/admin/projects`.
+     *
+     * The body is the create screen's fields plus the id the caller minted, and nothing else:
+     * `isArchived`, `nextItemNumber` and the timestamps are the server's on a create, which is
+     * why this is a body of its own rather than the [ProjectRequestBody] the `PATCH` sends.
+     *
+     * Opted into replay. The id names the row this call is asking for, so a request replayed
+     * after a dropped connection collides with the project its first attempt created — and
+     * [createProject] reads that collision back into the project instead of reporting a
+     * failure for a project that exists.
+     */
+    private class CreateProjectEndpoint(private val payload: CreateProjectRequestBody) : Endpoint {
+        override val path: String = "/v1/admin/projects"
+        override val method: HttpMethod = HttpMethod.Post
+        override val body: ByteArray? = jsonBody(payload)
+        override val isIdempotent: Boolean? = true
+    }
+
+    /**
      * `PATCH /v1/admin/projects/{id}`.
      *
      * The body is the whole project as the client holds it; `id` and `createdAt` are taken
@@ -64,6 +85,16 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         override val body: ByteArray? = jsonBody(payload)
         override val isIdempotent: Boolean? = true
     }
+
+    /** The create body: the form's fields and the id this client minted, nothing server-owned. */
+    @Serializable
+    private data class CreateProjectRequestBody(
+        val id: String,
+        val keyPrefix: String,
+        val name: String,
+        val details: String,
+        val memberIds: List<String>,
+    )
 
     /**
      * The server's `project` object, as the admin endpoints return it.
@@ -188,6 +219,43 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         ).toAdminProject()
     } catch (_: AppError.NotFound) {
         null
+    }
+
+    /**
+     * Creates a project and returns the row the server stored.
+     *
+     * The id is minted here rather than left to the server, the way a client names a project it
+     * pushes. That is what makes the server's `409` answer — a create for an id it already
+     * holds is refused, because replacing the row would rewind a key counter the project has
+     * already spent — recoverable: the only project that can hold this call's own fresh UUID is
+     * the one an earlier attempt of this same call made, so a lost response becomes that
+     * project instead of a failed create whose obvious answer is a second one.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun createProject(
+        name: String,
+        keyPrefix: String,
+        details: String,
+        memberIDs: List<UserID>,
+    ): AdminProject {
+        val id = randomProjectID()
+        val body = CreateProjectRequestBody(
+            id = id.stringValue,
+            keyPrefix = keyPrefix,
+            name = name,
+            details = details,
+            memberIds = memberIDs.map { it.stringValue },
+        )
+        return try {
+            client.send(
+                CreateProjectEndpoint(body).request,
+                decoding = ProjectResponseBody.serializer(),
+            ).toAdminProject()
+        } catch (conflict: AppError.Conflict) {
+            // The collided row is absent only if it was removed between the create and this
+            // read, in which case there is nothing to return and the conflict is the truth.
+            project(id) ?: throw conflict
+        }
     }
 
     /**

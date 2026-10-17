@@ -379,23 +379,13 @@ fun NavigationHost(
                 // `pushedPane` are: it is a whole pane of one arrangement arm, and inlining the
                 // lambda would make this the one pane of the three with no name.
                 val noSprintSelected: @Composable () -> Unit = { SprintDetailPlaceholder() }
-                // The admin sections' left panes. Values rather than `pushedPane`, and that is
-                // the difference from Sprints: the Settings tab's root is the settings screen,
-                // so an admin section's list is the *first pushed* route rather than `tabRoot`.
-                // Drawing the list from a constant route rather than from whichever route is on
-                // top is also what keeps the right pane from being handed the list when nothing
-                // is selected — the mistake the Sprints branch below documents.
-                val adminProjectsListPane: @Composable () -> Unit = {
-                    if (adminProjectsPort == null) {
-                        AdminProjectsPlaceholder(projectID = null)
-                    } else {
-                        AdminProjectsDestination(
-                            projectID = null,
-                            router = router,
-                            adminProjectsPort = adminProjectsPort,
-                            scope = scope,
-                        )
-                    }
+                // The projects section's two panes with no port bound: the tagged placeholder the
+                // routing is exercised through, and a right pane that stays empty because a
+                // section with no list has nothing to put in it. Values rather than inline
+                // lambdas, and for the same reason `tabRoot` and `pushedPane` are: each is a
+                // whole pane of one arm.
+                val adminProjectsPlaceholderPane: @Composable () -> Unit = {
+                    AdminProjectsPlaceholder(projectID = null)
                 }
                 val noAdminSelected: @Composable () -> Unit = { AdminDetailPlaceholder() }
 
@@ -415,12 +405,15 @@ fun NavigationHost(
                 // difference is only which element the left pane draws — the tab root for
                 // Sprints, the section's list route for admin — and the branch says so.
                 //
-                // The members section is deliberately *not* a pair. It has no detail screen
-                // (D6): its one screen is a list whose rows carry delete and reactivate, and
-                // the second pane on a wide window is the create form the section itself owns,
-                // which is neither a route nor a selection. Hence one pane here when no port
-                // is bound, and a single destination — which draws its own two panes — when
-                // one is.
+                // Both admin sections are the exception among these four, and for the same
+                // reason: the right pane is the *section's* rather than the stack's. Members has
+                // no detail screen at all (D6) — its one screen is a list whose rows carry delete
+                // and reactivate — so its second pane is the create form the section owns, which
+                // is neither a route nor a selection. Projects has the editor as well, and its
+                // pane holds that when a project is selected and the same create form when none
+                // is. Hence one pane here when no port is bound, and a single destination — which
+                // draws its own two panes, and remembers the create model above both of them so
+                // the list can be told to re-read when a create lands — when one is.
                 //
                 // Nothing here is animated and nothing is remembered. The panes are the same
                 // composables the single-pane path renders, so a tap, a deep link and a restored
@@ -462,20 +455,32 @@ fun NavigationHost(
 
                     layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminProjects ->
-                        AdminTwoPanes(
-                            listPane = adminProjectsListPane,
-                            detailPane = if (backgroundPushed.projectID == null) {
-                                noAdminSelected
-                            } else if (adminProjectsPort == null) {
-                                // A lambda, not the call itself: both branches of a `detailPane`
-                                // must be panes, and `AdminProjectsPlaceholder(...)` is a `Unit`
-                                // — which widened this `if` to `Any` and failed to type-check
-                                // against the `@Composable () -> Unit` the pane slot wants.
-                                { AdminProjectsPlaceholder(projectID = backgroundPushed.projectID) }
-                            } else {
-                                pushedPane
-                            },
-                        )
+                        if (adminProjectsPort == null) {
+                            AdminTwoPanes(
+                                listPane = adminProjectsPlaceholderPane,
+                                detailPane = if (backgroundPushed.projectID == null) {
+                                    noAdminSelected
+                                } else {
+                                    // A lambda, not the call itself, for the reason the type checker
+                                    // gave when this was first written: the call returns `Unit`,
+                                    // which widened this `if` to `Any` and failed against the
+                                    // `@Composable () -> Unit` the pane slot wants.
+                                    { AdminProjectsPlaceholder(projectID = backgroundPushed.projectID) }
+                                },
+                            )
+                        } else {
+                            // The bound-port arm draws the whole section, both panes, for the
+                            // reason the comment above gives: the create model it remembers sits
+                            // above the list and the pane the form is drawn in.
+                            AdminProjectsDestination(
+                                projectID = backgroundPushed.projectID,
+                                router = router,
+                                adminProjectsPort = adminProjectsPort,
+                                memberAdminPort = memberAdminPort,
+                                scope = scope,
+                                isWide = true,
+                            )
+                        }
 
                     else -> pushedPane()
                 }
@@ -791,6 +796,7 @@ private fun PushedRoute(
                     projectID = route.projectID,
                     router = router,
                     adminProjectsPort = adminProjectsPort,
+                    memberAdminPort = memberAdminPort,
                     scope = scope,
                 )
             }

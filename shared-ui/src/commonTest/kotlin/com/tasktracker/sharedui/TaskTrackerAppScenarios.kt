@@ -126,6 +126,14 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.theAdminProjectsRowOpensTheProjectsSection)
 
     @Test
+    fun aWideShellDrawsTheProjectsListAndTheCreateFormSideBySide() =
+        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheProjectsListAndTheCreateFormSideBySide)
+
+    @Test
+    fun aNarrowShellDrawsTheProjectFormOverTheAdminList() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheProjectFormOverTheAdminList)
+
+    @Test
     fun aWideShellCentresTheSheetLikeAWindow() =
         runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
 

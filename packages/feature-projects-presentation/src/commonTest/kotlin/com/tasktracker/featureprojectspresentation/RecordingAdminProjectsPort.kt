@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.Project
 import com.tasktracker.featureprojectsdomain.AdminProject
@@ -25,11 +26,15 @@ class RecordingAdminProjectsPort(
     private val byStatus: Map<ProjectAdminStatus, List<AdminProject>> = emptyMap(),
     private val projectByID: Map<ProjectID, AdminProject> = emptyMap(),
     private val updateResult: ((Project, String) -> AdminProject)? = null,
+    var created: AdminProject? = null,
+    /** A `Throwable` rather than an [AppError] so a test can script cancellation too. */
+    var createFailure: Throwable? = null,
 ) : AdminProjectsPort {
 
     val projectsCalls = mutableListOf<ProjectAdminStatus>()
     val projectCalls = mutableListOf<ProjectID>()
     val updateCalls = mutableListOf<Pair<Project, String>>()
+    val createCalls = mutableListOf<CreateProjectCall>()
 
     override suspend fun projects(status: ProjectAdminStatus): List<AdminProject> {
         projectsCalls += status
@@ -39,6 +44,17 @@ class RecordingAdminProjectsPort(
     override suspend fun project(id: ProjectID): AdminProject? {
         projectCalls += id
         return projectByID[id]
+    }
+
+    override suspend fun createProject(
+        name: String,
+        keyPrefix: String,
+        details: String,
+        memberIDs: List<UserID>,
+    ): AdminProject {
+        createCalls += CreateProjectCall(name, keyPrefix, details, memberIDs)
+        createFailure?.let { throw it }
+        return created ?: error("RecordingAdminProjectsPort.created was not set for this test")
     }
 
     override suspend fun updateProject(project: Project, version: String): AdminProject {
@@ -76,3 +92,11 @@ class RecordingAdminProjectsPort(
         private val createdAt = Instant.fromEpochSeconds(1_700_000_000)
     }
 }
+
+/** One `createProject` call, as the port received it. */
+data class CreateProjectCall(
+    val name: String,
+    val keyPrefix: String,
+    val details: String,
+    val memberIDs: List<UserID>,
+)
