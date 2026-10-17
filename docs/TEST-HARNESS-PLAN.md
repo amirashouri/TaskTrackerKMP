@@ -256,7 +256,7 @@ removed.
 
 ### Phase 4 — CI and documentation consolidation
 
-**Goal:** the matrix is enforced on every PR and the policy exists once.
+**Goal:** the matrix is enforced on every change and the policy exists once.
 
 **Files**
 
@@ -274,10 +274,16 @@ removed.
 
 **Acceptance**
 
-- A PR with a new failing test fails CI even if the failure count is unchanged.
-- A PR that fixes an allowlisted test but leaves the entry fails CI.
+- A PR with a new failing test fails the gate even if the failure count is unchanged.
+- A PR that fixes an allowlisted test but leaves the entry fails the gate.
 - The docs contain no hand-written host totals.
 - `scripts/check.sh full` is green on `main`.
+
+> **Amended 2026-10-17.** The two lines above said "fails CI" because `tests.yml` was
+> written to run on every push. It now runs on `workflow_dispatch` and a nightly schedule
+> only, so a PR is gated by `scripts/check.sh` rather than by CI. The goal is unchanged in
+> substance — the matrix is still enforced, by the local gate — and the measurements
+> behind the change are in `docs/DECISIONS.md` → "Continuous integration".
 
 ## Risks and rollback
 
@@ -305,7 +311,9 @@ removed.
   entries are explained by real host capabilities.
 - `test-known-failures.json` is empty.
 - The matrix check (base class or script) passes.
-- CI is green on a PR that changes tests.
+- CI is green on a PR that changes tests. *(Amended 2026-10-17: PRs no longer run CI;
+  `scripts/check.sh` is green on a PR that changes tests. See `docs/DECISIONS.md` →
+  "Continuous integration".)*
 - `docs/TESTING.md` is the only place the policy and commands are written down.
 
 ## Progress log
