@@ -29,6 +29,15 @@ cd "$(dirname "$0")/.." || exit 1
 # The build needs JDK 25, and `java_home` cannot find this machine's copy.
 export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
 
+# A hosted runner is a single-use VM, so a daemon is started only to be discarded, and
+# its orchestration competes with the build for the same cores. Measured on run
+# 39042728812, before these flags: JVM 6m54s, Android 6m01s, iOS 34m07s. The three
+# Gradle flags repeat the committed gradle.properties deliberately, so the settings
+# survive a CI checkout that changes that file. Local runs keep the daemon.
+if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
+  export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true"
+fi
+
 GRAPH_TASKS=(
   verifyArchitectureGraph
   verifyModuleImports

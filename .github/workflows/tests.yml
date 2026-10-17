@@ -1,9 +1,16 @@
 name: tests
 
+# On demand and nightly; deliberately not on every push. PRs are verified with
+# `scripts/check.sh`, which `AGENTS.md` already names as the deciding command; this
+# matrix is a drift backstop for main. Measured on run 39042728812: a cold iOS leg is
+# 35m04s and a cache-warm one ~15m, against ~5-6m for JVM and Android. That is wall
+# clock in front of every commit, which is the cost — the repository is public, so the
+# Actions minutes were never billed.
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # 04:17 UTC: off the hour, so the run does not queue behind the top-of-hour cron spike.
+    - cron: '17 4 * * *'
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -34,9 +41,19 @@ jobs:
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Restore-only off main, per the action's guidance: a PR build reads the cache
+          # main produced, but never replaces the entry main's builds will restore.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Point Gradle at the runner's JDK
-        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+      # Same keys as the committed gradle.properties; the guard keeps this append
+      # idempotent so a CI layout that lacks them gains them without duplicating keys.
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
 
       - name: JVM tests, graph, baseline
         run: ./scripts/check.sh fast
@@ -74,9 +91,19 @@ jobs:
           yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Restore-only off main, per the action's guidance: a PR build reads the cache
+          # main produced, but never replaces the entry main's builds will restore.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Point Gradle at the runner's JDK
-        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+      # Same keys as the committed gradle.properties; the guard keeps this append
+      # idempotent so a CI layout that lacks them gains them without duplicating keys.
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
 
       - name: Android host tests + baseline
         run: ./scripts/check.sh android
@@ -96,15 +123,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # setup-gradle caches the Gradle build cache, not the Kotlin/Native toolchain, so
+      # every run re-downloaded the Kotlin/Native distribution and re-compiled the
+      # platform libs. Measured on run 39042728812 with ~/.konan cold: the iOS leg ran
+      # 34m07s against 6m54s for JVM and 6m01s for Android. The version catalog is the
+      # only file that moves the toolchain version, so it is the key's input.
+      - name: Cache the Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('**/libs.versions.toml') }}
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '25'
 
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Restore-only off main, per the action's guidance: a PR build reads the cache
+          # main produced, but never replaces the entry main's builds will restore.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - name: Point Gradle at the runner's JDK
-        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+      # Same keys as the committed gradle.properties; the guard keeps this append
+      # idempotent so a CI layout that lacks them gains them without duplicating keys.
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
 
       - name: Boot a simulator
         run: |
