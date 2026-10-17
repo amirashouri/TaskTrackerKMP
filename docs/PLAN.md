@@ -984,9 +984,12 @@ This section was reviewed against the code on `main`, not against its own task m
 The first slice is shipped and green; two acceptance criteria are **not** met, and one
 gap in the tests is why they went unnoticed.
 
-- **Landed:** `CLI-2`–`CLI-8`, plus the *list* halves of `CLI-9` and `CLI-10`.
-- **Not met:** `CLI-9`'s edit-project page and `CLI-10`'s wide arrangements — the
-  selected id never reaches a screen. `CLI-12` and `CLI-13` are the remainders.
+- **Landed:** `CLI-2`–`CLI-8`, the list halves of `CLI-9` and `CLI-10`, and `CLI-12` — the
+  admin project editor, as a model (`AdminProjectEditorModel`) beside the already-stateless
+  `ProjectEditorScreen`. Server `T8.9` (`GET /v1/admin/projects/{id}`) was mounted and
+  verified first, per the dual-engine ordering rule.
+- **Still not met:** `CLI-10`'s wide arrangements. A selected project now reaches an editor,
+  but the projects detail pane still draws the list. `CLI-13`.
 - **Hid behind:** the shell scenarios bind no admin port, so they exercise the
   placeholder path rather than the real destinations. `CLI-14`.
 - **Shipped differently than written:** `CLI-1` reads the access token's `role` claim
@@ -1031,10 +1034,10 @@ gap in the tests is why they went unnoticed.
 | CLI-6 | New `:packages:feature-teams-presentation`: members screens | CLI-3, CLI-5 | yes (new module) | **done** |
 | CLI-7 | `feature-projects-domain`: admin-projects port | — | yes (domain API) | **done** |
 | CLI-8 | `feature-projects-data`: HTTP admin-projects remote | CLI-7 | yes (data API) | **done** |
-| CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes | **partial** — the list landed; selecting a project opens no editor (`CLI-12`) |
+| CLI-9 | `feature-projects-presentation`: Manage-projects screen (segments) | CLI-3, CLI-8 | yes | **met** — the list and the editor both landed (`CLI-12`); the arrangement is `CLI-13` |
 | CLI-10 | Desktop split-screen vs mobile page wiring for both admin areas | CLI-6, CLI-9 | yes | **not met** — the wide arrangements draw the list twice (`CLI-13`) |
 | CLI-11 | Tests, `test-baseline.json` regen, `scripts/check.sh` | all | — | **partial** — the admin shell scenarios never bind a port (`CLI-14`) |
-| CLI-12 | Wire the admin project editor through `AdminProjectsPort` | CLI-9, server `T8.9` | yes (wire) | open |
+| CLI-12 | Wire the admin project editor through `AdminProjectsPort` | CLI-9, server `T8.9` | yes (wire) | **done** — a model beside the shared stateless screen |
 | CLI-13 | Fix both admin pane arrangements; drop the vestigial `memberID` | CLI-6, CLI-9 | yes (shared-ui/routing) | open |
 | CLI-14 | Bind the admin ports in host scenarios so the real destinations run | CLI-12, CLI-13 | yes (shared-ui) | open |
 
@@ -1153,23 +1156,26 @@ of that name in `feature-settings-domain`.
 - Active vs Archived selection maps to `?status=`; the edit patch sends only changed fields + `version`.
 - Mutation-check: swap the `status` query value → the segment test goes red.
 
-## CLI-9 — `feature-projects-presentation`: Manage-projects screen — PARTIAL
+## CLI-9 — `feature-projects-presentation`: Manage-projects screen — MET
 
-**Landed:** the list. `packages/feature-projects-presentation/.../AdminProjectsScreen.kt`
-renders a `TTGlassSegmentedPicker` (Active/Archived) over the port's `projects(status)`,
+**Landed:** the list and the editor. `packages/feature-projects-presentation/.../AdminProjectsScreen.kt`
+renders a `TTGlassSegmentedPicker` (Active/Archived) over the port's `projects(status)`
 and reports a selection upward through `onProjectSelected`.
 
-**Not met — the selection leads nowhere.** The instruction above ("routes to the existing
-`ProjectEditorScreen`") was wrong as a plan, not merely unfinished: that screen writes
-through the local Room/sync path, and a project the admin is not a member of is absent
-from their store and refused by the sync push. Per **D5** the editor has to be
-port-backed, which is `CLI-12`.
+**The selection used to lead nowhere.** The instruction this task shipped with ("routes to
+the existing `ProjectEditorScreen`") was wrong as a plan, not merely unfinished: that
+screen writes through the local Room/sync path, and a project the admin is not a member of
+is absent from their store and refused by the sync push. Per **D5** the editor had to be
+port-backed, and `CLI-12` landed it as `AdminProjectEditorModel` beside that same stateless
+screen. What remains of this section is the arrangement, not the screen: `CLI-13` and
+`CLI-14`.
 
 **Acceptance / tests**
 - Archived projects appear only under Archived.
 - Mutation-check: hard-code the Active filter → the archived-selection test goes red.
 - Selecting a project opens an editor seeded from `project(id)` and saving calls
-  `updateProject(...)` — **deferred to `CLI-12`**, which is why this task stays partial.
+  `updateProject(...)` — landed in `CLI-12`; the destination-level assertion arrives with
+  the bound port in `CLI-14`.
 
 ## CLI-10 — Desktop split screen vs mobile page — NOT MET
 
@@ -1204,27 +1210,46 @@ port-backed, which is `CLI-12`.
 
 ---
 
-## CLI-12 — Wire the admin project editor through `AdminProjectsPort`
+## CLI-12 — Wire the admin project editor through `AdminProjectsPort` — DONE
 
-**Depends on** server `T8.9` (`GET /v1/admin/projects/{id}`): the route is verified on the
-server first, per the dual-engine ordering rule. Do not write this against an unverified
-stub.
+**Depends on** server `T8.9` (`GET /v1/admin/projects/{id}`), which landed and was verified
+there first, per the dual-engine ordering rule.
 
-**Files**
-- `packages/feature-projects-presentation/.../AdminProjectEditor.kt` (**new**) — seeded
-  from `port.project(id)`. A `null` answer means "this project is not on the server", not
-  an error, which is what the port's KDoc already says.
-- `shared-ui/.../AdminProjectsDestination.kt` — stop ignoring `projectID`: a non-null id
-  renders the editor, a null one the list.
-- `packages/feature-projects-presentation/src/commonTest/...` — a fake port that records
-  both the seed read and the save.
+**Corrected during implementation.** This task named a new screen,
+`AdminProjectEditor.kt`. That was wrong. `ProjectEditorScreen` is already stateless — it
+takes the draft and the callbacks and holds no port — so a second screen would be a second
+copy of the same fields, which is the drift that screen's own design note exists to
+prevent. The missing unit was a *model*, and the screen is reused.
+
+**Landed**
+- `packages/feature-projects-presentation/.../AdminProjectEditorModel.kt` (**new**) —
+  extends the same `ProjectModel` base as `ProjectEditorModel`, seeds from
+  `AdminProjectsPort.project(id)`, and saves `project.copy(name, details)` against the
+  version the seed carried. A `null` seed sets `isMissing` rather than an error, because
+  the port's KDoc requires "the row is gone" and "the read failed" to stay different
+  answers — a screen that conflated them would offer a retry for a deleted project, or
+  worse, hide a 500 behind "deleted".
+- `shared-ui/.../AdminProjectsDestination.kt` — a non-null `projectID` now renders
+  `ProjectEditorScreen` driven by that model; the id was previously ignored, so selecting a
+  row drew the list again. A null id renders the list, and loading and missing render their
+  own notice.
+- `packages/design-system/.../values/strings.xml` — one string, `admin_projects_missing`.
+  A missing row needs wording and `AppError.NotFound` takes its text from the caller.
+- `packages/feature-projects-presentation/src/commonTest/.../AdminProjectEditorModelTest.kt`
+  — the seed read, the missing row, the untouched fields travelling through the save, the
+  version the second save carries, and a refused save reporting rather than claiming
+  success.
 
 **Acceptance / tests**
 - Selecting a project reads `project(id)` and renders that project's fields; saving calls
-  `updateProject(project, version)` with the version the seed returned, so the optimistic
+  `updateProject(project, version)` with the version the seed carried, so the optimistic
   lock is carried rather than invented.
-- Mutation-check: ignore `projectID` again → the "selection opens the editor" test goes red.
 - A `null` seed offers no save and says the project is not on the server.
+- Mutation-check, both caught: send `""` instead of the seed's version → the two version
+  tests go red; drop the `isMissing` assignment → the missing test goes red.
+- The destination's own `projectID` branch is asserted by **CLI-14**, which is what binds
+  an admin port into a shell scenario; until a port is bound the shell renders the
+  `AdminPanes` placeholder and the destination is never composed.
 
 ## CLI-13 — Fix both admin pane arrangements; drop the vestigial `memberID`
 

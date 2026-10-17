@@ -560,6 +560,7 @@
     <string name="admin_projects_segment_archived">Archived</string>
     <string name="admin_projects_loading">Loading projects…</string>
     <string name="admin_projects_empty">No %1$s projects.</string>
+    <string name="admin_projects_missing">That project is no longer on the server.</string>
 
     <!-- The add-member form. The field labels are the words the person filling it in expects. -->
     <string name="admin_members_add_title">Add member</string>
