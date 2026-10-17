@@ -135,9 +135,12 @@ PRs are verified with `scripts/check.sh`; the three-host matrix is a drift backs
   1392 Android) plus ~1.7 GB of cache restore, before Kotlin/Native links anything on
   the iOS host. Warm, the legs measured 5m22s / 6m12s / ~15m (run 39045556483 and
   39042728812); cold, iOS was 35m04s.
-- `~/.konan` is 1.9 GB and is **not** covered by `gradle/actions/setup-gradle`, which
-  caches `GRADLE_USER_HOME` only — so it was re-fetched and re-compiled every run until
-  the workflow cached it explicitly. Cache it; do not reintroduce a per-push iOS leg.
+- `~/.konan` is **not** covered by `gradle/actions/setup-gradle`, which caches
+  `GRADLE_USER_HOME` only — so it was re-fetched and re-compiled every run until the
+  workflow cached it explicitly. The saved entry measured **436.72 MiB**
+  (`konan-macOS-…`, saved by run 39045556483): the "1.9 GB" first recorded here was a
+  developer machine's `~/.konan`, which holds several Kotlin/Native versions. Cache it;
+  do not reintroduce a per-push iOS leg.
 - `main` was red on 2026-10-17 by choice, and it was infrastructure, not a regression:
   `java.net.SocketException: Connection reset` while `gradlew` fetched the 143 MB
   `gradle-9.8.0-bin.zip`, because no macOS job had ever cached the Gradle distribution.
