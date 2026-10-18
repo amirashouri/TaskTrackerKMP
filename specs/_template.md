@@ -31,6 +31,16 @@ checks these, not good intentions.
   `scripts/test-baseline.py`; `scripts/check-baseline.sh` must pass.
 - Tests added go through the `test-reviewer` subagent before the PR.
 
+## Handoff
+
+Filled at end of each session. Carries state across agent providers (OpenCode →
+FreeBuf → WorkBuddy) — chat context dies on a switch, a committed spec does not.
+
+- **Done:** <what is finished and verified>
+- **Pending:** <what remains>
+- **Next step:** <the single next concrete action>
+- **Gotchas:** <constraints or decisions the next agent must not re-litigate>
+
 ## Risks / notes
 
 - <what is easy to get wrong here>
