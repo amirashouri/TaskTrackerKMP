@@ -132,14 +132,34 @@ enum class WorkItemStatus {
  */
 @Serializable
 enum class Priority {
+    @SerialName("lowest")
     Lowest,
+
+    @SerialName("low")
     Low,
+
+    @SerialName("medium")
     Medium,
+
+    @SerialName("high")
     High,
+
+    @SerialName("critical")
     Critical,
     ;
 
-    /** The stable machine key for storage and the wire. */
+    /**
+     * The stable machine key for storage and the wire.
+     *
+     * Named on every entry above, and it has to stay that way: kotlinx serializes an enum
+     * by its *entry name* unless a `@SerialName` says otherwise, which would put `"Medium"`
+     * on the wire rather than `"medium"`. The server has enforced lowercase since
+     * `0001_initial` (`work_items_priority_check`, `CHECK (priority IN
+     * ('lowest','low','medium','high','critical'))`) and never normalizes case, so the
+     * capitalized form is refused by Postgres as `23514` — which the client reads as a
+     * *retryable* failure, burns the whole retry budget, and then dead-letters. Every work
+     * item in the queue stops there, and the push loop halts behind it.
+     */
     val wireValue: String
         get() = name.lowercase()
 
