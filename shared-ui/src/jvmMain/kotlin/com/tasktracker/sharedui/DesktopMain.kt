@@ -16,8 +16,13 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.app_name
 import com.tasktracker.userdefaults.WindowGeometry
 import com.tasktracker.userdefaults.WindowGeometryDefaults
+import java.awt.Image
+import java.awt.Taskbar
+import java.awt.Toolkit
+import javax.imageio.ImageIO
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+import androidx.compose.ui.res.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -41,6 +46,7 @@ import org.jetbrains.compose.resources.stringResource
  * `TaskTrackerApplication` owns it on Android and `IosGraph` owns it on iOS.
  */
 fun main() = startDesktopProcess {
+    setDockIcon()
     val resolver = DesktopGraph.resolver
     application {
         val windowState = rememberWindowState(
@@ -50,10 +56,41 @@ fun main() = startDesktopProcess {
             onCloseRequest = ::exitApplication,
             title = stringResource(Res.string.app_name),
             state = windowState,
+            icon = painterResource("AppIcon.png"),
         ) {
             RememberWindowGeometry(windowState)
             DesktopContent(resolver = resolver)
         }
+    }
+}
+
+/**
+ * Replaces the default Java dock icon with the TaskTracker mark on macOS/Linux/Windows.
+ *
+ * `runDesktop` launches a raw `java` process with no `.app` bundle, so macOS/OS defaults fall
+ * back to the Java icon and label the process "Java". Standard JDK 9+ `Taskbar.getTaskbar().iconImage`
+ * overrides it; for older/custom JDK environments it falls back to `com.apple.eawt.Application`.
+ */
+private fun setDockIcon() {
+    try {
+        val image: Image? = ImageIO.read(
+            DesktopGraph::class.java.getResource("/AppIcon.png") ?: return
+        ) ?: return
+
+        if (Taskbar.isTaskbarSupported()) {
+            val taskbar = Taskbar.getTaskbar()
+            if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
+                taskbar.iconImage = image
+                return
+            }
+        }
+
+        val applicationClass = Class.forName("com.apple.eawt.Application")
+        val application = applicationClass.getMethod("getApplication").invoke(null)
+        applicationClass.getMethod("setDockIconImage", Image::class.java).invoke(application, image)
+        Toolkit.getDefaultToolkit().sync()
+    } catch (_: Exception) {
+        // Not supported or Apple AWT unavailable: keep default icon.
     }
 }
 

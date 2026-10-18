@@ -101,6 +101,16 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.tasktracker.sharedui.DesktopMainKt"
+
+        // The packaged macOS .app icon. Without this, Finder and the Dock show the
+        // default Java icon instead of the TaskTracker mark. The source PNG is the
+        // 1024px render from tools/generate_app_icon.py; iconutil packed it into
+        // AppIcon.icns at shared-ui/src/jvmMain/resources/AppIcon.icns.
+        nativeDistributions {
+            macOS {
+                iconFile = file("src/jvmMain/resources/AppIcon.icns")
+            }
+        }
     }
 }
 
