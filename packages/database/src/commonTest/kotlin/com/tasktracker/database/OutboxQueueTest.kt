@@ -83,6 +83,34 @@ class OutboxQueueTest {
     }
 
     @Test
+    fun aTieKeepsAParentAheadOfTheChildThatNamesIt() = runTest {
+        val queue = queue()
+        // The real id shape is `entity:entityID:operation:uuid`, so on a shared instant the
+        // id alone would sort by entity name: `attachment` and `comment` before the
+        // `workItem` they name. The server resolves an attachment's project through its
+        // work item and answers `rejected` when that work item is not there yet, which the
+        // engine dead-letters instead of retrying — so a file attached on the create
+        // screen would never arrive. A create and the attach held for it do share one
+        // instant, which is how this is reachable at all.
+        queue.enqueue(entry("attachment:att-1:upsert:z", entity = OutboxEntity.Attachment, entityID = "att-1"))
+        queue.enqueue(entry("comment:c-1:upsert:y", entity = OutboxEntity.Comment, entityID = "c-1"))
+        queue.enqueue(entry("workItem:w-1:upsert:x", entity = OutboxEntity.WorkItem, entityID = "w-1"))
+        queue.enqueue(entry("project:p-1:upsert:w", entity = OutboxEntity.Project, entityID = "p-1"))
+
+        val claimed = queue.claim(limit = 10, maxAttempts = 3)
+
+        assertEquals(
+            listOf(
+                "project:p-1:upsert:w",
+                "workItem:w-1:upsert:x",
+                "comment:c-1:upsert:y",
+                "attachment:att-1:upsert:z",
+            ),
+            claimed.map { it.id },
+        )
+    }
+
+    @Test
     fun claimingRespectsTheBatchLimit() = runTest {
         val queue = queue()
         for (index in 0..4) queue.enqueue(entry("change-$index", offset = index.toDouble()))
