@@ -90,6 +90,14 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
 
     @Test
+    fun shrinkingTheWindowPastTheThresholdShedsTheRailInset() =
+        runComposeUiTest(block = ShellScenarios.shrinkingTheWindowPastTheThresholdShedsTheRailInset)
+
+    @Test
+    fun growingTheWindowPastTheThresholdDropsTheBarInset() =
+        runComposeUiTest(block = ShellScenarios.growingTheWindowPastTheThresholdDropsTheBarInset)
+
+    @Test
     fun aWideShellDrawsTheSprintListAndDetailSideBySide() =
         runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheSprintListAndDetailSideBySide)
 

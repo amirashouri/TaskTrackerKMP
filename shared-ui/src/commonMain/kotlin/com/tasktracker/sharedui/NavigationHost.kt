@@ -264,9 +264,12 @@ fun NavigationHost(
     // caption is a typography measurement rather than a token. There is no number to put here,
     // which is the same finding that kept a rail-width token out of the design system.
     //
-    // Under `Compact` this stays 0.dp for the life of the composition, because only the expanded
-    // arm writes it. The padding below is therefore a no-op on a phone rather than a branch that
-    // has to be re-verified there.
+    // `Compact` must never read a non-zero value, and this used to be left to the fact that only
+    // the expanded arm writes it. That holds on a launch that starts narrow and fails on a
+    // resize: dragging a wide window under the threshold removes the rail from the composition
+    // without a remeasure, so `onSizeChanged` never fires again, nothing zeroes the measurement,
+    // and the whole page keeps a leading gap. The consumer below therefore reads this *only*
+    // under `Expanded` rather than trusting the write to have been undone.
     val railInset = remember { mutableStateOf(0.dp) }
     // Read here rather than inside the `onSizeChanged` lambda, which is not a composable scope.
     val tabBarDensity = LocalDensity.current
@@ -281,7 +284,17 @@ fun NavigationHost(
     val hostDispatcherOwner = LocalNavigationEventDispatcherOwner.current
     val fallbackDispatcherOwner = rememberNavigationEventDispatcherOwner(parent = null)
     CompositionLocalProvider(
-        LocalTabBarScrollUnderInset provides tabBarInset.value,
+        // The bar's height only reaches a list while the bar is there to cover it. Under
+        // `Expanded` the bar is gone but this used to keep publishing the last measurement, so a
+        // window grown past the threshold padded the bottom of every scrolling list for chrome
+        // that is not drawn — the same stale-inset leak as the rail's, on the other axis. `0.dp`
+        // is the same "there is no bar" answer the local's own default gives, now derived from the
+        // layout class instead of asserted by the expanded arm never writing the measurement.
+        LocalTabBarScrollUnderInset provides if (layoutClass == ShellLayoutClass.Expanded) {
+            0.dp
+        } else {
+            tabBarInset.value
+        },
         // What a modal does follows the same class the chrome follows: anchored and sliding
         // under `Compact`, a centred window under `Expanded`. Derived here from the one read
         // above, so the sheets cannot disagree with the chrome about which layout the shell
@@ -296,8 +309,18 @@ fun NavigationHost(
         Box(modifier = modifier.fillMaxSize()) {
             // Starts beside the rail under `Expanded` and flush under `Compact`, for the same
             // reason the bar is overlaid rather than a second child of a `Column`: the rail floats
-            // over the content and the content has to be given back the room it covers.
-            Box(modifier = Modifier.fillMaxSize().padding(start = railInset.value)) {
+            // over the content and the content has to be given back the room it covers. The gate
+            // is the fix for a resize: the rail is measured, and a rail that has left the
+            // composition is never measured again — so the value is honoured only where the rail
+            // is actually drawn, and the remembered width survives the trip back to `Expanded`
+            // instead of being thrown away on the way out.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        start = if (layoutClass == ShellLayoutClass.Expanded) railInset.value else 0.dp,
+                    ),
+            ) {
                 val path = navigation.pathFor(tab)
                 val pushed = path.lastOrNull()
 
@@ -563,11 +586,10 @@ fun NavigationHost(
             // `ShellLayoutClass` for why `isDesktopApp` is the wrong source for that answer.
             //
             // The load-bearing half of this branch is not the `when` but what the expanded arm does
-            // *not* do: it never writes `tabBarInset`, so `LocalTabBarScrollUnderInset` keeps its
-            // `0.dp` default and every scrolling list stops padding for a bar that is not
-            // composed. Reusing the default is the point — a second spelling of "there is no bar"
-            // is a second thing to keep true, and `TTBottomSheetScaffold` reads the same local for
-            // the same reason.
+            // *not* do: it never composes the bar, so nothing below it is told to keep room for
+            // one — the provider above hands `0.dp` under this class rather than the last bar's
+            // measurement, which is what it used to hand a window that had just been widened.
+            // `TTBottomSheetScaffold` reads the same local and gets the same answer.
             //
             // The bar's own `WindowInsets.ime` guard and its `navigationBarsPadding()` are left
             // exactly as they are rather than made conditional. They are already correct at zero
