@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -52,6 +53,7 @@ internal class Harness(
     val database: TaskTrackerDatabase = TaskTrackerDatabase.inMemory(),
     val bus: ProjectChangeBus = ProjectChangeBus(),
     val session: StubSessionCache = StubSessionCache(),
+    val blobStore: FakeBlobStore = FakeBlobStore(),
 ) {
     val clock: TestDateProvider = TestDateProvider()
 
@@ -60,6 +62,10 @@ internal class Harness(
         changeBus = bus,
         sessionCache = session,
         dateProvider = clock,
+        // In memory, not the production store: a test that wrote attachment bytes through
+        // `FileBlobStore()` would land them in the real support directory, where they would
+        // outlive the test and leak between runs.
+        blobStore = blobStore,
     )
 
     val sink: LocalDataSyncSink = LocalDataSyncSink(database, bus)
@@ -149,6 +155,36 @@ internal object Moments {
 
     /** A date every seeded due date lands near, so a relative-date test has something to say. */
     val day: Instant = start + 1.days
+}
+
+/**
+ * Attachment bytes, in memory.
+ *
+ * The production store resolves a directory on the host and writes real files. A test must
+ * not do that: the bytes would outlive the run, two parallel tests could collide on the same
+ * id, and "the file is missing" — a case the repository has to handle — would be reachable
+ * only by deleting something from a shared folder. Here it is one map, and a test can make a
+ * file vanish by calling [delete] or by simply never writing it.
+ */
+internal class FakeBlobStore : AttachmentBlobStore {
+
+    private val files = mutableMapOf<String, ByteArray>()
+
+    /** The names written, in order, so a test can prove the repository stored anything at all. */
+    val writes = mutableListOf<String>()
+
+    override fun write(id: AttachmentID, bytes: ByteArray): String {
+        val name = "${id.stringValue}.blob"
+        files[name] = bytes
+        writes += name
+        return name
+    }
+
+    override fun read(relativeName: String): ByteArray? = files[relativeName]
+
+    override fun delete(relativeName: String) {
+        files.remove(relativeName)
+    }
 }
 
 /**

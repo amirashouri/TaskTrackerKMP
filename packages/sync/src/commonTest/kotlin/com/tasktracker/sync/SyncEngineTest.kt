@@ -402,6 +402,51 @@ class SyncEngineTest {
         assertEquals(listOf("task-1", "task-2"), sink.appliedIDs)
     }
 
+    /**
+     * The attachments scope has to be in the default set.
+     *
+     * Every production graph passes `SyncScope.all`, so a scope that was defined but left out
+     * of `all` would be pulled by nobody: attachment metadata would never arrive, every file
+     * would stay local, and nothing anywhere would report an error — the engine would be
+     * behaving exactly as configured. This assertion is the only thing that catches it.
+     */
+    @Test
+    fun `the default scopes include attachment metadata`() = runTest {
+        val transport = StubSyncTransport()
+
+        engine(transport = transport).run()
+
+        val pulled = transport.pullRequests.map { it.scope }
+        assertTrue(
+            SyncScope.Attachments in pulled,
+            "attachment metadata must be pulled by default, but the engine pulled $pulled",
+        )
+    }
+
+    @Test
+    fun `an attachment change is routed to the attachment sink`() = runTest {
+        val sink = RecordingSink()
+        val transport = StubSyncTransport()
+        transport.setPages(
+            listOf(
+                PullPage(
+                    changes = listOf(remoteChange("file-1", entity = OutboxEntity.Attachment)),
+                    nextCursor = "c1",
+                    hasMore = false,
+                ),
+            ),
+            scope = SyncScope.Attachments,
+        )
+
+        val report = engine(
+            transport = transport,
+            sinks = mapOf(OutboxEntity.Attachment to sink),
+        ).run()
+
+        assertEquals(1, report.applied)
+        assertEquals(listOf("file-1"), sink.appliedIDs)
+    }
+
     @Test
     fun `the cursor is stored only after the page is safely applied`() = runTest {
         val sink = RecordingSink()

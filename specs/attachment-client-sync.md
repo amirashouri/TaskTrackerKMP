@@ -217,17 +217,35 @@ and invisible to teammates.
     successful sweep, `Failed` + banner + no retry on a `Validation`, `Waiting` + silence + retry
     on a `Transport`. `FakeAttachmentBlobTransport` counts `attempts` separately from `uploads` so
     "was retried" and "succeeded" cannot be confused.
+- **Done (T12):** tests across all four layers. 25 new tests, both repos green.
+  - **Domain** (`AttachmentBlobUseCasesTest`, 10): `UploadAttachment`'s four results plus the
+    case where a refusal must propagate rather than be flattened into one — the model's
+    retry/refuse split depends on that, so a use case that swallowed a `413` would break the
+    feature without failing any other test. `FetchAttachment` covers cache hit (0 downloads),
+    miss → download → cache, and that a second open is a cache hit.
+  - **Data** (`AttachmentBlobRepositoryTest`, 5): `cacheAttachmentBytes` and
+    `markAttachmentUploaded` write the blob / set the ref **and queue nothing**. That is the
+    assertion that matters: either one enqueuing a change would make every pulled file echo
+    back to the server as a new push. The harness now injects an in-memory `FakeBlobStore`
+    instead of the production `FileBlobStore()`, which was writing into the real support
+    directory during tests.
+  - **Sync** (2): `SyncScope.Attachments` is in `SyncScope.all` (a scope defined but omitted
+    from `all` would be pulled by nobody, silently), and an attachment change is routed to the
+    `Attachment` sink.
+  - **Server** (`internal/attachments/handler_test.go`, 8): upload stores bytes and links
+    `blobRef`; oversize → 413 with no file left behind; upload before the metadata row → 404
+    (the client's `NotYetOnServer`); non-member → 404 on both verbs; download serves the bytes
+    with the stored mime type and filename; a member using a mismatched work-item id → 404.
+  - **Two bugs in the doubles, found by writing these:** both `FakeProjectRepository`s never set
+    `projectID` on `addAttachment`, so every upload read as `AlreadySynced`; and the data-module
+    `Harness` was constructing the real `FileBlobStore()`, so attachment tests wrote files into
+    the device's support directory.
 - **Not done, deliberately:** the row tap that would call `attachmentBytes`. There is still no
   platform file opener (a `Desktop.open` / `Intent` / `UIDocumentInteractionController` seam), and a
   tappable row that opens nothing is the mock this repo refuses. The use case is ready and tested
   at the domain level; the opener is its own slice.
-- **Pending:** T12 (tests, both repos) — the remaining gaps are the use cases themselves
-  (`UploadAttachment`, `FetchAttachment`), the repository's `cacheAttachmentBytes`/
-  `markAttachmentUploaded`, the `SyncScope.Attachments` pull, and the server's
-  `internal/attachments` package, which still has no test files.
-- **Next step:** T12, starting with `packages/feature-projects-domain` (`UploadAttachment`'s four
-  results, `FetchAttachment`'s cache-hit / miss→download→cache / no-`blobRef`), then the server
-  handler tests (upload, download, 413, the 404-before-metadata case, membership).
+- **Next step:** the file opener, then the two follow-ups already listed above (a global
+  `blobRef == null` sweep, and a one-time backfill enqueue for attachments that predate sync).
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only

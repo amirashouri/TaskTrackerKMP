@@ -65,6 +65,16 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedComments = mutableListOf<Comment>()
     private val storedAttachments = mutableListOf<Attachment>()
+
+    /**
+     * The bytes this device holds, keyed by attachment id.
+     *
+     * Kept apart from [storedAttachments] because the real store keeps them apart: the row is
+     * metadata, the bytes are a file on disk. The upload use case reads them through
+     * [attachmentBytes] precisely so a row can exist with no bytes behind it, and a fake that
+     * folded them into the row could not reproduce the `NoLocalBytes` case at all.
+     */
+    private val blobBytes = mutableMapOf<AttachmentID, ByteArray>()
     private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
@@ -649,6 +659,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val attachment = Attachment(
                 id = randomAttachmentID(),
                 workItemID = workItemID,
+                // Set, as the real store sets it. The file API scopes every request by project,
+                // so the upload use case refuses a row it cannot scope — a fake that left this
+                // null would report every upload as `AlreadySynced` and prove nothing.
+                projectID = owner.projectID,
                 fileName = fileName,
                 mimeType = mimeType,
                 sizeBytes = bytes.size.toLong(),
@@ -656,6 +670,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 createdAt = now,
             )
             storedAttachments += attachment
+            blobBytes[attachment.id] = bytes
             publish(ProjectChange(ProjectChange.Kind.WorkItems, owner.projectID))
             attachment
         }
@@ -672,6 +687,41 @@ class FakeProjectRepository : ProjectRepositoryPort {
             storedAttachments.removeAt(index)
             val projectID = storedItems.firstOrNull { it.id == owner }?.projectID
             publish(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
+        }
+    }
+
+    override suspend fun attachment(id: AttachmentID): Attachment? {
+        throwIfFailing()
+        return lock.withLock { storedAttachments.firstOrNull { it.id == id } }
+    }
+
+    override suspend fun attachmentBytes(id: AttachmentID): ByteArray? {
+        throwIfFailing()
+        return lock.withLock { blobBytes[id] }
+    }
+
+    override suspend fun cacheAttachmentBytes(id: AttachmentID, bytes: ByteArray): Attachment? {
+        throwIfFailing()
+        return lock.withLock {
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return@withLock null
+            val row = storedAttachments[index]
+            blobBytes[id] = bytes
+            val updated = row.copy(blobPath = "cache/${id.stringValue}", sizeBytes = bytes.size.toLong())
+            storedAttachments[index] = updated
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, row.projectID))
+            updated
+        }
+    }
+
+    override suspend fun markAttachmentUploaded(id: AttachmentID, blobRef: String, uploadedAt: Instant) {
+        throwIfFailing()
+        lock.withLock {
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return@withLock
+            val row = storedAttachments[index]
+            storedAttachments[index] = row.copy(blobRef = blobRef, uploadedAt = uploadedAt)
+            publish(ProjectChange(ProjectChange.Kind.WorkItems, row.projectID))
         }
     }
 
@@ -757,6 +807,44 @@ class FakeProjectRepository : ProjectRepositoryPort {
         storedItems += item
         item
     }
+
+    /**
+     * Files a row directly, as a pull or an earlier build would have left it.
+     *
+     * The project is read off the work item rather than passed, because every real path sets
+     * it that way. [scoped] is a separate switch rather than a nullable `projectID` on
+     * purpose: a nullable parameter cannot express "explicitly unscoped", since `null` there
+     * would have to mean both "derive it" and "leave it out" — and the unscoped row is exactly
+     * the one shape the upload use case refuses.
+     *
+     * Deliberately not publishing a change, for the same reason [seedWorkItem] does not: this
+     * is fixture setup, not a write the models should react to.
+     */
+    suspend fun seedAttachment(
+        workItemID: WorkItemID,
+        fileName: String = "report.txt",
+        sizeBytes: Long = 3L,
+        blobRef: String? = null,
+        scoped: Boolean = true,
+    ): Attachment = lock.withLock {
+        val owner = storedItems.firstOrNull { it.id == workItemID }
+        val attachment = Attachment(
+            id = randomAttachmentID(),
+            workItemID = workItemID,
+            projectID = if (scoped) owner?.projectID else null,
+            fileName = fileName,
+            mimeType = "text/plain",
+            sizeBytes = sizeBytes,
+            blobPath = "report.blob",
+            blobRef = blobRef,
+            createdAt = Instant.fromEpochSeconds(0),
+        )
+        storedAttachments += attachment
+        attachment
+    }
+
+    /** Puts bytes behind an attachment id, as if the file were already on this device. */
+    suspend fun seedBytes(id: AttachmentID, bytes: ByteArray) = lock.withLock { blobBytes[id] = bytes }
 
     private fun throwIfFailing() {
         failure?.let { throw it }
