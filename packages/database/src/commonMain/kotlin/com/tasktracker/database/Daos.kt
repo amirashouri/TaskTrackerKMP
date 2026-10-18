@@ -21,8 +21,17 @@ interface OutboxDao {
      *
      * Ordering is the subtle part. Changes are claimed strictly oldest-first because the
      * server applies them in order: pushing "task 7 updated" before "task 7 created"
-     * would be rejected as an unknown id, and the queue would wedge. Ties break on id so
-     * two changes written in the same millisecond still have one defined order.
+     * would be rejected as an unknown id, and the queue would wedge.
+     *
+     * A tie breaks on the entity's rank *before* the id, because the id alone leads with
+     * the entity name and so sorts `attachment` and `comment` ahead of the `workItem`
+     * they name. That is the same wedge by another route: the server resolves an
+     * attachment's project through its work item, finds none, and answers `rejected` —
+     * which the engine dead-letters rather than retries, so a file attached on the create
+     * screen never reaches the server at all. The rank is the dependency order the server
+     * applies: a project, then a sprint, then a work item, then its comments and its
+     * files. An entity the rank does not know sorts last; `claim` refuses it on read
+     * regardless.
      *
      * A null [userID] claims every account's rows, which is the shape a store with no
      * session concept takes. Otherwise only this account's rows, plus null-user rows:
@@ -38,7 +47,16 @@ interface OutboxDao {
         WHERE status IN ('pending', 'failed')
           AND attemptCount < :maxAttempts
           AND (:userID IS NULL OR userID IS NULL OR userID = :userID)
-        ORDER BY createdAt ASC, id ASC
+        ORDER BY createdAt ASC,
+                 CASE entityKind
+                     WHEN 'project' THEN 0
+                     WHEN 'sprint' THEN 1
+                     WHEN 'workItem' THEN 2
+                     WHEN 'comment' THEN 3
+                     WHEN 'attachment' THEN 4
+                     ELSE 9
+                 END ASC,
+                 id ASC
         LIMIT :limit
         """,
     )
@@ -86,7 +104,8 @@ interface OutboxDao {
      *
      * Oldest first for the same reason [claimable] is: a caller putting them back has to
      * put them back in the order the server will apply them, and re-queueing out of order
-     * is how a work item ends up ahead of the project that has to exist first.
+     * is how a work item ends up ahead of the project that has to exist first. The same
+     * rank tie-break applies, so a revived batch keeps a parent ahead of its children.
      *
      * Scoped like [claimable] and with the same predicate, so the set a caller sees here is
      * exactly the set it could later claim.
@@ -96,7 +115,16 @@ interface OutboxDao {
         SELECT * FROM outbox
         WHERE status = 'dead'
           AND (:userID IS NULL OR userID IS NULL OR userID = :userID)
-        ORDER BY createdAt ASC, id ASC
+        ORDER BY createdAt ASC,
+                 CASE entityKind
+                     WHEN 'project' THEN 0
+                     WHEN 'sprint' THEN 1
+                     WHEN 'workItem' THEN 2
+                     WHEN 'comment' THEN 3
+                     WHEN 'attachment' THEN 4
+                     ELSE 9
+                 END ASC,
+                 id ASC
         """,
     )
     suspend fun deadLetters(userID: String?): List<OutboxRecord>

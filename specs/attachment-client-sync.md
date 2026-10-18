@@ -419,6 +419,29 @@ and invisible to teammates.
     is why the two iOS breaks above went unnoticed — `jvmTest` alone never sees them.
 - **Next step:** none outstanding for attachments. Both follow-ups the spec carried — the
   global sweep (#20) and the backfill enqueue (#21) — are shipped and green.
+- **Done — outbox ordering (follow-up bug found after #21):** a create-time attach was
+  dead-lettered before it was ever pushed.
+  - **The defect.** `OutboxDao.claimable` ordered `createdAt ASC, id ASC`, and an outbox id is
+    `entity:entityID:operation:uuid`. On a shared instant the id leads with the *entity name*,
+    so `attachment` (and `comment`) sorted ahead of the `workItem` they name — the exact wedge
+    the query's own KDoc claims it prevents. A create enqueues `workItem` and `project` at one
+    `now`, then the flushed attachment at a second; when both calls land on the same
+    millisecond the attachment was claimed first, the server's `resolveProject` found no work
+    item through it and answered `rejected` (`change does not name a project`), and `settle`
+    dead-letters a rejection on its first attempt. The task reached the database and the file
+    never did, silently. Reproduced deterministically under the fixed clock — claimed order
+    `[attachment, project, workItem]`. The edit path was never affected: the work item is
+    already on the server by the time the file is attached.
+  - **The fix.** A rank tie-break between `createdAt` and `id`, in both `claimable` and
+    `deadLetters`: project, sprint, work item, then its comments and files — the dependency
+    order the server applies. Insertion order would not have worked: `createWorkItem` enqueues
+    the work item *before* the project it must follow, so only the alphabetical accident keeps
+    that pair right today.
+  - **Tests:** 1 in `OutboxQueueTest` (project/workItem/comment/attachment at one instant,
+    parents first), mutation-checked red without the ORDER BY change — it reported
+    `[attachment, comment, project, workItem]`.
+  - **Baseline:** regenerated after a green three-host run — **1820 jvm / 1769 iOS / 1475
+    Android-host**. The Android host is unchanged because it runs no `:packages:database` tests.
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only
