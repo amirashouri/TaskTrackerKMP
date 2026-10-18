@@ -1843,6 +1843,9 @@ private fun WorkItemEditorDestination(
         onRemoveAttachment = { id ->
             scope.launch { model.removeAttachment(id) }
         },
+        // Per-row upload progress. The model owns the states; the list only names them, so a
+        // row can say "waiting" or "not uploaded" without the view guessing from `blobRef`.
+        attachmentSyncState = model::syncStateOf,
         onDismissRequest = {
             if (!isBusy) {
                 onDismiss()

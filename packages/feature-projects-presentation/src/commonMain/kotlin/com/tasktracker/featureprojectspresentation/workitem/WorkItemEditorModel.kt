@@ -199,6 +199,39 @@ class WorkItemEditorModel(
         private set
 
     /**
+     * Files whose bytes are moving right now.
+     *
+     * A set rather than a single flag because [refreshAttachments] can retry several at
+     * once, and a row that said "uploading" only while it was the *last* one tried would
+     * be wrong about the others.
+     */
+    private var uploadingIDs by mutableStateOf<Set<AttachmentID>>(emptySet())
+
+    /**
+     * Files the last attempt refused for a reason a retry cannot fix.
+     *
+     * Kept so the row stops saying "waiting", and so the refresh sweep stops retrying a
+     * request that will be refused identically every time. Cleared on a success.
+     */
+    private var refusedIDs by mutableStateOf<Set<AttachmentID>>(emptySet())
+
+    /**
+     * What to tell the user about one file's progress towards the server.
+     *
+     * The order of the checks is the contract. A row with a `blobRef` is synced whatever
+     * else is true of it, and a graph with no file API reports [AttachmentSyncState.LocalOnly]
+     * before anything else — there is no queue to be waiting in when there is no server to
+     * send to, and a "waiting" label there would be a spinner that can never resolve.
+     */
+    fun syncStateOf(attachment: Attachment): AttachmentSyncState = when {
+        attachment.blobRef != null -> AttachmentSyncState.Synced
+        uploadBlob == null -> AttachmentSyncState.LocalOnly
+        attachment.id in uploadingIDs -> AttachmentSyncState.Uploading
+        attachment.id in refusedIDs -> AttachmentSyncState.Failed
+        else -> AttachmentSyncState.Waiting
+    }
+
+    /**
      * Reloads the files — after open, and after a change announcement from elsewhere.
      *
      * A no-op while creating, for the same reason comments are: there is no id yet, and
@@ -212,7 +245,11 @@ class WorkItemEditorModel(
         // landed — so a `404` from the first, immediate attempt is recovered here rather
         // than waiting for the user to attach the file again. Snapshot the ids first: each
         // upload can rewrite `attachments`, and iterating a live list would be undefined.
-        val pending = attachments.filter { it.blobRef == null }.map { it.id }
+        // Refused files are skipped: a `413` is a verdict, not a delay, and re-sending it on
+        // every refresh would re-raise the banner for a file the user must shrink themselves.
+        val pending = attachments
+            .filter { it.blobRef == null && it.id !in refusedIDs }
+            .map { it.id }
         for (pendingID in pending) {
             uploadAttachment(pendingID)
         }
@@ -272,26 +309,56 @@ class WorkItemEditorModel(
     /**
      * Pushes one attachment's bytes in the background, after [attachFile] returned.
      *
-     * Deliberately silent on failure: the metadata is already queued and the next sync
-     * retries the bytes, so a transient network error must not paint a banner over an
-     * attach the user watched succeed. Success sets `blobRef`, which is what the list
-     * renders as "synced".
+     * ## Which failures are silent, and why that is not one rule
+     *
+     * The metadata is already queued, so a *transient* failure — no network, a 500, a
+     * timeout — is retried by the next refresh and must stay quiet: painting a banner over
+     * an attach the user watched succeed, for a problem that fixes itself, teaches them to
+     * distrust the button. A *refusal* is the opposite. A `413` means this file will be
+     * refused every time it is sent, so silence would leave a row saying "waiting" forever
+     * on something that will never arrive. The split is [AppError.isRetryable], the same
+     * property the sync engine retries on, so the two cannot drift into disagreeing about
+     * what "try again" means.
+     *
+     * Success sets `blobRef`, which is what the list renders as "synced".
      */
     suspend fun uploadAttachment(id: AttachmentID) {
         val useCase = uploadBlob ?: return
-        val result = try {
-            useCase(id)
+        // Marked before the first suspension so the row says "uploading" from the frame the
+        // attempt starts, and cleared in `finally` so a cancellation cannot strand a row in
+        // a state no later attempt would clear.
+        uploadingIDs = uploadingIDs + id
+        try {
+            when (val result = useCase(id)) {
+                UploadAttachmentResult.Uploaded, UploadAttachmentResult.AlreadySynced -> {
+                    refusedIDs = refusedIDs - id
+                    // Re-read the one row rather than the whole list: the upload changed only
+                    // `blobRef`/`uploadedAt`, and a full refresh would race a concurrent edit.
+                    // `AlreadySynced` re-reads too, so a row that is synced stops saying
+                    // "waiting" — it can be reached with a stale list after another device
+                    // uploaded the same file.
+                    repository.attachment(id)?.let { updated ->
+                        attachments = attachments.map { if (it.id == id) updated else it }
+                    }
+                }
+
+                // Nothing left on this device to send, and nothing that will put it back:
+                // retrying cannot help, so the row stops promising rather than queueing
+                // forever. No banner — the user did not press anything for this one.
+                UploadAttachmentResult.NoLocalBytes -> refusedIDs = refusedIDs + id
+
+                // The metadata push has not landed yet. The next refresh retries.
+                UploadAttachmentResult.NotYetOnServer -> Unit
+            }
         } catch (cancellation: CancellationException) {
             throw cancellation
-        } catch (_: AppError) {
-            return
-        }
-        if (result == UploadAttachmentResult.Uploaded) {
-            // Re-read the one row rather than the whole list: the upload changed only
-            // `blobRef`/`uploadedAt`, and a full refresh would race a concurrent edit.
-            repository.attachment(id)?.let { updated ->
-                attachments = attachments.map { if (it.id == id) updated else it }
+        } catch (failure: AppError) {
+            if (!failure.isRetryable) {
+                refusedIDs = refusedIDs + id
+                onFailure(failure)
             }
+        } finally {
+            uploadingIDs = uploadingIDs - id
         }
     }
 
@@ -318,6 +385,10 @@ class WorkItemEditorModel(
     suspend fun removeAttachment(id: AttachmentID) {
         reporting { dropAttachment(id) } ?: return
         attachments = attachments.filterNot { it.id == id }
+        // The two upload sets are keyed by id and would otherwise keep an entry for a row
+        // that no longer exists for as long as this editor stays open.
+        uploadingIDs = uploadingIDs - id
+        refusedIDs = refusedIDs - id
     }
 
     private val original: Draft? = existing?.let { Draft.of(it) }

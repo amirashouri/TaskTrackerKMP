@@ -188,6 +188,16 @@
     <string name="attachment_empty">No attachments yet</string>
     <string name="attachment_add">Attach file</string>
     <string name="attachment_remove">Remove</string>
+    <!--
+      One label per upload state. They are deliberately five rather than two: a file with
+      no blob ref is either queued, in flight, or refused, and calling all three
+      "uploading" would be a promise the app cannot keep for two of them.
+    -->
+    <string name="attachment_state_synced">Synced</string>
+    <string name="attachment_state_uploading">Uploading…</string>
+    <string name="attachment_state_waiting">Waiting to upload</string>
+    <string name="attachment_state_failed">Not uploaded</string>
+    <string name="attachment_state_local_only">On this device</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>

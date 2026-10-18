@@ -183,13 +183,51 @@ and invisible to teammates.
   push lands keeps `blobRef == null` until they reopen it. A global sweep (e.g. a post-sync
   coordinator hook that drains all `blobRef == null` rows with local bytes) would close this;
   it needs an "all pending attachments" query on the port.
-- **Pending:** #14 (UI sync state) + T12 (tests, both repos).
-- **Next step:** #14 — `AttachmentList`: show "uploading…" while `blobRef == null`, "synced" once
-  set, and wire a row tap to `WorkItemEditorModel.attachmentBytes` (download-on-demand) once a
-  platform file opener exists; add the `413` banner path. Then T12 tests: `UploadAttachment`
-  (uploaded / already-synced / no-local-bytes / not-yet-on-server), `FetchAttachment` (cache hit,
-  miss→download→cache, no blobRef), repository `cacheAttachmentBytes`/`markAttachmentUploaded`,
-  and the `SyncScope.Attachments` pull.
+- **Done (#14):** per-row sync state, and the refusal/transient split behind it.
+  - **Five states, not two.** `AttachmentSyncState` (`AttachmentList.kt`) is `Synced`,
+    `Uploading`, `Waiting`, `Failed`, `LocalOnly`. The original plan's "`blobRef == null` means
+    uploading…" was wrong in three ways at once: a queued file, a file in flight and a file the
+    server refused all have no ref, so one label would have lied about two of them. `LocalOnly`
+    covers the demo graph, where there is no server to wait for and a spinner could never resolve.
+  - **The model owns the states** (`WorkItemEditorModel.syncStateOf`), because only it knows what
+    is in flight. Two id sets back it — `uploadingIDs` and `refusedIDs` — and the check order is
+    the contract: `blobRef` first, then "no transport", then in-flight, then refused, else waiting.
+  - **Refusal vs transient is `AppError.isRetryable`**, the same property the sync engine retries
+    on, so the two cannot drift apart. A non-retryable failure (a `413`, a `400`) sets `Failed`,
+    raises the banner and is **skipped by the refresh sweep** — re-sending a verdict on every
+    refresh would re-raise the banner forever. A retryable one stays `Waiting` and stays quiet:
+    painting an error over an attach the user watched succeed, for a problem that fixes itself,
+    is how a button loses its trustworthiness.
+  - `NoLocalBytes` also lands on `Failed` (retrying cannot put the bytes back) but with no banner,
+    since no user action asked for it.
+  - **`AttachmentList` renders the state** as a caption beside the size, `ttError()` for `Failed`
+    only. The `syncStateOf` parameter is nullable: null means "this caller has no sync
+    information", matching the editor's existing "empty list means no file list" convention. A
+    default of `Synced` was rejected — it would put a checkmark on a file that never left the
+    device.
+  - **Threading:** only `WorkItemEditorSheet` → `ProjectsEditorFullScreen` carries it, because that
+    is the one live path. `WorkItemEditorScreen` is preview-only (it passes no attachment params at
+    all today), so it was deliberately left alone rather than given a sixth dead parameter.
+  - **Fake upgraded to make this testable:** `FakeProjectRepository` now implements `attachment`,
+    `attachmentBytes`, `cacheAttachmentBytes`, `markAttachmentUploaded`, keeps bytes in a separate
+    `blobBytes` map (the real store separates metadata from bytes too), and — a real bug in the
+    double — now sets `projectID` on `addAttachment`. Without that every upload read as
+    `AlreadySynced`, because the use case refuses a row it cannot scope.
+  - **Tests:** four in `WorkItemEditorModelTest` — `LocalOnly` with no transport, `Synced` after a
+    successful sweep, `Failed` + banner + no retry on a `Validation`, `Waiting` + silence + retry
+    on a `Transport`. `FakeAttachmentBlobTransport` counts `attempts` separately from `uploads` so
+    "was retried" and "succeeded" cannot be confused.
+- **Not done, deliberately:** the row tap that would call `attachmentBytes`. There is still no
+  platform file opener (a `Desktop.open` / `Intent` / `UIDocumentInteractionController` seam), and a
+  tappable row that opens nothing is the mock this repo refuses. The use case is ready and tested
+  at the domain level; the opener is its own slice.
+- **Pending:** T12 (tests, both repos) — the remaining gaps are the use cases themselves
+  (`UploadAttachment`, `FetchAttachment`), the repository's `cacheAttachmentBytes`/
+  `markAttachmentUploaded`, the `SyncScope.Attachments` pull, and the server's
+  `internal/attachments` package, which still has no test files.
+- **Next step:** T12, starting with `packages/feature-projects-domain` (`UploadAttachment`'s four
+  results, `FetchAttachment`'s cache-hit / miss→download→cache / no-`blobRef`), then the server
+  handler tests (upload, download, 413, the 404-before-metadata case, membership).
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only

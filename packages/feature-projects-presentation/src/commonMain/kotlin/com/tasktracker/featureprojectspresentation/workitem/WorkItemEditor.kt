@@ -252,6 +252,8 @@ fun WorkItemEditorSheet(
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
     onRemoveAttachment: (AttachmentID) -> Unit = {},
+    /** See [AttachmentList.syncStateOf]. */
+    attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
     /** See [WorkItemEditorForm.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     /** See [WorkItemEditorForm.resolveSelected]. */
@@ -321,6 +323,7 @@ fun WorkItemEditorSheet(
         isAttaching = isAttaching,
         onAttachClick = onAttachClick,
         onRemoveAttachment = onRemoveAttachment,
+        attachmentSyncState = attachmentSyncState,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -415,6 +418,8 @@ private fun ProjectsEditorFullScreen(
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
     onRemoveAttachment: (AttachmentID) -> Unit = {},
+    /** See [AttachmentList.syncStateOf]. */
+    attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
 ) {
     Column(
         modifier = modifier
@@ -566,6 +571,7 @@ private fun ProjectsEditorFullScreen(
             attachments = attachments,
             onAttachClick = onAttachClick,
             onRemove = onRemoveAttachment,
+            syncStateOf = attachmentSyncState,
         )
         Row(
             modifier = Modifier

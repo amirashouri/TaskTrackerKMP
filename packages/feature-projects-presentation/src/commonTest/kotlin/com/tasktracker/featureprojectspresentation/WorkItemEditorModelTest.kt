@@ -891,11 +891,135 @@ class WorkItemEditorModelTest {
         assertNull(model.errorMessage)
     }
 
+    // MARK: Sync state
+
+    /**
+     * A graph with no file API is a supported build — the offline demo — and its rows must
+     * not pretend to be queued. There is no server to queue for, so "waiting" there would be
+     * a spinner that can never resolve, and "synced" would be a lie about a local file.
+     */
+    @Test
+    fun `a file on a build with no server stays on this device`() = runTest {
+        val (repository, item) = seededItem()
+        repository.seed(pendingAttachment(item))
+        val model = editing(item, repository)
+
+        model.refreshAttachments()
+
+        assertEquals(
+            AttachmentSyncState.LocalOnly,
+            model.syncStateOf(model.attachments.single()),
+        )
+    }
+
+    @Test
+    fun `a successful upload turns the row synced`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1, 2, 3))
+        val transport = FakeAttachmentBlobTransport()
+        val model = editing(item, repository, transport)
+
+        model.refreshAttachments()
+
+        assertEquals(listOf(attachment.id), transport.uploads)
+        val row = model.attachments.single()
+        assertEquals(AttachmentSyncState.Synced, model.syncStateOf(row))
+        assertNotNull(row.blobRef, "a synced row must carry the server's key")
+        assertNull(model.errorMessage, "a successful upload leaves the banner clear")
+    }
+
+    /**
+     * The pair that decides the feature's honesty: a refusal is a verdict and a transport
+     * failure is weather. They must be treated differently, and both must be *observable* —
+     * one on the banner and the row, the other only in the retry count.
+     */
+    @Test
+    fun `a refusal is remembered, explained, and not retried`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val refusal = AppError.Validation("That file is larger than the 25 MB limit.")
+        val transport = FakeAttachmentBlobTransport(failure = refusal)
+        val model = editing(item, repository, transport)
+
+        model.refreshAttachments()
+
+        assertEquals(
+            AttachmentSyncState.Failed,
+            model.syncStateOf(model.attachments.single()),
+            "a refused file must stop claiming it is on its way",
+        )
+        assertEquals(refusal.message, model.errorMessage, "a refusal must say why")
+
+        model.refreshAttachments()
+
+        assertEquals(1, transport.attempts, "a refusal is a verdict, not a delay")
+    }
+
+    @Test
+    fun `a transient failure stays quiet and is retried`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val transport = FakeAttachmentBlobTransport(failure = AppError.Transport("offline"))
+        val model = editing(item, repository, transport)
+
+        model.refreshAttachments()
+
+        assertEquals(
+            AttachmentSyncState.Waiting,
+            model.syncStateOf(model.attachments.single()),
+            "a file still on its way is waiting, not failed",
+        )
+        assertNull(
+            model.errorMessage,
+            "a transient failure must not paint a banner over an attach the user watched succeed",
+        )
+
+        model.refreshAttachments()
+
+        assertEquals(2, transport.attempts, "weather is retried")
+    }
+
     // MARK: Helpers
 
     private fun newItem(repository: FakeProjectRepository = FakeProjectRepository()) =
         WorkItemEditorModel(testProject().id, null, repository, TestDateProvider())
 
-    private fun editing(item: com.tasktracker.domain.WorkItem, repository: FakeProjectRepository = FakeProjectRepository()) =
-        WorkItemEditorModel(item.projectID, item, repository, TestDateProvider())
+    private fun editing(
+        item: com.tasktracker.domain.WorkItem,
+        repository: FakeProjectRepository = FakeProjectRepository(),
+        transport: FakeAttachmentBlobTransport? = null,
+    ) = WorkItemEditorModel(
+        item.projectID,
+        item,
+        repository,
+        TestDateProvider(),
+        blobTransport = transport,
+    )
+
+    private suspend fun seededItem(): Pair<FakeProjectRepository, com.tasktracker.domain.WorkItem> {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id)
+        repository.seed(item)
+        return repository to item
+    }
+
+    /** A row as a real attach leaves it: scoped to its project, with no server key yet. */
+    private fun pendingAttachment(item: com.tasktracker.domain.WorkItem) = Attachment(
+        id = randomAttachmentID(),
+        workItemID = item.id,
+        projectID = item.projectID,
+        fileName = "report.txt",
+        mimeType = "text/plain",
+        sizeBytes = 3L,
+        blobPath = "report.blob",
+        createdAt = Instant.fromEpochSeconds(1_700_000_000),
+    )
 }

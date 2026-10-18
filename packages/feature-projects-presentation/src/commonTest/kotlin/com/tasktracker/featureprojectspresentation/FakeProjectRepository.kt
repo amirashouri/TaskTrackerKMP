@@ -99,6 +99,17 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedComments = mutableListOf<Comment>()
     private val storedAttachments = mutableListOf<Attachment>()
+
+    /**
+     * The attachment bytes this device holds, keyed by id.
+     *
+     * Separate from [storedAttachments] because the real store separates them too: the row
+     * is metadata and the bytes are a file on disk, addressed by `blobPath`. A fake that
+     * kept the bytes in the row would let a test pass on a shape the repository cannot
+     * produce — and the upload path reads them through [attachmentBytes] precisely so the
+     * two can be missing independently.
+     */
+    private val blobBytes = mutableMapOf<AttachmentID, ByteArray>()
     private val storedSprints = mutableListOf<Sprint>()
 
     /** Written, so a test can assert which use case ran and with what. */
@@ -588,6 +599,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val attachment = Attachment(
                 id = randomAttachmentID(),
                 workItemID = workItemID,
+                // Set, because the real store sets it: the file API scopes every request by
+                // project, and an upload with no project is one the use case refuses. A fake
+                // that left it null would make every upload look already-synced.
+                projectID = existing.projectID,
                 fileName = fileName,
                 mimeType = mimeType,
                 sizeBytes = bytes.size.toLong(),
@@ -595,6 +610,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 createdAt = now,
             )
             storedAttachments += attachment
+            blobBytes[attachment.id] = bytes
             writes += "addAttachment"
             attachment.copy()
         }
@@ -611,9 +627,56 @@ class FakeProjectRepository : ProjectRepositoryPort {
             if (index < 0) return
             val owner = storedAttachments[index].workItemID
             storedAttachments.removeAt(index)
+            blobBytes.remove(id)
             val projectID = storedItems.firstOrNull { it.id == owner }?.projectID
             writes += "deleteAttachment"
             pending = ProjectChange(ProjectChange.Kind.WorkItems, projectID)
+        }
+        pending?.let { publish(it) }
+    }
+
+    override suspend fun attachment(id: AttachmentID): Attachment? = locked {
+        storedAttachments.firstOrNull { it.id == id }?.copy()
+    }
+
+    override suspend fun attachmentBytes(id: AttachmentID): ByteArray? = locked { blobBytes[id] }
+
+    override suspend fun cacheAttachmentBytes(id: AttachmentID, bytes: ByteArray): Attachment? {
+        var cached: Attachment? = null
+        var pending: ProjectChange? = null
+        lock.withLock {
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return null
+            val row = storedAttachments[index]
+            blobBytes[id] = bytes
+            val updated = row.copy(
+                blobPath = "cache/${id.stringValue}",
+                sizeBytes = bytes.size.toLong(),
+            )
+            storedAttachments[index] = updated
+            writes += "cacheAttachmentBytes"
+            cached = updated.copy()
+            pending = ProjectChange(
+                ProjectChange.Kind.WorkItems,
+                storedItems.firstOrNull { it.id == row.workItemID }?.projectID,
+            )
+        }
+        pending?.let { publish(it) }
+        return cached
+    }
+
+    override suspend fun markAttachmentUploaded(id: AttachmentID, blobRef: String, uploadedAt: Instant) {
+        var pending: ProjectChange? = null
+        lock.withLock {
+            val index = storedAttachments.indexOfFirst { it.id == id }
+            if (index < 0) return
+            val row = storedAttachments[index]
+            storedAttachments[index] = row.copy(blobRef = blobRef, uploadedAt = uploadedAt)
+            writes += "markAttachmentUploaded"
+            pending = ProjectChange(
+                ProjectChange.Kind.WorkItems,
+                storedItems.firstOrNull { it.id == row.workItemID }?.projectID,
+            )
         }
         pending?.let { publish(it) }
     }
@@ -654,6 +717,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     /** Adds an attachment directly, without recording a write or a change. */
     suspend fun seed(attachment: Attachment) = locked { storedAttachments += attachment }
+
+    /**
+     * Puts bytes behind an attachment id, as if the file were already on this device.
+     *
+     * Needed because [seed] writes metadata only, and the upload path deliberately reads the
+     * bytes through their own call: a row with no bytes is `NoLocalBytes`, not a failure.
+     */
+    suspend fun seedBytes(id: AttachmentID, bytes: ByteArray) = locked { blobBytes[id] = bytes }
 
     /** How many subscribers the broadcaster currently has. Proves observation stopped. */
     val subscriberCount: Int get() = broadcaster.subscriberCount
