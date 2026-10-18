@@ -58,17 +58,57 @@ internal object HttpErrorMapping {
         else -> AppError.Transport(error.message ?: "unknown")
     }
 
+    /**
+     * Statuses whose `error` field is a product-defined, user-safe sentence the client may
+     * show verbatim.
+     *
+     * Everything else — 5xx and any unrecognised status — is server-internal: the user gets
+     * a generic, client-owned message and the raw text is withheld rather than rendered. The
+     * server is trusted for these four because their wording is part of the API contract
+     * (docs/API.md), not an implementation detail that could leak a stack trace or a query.
+     * 401/403 are deliberately absent: their user text is client-owned
+     * (`AppError.Unauthorized`/`Forbidden`), so the server's words are never shown for them.
+     */
+    private val SURFACE_SAFE_STATUSES = setOf(400, 404, 409, 422)
+
     fun map(statusCode: Int, body: ByteArray): AppError {
-        val message = serverMessage(body)
+        val raw = serverMessage(body)
+        // Only statuses in the allowlist may surface the server's words; for the rest the
+        // detail is withheld so a future unhandled path cannot leak internals to the user.
+        val detail = if (statusCode in SURFACE_SAFE_STATUSES) sanitize(raw) else ""
         return when (statusCode) {
-            400 -> AppError.Validation(message.ifEmpty { "The server rejected the request." })
+            400 -> AppError.Validation(detail.ifEmpty { "The server rejected the request." })
             401 -> AppError.Unauthorized
             403 -> AppError.Forbidden
-            404 -> AppError.NotFound(message.ifEmpty { "Not found (404)." })
-            409 -> AppError.Conflict(entity = message.ifEmpty { "record" })
-            422 -> AppError.Validation(message.ifEmpty { "The request was not processable." })
-            in 500..599 -> AppError.Server(statusCode, message)
-            else -> AppError.Unknown("Unexpected status $statusCode. $message")
+            404 -> AppError.NotFound(detail.ifEmpty { "Not found (404)." })
+            409 -> AppError.Conflict(entity = detail.ifEmpty { "item" })
+            422 -> AppError.Validation(detail.ifEmpty { "The request was not processable." })
+            in 500..599 -> AppError.Server(statusCode, detail)
+            429 -> AppError.Unknown("Too many attempts. Please wait a moment and try again.")
+            else -> AppError.Unknown("Unexpected response from the server. Please try again.")
+        }
+    }
+
+    /**
+     * Makes a server `error` string safe to put in a banner.
+     *
+     * A leaking server can return more than a sentence — a wrapped exception carries
+     * newlines and tabs, and an over-long body was already a risk before the cap. Stripping
+     * control characters and collapsing whitespace keeps one failure on one line, and the
+     * length cap bounds what a proxy or a future bug can put in front of a user. A clean
+     * sentence passes through unchanged.
+     */
+    private fun sanitize(text: String): String {
+        if (text.isEmpty()) return ""
+        val cleaned = text
+            .replace(Regex("[\\p{Cntrl}&&[^\\r\\n\\t]]"), "")
+            .replace(Regex("[\\r\\n\\t]+"), " ")
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
+        return if (cleaned.length <= MAX_MESSAGE_LENGTH) {
+            cleaned
+        } else {
+            cleaned.take(MAX_MESSAGE_LENGTH).trimEnd()
         }
     }
 

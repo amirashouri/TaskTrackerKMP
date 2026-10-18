@@ -266,7 +266,51 @@ class KtorHttpClientTest {
         val error = assertFailsWith<AppError.Conflict> {
             client(transport).send(HttpRequest(HttpMethod.Get, "/x", requiresAuth = false))
         }
-        assertEquals("record", error.entity)
+        // The server's 409 body is a full sentence, not an entity noun, so it is never
+        // surfaced as `entity`; the client owns a correct, generic message instead.
+        assertEquals("item", error.entity)
+    }
+
+    @Test
+    fun `a 400 surfaces the server's validation message`() = runTest {
+        val transport = StubTransport()
+        transport.enqueue(Stub.json("""{"error":"email and password are required"}""", status = 400))
+
+        val error = assertFailsWith<AppError.Validation> {
+            client(transport).send(HttpRequest(HttpMethod.Get, "/x", requiresAuth = false))
+        }
+        assertEquals("email and password are required", error.detail)
+    }
+
+    @Test
+    fun `a 500 does not surface the server's internal message`() = runTest {
+        val transport = StubTransport()
+        transport.enqueue(
+            Stub.json(
+                """{"error":"pq: duplicate key value violates unique constraint \"projects_pkey\""}""",
+                status = 500,
+            ),
+        )
+
+        val error = assertFailsWith<AppError.Server> {
+            client(transport).send(HttpRequest(HttpMethod.Get, "/x", requiresAuth = false))
+        }
+        assertEquals(500, error.statusCode)
+        assertTrue(
+            !error.message!!.contains("duplicate"),
+            "server internals must not reach the user: ${error.message}",
+        )
+    }
+
+    @Test
+    fun `a 429 maps to a friendly rate-limit message`() = runTest {
+        val transport = StubTransport()
+        transport.enqueue(Stub.json("""{"error":"too many sign-in attempts"}""", status = 429))
+
+        val error = assertFailsWith<AppError.Unknown> {
+            client(transport).send(HttpRequest(HttpMethod.Get, "/x", requiresAuth = false))
+        }
+        assertTrue(error.message!!.contains("wait"), "expected a friendly message, got ${error.message}")
     }
 
     @Test
