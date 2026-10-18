@@ -129,6 +129,12 @@ private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     // A dedicated stream would be a wire change and a new user-facing sync switch — see
     // the sprint note above; neither belongs in the phase that adds a table.
     OutboxEntity.WorkItem, OutboxEntity.Sprint, OutboxEntity.Comment -> SyncScope.WorkItems
+    // Attachments get their own stream on the server, so they do here too. Filing them under
+    // `workItems` would make the pull loop read an empty `attachments` log forever, and a
+    // second device would never see the file appear. This branch is also what keeps the
+    // `when` exhaustive: `OutboxEntity.Attachment` was added to the enum with the outbox
+    // work, and a `when` over the enum without it does not compile.
+    OutboxEntity.Attachment -> SyncScope.Attachments
 }
 
 private fun OutboxEntry.toRemoteChange(): RemoteChange = RemoteChange(

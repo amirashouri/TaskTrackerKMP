@@ -38,3 +38,16 @@ internal actual fun writeBlobFile(path: String, bytes: ByteArray) {
 internal actual fun deleteBlobFile(path: String) {
     NSFileManager.defaultManager.removeItemAtPath(path, error = null)
 }
+
+/** `null` for a missing file, which is how "not cached here" reaches the caller. */
+@OptIn(ExperimentalForeignApi::class)
+internal actual fun readBlobFile(path: String): ByteArray? {
+    val data = NSFileManager.defaultManager.contentsAtPath(path) ?: return null
+    val size = data.length.toInt()
+    if (size == 0) return ByteArray(0)
+    return ByteArray(size).apply {
+        usePinned { pinned ->
+            data.getBytes(pinned.addressOf(0), data.length)
+        }
+    }
+}

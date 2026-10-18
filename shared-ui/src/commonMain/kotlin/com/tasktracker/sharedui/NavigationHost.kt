@@ -1620,7 +1620,11 @@ private fun WorkItemEditorDestination(
     // id that arrives mid-edit must relabel rather than leave a stale name on the row.
     val currentUserID by preferences.currentUserID.collectAsState()
     val currentUserName by preferences.currentUserName.collectAsState()
-    val filePicker = currentProjectEnvironment?.filePicker
+    val projectEnvironment = currentProjectEnvironment
+    val filePicker = projectEnvironment?.filePicker
+    // `null` in a demo graph: the editor then keeps attachments local instead of handing
+    // off an upload to a file API that does not exist.
+    val blobTransport = projectEnvironment?.blobTransport
     val model = remember(
         projectID,
         workItemID,
@@ -1629,6 +1633,7 @@ private fun WorkItemEditorDestination(
         initialStatus,
         initialSprintID,
         currentUserID,
+        blobTransport,
     ) {
         WorkItemEditorModel(
             projectID,
@@ -1638,6 +1643,7 @@ private fun WorkItemEditorDestination(
             initialStatus,
             initialSprintID,
             currentUserID = currentUserID,
+            blobTransport = blobTransport,
         )
     }
 
@@ -1823,7 +1829,14 @@ private fun WorkItemEditorDestination(
             val picker = filePicker
             if (picker != null && !model.isAttaching) {
                 scope.launch {
-                    picker.pick()?.let { picked -> model.attachFile(picked) }
+                    picker.pick()?.let { picked ->
+                        model.attachFile(picked)?.let { stored ->
+                            // The local commit is done and the metadata is queued; the bytes
+                            // upload in the background so the attach button never waits on
+                            // the network. A failure here is retried by a later sync.
+                            launch { model.uploadAttachment(stored.id) }
+                        }
+                    }
                 }
             }
         },

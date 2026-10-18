@@ -16,6 +16,7 @@ import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlin.time.Instant
 
 /**
@@ -715,16 +716,16 @@ data class Comment(
  * The bytes are **not** here and never will be: a row is the index, the blob store
  * (`feature-projects-data`) holds the file itself under the app's support directory.
  * Keeping the bytes out of the entity is what lets a thread listing render, a delete
- * cascade, and a future sync transport all work on the metadata alone.
+ * cascade, and the sync transport all work on the metadata alone.
  *
- * ## Device-local in this slice, and the row says so honestly
+ * ## Metadata syncs; bytes do not ride the change feed
  *
- * Like [StatusChange], an attachment is not queued to the outbox — the transport has
- * no blob upload and inventing one would promise sync that cannot happen. The row is
- * local truth: [blobPath] names a file on *this* device, and a pulled row from a
- * future server would carry a blob reference this device must fetch before it can
- * open anything. That is the seam the sync transport will fill; nothing here pretends
- * it is already filled.
+ * Unlike [StatusChange], an attachment **does** touch the outbox: its metadata is a change
+ * like any other, so another member sees the file appear on the card. The bytes travel a
+ * different road — the server's file API, keyed by [blobRef] — because a 25 MiB file in a
+ * sync payload would make every page carry the file. [blobPath] is this device's cache; a
+ * pulled row arrives with a [blobRef] and an empty path, and the viewer downloads the bytes
+ * on first open.
  *
  * A comment about attribution applies here too, inverted: an attachment without its
  * bytes is useless, so the attach path refuses to store a row whose blob write failed,
@@ -734,15 +735,48 @@ data class Comment(
 data class Attachment(
     val id: AttachmentID = randomAttachmentID(),
     val workItemID: WorkItemID,
+    /**
+     * Denormalised owner. The server requires it to scope the file API by membership, and
+     * the sync payload carries it so a pulled row lands already scoped. `null` only for a
+     * local-only row a test double built without a project — every real path sets it.
+     */
+    val projectID: ProjectID? = null,
     /** The name the file was picked under, shown to the user; never used as a path. */
     val fileName: String,
-    /** Best-effort, from the picker; `null` when the platform could not say. */
-    val mimeType: String?,
+    /**
+     * Best-effort, from the picker; `null` when the platform could not say.
+     *
+     * Defaulted because the server sends it with `omitempty`: a file the picker could not
+     * type arrives with no `mimeType` key at all, and a nullable property without a default
+     * is still a *required* key to kotlinx — the pull would fail on exactly the files whose
+     * type is unknown.
+     */
+    val mimeType: String? = null,
     val sizeBytes: Long,
     /**
      * Path of the stored blob, relative to the attachments root — never absolute, so a
-     * store relocated between installs or machines stays readable.
+     * store relocated between installs or machines stays readable. This is the local cache;
+     * the server's copy is addressed by [blobRef].
+     *
+     * `@Transient`: it is a client-only path. It must never reach the wire — the server has
+     * its own blob store keyed by [blobRef] — so it is excluded from the outbox payload. A
+     * pulled row never carried bytes, so it decodes to the default `""` ("download on demand").
      */
-    val blobPath: String,
+    @Transient
+    val blobPath: String = "",
+    /**
+     * Server key for the uploaded bytes, or `null` until pushed. Set by the upload use case
+     * after the file API accepts the blob; the UI reads it as "visible to teammates".
+     */
+    val blobRef: String? = null,
+    /** Who attached the file; carried from the server so a pulled row shows attribution. */
+    val createdBy: UserID? = null,
     val createdAt: Instant,
+    /** Server version, carried so a pulled row round-trips exactly. Empty for a fresh local row. */
+    val version: String = "",
+    /**
+     * When the bytes were pushed, or `null` while local-only. A flag, not the bytes — the
+     * local copy stays at [blobPath] until re-downloaded elsewhere.
+     */
+    val uploadedAt: Instant? = null,
 )

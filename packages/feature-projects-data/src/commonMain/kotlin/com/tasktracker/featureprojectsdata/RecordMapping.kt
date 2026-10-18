@@ -562,10 +562,13 @@ internal val CommentRecord.domainValue: Comment?
 internal fun Attachment.toRecord(): AttachmentRecord = AttachmentRecord(
     id = id.stringValue,
     workItemID = workItemID.stringValue,
+    projectID = projectID?.stringValue ?: "",
     fileName = fileName,
     mimeType = mimeType,
     sizeBytes = sizeBytes,
     blobPath = blobPath,
+    blobRef = blobRef,
+    uploadedAt = uploadedAt,
     createdAt = createdAt,
 )
 
@@ -585,10 +588,14 @@ internal val AttachmentRecord.domainValue: Attachment?
         return Attachment(
             id = attachmentID,
             workItemID = itemID,
+            projectID = parseProjectID(projectID),
             fileName = fileName,
             mimeType = mimeType,
             sizeBytes = sizeBytes,
             blobPath = blobPath,
+            blobRef = blobRef,
+            createdBy = null,
             createdAt = createdAt,
+            uploadedAt = uploadedAt,
         )
     }

@@ -1001,6 +1001,14 @@ class RoomProjectRepository(
             val comment = database.commentDao().byID(entityID)?.domainValue ?: return null
             JSONCoding.json.encodeToString(Comment.serializer(), comment).encodeToByteArray()
         }
+
+        // An attachment's metadata is re-sent the same way as any other entity's. `blobPath`
+        // is `@Transient` on the domain type, so the rebuilt payload carries the same fields
+        // the server accepted-or-refused before and never a local filesystem path.
+        OutboxEntity.Attachment -> {
+            val attachment = database.attachmentDao().byID(entityID)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(Attachment.serializer(), attachment).encodeToByteArray()
+        }
     }
 
     override suspend fun addComment(
@@ -1070,20 +1078,29 @@ class RoomProjectRepository(
             readWorkItem(workItemID).projectID
         }
 
+        val stamp = currentUserStamp()
         val attachment = Attachment(
             id = randomAttachmentID(),
             workItemID = workItemID,
+            projectID = owner,
             fileName = fileName,
             mimeType = mimeType,
             sizeBytes = bytes.size.toLong(),
             blobPath = "",
+            createdBy = stamp?.let { parseUserID(it) },
             createdAt = now,
         )
         val relativeName = blobStore.write(attachment.id, bytes)
 
         return try {
             inTransaction(database) {
+                // The row and the outbox entry share one transaction, exactly like
+                // `addComment`: a mutation with nothing queued to push it is the failure the
+                // outbox exists to prevent. Only metadata travels in the change feed — the
+                // blob's bytes stay local and are uploaded by a separate, non-blocking step
+                // (see `UploadAttachment`) once the row has been accepted.
                 database.attachmentDao().insert(attachment.copy(blobPath = relativeName).toRecord())
+                enqueueAttachment(attachment.copy(blobPath = relativeName), stamp, now)
             }
             // Announced as a work-item change, the comment-write choice again: an open
             // editor re-reads the attachments it is showing, and a board re-reads a card
@@ -1099,12 +1116,50 @@ class RoomProjectRepository(
     }
 
     override suspend fun deleteAttachment(id: AttachmentID) {
+        val stamp = currentUserStamp()
         val blobPath = inTransaction(database) {
             val row = database.attachmentDao().byID(id.stringValue) ?: return@inTransaction null
             database.attachmentDao().deleteByID(id.stringValue)
+            // Queued like the other deletes: the server drops its row (and its blob) when it
+            // applies this, so a teammate's view stops showing the file too.
+            enqueueDelete(OutboxEntity.Attachment, id.stringValue, stamp, dateProvider.now())
             row.blobPath
         } ?: return
         safeDeleteBlob(blobPath)
+    }
+
+    override suspend fun attachment(id: AttachmentID): Attachment? =
+        inTransaction(database) { database.attachmentDao().byID(id.stringValue)?.domainValue }
+
+    override suspend fun attachmentBytes(id: AttachmentID): ByteArray? {
+        // The row is read first so a stale `blobPath` cannot be used to read a file whose
+        // row has already been deleted, and a blank path (a pulled row with no local
+        // bytes) answers `null` without touching the file system.
+        val row = inTransaction(database) { database.attachmentDao().byID(id.stringValue) } ?: return null
+        if (row.blobPath.isBlank()) return null
+        return blobStore.read(row.blobPath)
+    }
+
+    override suspend fun cacheAttachmentBytes(id: AttachmentID, bytes: ByteArray): Attachment? {
+        val row = inTransaction(database) { database.attachmentDao().byID(id.stringValue) } ?: return null
+        // `write` is keyed by the attachment id and overwrites, so caching a re-downloaded
+        // file cannot accumulate copies. If the row update then fails, the orphaned blob is
+        // the same file the row would have pointed at — disk cost, not correctness.
+        val relativeName = blobStore.write(id, bytes)
+        val updated = row.copy(blobPath = relativeName, sizeBytes = bytes.size.toLong())
+        inTransaction(database) { database.attachmentDao().update(updated) }
+        parseProjectID(row.projectID)?.let { changeBus.announceWorkItems(it) }
+        return updated.domainValue
+    }
+
+    override suspend fun markAttachmentUploaded(id: AttachmentID, blobRef: String, uploadedAt: Instant) {
+        // No outbox row: the metadata change was queued by `addAttachment`, and this is the
+        // server's own `blob_ref` reflected back locally for the "synced" indicator.
+        val row = inTransaction(database) { database.attachmentDao().byID(id.stringValue) } ?: return
+        inTransaction(database) {
+            database.attachmentDao().update(row.copy(blobRef = blobRef, uploadedAt = uploadedAt))
+        }
+        parseProjectID(row.projectID)?.let { changeBus.announceWorkItems(it) }
     }
 
     /**
@@ -1468,6 +1523,29 @@ class RoomProjectRepository(
                 id = newOutboxID(OutboxEntity.Sprint, sprint.id.stringValue, OutboxOperation.Upsert),
                 entity = OutboxEntity.Sprint,
                 entityID = sprint.id.stringValue,
+                operation = OutboxOperation.Upsert,
+                payload = payload.encodeToByteArray(),
+                createdAt = now,
+                userID = userID,
+            ).toRecord(),
+        )
+    }
+
+    /**
+     * As [enqueueComment].
+     *
+     * The payload is the **domain** `Attachment`. `blobPath` is `@Transient`, so it never
+     * reaches the wire — the server keeps its own blob store keyed by `blobRef`, and only
+     * fills `blobRef` once the bytes are uploaded (a separate step), not on this upsert. The
+     * `createdBy` carried here is what lets the server satisfy the `created_by` column.
+     */
+    private suspend fun enqueueAttachment(attachment: Attachment, userID: String?, now: Instant) {
+        val payload = JSONCoding.json.encodeToString(Attachment.serializer(), attachment)
+        database.outboxDao().insert(
+            NewOutboxEntry(
+                id = newOutboxID(OutboxEntity.Attachment, attachment.id.stringValue, OutboxOperation.Upsert),
+                entity = OutboxEntity.Attachment,
+                entityID = attachment.id.stringValue,
                 operation = OutboxOperation.Upsert,
                 payload = payload.encodeToByteArray(),
                 createdAt = now,

@@ -28,6 +28,17 @@ class HttpSyncTransport(
     private object Path {
         const val PUSH = "/v1/sync/push"
         fun changes(scope: SyncScope): String = "/v1/sync/changes/${scope.wireValue}"
+
+        /**
+         * The file API for one attachment's bytes.
+         *
+         * Scoped by project *and* work item as well as attachment id, because the server
+         * re-checks all three against the stored row before serving a byte: an id that
+         * exists under a project the caller is not in must answer `404`, and a path that
+         * named only the attachment id could not be checked that way.
+         */
+        fun blob(projectID: String, workItemID: String, attachmentID: String): String =
+            "/v1/projects/$projectID/work-items/$workItemID/attachments/$attachmentID/blob"
     }
 
     // MARK: - Wire types
@@ -188,6 +199,58 @@ class HttpSyncTransport(
             resyncRequired = response.resyncRequired,
         )
     }
+
+    // MARK: - Attachment bytes
+
+    /**
+     * Pushes one attachment's bytes.
+     *
+     * The bytes go as the request body itself, not inside a multipart form: the server reads
+     * `r.Body` directly and caps it with `http.MaxBytesReader`, so a `413` is the server's
+     * own verdict on the size rather than something this client has to measure first. The
+     * content type is declared honestly as octet-stream — the server ignores it, but a proxy
+     * that inspects bodies should not be told a photo is JSON.
+     *
+     * Marked idempotent: the server overwrites an existing blob and re-records the same
+     * `blob_ref`, so a replay after a transport error cannot corrupt anything, and without
+     * the flag the retry policy would refuse to resend a `POST` that failed in flight.
+     */
+    override suspend fun uploadAttachmentBlob(
+        projectID: String,
+        workItemID: String,
+        attachmentID: String,
+        bytes: ByteArray,
+    ) {
+        // The reply (`{"status":"stored"}`) is not needed: a success is the absence of an
+        // exception, and `send` already turns every non-2xx into an `AppError`.
+        client.send(
+            HttpRequest(
+                method = HttpMethod.Post,
+                path = Path.blob(projectID, workItemID, attachmentID),
+                headers = mapOf("Content-Type" to "application/octet-stream"),
+                body = bytes,
+                isIdempotent = true,
+            ),
+        )
+    }
+
+    /**
+     * Fetches one attachment's bytes.
+     *
+     * `send` returns the raw body and raises [com.tasktracker.core.AppError.NotFound] for a
+     * `404`, which is exactly what "the metadata arrived, the bytes have not" looks like from
+     * here — the caller decides whether that is worth retrying.
+     */
+    override suspend fun downloadAttachmentBlob(
+        projectID: String,
+        workItemID: String,
+        attachmentID: String,
+    ): ByteArray = client.send(
+        HttpRequest(
+            method = HttpMethod.Get,
+            path = Path.blob(projectID, workItemID, attachmentID),
+        ),
+    )
 
     // MARK: - Mapping
 

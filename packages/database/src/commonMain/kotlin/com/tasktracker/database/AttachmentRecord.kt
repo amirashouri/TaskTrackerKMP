@@ -7,6 +7,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import androidx.room.Update
 import kotlin.time.Instant
 
 /**
@@ -22,12 +23,13 @@ import kotlin.time.Instant
  * - **A monotonic [sequence] with a unique [id] index.** Same tie-break story as the
  *   thread: two attachments stored inside one clock tick need an order that is total
  *   and defined rather than inherited from SQLite's row order.
- * - **ABORT inserts.** A duplicate id is a bug, handled by an explicit exists-check on
- *   the write path — there is no pull path to re-deliver here, which makes a conflict
- *   even more certainly a genuine defect.
- * - **No `projectID` column.** Read per work item, deleted per work item; a column with
- *   no query does not earn its place. A project delete collects the project's work items
- *   first and drops each list by its item id, exactly like the thread.
+ * - **ABORT inserts, explicit `update` for the sync paths.** A duplicate id is a bug, so
+ *   an insert never silently replaces a row. The two paths that legitimately change an
+ *   existing row — caching downloaded bytes, and recording an upload — call [AttachmentDao.update]
+ *   with a full record instead, so they cannot create a second row by accident.
+ * - **A denormalised `projectID` column.** The server needs `project_id` to scope the file
+ *   API by membership, and the sink needs it to announce the owning project, so it is
+ *   carried rather than resolved from `workItemID` on every write.
  *
  * ## What is not stored
  *
@@ -46,6 +48,13 @@ data class AttachmentRecord(
     val id: String,
     val workItemID: String,
     /**
+     * Denormalised owner, the mirror of [CommentRecord]'s reasoning with one extra reason:
+     * the sink needs it to announce the change, and the server requires `project_id` to
+     * scope the file API by membership — so it is carried rather than resolved from
+     * `workItemID` on every write. Read per work item on the way in; written per row.
+     */
+    val projectID: String,
+    /**
      * The name the file was picked under. Display only — the blob's path is [blobPath]
      * and never derives from this, so a hostile or duplicate name is a rendering
      * question, not a write one.
@@ -59,6 +68,17 @@ data class AttachmentRecord(
      * store relocated between installs or machines stays readable.
      */
     val blobPath: String,
+    /**
+     * Server key for the uploaded bytes, or `null` until they have been pushed. The client
+     * never derives a path from this; it is the file API's handle, surfaced to the UI as
+     * "synced / visible to teammates" once set.
+     */
+    val blobRef: String?,
+    /**
+     * When the bytes were pushed, or `null` while local-only / still uploading. A flag, not
+     * a cache: the bytes themselves live at [blobPath] until re-downloaded on another device.
+     */
+    val uploadedAt: Instant?,
     val createdAt: Instant,
 )
 
@@ -102,4 +122,16 @@ interface AttachmentDao {
      */
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(record: AttachmentRecord)
+
+    /**
+     * Replaces an existing row, matched on its primary key.
+     *
+     * The two legitimate callers both start from a [byID] read and change only fields the
+     * local cache owns (`blobPath`, `sizeBytes`) or the upload reports (`blobRef`,
+     * `uploadedAt`), so a full-record update is the safe shape: a caller that forgot to
+     * carry a field would write a default over real data, which is why the read-then-copy
+     * pattern is the documented one.
+     */
+    @Update
+    suspend fun update(record: AttachmentRecord)
 }

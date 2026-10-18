@@ -18,3 +18,9 @@ internal actual fun writeBlobFile(path: String, bytes: ByteArray) {
 internal actual fun deleteBlobFile(path: String) {
     File(path).delete()
 }
+
+/** `null` for a missing file, which is how "not cached here" reaches the caller. */
+internal actual fun readBlobFile(path: String): ByteArray? {
+    val file = File(path)
+    return if (file.isFile) file.readBytes() else null
+}

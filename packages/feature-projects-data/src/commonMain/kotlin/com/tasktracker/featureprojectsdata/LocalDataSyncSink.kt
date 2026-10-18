@@ -8,6 +8,7 @@ import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.inTransaction
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
@@ -101,6 +102,15 @@ class LocalDataSyncSink(
             // cannot be named" (a comment arriving before its work item does).
             OutboxEntity.Comment -> {
                 val owner = applyComment(change)
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
+            }
+
+            // Announced like a comment: an attachment is metadata on a work item, and the
+            // same editor-re-reads-its-list reasoning applies. The bytes are never written
+            // here — a pulled row carries `blobRef` but no file, so the local cache stays
+            // empty until `FetchAttachment` downloads on demand.
+            OutboxEntity.Attachment -> {
+                val owner = applyAttachment(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
             }
         }
@@ -271,6 +281,39 @@ class LocalDataSyncSink(
             }
         }
         return projectOwning(comment.workItemID.stringValue)
+    }
+
+    /**
+     * Applies one attachment, server-wins, without ever touching the outbox (class KDoc).
+     *
+     * Mirrors [applyComment]. The one difference is what is and is not written: a pulled
+     * attachment arrives as metadata only, so [Attachment.toRecord] lands a row whose
+     * `blobPath` is the default `""` (the `@Transient` local cache path is never on the wire)
+     * while `blobRef` says the server already holds the bytes. A later `FetchAttachment`
+     * decides whether to download them.
+     *
+     * @return the owning project, read from the attachment's `workItemID` (the row carries
+     *   `projectID` too, but resolving through the item keeps the announcement rule identical
+     *   to [applyComment]); `null` when the item is not here, announced unscoped.
+     */
+    private suspend fun applyAttachment(change: RemoteChange): ProjectID? {
+        if (change.operation == OutboxOperation.Delete) {
+            val id = change.entityID
+            val workItemID = inTransaction(database) {
+                val existing = database.attachmentDao().byID(id) ?: return@inTransaction null
+                database.attachmentDao().deleteByID(id)
+                existing.workItemID
+            } ?: return null
+            return projectOwning(workItemID)
+        }
+
+        val attachment = decode(Attachment.serializer(), change.payload, change.entity)
+        inTransaction(database) {
+            if (database.attachmentDao().byID(attachment.id.stringValue) == null) {
+                database.attachmentDao().insert(attachment.toRecord())
+            }
+        }
+        return projectOwning(attachment.workItemID.stringValue)
     }
 
     /** The project a row's work item belongs to, or `null` when the item is not here. */

@@ -436,10 +436,10 @@ interface ProjectRepositoryPort {
      * comment there is no honest "it will sync later": the write either produces both or
      * throws.
      *
-     * **No outbox row**, deliberately: the transport has no blob upload, and queuing
-     * metadata for bytes that cannot travel would hand other devices an index entry they
-     * can never open. See [Attachment]'s KDoc — this is the seam a future blob transport
-     * fills, and until it does, an attachment is device-local like a [StatusChange].
+     * **Queues an outbox row.** The metadata now travels the change feed, so another member
+     * sees the file appear on the card; the bytes follow through the blob API (see
+     * `UploadAttachment`). The row and the outbox entry commit in one transaction, so a
+     * stored file always has a queued change behind it.
      *
      * Confirms the work item exists first, for the same reason [addComment] does.
      */
@@ -461,6 +461,48 @@ interface ProjectRepositoryPort {
      * own re-read is the announcement.
      */
     suspend fun deleteAttachment(id: AttachmentID)
+
+    /**
+     * One attachment's metadata row, or `null` when it has gone.
+     *
+     * The upload path needs the row's `projectID`, `workItemID` and `blobRef`, none of
+     * which the work-item listing hands back for a single id without reading the whole
+     * list. A read that names the id is also the honest answer to "did this row survive?".
+     */
+    suspend fun attachment(id: AttachmentID): Attachment? = null
+
+    /**
+     * The bytes cached on this device for one attachment, or `null` when they are not here.
+     *
+     * A metadata row can arrive from the server before its bytes do, so "no bytes" is a
+     * normal state rather than an error — the caller decides whether to download.
+     *
+     * The default answers `null`: a store with no blob cache (a test fake, or a future
+     * remote-only store) has nothing cached, and saying so is the truthful answer.
+     */
+    suspend fun attachmentBytes(id: AttachmentID): ByteArray? = null
+
+    /**
+     * Writes downloaded bytes into the local cache and points the row at them.
+     *
+     * Returns the updated metadata, or `null` when the row has gone. Never queues an outbox
+     * entry: bytes are not part of the change feed, and a "cached a file" change would
+     * push a write nobody asked for.
+     *
+     * The default is a no-op returning `null`, for a store with no blob cache.
+     */
+    suspend fun cacheAttachmentBytes(id: AttachmentID, bytes: ByteArray): Attachment? = null
+
+    /**
+     * Records that the bytes are now on the server, so the UI can say "synced".
+     *
+     * Local bookkeeping only — the server's `blob_ref` is what other members read — so this
+     * must not queue an outbox entry. A missing row is a no-op: the attachment may have
+     * been deleted while its upload was in flight.
+     *
+     * The default is a no-op, for a store with no blob cache.
+     */
+    suspend fun markAttachmentUploaded(id: AttachmentID, blobRef: String, uploadedAt: Instant) = Unit
 
     // MARK: Change notifications
 

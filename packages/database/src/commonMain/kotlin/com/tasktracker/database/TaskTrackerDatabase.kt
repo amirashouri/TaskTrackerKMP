@@ -79,10 +79,11 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         AttachmentRecord::class,
         NotificationRecord::class,
     ],
-    // 4: the attachments table. Bumped so an existing dev store is dropped and
-    // recreated by [open]'s destructive fallback instead of failing schema validation
-    // on a missing table — see the class KDoc on when the reset story ends.
-    version = 4,
+    // 5: the attachments table grew `project_id`, `blob_ref` and `uploaded_at` columns.
+    // Bumped so an existing dev store is dropped and recreated by [open]'s destructive
+    // fallback instead of failing schema validation on the missing columns — see the
+    // class KDoc on when the reset story ends.
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

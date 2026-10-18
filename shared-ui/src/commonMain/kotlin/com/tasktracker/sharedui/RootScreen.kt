@@ -31,6 +31,7 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -154,6 +155,9 @@ fun RootScreen(
                 resolver.getOrNull(MemberAdminPort::class),
                 resolver.getOrNull(FilePicker::class),
                 resolver.getOrNull(AdminProjectsPort::class),
+                // `null` in a demo graph, where there is no file API: the editor then keeps
+                // attachments local instead of attempting an upload that cannot succeed.
+                resolver.getOrNull(AttachmentBlobTransport::class),
             )
         }
     }

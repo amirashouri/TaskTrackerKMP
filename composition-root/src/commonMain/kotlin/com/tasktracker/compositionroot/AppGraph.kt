@@ -29,6 +29,7 @@ import com.tasktracker.featureprojectsdata.LocalDataSyncSink
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
@@ -517,6 +518,16 @@ object AppGraph {
             } ?: InMemorySyncTransport()
         }
 
+        // Attachment bytes are server-only. Binding this offline would wrap the in-memory
+        // transport, whose blob methods deliberately throw, and turn "attach a file" into a
+        // background upload that always fails. A demo graph therefore leaves the port
+        // unbound and the attachment stays local — exactly the behaviour before this feature.
+        if (platforms.apiBaseUrl != null) {
+            app<AttachmentBlobTransport> { resolver ->
+                SyncBackedAttachmentBlobTransport(resolver.resolve(SyncTransport::class))
+            }
+        }
+
         app<SyncEngine> { resolver ->
             val sink = resolver.resolve(LocalDataSyncSink::class)
             val sessionCache = resolver.resolve(SessionCache::class)
@@ -527,6 +538,11 @@ object AppGraph {
                 sinks = mapOf(
                     OutboxEntity.Project to sink,
                     OutboxEntity.WorkItem to sink,
+                    // Attachment metadata arrives on its own `attachments` stream and must
+                    // reach the same sink; without this entry a pulled attachment would hit
+                    // `NoSink`, and the pull for that scope would stop on its first change —
+                    // so a member would never see an attachment another member added.
+                    OutboxEntity.Attachment to sink,
                 ),
                 // Claims only the signed-in account's queued rows, read at cycle time from the
                 // same cache the repository stamps rows with. The two must agree, or a stamped

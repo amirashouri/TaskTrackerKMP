@@ -11,6 +11,18 @@ package com.tasktracker.sync
 enum class SyncScope(val wireValue: String) {
     Projects("projects"),
     WorkItems("workItems"),
+
+    /**
+     * Attachment **metadata**, so an attachment another member added appears on a card
+     * without the reader polling. The bytes do not travel here — they go through the blob
+     * API — but the row that names the file is a change like any other.
+     *
+     * `"attachments"` is the server's route value (`/v1/sync/changes/attachments`). It is a
+     * scope of its own, unlike sprints and comments which ride [WorkItems], because the
+     * server keeps a dedicated stream for it and the engine's pull loop can only read the
+     * streams named here.
+     */
+    Attachments("attachments"),
     ;
 
     companion object {

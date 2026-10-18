@@ -23,6 +23,7 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -81,11 +82,21 @@ class ProjectEnvironment(
      * Dimming an offline project list would be the wrong fallback — an administrator editing a
      * project the server never saw is an edit that did not happen.
      *
-     * Last in the list because `RootScreen` builds this positionally; a field inserted among
-     * the others would silently hand [filePicker]'s slot to a new port and type-check only
-     * because both are nullable.
+     * Appended after [filePicker] rather than inserted among the others because `RootScreen`
+     * builds this positionally; a field inserted mid-list would silently hand [filePicker]'s
+     * slot to a new port and type-check only because both are nullable. New nullable ports
+     * go at the end for the same reason.
      */
     val adminProjectsPort: AdminProjectsPort? = null,
+    /**
+     * The attachment byte transport, or `null` when this graph has no server.
+     *
+     * Nullable on purpose and *not* a missing-wiring failure: an offline graph has no file
+     * API to talk to, so an attachment is local-only there and the attach flow must not
+     * attempt an upload that is guaranteed to fail. `null` means "no blob sync", which the
+     * editor treats as "never hand off an upload", not as an error to show.
+     */
+    val blobTransport: AttachmentBlobTransport? = null,
 )
 
 /**

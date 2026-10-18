@@ -1,5 +1,6 @@
 package com.tasktracker.sync
 
+import com.tasktracker.core.AppError
 import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxEntry
 import com.tasktracker.database.OutboxOperation
@@ -132,6 +133,43 @@ interface SyncTransport {
     suspend fun push(entries: List<OutboxEntry>): List<PushResult>
 
     suspend fun pull(scope: SyncScope, cursor: String?, limit: Int): PullPage
+
+    /**
+     * Uploads the raw bytes for an attachment.
+     *
+     * The metadata row is expected to already exist on the server — it travels the change
+     * feed like any other entity — so this is the file content only. The body is the raw
+     * bytes, **not** a multipart envelope: the server reads the request body directly and
+     * caps it at its own limit, answering `413` past it.
+     *
+     * The default refuses rather than no-ops, because a transport with no server behind it
+     * (the in-memory demo) has nowhere to put bytes. A caller that reaches this default has
+     * wired an upload against a store that cannot honour it, and silently "succeeding" would
+     * leave the attachment permanently un-synced with nothing to show for it.
+     */
+    suspend fun uploadAttachmentBlob(
+        projectID: String,
+        workItemID: String,
+        attachmentID: String,
+        bytes: ByteArray,
+    ) {
+        throw AppError.Transport("This build has no server to store attachment bytes.")
+    }
+
+    /**
+     * Downloads the raw bytes for an attachment.
+     *
+     * Throws [AppError.NotFound] when the server has no blob for it — an attachment whose
+     * metadata arrived before its bytes were uploaded is a legitimate state, not a bug, and
+     * the caller retries later rather than reporting the attachment as missing.
+     */
+    suspend fun downloadAttachmentBlob(
+        projectID: String,
+        workItemID: String,
+        attachmentID: String,
+    ): ByteArray {
+        throw AppError.Transport("This build has no server to fetch attachment bytes from.")
+    }
 }
 
 /**

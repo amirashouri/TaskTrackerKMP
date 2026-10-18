@@ -23,14 +23,19 @@ import com.tasktracker.featureprojectsdomain.AddCommentResult
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.AttachFile
 import com.tasktracker.featureprojectsdomain.AttachFileResult
+import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.DeleteAttachment
 import com.tasktracker.featureprojectsdomain.ExpandRecurrence
+import com.tasktracker.featureprojectsdomain.FetchAttachment
 import com.tasktracker.featureprojectsdomain.LoadAttachments
 import com.tasktracker.featureprojectsdomain.LoadComments
 import com.tasktracker.featureprojectsdomain.PickedFile
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SaveWorkItem
+import com.tasktracker.featureprojectsdomain.UploadAttachment
+import com.tasktracker.featureprojectsdomain.UploadAttachmentResult
 import com.tasktracker.featureprojectsdomain.WorkItemSaveOutcome
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /**
@@ -85,6 +90,15 @@ class WorkItemEditorModel(
      * arriving from a future sync keeps working: the field is a `UserID`, not a name.
      */
     val currentUserID: UserID? = null,
+    /**
+     * The server's file API, or `null` when this graph has no server.
+     *
+     * A null port is not an error: an offline demo has no blob store to upload to, so an
+     * attachment stays local there. The upload/fetch use cases are built only when the port
+     * is present, and a null one makes the background upload a no-op rather than a failure
+     * the user would see after a perfectly successful attach.
+     */
+    blobTransport: AttachmentBlobTransport? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -96,6 +110,8 @@ class WorkItemEditorModel(
     private val loadAttachments = LoadAttachments(repository)
     private val storeAttachment = AttachFile(repository, dateProvider)
     private val dropAttachment = DeleteAttachment(repository)
+    private val uploadBlob = blobTransport?.let { UploadAttachment(repository, it, dateProvider) }
+    private val fetchBlob = blobTransport?.let { FetchAttachment(repository, it) }
 
     // MARK: Comments
 
@@ -191,6 +207,15 @@ class WorkItemEditorModel(
     suspend fun refreshAttachments() {
         val id = existing?.id ?: return
         attachments = reporting { loadAttachments(id) } ?: attachments
+        // Retry any bytes that have not reached the server. A refresh follows a sync change
+        // announcement, which is exactly when the metadata push is most likely to have
+        // landed — so a `404` from the first, immediate attempt is recovered here rather
+        // than waiting for the user to attach the file again. Snapshot the ids first: each
+        // upload can rewrite `attachments`, and iterating a live list would be undefined.
+        val pending = attachments.filter { it.blobRef == null }.map { it.id }
+        for (pendingID in pending) {
+            uploadAttachment(pendingID)
+        }
     }
 
     /**
@@ -203,8 +228,8 @@ class WorkItemEditorModel(
      * does nothing. The banner names the measured size and the limit, so a TooLarge the
      * user can read about is one they can fix on their next pick.
      */
-    suspend fun attachFile(picked: PickedFile) {
-        val id = existing?.id ?: return
+    suspend fun attachFile(picked: PickedFile): Attachment? {
+        val id = existing?.id ?: return null
         isAttaching = true
         val result = reporting {
             storeAttachment(
@@ -215,20 +240,71 @@ class WorkItemEditorModel(
             )
         }
         isAttaching = false
-        when (result) {
-            null -> Unit
-            is AttachFileResult.Success -> attachments = attachments + result.attachment
-            AttachFileResult.BlankName ->
+        return when (result) {
+            null -> null
+            is AttachFileResult.Success -> {
+                attachments = attachments + result.attachment
+                result.attachment
+            }
+
+            AttachFileResult.BlankName -> {
                 onFailure(AppError.Validation("The picked file has no name to file it under."))
-            AttachFileResult.EmptyFile ->
+                null
+            }
+
+            AttachFileResult.EmptyFile -> {
                 onFailure(AppError.Validation("The picked file is empty — nothing was stored."))
-            is AttachFileResult.TooLarge -> onFailure(
-                AppError.Validation(
-                    "The file is ${formatAttachmentSize(result.sizeBytes)}; " +
-                        "the limit is ${formatAttachmentSize(result.limitBytes)}.",
-                ),
-            )
+                null
+            }
+
+            is AttachFileResult.TooLarge -> {
+                onFailure(
+                    AppError.Validation(
+                        "The file is ${formatAttachmentSize(result.sizeBytes)}; " +
+                            "the limit is ${formatAttachmentSize(result.limitBytes)}.",
+                    ),
+                )
+                null
+            }
         }
+    }
+
+    /**
+     * Pushes one attachment's bytes in the background, after [attachFile] returned.
+     *
+     * Deliberately silent on failure: the metadata is already queued and the next sync
+     * retries the bytes, so a transient network error must not paint a banner over an
+     * attach the user watched succeed. Success sets `blobRef`, which is what the list
+     * renders as "synced".
+     */
+    suspend fun uploadAttachment(id: AttachmentID) {
+        val useCase = uploadBlob ?: return
+        val result = try {
+            useCase(id)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: AppError) {
+            return
+        }
+        if (result == UploadAttachmentResult.Uploaded) {
+            // Re-read the one row rather than the whole list: the upload changed only
+            // `blobRef`/`uploadedAt`, and a full refresh would race a concurrent edit.
+            repository.attachment(id)?.let { updated ->
+                attachments = attachments.map { if (it.id == id) updated else it }
+            }
+        }
+    }
+
+    /**
+     * The bytes to open for one attachment, downloading and caching them on first read.
+     *
+     * Returns `null` when there is nothing to open yet — the row is gone, or its bytes have
+     * not reached the server. A download failure is a real failure the user asked for, so
+     * it lands in the banner via [reporting] rather than being swallowed.
+     */
+    suspend fun attachmentBytes(id: AttachmentID): ByteArray? {
+        val useCase = fetchBlob ?: return null
+        return reporting { useCase(id) }
     }
 
     /**

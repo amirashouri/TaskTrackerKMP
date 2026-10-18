@@ -40,6 +40,15 @@ enum class OutboxEntity(val wireValue: String) {
      * every other member.
      */
     Comment("comment"),
+    /**
+     * An attachment's metadata, queued like any other entity.
+     *
+     * The bytes are never in the sync payload — that is the file API's job — but the index
+     * entry rides the same outbox as a comment so every member learns a file exists.
+     * `"attachment"` is the wire value the server's sync engine switches on; it must stay
+     * equal to the server's `OutboxEntityAttachment`.
+     */
+    Attachment("attachment"),
     ;
 
     companion object {

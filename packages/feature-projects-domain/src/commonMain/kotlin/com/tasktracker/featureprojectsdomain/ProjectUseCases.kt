@@ -580,3 +580,106 @@ class DeleteAttachment(
         repository.deleteAttachment(id)
     }
 }
+
+/** What happened when an attachment's bytes were pushed. */
+sealed interface UploadAttachmentResult {
+    /** The server now holds the bytes; the local row is marked synced. */
+    data object Uploaded : UploadAttachmentResult
+
+    /** There is nothing to do: already synced, or the row is gone. */
+    data object AlreadySynced : UploadAttachmentResult
+
+    /** The metadata row exists but its bytes are not on this device. */
+    data object NoLocalBytes : UploadAttachmentResult
+
+    /**
+     * The server does not have the metadata row yet, so it refused the bytes with `404`.
+     *
+     * Expected, not exceptional: the row is in the outbox and the upload runs right after
+     * the local write, so the first attempt can beat the metadata push. A later attempt
+     * (after a sync) succeeds.
+     */
+    data object NotYetOnServer : UploadAttachmentResult
+}
+
+/**
+ * Pushes one attachment's bytes to the server, after the metadata has been queued.
+ *
+ * Deliberately separate from [AttachFile]: attaching must commit locally and return
+ * immediately, while uploading is a network round trip that can take seconds and fail.
+ * Fusing them would make the attach button wait for the radio, which is the one thing an
+ * offline-first editor must never do.
+ *
+ * The upload is idempotent end to end — the server overwrites a blob and re-records the
+ * same `blob_ref` — so a retry after a transport error is safe.
+ */
+class UploadAttachment(
+    private val repository: ProjectRepositoryPort,
+    private val transport: AttachmentBlobTransport,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: AttachmentID): UploadAttachmentResult {
+        val attachment = repository.attachment(id) ?: return UploadAttachmentResult.AlreadySynced
+        if (attachment.blobRef != null) return UploadAttachmentResult.AlreadySynced
+        // A pulled row can name no project only if a build wrote it before `projectID`
+        // existed; without one the file API cannot scope the request, so there is nothing
+        // safe to send.
+        val projectID = attachment.projectID ?: return UploadAttachmentResult.AlreadySynced
+        val bytes = repository.attachmentBytes(id) ?: return UploadAttachmentResult.NoLocalBytes
+        return try {
+            transport.upload(
+                projectID = projectID,
+                workItemID = attachment.workItemID,
+                attachmentID = id,
+                bytes = bytes,
+            )
+            repository.markAttachmentUploaded(
+                id = id,
+                // The server names the blob after the attachment id; mirroring that keeps
+                // the local "synced" flag honest without a second round trip to read it.
+                blobRef = id.stringValue,
+                uploadedAt = dateProvider.now(),
+            )
+            UploadAttachmentResult.Uploaded
+        } catch (_: AppError.NotFound) {
+            UploadAttachmentResult.NotYetOnServer
+        }
+    }
+}
+
+/**
+ * Returns one attachment's bytes, downloading and caching them on first read.
+ *
+ * The local cache is the fast path and the only path when the device is offline: a file
+ * this device attached is already on disk, so opening it must not touch the network. A
+ * file another member attached arrives as metadata only, and its bytes are fetched here,
+ * once, then cached.
+ *
+ * Returns `null` when there is nothing to open: the row is gone, or its bytes have not
+ * reached the server yet. Both are "not available now" rather than failures the editor
+ * should paint red.
+ */
+class FetchAttachment(
+    private val repository: ProjectRepositoryPort,
+    private val transport: AttachmentBlobTransport,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: AttachmentID): ByteArray? {
+        repository.attachmentBytes(id)?.let { return it }
+        val attachment = repository.attachment(id) ?: return null
+        // No `blobRef` means the bytes were never uploaded, so there is nothing to fetch
+        // and no reason to spend a round trip learning that.
+        if (attachment.blobRef == null) return null
+        val projectID = attachment.projectID ?: return null
+        val bytes = transport.download(
+            projectID = projectID,
+            workItemID = attachment.workItemID,
+            attachmentID = id,
+        )
+        repository.cacheAttachmentBytes(id, bytes)
+        return bytes
+    }
+}

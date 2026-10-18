@@ -83,6 +83,12 @@ internal object HttpErrorMapping {
             404 -> AppError.NotFound(detail.ifEmpty { "Not found (404)." })
             409 -> AppError.Conflict(entity = detail.ifEmpty { "item" })
             422 -> AppError.Validation(detail.ifEmpty { "The request was not processable." })
+            // A `413` only ever comes from the attachment blob upload, which the server caps
+            // itself. The limit is a product fact the user can act on ("attach something
+            // smaller"), so it is stated plainly rather than folded into a generic failure —
+            // and 413 is deliberately *not* in SURFACE_SAFE_STATUSES, so the server's own
+            // wording cannot replace this one.
+            413 -> AppError.Validation("That file is larger than the 25 MB limit.")
             in 500..599 -> AppError.Server(statusCode, detail)
             429 -> AppError.Unknown("Too many attempts. Please wait a moment and try again.")
             else -> AppError.Unknown("Unexpected response from the server. Please try again.")
