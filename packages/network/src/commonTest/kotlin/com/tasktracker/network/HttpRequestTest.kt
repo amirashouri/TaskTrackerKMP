@@ -239,7 +239,9 @@ class ErrorMappingTest {
 
     @Test
     fun `an empty conflict still says what kind of thing it was`() {
-        assertEquals(AppError.Conflict("record"), HttpErrorMapping.map(409, ByteArray(0)))
+        // The client owns this noun. A 409 body is a sentence ("someone else edited this"),
+        // not an entity name, so the generic stand-in is used rather than the body.
+        assertEquals(AppError.Conflict("item"), HttpErrorMapping.map(409, ByteArray(0)))
     }
 
     @Test
@@ -253,29 +255,49 @@ class ErrorMappingTest {
     }
 
     @Test
-    fun `a server error message is taken from the envelope`() {
+    fun `a four thirteen says the file is too large`() {
+        // Only the attachment upload produces this. The limit is a product fact the user can
+        // act on, so the client states it and does not repeat the server's wording.
+        val error = HttpErrorMapping.map(
+            413,
+            """{"error":"that file is larger than the server allows"}""".encodeToByteArray(),
+        )
+        assertEquals(AppError.Validation("That file is larger than the 25 MB limit."), error)
+    }
+
+    @Test
+    fun `a server error withholds the envelope message`() {
+        // A 5xx body is server-internal — it can carry a driver error or a stack trace — so
+        // the client shows its own sentence and keeps the status for the retry policy.
         val error = HttpErrorMapping.map(500, """{"message":"database is down"}""".encodeToByteArray())
-        assertEquals(AppError.Server(500, "database is down"), error)
+        assertEquals(AppError.Server(500, ""), error)
         assertTrue(error.isRetryable)
     }
 
     @Test
     fun `the error field is accepted as well as message`() {
-        val error = HttpErrorMapping.map(502, """{"error":"upstream is down"}""".encodeToByteArray())
-        assertEquals(AppError.Server(502, "upstream is down"), error)
+        // Asserted through a status that surfaces its body. A 5xx would withhold the text and
+        // hide whether the `error` key was parsed at all.
+        val error = HttpErrorMapping.map(400, """{"error":"title is required"}""".encodeToByteArray())
+        assertEquals(AppError.Validation("title is required"), error)
     }
 
     @Test
-    fun `a non-JSON body still produces a readable message`() {
+    fun `a non-JSON body is tolerated but withheld for a server error`() {
+        // A proxy's HTML error page must not throw on the way in, and must not reach a banner.
         val error = HttpErrorMapping.map(502, "<html>bad gateway</html>".encodeToByteArray())
-        assertEquals(AppError.Server(502, "<html>bad gateway</html>"), error)
+        assertEquals(AppError.Server(502, ""), error)
     }
 
     @Test
-    fun `an oversized body is dropped rather than shown in a banner`() {
-        // A proxy's stack trace is not a message, and the cap is what stops it becoming one.
-        val error = HttpErrorMapping.map(502, "x".repeat(500).encodeToByteArray())
-        assertEquals(AppError.Server(502, ""), error)
+    fun `an over-long message is truncated rather than shown in full`() {
+        // A JSON envelope skips the raw-text cap, so sanitize's own limit is what bounds it.
+        // Asserted at 400 because a 5xx would drop the text before the cap could be observed.
+        val body = """{"message":"${"x".repeat(500)}"}""".encodeToByteArray()
+        assertEquals(
+            AppError.Validation("x".repeat(HttpErrorMapping.MAX_MESSAGE_LENGTH)),
+            HttpErrorMapping.map(400, body),
+        )
     }
 
     @Test
