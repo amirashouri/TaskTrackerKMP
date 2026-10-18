@@ -237,12 +237,54 @@ and invisible to teammates.
     1460 Android-host, 0 failures** (the Android host's 62 skips are the store-opening
     scenarios `thisHostOpensRoomStores` guards, including the resolution half of the graph
     test above).
-- **Remaining gap (follow-up):** a one-time backfill enqueue for attachments that predate
-  sync — rows written before the outbox entry existed, so a store that upgrades has local
-  files teammates have never seen. Their bytes are on this device, and the sweep above now
-  uploads any row that has no `blobRef`, so what is missing is the metadata row in the
-  outbox, not the bytes.
-- **Next step:** the backfill enqueue above.
+- **Remaining gap (follow-up):** ~~a one-time backfill enqueue for attachments that predate
+  sync~~ — done in #21 below.
+- **Done (#21):** the one-time backfill enqueue for attachments that predate sync.
+  - **The shape of the hole.** A row written before the change feed carried attachments has a
+    row, a blob and **no outbox entry**, so no cycle pushes it and no teammate ever sees it —
+    however many times the app syncs. The bytes are on this device and the sweep (#20) now
+    uploads any row with no `blobRef`, so what was missing was only the metadata change.
+  - **The set is structural, which is what makes it converge.** The backfill queues a change
+    for every row in `pendingAttachmentIDs` — `blobRef IS NULL AND blobPath != ''` — and that
+    is exactly the set the server cannot already hold as metadata: a row reaches
+    `blobRef != null` only through an upload, and an upload is answered `404` unless the
+    metadata row is already there. So a still-pending row is either pre-sync or queued and
+    not yet pushed, and queueing its change is correct in both cases. Rows the server has
+    fall out of the set by themselves, which is why no durable "which rows did I backfill"
+    marker exists to get wrong: run it once, the set empties as the uploads land.
+  - **`ProjectRepositoryPort.queueAttachmentChange(id, now)`** is the write, and it is the
+    same enqueue `addAttachment` performs — one `OutboxEntity.Attachment` upsert, one payload,
+    re-read from the stored row so the server learns what this device actually holds. It
+    deliberately does **not** deduplicate: the outbox is a log, an entry disappears the
+    moment the server accepts it, so "already queued" is not a question the store can answer,
+    and the server's upsert is idempotent. A repeated id costs a payload, not correctness.
+  - **Once per install, and the flag is raw.** `AttachmentUpgradeBackfill` (composition root)
+    holds the bound, because the domain module has no preferences by design. The key is a
+    plain string rather than a `DefaultsKey` for the reason the appearance scheme's is:
+    `removeAll` walks the enum on sign-out, so an enum member would let the backfill replay
+    after the first sign-out as though it had never run. The value stored is how many changes
+    were queued, so a later "why did this device re-announce everything" names a number.
+    A failure leaves the flag unset, so the next successful cycle picks the queue back up.
+  - **Why the bound exists even though the work converges.** An attachment whose metadata is
+    already on the server but whose bytes keep failing to upload stays in the pending set
+    forever, so an unbounded backfill would re-announce that one file on every cycle, to
+    teammates who can already see it. The work is idempotent by construction; the bound is
+    what keeps the idempotence from becoming noise.
+  - **Order in the hook, and why it is sweep-first.** Both halves converge on the cycle after
+    the backfill either way, so the order is not about correctness — it is about what a
+    failing backfill costs. The sweep is the recurring work and the backfill is a one-time
+    catch-up, so the sweep runs first: a store that throws while queueing the pre-sync rows
+    still uploads everything that was already queued. Neither waits.
+  - **Tests:** 2 in `AttachmentBlobUseCasesTest` (one change per pending row, oldest first,
+    with a synced row and a byte-less row skipped; an empty store queues nothing and says
+    so), 2 in `AttachmentBlobRepositoryTest` (the queued payload is the stored row's own, with
+    `blobPath` excluded and the bytes untouched; a missing row queues nothing and leaves the
+    queue alone), 5 in `AttachmentUpgradeBackfillTest` (first run queues and records the
+    count, a second run does nothing, sign-out does not clear the flag, a failed run leaves
+    it unset and retries, an empty store still records that it ran) and 2 more assertions in
+    `AppGraphTest` (the backfill rides the same backend switch as the sweep).
+- **Next step:** none outstanding for attachments. Remaining spec-wide work is outside this
+  file.
 - **Done (#14):** per-row sync state, and the refusal/transient split behind it.
   - **Five states, not two.** `AttachmentSyncState` (`AttachmentList.kt`) is `Synced`,
     `Uploading`, `Waiting`, `Failed`, `LocalOnly`. The original plan's "`blobRef == null` means
@@ -375,9 +417,8 @@ and invisible to teammates.
     now records **1786 jvm / 1735 iOS / 1446 Android-host, 0 failures**. That full run is also
     the first time `iosSimulatorArm64Test` has executed since the attachment work began, which
     is why the two iOS breaks above went unnoticed — `jvmTest` alone never sees them.
-- **Next step:** the one-time backfill enqueue for attachments that predate sync — the only
-  remaining follow-up. The sweep above already uploads any row with no `blobRef`, so what is
-  missing is the metadata row in the outbox, not the bytes.
+- **Next step:** none outstanding for attachments. Both follow-ups the spec carried — the
+  global sweep (#20) and the backfill enqueue (#21) — are shipped and green.
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only

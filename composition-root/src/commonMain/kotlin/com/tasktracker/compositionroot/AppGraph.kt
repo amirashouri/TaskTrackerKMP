@@ -31,6 +31,7 @@ import com.tasktracker.featureprojectsdata.RoomProjectRepository
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
+import com.tasktracker.featureprojectsdomain.BackfillUnqueuedAttachments
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.createAttachmentOpener
 import com.tasktracker.featureprojectsdomain.createFilePicker
@@ -558,6 +559,27 @@ object AppGraph {
                     ),
                 )
             }
+
+            // The upgrade path, bounded to one run per install. Under the same switch for a
+            // sharper reason: a demo graph has no server to announce anything to, and the
+            // flag it would set is a promise made on behalf of a store that will never see
+            // the change land. Leaving it unbound here means a demo graph keeps every
+            // attachment local and honest rather than marking an upgrade done that did not
+            // happen.
+            app<BackfillUnqueuedAttachments> { resolver ->
+                BackfillUnqueuedAttachments(
+                    repository = resolver.resolve(ProjectRepositoryPort::class),
+                    dateProvider = resolver.resolve(DateProvider::class),
+                )
+            }
+            app<AttachmentUpgradeBackfill> { resolver ->
+                AttachmentUpgradeBackfill(
+                    // The use case behind a function rather than the class, so the guard is
+                    // testable without a store — see its own KDoc.
+                    backfill = { resolver.resolve(BackfillUnqueuedAttachments::class)() },
+                    defaults = resolver.resolve(UserDefaultsStore::class),
+                )
+            }
         }
 
         app<SyncEngine> { resolver ->
@@ -600,6 +622,7 @@ object AppGraph {
             // thread the cycle finished on, and would throw once the container is stopped —
             // after `AppGraph.stop`, when a sweep is still finishing its last upload.
             val sweep = resolver.getOrNull(SweepPendingAttachments::class)
+            val upgrade = resolver.getOrNull(AttachmentUpgradeBackfill::class)
             SyncCoordinator(
                 engine = resolver.resolve(SyncEngine::class),
                 monitor = resolver.resolve(NetworkMonitor::class),
@@ -608,10 +631,24 @@ object AppGraph {
                 // inside `let`'s result is inferred as a plain lambda and then rejected as a
                 // suspend function type. Both branches are lambdas over the same parameter,
                 // so the shape is uniform and the branch is the only difference.
+                //
+                // Order is not what makes the upgrade work — both halves converge on the
+                // cycle after the backfill either way — but it is what keeps a failing
+                // backfill from costing the sweep its cycle. The sweep is the recurring
+                // work and the backfill is a one-time catch-up, so the recurring one goes
+                // first: a store that throws while queueing the pre-sync rows still uploads
+                // everything that was already queued.
+                //
+                // Neither waits. An upload that reaches the server before its own metadata
+                // row is answered `404`, which the sweep records as "not yet on server" and
+                // retries on the next cycle.
                 onCycleSucceeded = if (sweep == null) {
                     { }
                 } else {
-                    { sweep() }
+                    {
+                        sweep()
+                        upgrade?.runIfNeeded()
+                    }
                 },
             )
         }

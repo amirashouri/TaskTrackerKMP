@@ -17,6 +17,7 @@ import com.tasktracker.database.CachedSession
 import com.tasktracker.database.OutboxRecord
 import com.tasktracker.database.SessionCache
 import com.tasktracker.database.TaskTrackerDatabase
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
@@ -104,6 +105,10 @@ internal class Harness(
     /** As [queuedWorkItem], for a row the test already has in hand. */
     fun decodeWorkItem(record: OutboxRecord): WorkItem =
         JSONCoding.json.decodeFromString(WorkItem.serializer(), record.payload.decodeToString())
+
+    /** As [queuedWorkItem], for an attachment change — including the upgrade backfill's. */
+    fun decodeAttachment(record: OutboxRecord): Attachment =
+        JSONCoding.json.decodeFromString(Attachment.serializer(), record.payload.decodeToString())
 }
 
 /**

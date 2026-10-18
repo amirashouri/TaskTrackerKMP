@@ -463,6 +463,26 @@ interface ProjectRepositoryPort {
     suspend fun deleteAttachment(id: AttachmentID)
 
     /**
+     * Queues one attachment's metadata change, without touching its bytes or its row.
+     *
+     * Exists for the upgrade path. Attachments written before the change feed carried them
+     * have a row and a blob and **no outbox entry**, so no sync cycle would ever push them
+     * and no teammate would ever see them. This is the missing write, phrased as the same
+     * enqueue [addAttachment] performs rather than as a special case: one outbox row, one
+     * payload, the same `OutboxEntity.Attachment` upsert. The bytes follow through the
+     * upload use case, exactly as they do for a fresh attach.
+     *
+     * The row is re-read rather than trusting a caller's copy, so the payload describes what
+     * this device actually holds — a stale `Attachment` would queue the wrong fileName or
+     * size, and the server has no way to tell.
+     *
+     * Returns whether a change was queued. `false` means the row is gone, which is a
+     * no-op rather than an error: a store that outlives the attachment it was told about
+     * has nothing to announce. The default answers `false` for a store with no outbox.
+     */
+    suspend fun queueAttachmentChange(id: AttachmentID, now: Instant): Boolean = false
+
+    /**
      * One attachment's metadata row, or `null` when it has gone.
      *
      * The upload path needs the row's `projectID`, `workItemID` and `blobRef`, none of

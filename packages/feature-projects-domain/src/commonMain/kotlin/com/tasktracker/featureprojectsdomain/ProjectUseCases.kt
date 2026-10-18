@@ -770,6 +770,48 @@ class SweepPendingAttachments(
 }
 
 /**
+ * Queues the metadata change for every attachment whose bytes have never been pushed.
+ *
+ * ## The gap this is for
+ *
+ * Attachments written before the change feed carried them have a row, a blob and **no
+ * outbox entry** — so no cycle pushes them and no teammate sees them, however many times
+ * the app syncs. The bytes are on this device and the post-sync sweep will upload them, but
+ * only once the server has the metadata row to attach them to, and only a queued change
+ * can put it there. This is that write.
+ *
+ * ## Why the pending set is the right set, and why no flag is kept here
+ *
+ * [ProjectRepositoryPort.pendingAttachmentIDs] is `blobRef IS NULL AND blobPath != ''`, and
+ * that is exactly the set the server cannot already hold as *metadata*: a row reaches
+ * `blobRef != null` only through an upload, and an upload is answered `404` unless the
+ * metadata row is already there. So a row still pending is either pre-sync, or queued and
+ * not yet pushed — and in both cases queueing its change is the correct next step, never a
+ * mistake. A row the server has falls out of the set by itself, which is what makes this
+ * converge without any durable marker: run it once and the set empties as the uploads land.
+ *
+ * Whether it has *already run* is a different question, and it belongs to whoever holds the
+ * durable state — see the composition root's upgrade backfill, which runs this once per
+ * install so a healthy store is not re-announced on every cycle.
+ *
+ * @return how many changes were queued, for a caller that records what it did.
+ */
+class BackfillUnqueuedAttachments(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(CancellationException::class)
+    suspend operator fun invoke(): Int {
+        var queued = 0
+        for (id in repository.pendingAttachmentIDs()) {
+            if (repository.queueAttachmentChange(id, dateProvider.now())) queued += 1
+        }
+        return queued
+    }
+}
+
+/**
  * Returns one attachment's bytes, downloading and caching them on first read.
  *
  * The local cache is the fast path and the only path when the device is offline: a file

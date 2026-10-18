@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -268,6 +269,81 @@ class AttachmentBlobRepositoryTest {
         )
 
         assertTrue(harness.repository.pendingAttachmentIDs().isEmpty())
+    }
+
+    /**
+     * The upgrade path's write, asserted against the queue rather than the row.
+     *
+     * A store that has rows but no outbox entries is the pre-sync shape, and the only thing
+     * that makes those rows visible to teammates is this one `upsert` — with the stored
+     * row's own payload, because the server has no other way to learn what the file is. The
+     * second call is asserted to write a *second* row rather than to be a no-op: the outbox
+     * is a log, an entry disappears the moment the server accepts it, so "already queued" is
+     * not a question this store can answer, and the server's upsert is idempotent.
+     */
+    @Test
+    fun `queueing a change writes the stored rows own payload`() = runTest {
+        val harness = Harness()
+        val item = aWorkItemIn(harness)
+        val attachment = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "crash-report.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(1, 2, 3),
+            now = Moments.start,
+        )
+        // The attach itself queued one row; the queue is not drained, because what is under
+        // test is what this method adds to it.
+        val queuedByAttach = harness.queued().count { it.entityKind == OutboxEntity.Attachment.wireValue }
+        assertEquals(1, queuedByAttach, "the attach queues exactly one change of its own")
+
+        assertTrue(harness.repository.queueAttachmentChange(attachment.id, Moments.later))
+        assertTrue(harness.repository.queueAttachmentChange(attachment.id, Moments.later))
+
+        val queued = harness.queued().filter { it.entityKind == OutboxEntity.Attachment.wireValue }
+        assertEquals(
+            queuedByAttach + 2,
+            queued.size,
+            "the attach's own row plus the two this method wrote",
+        )
+        val last = queued.last()
+        assertEquals(attachment.id.stringValue, last.entityID)
+        assertEquals(OutboxOperation.Upsert.wireValue, last.operation)
+        val payload = harness.decodeAttachment(last)
+        assertEquals("crash-report.txt", payload.fileName)
+        assertEquals(3L, payload.sizeBytes)
+        assertEquals(item.projectID, payload.projectID)
+        assertTrue(payload.blobPath.isEmpty(), "the local cache path must never reach the wire")
+
+        // The bytes are not touched: the row still names the same file, and it is still
+        // unsent, because this queues a change rather than completing an upload.
+        val row = assertNotNull(harness.repository.attachment(attachment.id))
+        assertNull(row.blobRef)
+        assertContentEquals(byteArrayOf(1, 2, 3), harness.repository.attachmentBytes(attachment.id))
+    }
+
+    /** A row that has gone queues nothing, and says so rather than throwing. */
+    @Test
+    fun `queueing a change for a missing row queues nothing`() = runTest {
+        val harness = Harness()
+        val item = aWorkItemIn(harness)
+        val attachment = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "crash-report.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(1),
+            now = Moments.start,
+        )
+        harness.repository.deleteAttachment(attachment.id)
+        val depthAfterDelete = harness.queueDepth()
+
+        assertFalse(harness.repository.queueAttachmentChange(attachment.id, Moments.later))
+
+        assertEquals(
+            depthAfterDelete,
+            harness.queueDepth(),
+            "a missing row has nothing to announce, and the queue must stay put",
+        )
     }
 
     // MARK: Fixtures

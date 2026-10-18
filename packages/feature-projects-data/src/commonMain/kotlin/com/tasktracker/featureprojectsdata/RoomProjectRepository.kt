@@ -1132,6 +1132,29 @@ class RoomProjectRepository(
     override suspend fun attachment(id: AttachmentID): Attachment? =
         inTransaction(database) { database.attachmentDao().byID(id.stringValue)?.domainValue }
 
+    /**
+     * The upgrade path's missing write: queue the change [addAttachment] used to not queue.
+     *
+     * A row is read first, for the reason the port documents — the payload must describe the
+     * row as it stands, not as a caller remembered it. A missing row answers `false`, which
+     * is the same no-op [deleteAttachment] runs on: a store that outlives the attachment it
+     * was told about has nothing to announce.
+     *
+     * Deliberately *not* deduplicated against what is already queued. A second call writes a
+     * second row, because the outbox is a log rather than a set — the engine deletes an entry
+     * once the server has accepted it, so "already queued" is not a question the store can
+     * answer, and pretending otherwise would drop a change that had never been pushed. The
+     * server's upsert is idempotent, and a repeated id costs a payload, not correctness.
+     */
+    override suspend fun queueAttachmentChange(id: AttachmentID, now: Instant): Boolean {
+        val stamp = currentUserStamp()
+        val row = inTransaction(database) { database.attachmentDao().byID(id.stringValue) }
+            ?: return false
+        val stored = row.domainValue ?: return false
+        inTransaction(database) { enqueueAttachment(stored, stamp, now) }
+        return true
+    }
+
     override suspend fun attachmentBytes(id: AttachmentID): ByteArray? {
         // The row is read first so a stale `blobPath` cannot be used to read a file whose
         // row has already been deleted, and a blank path (a pulled row with no local

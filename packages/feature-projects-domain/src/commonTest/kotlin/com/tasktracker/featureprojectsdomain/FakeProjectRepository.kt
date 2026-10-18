@@ -75,6 +75,15 @@ class FakeProjectRepository : ProjectRepositoryPort {
      * folded them into the row could not reproduce the `NoLocalBytes` case at all.
      */
     private val blobBytes = mutableMapOf<AttachmentID, ByteArray>()
+
+    /**
+     * The attachment changes this fake was asked to queue, in order.
+     *
+     * There is no outbox here, so [queueAttachmentChange] records instead of writing — and
+     * that makes it observable, which is what the backfill is tested against. Read through
+     * [queuedAttachmentChanges] so a test asserts on a copy rather than on the live list.
+     */
+    private val queuedAttachmentChangeIDs = mutableListOf<AttachmentID>()
     private val storedSprints = mutableListOf<Sprint>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
@@ -724,6 +733,31 @@ class FakeProjectRepository : ProjectRepositoryPort {
             publish(ProjectChange(ProjectChange.Kind.WorkItems, row.projectID))
         }
     }
+
+    /**
+     * Records the call rather than pretending an outbox exists — this fake holds no queue,
+     * for the reason [retryStuckChanges] documents. The list is the point: the backfill's
+     * contract is "one queued change per pending row", and a store that silently dropped them
+     * would make the backfill look like a no-op.
+     *
+     * The answer mirrors the real store's "a missing row queues nothing" rather than its
+     * re-read, so a backfill over a row that has gone reports the same thing here as there.
+     */
+    override suspend fun queueAttachmentChange(id: AttachmentID, now: Instant): Boolean {
+        throwIfFailing()
+        return lock.withLock {
+            if (storedAttachments.none { it.id == id }) {
+                false
+            } else {
+                queuedAttachmentChangeIDs += id
+                true
+            }
+        }
+    }
+
+    /** The attachment changes this fake was asked to queue, in order. */
+    suspend fun queuedAttachmentChanges(): List<AttachmentID> =
+        lock.withLock { queuedAttachmentChangeIDs.toList() }
 
     /**
      * The rows the real store's `pendingUploads` query returns, filtered the same way.

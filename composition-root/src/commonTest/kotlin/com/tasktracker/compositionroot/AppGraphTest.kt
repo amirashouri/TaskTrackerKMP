@@ -253,6 +253,11 @@ class AppGraphTest {
         try {
             assertFalse(offline.isRegistered(SweepPendingAttachments::class))
             assertTrue(online.isRegistered(SweepPendingAttachments::class))
+            // The upgrade backfill rides the same switch, for the sharper reason recorded on
+            // its registration: the flag it sets is a promise made on behalf of a store that
+            // will never see the change land, and a demo graph has no such store.
+            assertFalse(offline.isRegistered(AttachmentUpgradeBackfill::class))
+            assertTrue(online.isRegistered(AttachmentUpgradeBackfill::class))
 
             if (thisHostOpensRoomStores()) {
                 assertNull(offline.getOrNull(SweepPendingAttachments::class))

@@ -427,6 +427,47 @@ class AttachmentBlobUseCasesTest {
         assertFailsWith<CancellationException> { sweep(repository, transport)() }
     }
 
+    // MARK: Backfilling
+
+    /**
+     * One change per pending row, oldest first — the set the sweep is about to drain.
+     *
+     * The two rows that are *not* queued are the assertion: a synced row is already on the
+     * server and re-announcing it would be noise, and a pulled row has no bytes here to
+     * upload even though it looks pending to anything that reads only `blobRef`.
+     */
+    @Test
+    fun `the backfill queues one change per pending row`() = runTest {
+        val (repository, itemID) = seeded()
+        val first = repository.seedAttachment(itemID, fileName = "first.txt")
+        val second = repository.seedAttachment(itemID, fileName = "second.txt")
+        val synced = repository.seedAttachment(itemID, fileName = "synced.txt", blobRef = "on-the-server")
+        repository.seedBytes(first.id, byteArrayOf(1))
+        repository.seedBytes(second.id, byteArrayOf(2))
+
+        val queued = BackfillUnqueuedAttachments(repository, TestDateProvider(now))()
+
+        assertEquals(2, queued)
+        assertEquals(
+            listOf(first.id, second.id),
+            repository.queuedAttachmentChanges(),
+            "the change must be queued for every row the server cannot already hold",
+        )
+    }
+
+    /** A store with nothing pending is a backfill that queues nothing, and says so. */
+    @Test
+    fun `a store with nothing pending queues nothing`() = runTest {
+        val (repository, itemID) = seeded()
+        val attachment = repository.seedAttachment(itemID, blobRef = "on-the-server")
+
+        val queued = BackfillUnqueuedAttachments(repository, TestDateProvider(now))()
+
+        assertEquals(0, queued)
+        assertTrue(repository.queuedAttachmentChanges().isEmpty())
+        assertNotNull(repository.attachment(attachment.id))
+    }
+
     // MARK: Fixtures
 
     private suspend fun seeded(): Pair<FakeProjectRepository, WorkItemID> {
