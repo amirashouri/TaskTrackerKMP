@@ -203,6 +203,15 @@ class ProjectsUiJvmTest {
     fun aRowThatIsNotOpeningShowsItsSyncState() = runComposeUiTest(block = AttachmentRowScenarios.aRowThatIsNotOpeningShowsItsSyncState)
 
     @Test
+    fun aHeldPickReadsAsPendingNotAttached() = runComposeUiTest(block = AttachmentRowScenarios.aHeldPickReadsAsPendingNotAttached)
+
+    @Test
+    fun removingAHeldPickNamesItsPosition() = runComposeUiTest(block = AttachmentRowScenarios.removingAHeldPickNamesItsPosition)
+
+    @Test
+    fun theTitleFieldShowsWhatYouType() = runComposeUiTest(block = WorkItemEditorScenarios.theTitleFieldShowsWhatYouType)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

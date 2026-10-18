@@ -210,6 +210,19 @@ class WorkItemEditorModel(
     var attachments by mutableStateOf<List<Attachment>>(emptyList())
         private set
 
+    /**
+     * Files picked on a **create**, held until Save mints the item's id.
+     *
+     * A create has no id to file against, so a pick cannot be stored yet — which is why the
+     * attach button used to look dead there: `attachFile` returned `null` before doing
+     * anything. Staging is what makes the pick real. A held file is screened on the same
+     * rules ([AttachFile.refusal]) the attach applies, shown as a pending row, and filed by
+     * [flushStagedAttachments] the moment the item exists. Empty on an edit, which stores
+     * each pick immediately.
+     */
+    var stagedAttachments by mutableStateOf<List<PickedFile>>(emptyList())
+        private set
+
     /** Whether an attach is in flight — the model has no other in-flight flag. */
     var isAttaching by mutableStateOf(false)
         private set
@@ -293,9 +306,12 @@ class WorkItemEditorModel(
      * button press the user watched fail, and swallowing it would teach that the button
      * does nothing. The banner names the measured size and the limit, so a TooLarge the
      * user can read about is one they can fix on their next pick.
+     *
+     * Keyed on [savedWorkItemID] rather than the constructor's `existing`, because a create
+     * has no `existing` yet the flush after Save files against the id the save just minted.
      */
     suspend fun attachFile(picked: PickedFile): Attachment? {
-        val id = existing?.id ?: return null
+        val id = savedWorkItemID ?: return null
         isAttaching = true
         val result = reporting {
             storeAttachment(
@@ -313,26 +329,74 @@ class WorkItemEditorModel(
                 result.attachment
             }
 
-            AttachFileResult.BlankName -> {
-                onFailure(AppError.Validation("The picked file has no name to file it under."))
-                null
-            }
-
-            AttachFileResult.EmptyFile -> {
-                onFailure(AppError.Validation("The picked file is empty — nothing was stored."))
-                null
-            }
-
-            is AttachFileResult.TooLarge -> {
-                onFailure(
-                    AppError.Validation(
-                        "The file is ${formatAttachmentSize(result.sizeBytes)}; " +
-                            "the limit is ${formatAttachmentSize(result.limitBytes)}.",
-                    ),
-                )
+            else -> {
+                reportRefusal(result)
                 null
             }
         }
+    }
+
+    /**
+     * Holds one picked file until Save mints the item's id.
+     *
+     * Screened on [AttachFile.refusal] so a file the attach would refuse is refused *now*,
+     * at the press the user watched, rather than after a save that already created the task
+     * — and the banner names the same number the attach would have. A held file is shown as
+     * a pending row and filed by [flushStagedAttachments] once the item exists.
+     */
+    fun stageAttachment(picked: PickedFile) {
+        AttachFile.refusal(picked.fileName, picked.bytes)?.let { refusal ->
+            reportRefusal(refusal)
+            return
+        }
+        stagedAttachments = stagedAttachments + picked
+    }
+
+    /** Drops one held pick by position. A no-op for an index that is not there. */
+    fun removeStagedAttachment(index: Int) {
+        stagedAttachments = stagedAttachments.filterIndexed { i, _ -> i != index }
+    }
+
+    /**
+     * Files every held pick onto the id a successful create just minted.
+     *
+     * Runs inside the save flow, after [save] returned an outcome, because only then does the
+     * item exist to file against — this is what a create's staged picks were waiting for. The
+     * list is cleared first so a re-entrant call cannot file the same pick twice, and the
+     * stored rows are returned so the caller can start their uploads. A row that failed to
+     * store was already reported to the banner by [attachFile]'s own refusal handling.
+     */
+    suspend fun flushStagedAttachments(): List<Attachment> {
+        if (stagedAttachments.isEmpty()) return emptyList()
+        val held = stagedAttachments
+        stagedAttachments = emptyList()
+        return held.mapNotNull { attachFile(it) }
+    }
+
+    /**
+     * Puts one refusal in the shared banner, in the words the attach path already used.
+     *
+     * Shared with [stageAttachment] so a create-time refusal reads exactly like an edit-time
+     * one — the same measured size, the same limit.
+     */
+    private fun reportRefusal(refusal: AttachFileResult) {
+        val error = when (refusal) {
+            AttachFileResult.BlankName ->
+                AppError.Validation("The picked file has no name to file it under.")
+
+            AttachFileResult.EmptyFile ->
+                AppError.Validation("The picked file is empty — nothing was stored.")
+
+            is AttachFileResult.TooLarge -> AppError.Validation(
+                "The file is ${formatAttachmentSize(refusal.sizeBytes)}; " +
+                    "the limit is ${formatAttachmentSize(refusal.limitBytes)}.",
+            )
+
+            // Not a refusal: only the attach path reaches here with a success, and it
+            // handles that case itself before calling this.
+            is AttachFileResult.Success -> return
+        }
+        onFailure(error)
     }
 
     /**

@@ -258,6 +258,10 @@ fun WorkItemEditorSheet(
     onOpenAttachment: ((AttachmentID) -> Unit)? = null,
     /** See [AttachmentList.isOpening]. */
     attachmentOpening: ((Attachment) -> Boolean)? = null,
+    /** See [AttachmentList.pendingAttachments]; held picks while creating. */
+    pendingAttachments: List<PickedFile> = emptyList(),
+    /** See [AttachmentList.onRemovePending]. */
+    onRemovePending: (Int) -> Unit = {},
     /** See [WorkItemEditorForm.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     /** See [WorkItemEditorForm.resolveSelected]. */
@@ -266,17 +270,13 @@ fun WorkItemEditorSheet(
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
 ) {
-    val editTitle = if (isCreating) {
-        stringResource(Res.string.work_item_editor_new_title)
-    } else {
-        val keyString = if (isCreating) "" else issuedKey?.toString().orEmpty()
-        stringResource(Res.string.work_item_editor_edit_title, keyString)
-    }
-
     // The editor is now always full-screen. We keep the deprecated parameters
     // for binary compatibility with NavigationHost.
     ProjectsEditorFullScreen(
-        title = editTitle,
+        // The draft's own title, not the header: `ProjectsEditorFullScreen` names the
+        // surface itself. Passing the header string here bound the title *field* to a
+        // constant, which is why it read "New Task" and dropped every keystroke.
+        title = title,
         details = details,
         storyPointsText = storyPointsText,
         status = status,
@@ -330,6 +330,8 @@ fun WorkItemEditorSheet(
         attachmentSyncState = attachmentSyncState,
         onOpenAttachment = onOpenAttachment,
         attachmentOpening = attachmentOpening,
+        pendingAttachments = pendingAttachments,
+        onRemovePending = onRemovePending,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -430,6 +432,10 @@ private fun ProjectsEditorFullScreen(
     onOpenAttachment: ((AttachmentID) -> Unit)? = null,
     /** See [AttachmentList.isOpening]. */
     attachmentOpening: ((Attachment) -> Boolean)? = null,
+    /** See [AttachmentList.pendingAttachments]; held picks while creating. */
+    pendingAttachments: List<PickedFile> = emptyList(),
+    /** See [AttachmentList.onRemovePending]. */
+    onRemovePending: (Int) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -457,8 +463,18 @@ private fun ProjectsEditorFullScreen(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
             ) {
+                // The header names the surface ("New Task" / "Edit TT-1"); `title` is the
+                // draft and belongs to the field below. Sharing one parameter between the
+                // two was the defect: the field rendered this constant and never the draft.
                 ttText(
-                    text = title,
+                    text = if (isCreating) {
+                        stringResource(Res.string.work_item_editor_new_title)
+                    } else {
+                        stringResource(
+                            Res.string.work_item_editor_edit_title,
+                            issuedKey?.toString().orEmpty(),
+                        )
+                    },
                     style = ttTypography.title,
                     color = ttLabel(),
                 )
@@ -584,6 +600,8 @@ private fun ProjectsEditorFullScreen(
             syncStateOf = attachmentSyncState,
             onOpen = onOpenAttachment,
             isOpening = attachmentOpening,
+            pendingAttachments = pendingAttachments,
+            onRemovePending = onRemovePending,
         )
         Row(
             modifier = Modifier

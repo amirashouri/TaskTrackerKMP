@@ -879,9 +879,9 @@ class WorkItemEditorModelTest {
     }
 
     /**
-     * A create has no id yet, and a file cannot be filed against a work item that does
-     * not exist, so every attachment call on a create model is a no-op rather than a
-     * crash or a stray write.
+     * A create has no id yet, so `attachFile` itself is a no-op rather than a crash or a
+     * stray write — the create path holds picks through `stageAttachment` and files them on
+     * save instead (see `saving a create files the held picks onto the new item`).
      */
     @Test
     fun `attachment calls on a create model are no-ops`() = runTest {
@@ -897,6 +897,98 @@ class WorkItemEditorModelTest {
         assertTrue(model.attachments.isEmpty())
         assertTrue(repository.writes.isEmpty(), "a create must not write attachments")
         assertNull(model.errorMessage)
+    }
+
+    // MARK: Staging on a create
+
+    /**
+     * A pick on a create is held, not stored: there is no id to file it against yet, so the
+     * model keeps it until Save. This is the pick the attach button used to swallow — the
+     * flow that made "attach a file" look broken on a new task.
+     */
+    @Test
+    fun `a pick on a create is held until save`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = newItem(repository)
+
+        model.stageAttachment(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1, 2)),
+        )
+
+        assertEquals(1, model.stagedAttachments.size)
+        assertEquals("report.txt", model.stagedAttachments.single().fileName)
+        assertTrue(repository.writes.isEmpty(), "nothing is written before the item exists")
+        assertNull(model.errorMessage)
+    }
+
+    /**
+     * A refusal at pick time reads like the attach's own, on the same rules: the banner names
+     * the limit before the file is held, rather than after a save that already created the
+     * task. `AttachFile.refusal` is the single source both paths share.
+     */
+    @Test
+    fun `a create-time pick over the cap is refused before it is held`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = newItem(repository)
+        val overCap = ByteArray((AttachFile.MAX_ATTACHMENT_BYTES + 1L).toInt())
+
+        model.stageAttachment(
+            PickedFile(fileName = "huge.bin", mimeType = "application/octet-stream", bytes = overCap),
+        )
+
+        assertTrue(model.stagedAttachments.isEmpty(), "a refused pick is not held")
+        assertTrue(model.errorMessage?.contains("25.0 MB") == true, "the same words as the attach")
+        assertTrue(repository.writes.isEmpty())
+    }
+
+    @Test
+    fun `a held pick can be dropped before save`() = runTest {
+        val model = newItem()
+        model.stageAttachment(PickedFile("one.txt", "text/plain", byteArrayOf(1)))
+        model.stageAttachment(PickedFile("two.txt", "text/plain", byteArrayOf(2)))
+
+        model.removeStagedAttachment(0)
+
+        assertEquals(listOf("two.txt"), model.stagedAttachments.map { it.fileName })
+    }
+
+    /**
+     * The point of holding: the moment the item exists, the held picks are filed against the
+     * id the save minted — and the held list is emptied so they cannot be filed twice.
+     */
+    @Test
+    fun `saving a create files the held picks onto the new item`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = WorkItemEditorModel(project.id, null, repository, TestDateProvider())
+        model.onTitleChanged("Write the spec")
+        model.stageAttachment(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1, 2)),
+        )
+
+        val outcome = assertIs<WorkItemSaveOutcome.Created>(model.save())
+        val stored = model.flushStagedAttachments()
+
+        assertEquals(1, stored.size)
+        assertEquals("report.txt", stored.single().fileName)
+        assertEquals(outcome.workItemID, stored.single().workItemID)
+        assertEquals(1, repository.attachments(outcome.workItemID).size)
+        assertEquals(
+            stored.map { it.id }.toSet(),
+            model.attachments.map { it.id }.toSet(),
+            "the flush's rows are the ones the model will render",
+        )
+        assertTrue(model.stagedAttachments.isEmpty(), "held picks are filed once")
+    }
+
+    @Test
+    fun `flushing with nothing held writes nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = newItem(repository)
+
+        assertTrue(model.flushStagedAttachments().isEmpty())
+        assertTrue(repository.writes.isEmpty())
     }
 
     // MARK: Sync state

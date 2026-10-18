@@ -1764,8 +1764,18 @@ private fun WorkItemEditorDestination(
             scope.launch {
                 isBusy = true
                 val outcome = model.save()
+                // A create held its picks until now: file them on the id the save just
+                // minted, before the editor goes away. Nothing to do on an edit (the list
+                // is empty) or when the save failed (`outcome == null`).
+                val stored = if (outcome != null) model.flushStagedAttachments() else emptyList()
                 isBusy = false
                 if (outcome != null) {
+                    // The same non-blocking handoff an edit's attach uses: the local commit
+                    // is done and the metadata is queued, so the bytes upload in the
+                    // background and a failure there is retried by a later sync.
+                    stored.forEach { attachment ->
+                        launch { model.uploadAttachment(attachment.id) }
+                    }
                     onDismiss()
                 }
             }
@@ -1821,6 +1831,10 @@ private fun WorkItemEditorDestination(
         // each attach — the write returns the stored row, so the view updates from the
         // value it just created rather than re-reading the store.
         attachments = model.attachments,
+        // Held picks on a create: the list renders them under "will be attached when you
+        // save", and Remove drops one before Save files the rest.
+        pendingAttachments = model.stagedAttachments,
+        onRemovePending = model::removeStagedAttachment,
         isAttaching = model.isAttaching,
         onAttachClick = {
             // The picker belongs to the environment, not the screen: the graph owns the
@@ -1835,11 +1849,18 @@ private fun WorkItemEditorDestination(
             if (picker != null && !model.isAttaching) {
                 scope.launch {
                     picker.pick()?.let { picked ->
-                        model.attachFile(picked)?.let { stored ->
-                            // The local commit is done and the metadata is queued; the bytes
-                            // upload in the background so the attach button never waits on
-                            // the network. A failure here is retried by a later sync.
-                            launch { model.uploadAttachment(stored.id) }
+                        // A create has no id to file against, so the pick is held in the
+                        // draft and filed by `onSave` the moment the item exists. An edit
+                        // stores it now and uploads its bytes in the background.
+                        if (model.isCreating) {
+                            model.stageAttachment(picked)
+                        } else {
+                            model.attachFile(picked)?.let { stored ->
+                                // The local commit is done and the metadata is queued; the
+                                // bytes upload in the background so the attach button never
+                                // waits on the network. A failure is retried by a later sync.
+                                launch { model.uploadAttachment(stored.id) }
+                            }
                         }
                     }
                 }
