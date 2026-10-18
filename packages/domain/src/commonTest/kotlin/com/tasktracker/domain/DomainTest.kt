@@ -1030,3 +1030,29 @@ class MentionRulesTest {
         assertEquals("bob", mentions[1].username)
     }
 }
+
+/**
+ * The spelling of [Priority] on the wire, which is not the enum's entry name.
+ */
+class PriorityWireTest {
+
+    @Test
+    fun everyPriorityTravelsAsItsLowercaseWireValue() {
+        // The server has enforced lowercase since `0001_initial`:
+        // `work_items_priority_check` is `CHECK (priority IN ('lowest','low','medium','high',
+        // 'critical'))`, and nothing in the Go layer normalizes case. kotlinx serializes an
+        // enum by its *entry name* unless the entry carries `@SerialName`, so dropping one
+        // annotation puts `"Medium"` on the wire; Postgres refuses it as SQLSTATE 23514,
+        // which the client reads as a *retryable* failure. It then spends the whole retry
+        // budget before dead-lettering — and because the push loop stops at the first
+        // retryable failure, every change queued behind the item is never sent at all.
+        for (priority in Priority.entries) {
+            val encoded = JSONCoding.json.encodeToString(Priority.serializer(), priority)
+            assertEquals(
+                "\"${priority.wireValue}\"",
+                encoded,
+                "Priority.$priority must travel as its wireValue, not its entry name — got $encoded",
+            )
+        }
+    }
+}

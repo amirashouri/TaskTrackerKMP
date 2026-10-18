@@ -368,7 +368,7 @@ class RecurrenceTest {
         val encoded = """
             {"id":"0192f0c2-6a1e-7c3d-8e4f-0a1b2c3d4e5f",
              "projectID":"0192f0c2-6a1e-7c3d-8e4f-0a1b2c3d4e50","key":"TT-1",
-             "title":"Old","details":"","status":"backlog","priority":"Medium","assigneeID":null,
+             "title":"Old","details":"","status":"backlog","priority":"medium","assigneeID":null,
              "dueDate":null,"storyPoints":null,"blockedByIDs":[],"sprintID":null,"rank":0,
              "createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:00Z","resolvedAt":null}
         """.trimIndent()
