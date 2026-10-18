@@ -12,6 +12,7 @@ import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.Attachment
+import com.tasktracker.featureprojectsdomain.PickedFile
 import kotlin.test.assertEquals
 import kotlin.time.Instant
 
@@ -92,6 +93,34 @@ object AttachmentRowScenarios {
         onNodeWithText("Opening…").assertDoesNotExist()
     }
 
+    /**
+     * A pick held on a create reads as pending, not attached: its own row, its own caption,
+     * and no "No attachments yet" line standing beside it. A held file that looked attached
+     * would be the second lie this list exists to refuse.
+     */
+    val aHeldPickReadsAsPendingNotAttached: suspend ComposeUiTest.() -> Unit = {
+        val file = PickedFile("spec.pdf", "application/pdf", byteArrayOf(1, 2, 3, 4))
+
+        setContent { pendingShowing(listOf(file), onRemovePending = {}) }
+
+        onNodeWithTag(WorkItemPendingAttachmentTag(0)).assertIsDisplayed()
+        onNodeWithText("Will be attached when you save").assertIsDisplayed()
+        onNodeWithTag(WorkItemAttachmentsEmptyTag).assertDoesNotExist()
+    }
+
+    /** Remove names the held pick by position — before save it has no attachment id. */
+    val removingAHeldPickNamesItsPosition: suspend ComposeUiTest.() -> Unit = {
+        val first = PickedFile("one.txt", "text/plain", byteArrayOf(1))
+        val second = PickedFile("two.txt", "text/plain", byteArrayOf(2))
+        var removed: Int? = null
+
+        setContent { pendingShowing(listOf(first, second), onRemovePending = { removed = it }) }
+
+        onNodeWithTag(WorkItemPendingAttachmentRemoveTag(1)).performClick()
+
+        assertEquals(1, removed)
+    }
+
     private fun aFile() = Attachment(
         id = randomAttachmentID(),
         workItemID = ViewPreviewData.workItems.first().id,
@@ -116,6 +145,23 @@ object AttachmentRowScenarios {
                 syncStateOf = syncStateOf,
                 onOpen = onOpen,
                 isOpening = isOpening,
+            )
+        }
+    }
+
+    @Composable
+    private fun pendingShowing(
+        files: List<PickedFile>,
+        onRemovePending: (Int) -> Unit,
+    ) {
+        ttTheme(ThemeScheme.Light) {
+            AttachmentList(
+                // Empty by definition: a held pick exists only before the item does.
+                attachments = emptyList(),
+                onAttachClick = {},
+                onRemove = {},
+                pendingAttachments = files,
+                onRemovePending = onRemovePending,
             )
         }
     }

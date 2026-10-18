@@ -189,6 +189,12 @@
     <string name="attachment_add">Attach file</string>
     <string name="attachment_remove">Remove</string>
     <!--
+      A pick held on the create screen, before the task exists to file it against. Not a
+      sync state: it says the file is not attached *yet* and will be once Save runs, which
+      is a fact about this screen alone. The stored rows' sync captions begin below.
+    -->
+    <string name="attachment_pending">Will be attached when you save</string>
+    <!--
       One label per upload state. They are deliberately five rather than two: a file with
       no blob ref is either queued, in flight, or refused, and calling all three
       "uploading" would be a promise the app cannot keep for two of them.

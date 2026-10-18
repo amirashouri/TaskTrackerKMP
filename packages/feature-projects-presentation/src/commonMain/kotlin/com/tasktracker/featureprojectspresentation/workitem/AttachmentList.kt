@@ -20,9 +20,11 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Attachment
+import com.tasktracker.featureprojectsdomain.PickedFile
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.attachment_add
 import com.tasktracker.resources.attachment_empty
+import com.tasktracker.resources.attachment_pending
 import com.tasktracker.resources.attachment_remove
 import com.tasktracker.resources.attachment_section_label
 import com.tasktracker.resources.attachment_state_failed
@@ -99,6 +101,14 @@ fun AttachmentList(
     syncStateOf: ((Attachment) -> AttachmentSyncState)? = null,
     onOpen: ((AttachmentID) -> Unit)? = null,
     isOpening: ((Attachment) -> Boolean)? = null,
+    /**
+     * Files picked on a create and held until Save mints the item's id. Rendered in the same
+     * section as the stored rows because they are attachments in waiting, not a second
+     * concept — an edit stores each pick immediately and passes nothing here.
+     */
+    pendingAttachments: List<PickedFile> = emptyList(),
+    /** Drops one held pick by position. Ignored while [pendingAttachments] is empty. */
+    onRemovePending: (Int) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -124,7 +134,7 @@ fun AttachmentList(
                 modifier = Modifier.testTag(WorkItemAttachmentAddTag),
             )
         }
-        if (attachments.isEmpty()) {
+        if (attachments.isEmpty() && pendingAttachments.isEmpty()) {
             ttText(
                 text = stringResource(Res.string.attachment_empty),
                 style = ttTypography.footnote,
@@ -208,6 +218,40 @@ fun AttachmentList(
                 )
             }
         }
+        // Held picks sit below the stored rows: a create's list is empty, so these are the
+        // only rows — the caption is what stops a held file reading as an attached one.
+        pendingAttachments.forEachIndexed { index, file ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(WorkItemPendingAttachmentTag(index)),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ttText(
+                    text = "${file.fileName} · ${formatAttachmentSize(file.bytes.size.toLong())}",
+                    style = ttTypography.callout,
+                    color = ttLabel(),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                ttText(
+                    text = stringResource(Res.string.attachment_pending),
+                    style = ttTypography.captionEmphasised,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier.testTag(WorkItemPendingAttachmentStateTag(index)),
+                )
+                ttText(
+                    text = stringResource(Res.string.attachment_remove),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier
+                        .testTag(WorkItemPendingAttachmentRemoveTag(index))
+                        .clickable(role = Role.Button) { onRemovePending(index) },
+                )
+            }
+        }
     }
 }
 
@@ -251,6 +295,18 @@ fun WorkItemAttachmentStateTag(id: AttachmentID): String = "workItem.editor.atta
  * from "this row can be opened" — the difference the nullable `onOpen` exists to express.
  */
 fun WorkItemAttachmentOpenTag(id: AttachmentID): String = "workItem.editor.attachment.open.$id"
+
+/**
+ * The held picks on a create screen, keyed by position rather than an id: a pick has no
+ * [AttachmentID] until Save files it, and there is at most one row per held file.
+ */
+fun WorkItemPendingAttachmentTag(index: Int): String = "workItem.editor.attachment.pending.$index"
+
+fun WorkItemPendingAttachmentRemoveTag(index: Int): String =
+    "workItem.editor.attachment.pending.remove.$index"
+
+fun WorkItemPendingAttachmentStateTag(index: Int): String =
+    "workItem.editor.attachment.pending.state.$index"
 
 /**
  * Bytes to a one-decimal read, in this view's own words.

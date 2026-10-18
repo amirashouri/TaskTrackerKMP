@@ -531,6 +531,23 @@ class AttachFile(
     companion object {
         /** The largest file the blob store will take, in bytes. */
         const val MAX_ATTACHMENT_BYTES: Long = 25L * 1024L * 1024L
+
+        /**
+         * The refusals only attaching can decide, as a pure check the editor can also run.
+         *
+         * `null` means the pick passes. Extracted so the editor's create-time staging can
+         * screen a held pick on the **same** rules the eventual attach applies — one source
+         * for the cap, rather than a second copy that drifts from this one and from the
+         * server's `AttachmentMaxBytes`.
+         */
+        fun refusal(fileName: String, bytes: ByteArray): AttachFileResult? = when {
+            fileName.trim().isEmpty() -> AttachFileResult.BlankName
+            bytes.isEmpty() -> AttachFileResult.EmptyFile
+            bytes.size > MAX_ATTACHMENT_BYTES ->
+                AttachFileResult.TooLarge(bytes.size.toLong(), MAX_ATTACHMENT_BYTES)
+
+            else -> null
+        }
     }
 
     @Throws(AppError::class, CancellationException::class)
@@ -540,20 +557,11 @@ class AttachFile(
         mimeType: String?,
         bytes: ByteArray,
     ): AttachFileResult {
-        val trimmed = fileName.trim()
-        if (trimmed.isEmpty()) {
-            return AttachFileResult.BlankName
-        }
-        if (bytes.isEmpty()) {
-            return AttachFileResult.EmptyFile
-        }
-        if (bytes.size > MAX_ATTACHMENT_BYTES) {
-            return AttachFileResult.TooLarge(bytes.size.toLong(), MAX_ATTACHMENT_BYTES)
-        }
+        refusal(fileName, bytes)?.let { return it }
         return AttachFileResult.Success(
             repository.addAttachment(
                 workItemID = workItemID,
-                fileName = trimmed,
+                fileName = fileName.trim(),
                 mimeType = mimeType,
                 bytes = bytes,
                 now = dateProvider.now(),
