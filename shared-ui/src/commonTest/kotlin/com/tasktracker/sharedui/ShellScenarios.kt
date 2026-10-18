@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
@@ -208,6 +210,15 @@ object ShellScenarios {
      * environment detail, and the fix is to make the default the width these scenarios are about
      * rather than to widen the threshold until the accident stops happening. A scenario that
      * wants the wide layout says so — see [aWideShellDrawsTheRailAndNoBar].
+     *
+     * ## [widthState] is for the scenarios about a *resize*
+     *
+     * Most scenarios are about a shell at one width, and [width] states it. Two widths in one run
+     * is a different claim — that the shell survives crossing the `Expanded`/`Compact` boundary —
+     * and it cannot be made by a parameter read once before `setContent`. A scenario that needs it
+     * passes a [MutableState] and writes to it; the value is read inside the composition, so the
+     * shell sees the new width. [width] is then ignored, because two sources for one width is a
+     * question with two answers.
      */
     internal suspend fun ComposeUiTest.setUpShell(
         session: ScriptedSession,
@@ -218,6 +229,7 @@ object ShellScenarios {
         preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         splashHold: Long = 0L,
         width: Dp? = PHONE_WIDTH,
+        widthState: MutableState<Dp>? = null,
         navigationEventOwner: NavigationEventDispatcherOwner? = null,
         memberAdminPort: MemberAdminPort? = null,
         adminProjectsPort: AdminProjectsPort? = null,
@@ -247,11 +259,16 @@ object ShellScenarios {
         // system — which is the whole reason this is done this way. See
         // [fiveTabsFitAtPhoneWidth].
         setContent {
+            // Read inside the composition, so a scenario that supplies [widthState] can change the
+            // width mid-test: `ShellLayout` resolves its class from the width it is offered, and a
+            // width that only ever changes outside the composition is a width the shell never
+            // sees.
+            val shellWidth = widthState?.value ?: width
             val app: @Composable () -> Unit = {
-                if (width == null) {
+                if (shellWidth == null) {
                     TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
                 } else {
-                    Box(modifier = Modifier.width(width)) {
+                    Box(modifier = Modifier.width(shellWidth)) {
                         TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
                     }
                 }
@@ -1986,6 +2003,128 @@ object ShellScenarios {
     }
 
     /**
+     * Shrinking the window past the threshold sheds the rail's inset.
+     *
+     * This is a *resize* defect, and neither static width can show it. `railInset` is written by the
+     * rail's own `onSizeChanged`, and a rail that has left the composition is never remeasured, so
+     * nothing zeroes the measurement. A shell that starts at [PHONE_WIDTH] never runs that arm and
+     * reads `0.dp`; a shell that starts at [DESKTOP_WIDTH] reads the rail's true width. Only the
+     * crossing between the two leaves the old width behind as a band of blank canvas down the
+     * leading edge, which is why this stands one shell up wide, shrinks it, and asserts on the same
+     * composition rather than asserting the two widths in isolation.
+     *
+     * The measurement is the projects list's leading edge, for the reason
+     * [theRailIsALeadingColumnRatherThanAStretchedOne] gives: the box carrying the inset is
+     * anonymous, so a node inside it is the only thing that can show whether the inset reached the
+     * pixels. Under `Compact` that edge should sit on the shell's own leading edge.
+     */
+    val shrinkingTheWindowPastTheThresholdShedsTheRailInset: suspend ComposeUiTest.() -> Unit = shrink@{
+        val width = mutableStateOf(DESKTOP_WIDTH)
+        setUpShell(session = ScriptedSession(restored = signedIn()), widthState = width)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@shrink
+
+        // Asserted before the shrink, or this could pass on a shell that never drew the rail and
+        // therefore never had an inset to shed.
+        onNodeWithTag(NavigationRailTag).assertExists(
+            "at ${DESKTOP_WIDTH.value}dp the shell should draw a navigation rail before it is " +
+                "shrunk, or there is no stale inset for this scenario to catch",
+        )
+
+        runOnIdle { width.value = PHONE_WIDTH }
+        waitForIdle()
+
+        onNodeWithTag(TabBarTag).assertExists(
+            "at ${PHONE_WIDTH.value}dp the shell should be drawing the tab bar",
+        )
+        assertNothingTagged(
+            NavigationRailTag,
+            "at ${PHONE_WIDTH.value}dp the shell is still drawing the rail it had at " +
+                "${DESKTOP_WIDTH.value}dp",
+        )
+
+        val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        val list = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
+        assertEquals(
+            shell.left.value,
+            list.left.value,
+            ONE_POINT,
+            "after shrinking to ${PHONE_WIDTH.value}dp the projects list starts at " +
+                "${list.left.value}dp while the shell starts at ${shell.left.value}dp — a " +
+                "${list.left.value - shell.left.value}dp gap down the leading edge. The rail's " +
+                "inset was measured at ${DESKTOP_WIDTH.value}dp and is still being applied after " +
+                "the rail is gone, because a rail leaves the composition without being remeasured " +
+                "to zero",
+        )
+    }
+
+    /**
+     * Growing the window past the threshold drops the bar's inset with the bar.
+     *
+     * The mirror of [shrinkingTheWindowPastTheThresholdShedsTheRailInset], with the same mechanism:
+     * `tabBarInset` is written by the bar's own `onSizeChanged`, the bar leaves the composition
+     * without being remeasured, and `LocalTabBarScrollUnderInset` went on publishing its height —
+     * so every scrolling list kept reserving a bar's worth of room at the end of its scroll for
+     * chrome that is not drawn. Neither static width can show it: a shell that starts narrow reads
+     * the bar's true height, and a shell that starts wide never runs that arm.
+     *
+     * The projects list is the probe because it is the landing tab, so it is on screen without
+     * opening a project. Its bottom `contentPadding` is `ttSpacing.xl +` the published inset, and at
+     * the end of the scroll the gap between its last row and its viewport floor *is* that padding —
+     * read off the pixels rather than through a probe composable that would have to be trusted
+     * separately.
+     */
+    val growingTheWindowPastTheThresholdDropsTheBarInset: suspend ComposeUiTest.() -> Unit = grow@{
+        val repository = FakeProjectRepository()
+        val seeded = seedOverflowingLists(repository)
+        val width = mutableStateOf(PHONE_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = repository,
+            widthState = width,
+        )
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@grow
+
+        // Narrow: the bar is up, so there is an inset for the grown shell to shed. Its height is
+        // read rather than assumed, because it is what the failure message prices the leak in.
+        val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
+        val barHeight = bar.bottom.value - bar.top.value
+        assertTrue(
+            barHeight > 0f,
+            "at ${PHONE_WIDTH.value}dp the shell should draw a tab bar with a height, or there is " +
+                "no inset for this scenario to catch going stale",
+        )
+
+        runOnIdle { width.value = DESKTOP_WIDTH }
+        waitForIdle()
+
+        onNodeWithTag(NavigationRailTag).assertExists(
+            "at ${DESKTOP_WIDTH.value}dp the shell should be drawing a navigation rail",
+        )
+        assertNothingTagged(
+            TabBarTag,
+            "at ${DESKTOP_WIDTH.value}dp the shell is still drawing the tab bar it had at " +
+                "${PHONE_WIDTH.value}dp",
+        )
+
+        onNodeWithTag(ProjectsListTag).performScrollToIndex(seeded.projects.lastIndex)
+        waitForIdle()
+        val gap = projectsListBottomGap()
+        assertEquals(
+            ttSpacing.xl.value,
+            gap,
+            ONE_POINT,
+            "after growing to ${DESKTOP_WIDTH.value}dp the projects list reserves ${gap}dp below " +
+                "its last row, where its own bottom padding is ${ttSpacing.xl.value}dp — " +
+                "${gap - ttSpacing.xl.value}dp of the bar's ${barHeight}dp height is still being " +
+                "published by the grown shell. The bar is gone but the inset it measured is not",
+        )
+    }
+
+    /**
      * Asserts that nothing in the tree carries [tag].
      *
      * A counted assertion rather than `assertDoesNotExist()`, because that takes no message in
@@ -3534,6 +3673,31 @@ object ShellScenarios {
                 "be measured against the tab bar",
         )
         assertLastRowClearsTheBar(tab, lastRow.config.getOrElseNullable(SemanticsProperties.TestTag) { null }!!)
+    }
+
+    /**
+     * The vertical gap between the projects list's viewport floor and its bottom-most row, in dp.
+     *
+     * At the end of the scroll that gap *is* the list's bottom `contentPadding`, so this reads the
+     * published tab-bar inset through the pixels rather than through a probe composable that would
+     * have to be trusted separately. [growingTheWindowPastTheThresholdDropsTheBarInset] is the
+     * caller, and the list's own padding is subtracted there.
+     *
+     * Both edges are read as dp through `getBoundsInRoot`, the file's rule — the pixel-valued
+     * `SemanticsNode.boundsInRoot` is used only to pick the bottom-most row, the same split
+     * [assertBottomMostRowClearsTheBar] makes, because mixing the two units silently costs the
+     * host's density.
+     */
+    private fun ComposeUiTest.projectsListBottomGap(): Float {
+        val list = onNodeWithTag(ProjectsListTag).getBoundsInRoot()
+        val rows = onAllNodes(hasRowTagUnder(ProjectRowTagPrefix)).fetchSemanticsNodes()
+        val lastRow = assertNotNull(
+            rows.maxByOrNull { it.boundsInRoot.bottom },
+            "expected at least one row tagged `$ProjectRowTagPrefix.*`, so the list's bottom " +
+                "padding could be measured against its last row",
+        )
+        val lastRowTag = lastRow.config.getOrElseNullable(SemanticsProperties.TestTag) { null }!!
+        return list.bottom.value - onNodeWithTag(lastRowTag).getBoundsInRoot().bottom.value
     }
 
     /**
