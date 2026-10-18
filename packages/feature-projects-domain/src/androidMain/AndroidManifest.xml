@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The FileProvider `AttachmentOpener.android` needs to hand a file to another app.
+
+  Declared here rather than in androidApp for the same reason :packages:network declares
+  ACCESS_NETWORK_STATE here: a library that silently requires a manifest entry it does not
+  mention fails at runtime, on a build nobody tested. The app's manifest need not repeat it —
+  the merger unions library manifests — so the requirement has exactly one home.
+
+  `${applicationId}` resolves against the app being built, so the authority is unique per
+  application and matches what the code composes at runtime from `context.packageName`.
+
+  `exported="false"` with `grantUriPermissions="true"` is the only safe pairing: no app may
+  query the provider, but one holding a URI this app handed it may read that single file.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/attachment_handoff_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

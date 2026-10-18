@@ -244,8 +244,79 @@ and invisible to teammates.
   platform file opener (a `Desktop.open` / `Intent` / `UIDocumentInteractionController` seam), and a
   tappable row that opens nothing is the mock this repo refuses. The use case is ready and tested
   at the domain level; the opener is its own slice.
-- **Next step:** the file opener, then the two follow-ups already listed above (a global
-  `blobRef == null` sweep, and a one-time backfill enqueue for attachments that predate sync).
+- **Done (#19):** the file opener — the row is now a doorway.
+  - **New port** `AttachmentOpener` (`feature-projects-domain/commonMain`): `open(fileName,
+    mimeType, bytes)`. It takes **bytes, not the cached path**, which is the mirror of
+    `FilePicker`: there the platform owns the file and the domain wants the bytes, here the
+    domain owns the bytes and the platform wants a file. A path-shaped port would force the
+    domain to know the blob store's layout, and the store refuses to hand out absolute paths
+    for the same reason. Each side hands over a copy and keeps its own storage rules; the copy
+    is bounded by `AttachFile.MAX_ATTACHMENT_BYTES`.
+  - **`handOffFileName`** (shared, `internal`) is the one place a picked name becomes a file
+    name. A picked name is display text and can carry a separator or `..`; three platform
+    implementations of that guard is three chances to get one wrong.
+  - **Three actuals**, each writing a scratch copy and then handing it off:
+    - JVM: `java.awt.Desktop.open` on a file in `java.io.tmpdir`. `isDesktopSupported` is
+      checked first because `getDesktop()` throws `HeadlessException` on a server or in CI, and
+      both halves run on `Dispatchers.IO` because both block.
+    - Android: `ACTION_VIEW` on a `content://` URI from a `FileProvider`. Since API 24 a
+      `file://` URI throws `FileUriExposedException`, so the provider is not optional. The
+      provider is declared in **this module's** manifest with `${applicationId}.fileprovider`
+      and a single narrow `<cache-path path="attachments/">` — the code and its requirement
+      travel together, the same way `:packages:network` ships the permission its connectivity
+      callback needs. `FLAG_ACTIVITY_NEW_TASK` is required because the launch comes from the
+      application context.
+    - iOS: `UIDocumentInteractionController.presentOpenInMenuFromRect`, on the main queue, with
+      the controller held on the opener — UIKit does not retain it, and a released controller is
+      the silent "nothing happened" the port's KDoc refuses. `presentOpenInMenu` rather than
+      `presentOptionsMenu` because the press means "open", and a Quick Look preview is a
+      different feature.
+  - **A real bug fixed on the way:** `FetchAttachment` now takes a **nullable** transport, and
+    `WorkItemEditorModel` builds it unconditionally. It used to be built only when a blob
+    transport existed, which meant a demo graph — no server — could not open the files it had
+    attached itself, because `attachmentBytes` returned `null` before ever looking at the
+    cache. `null` now means "no file API", so a cache hit still answers and a cache miss
+    returns `null` instead of attempting a download that has nowhere to go.
+  - **The model** (`openAttachment`) fetches through `attachmentBytes` and hands the result to
+    the opener. Three cases stay silent — no opener, no such row, nothing to open — because
+    none of them is a failure of the press and the row's own caption already says which
+    applies. A failed download and a platform that cannot open the type both reach the banner,
+    because the user asked for this one. `openingIDs` is the re-entrancy guard, cleared in a
+    `finally` so a cancelled open cannot leave a row saying "opening" for the model's lifetime.
+  - **The row** is pressable **only when there is an opener**: `onOpen` is nullable, and `null`
+    renders no press target at all rather than a tap that does nothing. The press target is the
+    **name**, not the row — a full-width tap area would sit under Remove and turn a near-miss
+    into a file opening instead of a file being removed.
+  - **Opening is not a sync state.** `isOpening` is a separate nullable callback and the
+    caption slot shows "Opening…" while it is true, then the sync state comes back. Folding a
+    transient activity into `AttachmentSyncState` would put it in a slot that otherwise never
+    lies about where the file is; two captions per row would be worse.
+  - **Two pre-existing iOS breaks found and fixed**, both invisible while only `jvmTest` ran:
+    - `BlobFiles.ios.readBlobFile` called `NSData.getBytes`, which is **absent** from this
+      Kotlin version's `NSData` projection — the exact gap `FilePicker.ios` documents. The
+      module's iOS target had never been compiled, so the blob store did not build for iOS at
+      all. Fixed with the `bytes` + `memcpy` route the other two iOS seams use.
+    - `WorkItemEditorModelTest` had a test named `a refusal is remembered, explained, and not
+      retried`. The Kotlin/Native backend rejects a comma in a function name outright, and it
+      rejects the **whole module**, so that one comma made every iOS test in
+      `feature-projects-presentation` uncompilable. Renamed, and the rule is now written at the
+      top of the class so the next one is not added.
+  - **Tests:** 6 in `WorkItemEditorModelTest` (bytes/name/type handed over; a remote row
+    downloads first; nothing to open is silent; no opener is silent; a platform refusal is
+    reported and clears the flag; a second press mid-open does not open twice — the last one
+    observed *from inside* the fake's `open`, which is the only window where the guard does
+    anything), 2 in `AttachmentBlobUseCasesTest` (a cache hit answers with no transport at all;
+    a missing file with no transport returns `null`), and 4 UI scenarios in
+    `AttachmentRowScenarios`, each wired into all three test targets: no opener means no press
+    target, pressing names the file, and the caption slot swaps in both directions.
+  - **The test baseline was stale and is now regenerated.** `test-baseline.json` still held the
+    pre-T12 counts (1749 / 1698 / 1414), so `scripts/check-baseline.sh` failed on all three
+    hosts. It is generated, not hand-edited: `scripts/check.sh full` → `scripts/test-baseline.py`
+    now records **1786 jvm / 1735 iOS / 1446 Android-host, 0 failures**. That full run is also
+    the first time `iosSimulatorArm64Test` has executed since the attachment work began, which
+    is why the two iOS breaks above went unnoticed — `jvmTest` alone never sees them.
+- **Next step:** the two follow-ups already listed above — a global `blobRef == null` sweep,
+  and a one-time backfill enqueue for attachments that predate sync.
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only

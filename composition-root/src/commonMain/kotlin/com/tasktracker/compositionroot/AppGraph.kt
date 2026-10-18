@@ -30,7 +30,9 @@ import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
+import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.FilePicker
+import com.tasktracker.featureprojectsdomain.createAttachmentOpener
 import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdata.LiveSettingsService
@@ -234,6 +236,16 @@ object AppGraph {
         // resolved instance, flowing through the environment, is the only shape where a
         // test can substitute a fake without touching the screen tree.
         app<FilePicker> { createFilePicker(platforms.host) }
+
+        // The platform's file opener, resolved once for the same reason as the picker above:
+        // the hand-off needs a platform host (a `Context` for Android's FileProvider), and the
+        // presentation layer has nothing to hand a factory. It reaches the editor through
+        // [com.tasktracker.featureprojectspresentation.project.ProjectEnvironment.opener].
+        //
+        // Registered unconditionally, unlike the blob transport: opening a file this device
+        // attached is a cache read, so it works with no server. Tying it to the API base URL
+        // would make a demo build's own attachments unopenable.
+        app<AttachmentOpener> { createAttachmentOpener(platforms.host) }
     }
 
     /**

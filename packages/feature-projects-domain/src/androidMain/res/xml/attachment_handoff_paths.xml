@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The one directory the hand-off provider may serve: `cacheDir/attachments`, which is where
+  `AttachmentOpener.android` writes its scratch copy.
+
+  A single narrow root rather than `<cache-path path="." />`: the provider should be able to
+  hand over the files this feature created, not everything the cache holds. The `path` must
+  stay equal to `SCRATCH_DIRECTORY` in the opener — a drift there fails every open with an
+  `IllegalArgumentException` from `getUriForFile`, which the opener reports rather than hides.
+-->
+<paths>
+    <cache-path
+        name="attachment_handoff"
+        path="attachments/" />
+</paths>

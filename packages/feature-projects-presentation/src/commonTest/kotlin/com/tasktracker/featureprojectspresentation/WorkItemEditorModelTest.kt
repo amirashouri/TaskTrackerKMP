@@ -28,6 +28,14 @@ import kotlin.time.Instant
  * The test that earns its keep here is
  * [the key the project issues is read back rather than composed locally] - a fake that
  * numbered from 1 every time would make a naive implementation pass.
+ *
+ * ## No commas in a test name
+ *
+ * This class is `commonTest`, so it compiles for iOS too, and the Kotlin/Native backend
+ * rejects a comma in a function name outright: `Name contains illegal characters: ","`. It
+ * rejects the whole module, not just the one test, so a single comma here makes every iOS
+ * test in this module uncompilable while `jvmTest` stays green — which is exactly how one got
+ * in. Use "and", or split the sentence.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WorkItemEditorModelTest {
@@ -936,7 +944,7 @@ class WorkItemEditorModelTest {
      * one on the banner and the row, the other only in the retry count.
      */
     @Test
-    fun `a refusal is remembered, explained, and not retried`() = runTest {
+    fun `a refusal is remembered and explained and not retried`() = runTest {
         val (repository, item) = seededItem()
         val attachment = pendingAttachment(item)
         repository.seed(attachment)
@@ -985,6 +993,143 @@ class WorkItemEditorModelTest {
         assertEquals(2, transport.attempts, "weather is retried")
     }
 
+    // MARK: Opening
+
+    /**
+     * The press itself: the bytes this device holds, under the name and type the row carries.
+     *
+     * All three are asserted because all three decide what happens next — the name is the
+     * file the receiving app shows, the type picks which app that is, and the bytes are the
+     * file. A test that only compared bytes would pass while the platform opened the wrong
+     * kind of thing.
+     */
+    @Test
+    fun `opening a file hands the platform its bytes under the row's name and type`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1, 2, 3))
+        val opener = FakeAttachmentOpener()
+        val model = editing(item, repository, opener = opener)
+
+        model.refreshAttachments()
+        model.openAttachment(attachment.id)
+
+        val open = opener.opens.single()
+        assertEquals("report.txt", open.fileName)
+        assertEquals("text/plain", open.mimeType)
+        assertTrue(byteArrayOf(1, 2, 3).contentEquals(open.bytes))
+        assertNull(model.errorMessage, "a successful open says nothing")
+        assertFalse(model.isOpening(attachment.id), "the flag must come back down")
+    }
+
+    /**
+     * A file another member attached has no bytes here, so the open has to fetch them — and
+     * this is the one path where a press legitimately waits on the network.
+     */
+    @Test
+    fun `opening a file this device does not hold fetches it first`() = runTest {
+        val (repository, item) = seededItem()
+        val remote = pendingAttachment(item).copy(blobRef = "server-key", blobPath = "")
+        repository.seed(remote)
+        val transport = FakeAttachmentBlobTransport(downloadBytes = byteArrayOf(9, 9))
+        val opener = FakeAttachmentOpener()
+        val model = editing(item, repository, transport, opener = opener)
+
+        model.refreshAttachments()
+        model.openAttachment(remote.id)
+
+        assertTrue(
+            byteArrayOf(9, 9).contentEquals(opener.opens.single().bytes),
+            "the opened bytes must be the downloaded ones",
+        )
+    }
+
+    /**
+     * The silent case: the file is here as a row but its bytes are neither on this device nor
+     * on the server yet. Nothing to open is not a failure, and the row's own caption already
+     * says which state it is in.
+     */
+    @Test
+    fun `opening a file with nothing to open says nothing`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item).copy(blobPath = "")
+        repository.seed(attachment)
+        val transport = FakeAttachmentBlobTransport()
+        val opener = FakeAttachmentOpener()
+        val model = editing(item, repository, transport, opener = opener)
+
+        model.refreshAttachments()
+        model.openAttachment(attachment.id)
+
+        assertTrue(opener.opens.isEmpty(), "there were no bytes to hand over")
+        assertNull(model.errorMessage, "an unavailable file is not an error")
+    }
+
+    @Test
+    fun `a graph with no opener cannot open anything`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val model = editing(item, repository)
+
+        model.refreshAttachments()
+        model.openAttachment(attachment.id)
+
+        assertNull(model.errorMessage, "a missing seam is not a failure of the press")
+    }
+
+    /**
+     * A platform that cannot open the type is a real failure of a press the user made, so it
+     * must reach the banner — silence there is indistinguishable from a broken row.
+     */
+    @Test
+    fun `an open the platform refuses is reported`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val refusal = AppError.Validation("No app on this device can open report.txt.")
+        val opener = FakeAttachmentOpener(failure = refusal)
+        val model = editing(item, repository, opener = opener)
+
+        model.refreshAttachments()
+        model.openAttachment(attachment.id)
+
+        assertEquals(refusal.message, model.errorMessage)
+        assertEquals(1, opener.opens.size, "the attempt happened; the platform refused it")
+        assertFalse(model.isOpening(attachment.id), "a failure must not leave the row opening")
+    }
+
+    /**
+     * The re-entrancy guard, observed from inside the open it guards: a second press while
+     * the first is still fetching must join it rather than start a second download.
+     *
+     * The hook runs inside the fake's `open`, which is after `openingIDs` was set and before
+     * it is cleared — the only window in which the guard is doing anything.
+     */
+    @Test
+    fun `a second press while the first is opening is ignored`() = runTest {
+        val (repository, item) = seededItem()
+        val attachment = pendingAttachment(item)
+        repository.seed(attachment)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val opener = FakeAttachmentOpener()
+        val model = editing(item, repository, opener = opener)
+        var flagDuringOpen: Boolean? = null
+        opener.onOpen = {
+            flagDuringOpen = model.isOpening(attachment.id)
+            model.openAttachment(attachment.id)
+        }
+
+        model.refreshAttachments()
+        model.openAttachment(attachment.id)
+
+        assertEquals(true, flagDuringOpen, "the row must read as opening while it opens")
+        assertEquals(1, opener.opens.size, "a second press must not open the file twice")
+    }
+
     // MARK: Helpers
 
     private fun newItem(repository: FakeProjectRepository = FakeProjectRepository()) =
@@ -994,12 +1139,14 @@ class WorkItemEditorModelTest {
         item: com.tasktracker.domain.WorkItem,
         repository: FakeProjectRepository = FakeProjectRepository(),
         transport: FakeAttachmentBlobTransport? = null,
+        opener: FakeAttachmentOpener? = null,
     ) = WorkItemEditorModel(
         item.projectID,
         item,
         repository,
         TestDateProvider(),
         blobTransport = transport,
+        opener = opener,
     )
 
     private suspend fun seededItem(): Pair<FakeProjectRepository, com.tasktracker.domain.WorkItem> {

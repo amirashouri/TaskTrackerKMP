@@ -24,6 +24,7 @@ import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
+import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -97,6 +98,23 @@ class ProjectEnvironment(
      * editor treats as "never hand off an upload", not as an error to show.
      */
     val blobTransport: AttachmentBlobTransport? = null,
+    /**
+     * The platform's file opener, or `null` when the graph supplied none.
+     *
+     * Nullable because a graph can legitimately be built without one — the same case
+     * [MissingProjectEnvironmentView] covers for projects. A missing opener makes an
+     * attachment row un-tappable rather than tappable-and-inert: a press that opens nothing
+     * is the mock this repo refuses.
+     *
+     * Deliberately *not* tied to [blobTransport]. Opening is a local-cache read for a file
+     * this device attached, so a graph with no server must still be able to open its own
+     * files; the two ports answer different questions.
+     *
+     * Last in the list because `RootScreen` builds this positionally, for the reason
+     * [adminProjectsPort] documents: a field inserted mid-list would take the slot of the
+     * nullable port before it and type-check only because both are nullable.
+     */
+    val opener: AttachmentOpener? = null,
 )
 
 /**

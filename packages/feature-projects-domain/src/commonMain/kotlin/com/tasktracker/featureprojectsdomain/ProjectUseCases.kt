@@ -657,18 +657,28 @@ class UploadAttachment(
  * file another member attached arrives as metadata only, and its bytes are fetched here,
  * once, then cached.
  *
+ * [transport] is nullable, and `null` means "this build has no file API" rather than "this
+ * use case is unavailable". The distinction matters: a demo graph has no server, and a file
+ * it attached is still on this device, so it must still be openable. Refusing to build the
+ * use case without a transport — which is what the editor did first — made every local file
+ * unopenable in exactly the build that has nothing else to open. With no transport, a cache
+ * hit answers and a cache miss returns `null`.
+ *
  * Returns `null` when there is nothing to open: the row is gone, or its bytes have not
  * reached the server yet. Both are "not available now" rather than failures the editor
  * should paint red.
  */
 class FetchAttachment(
     private val repository: ProjectRepositoryPort,
-    private val transport: AttachmentBlobTransport,
+    private val transport: AttachmentBlobTransport? = null,
 ) {
 
     @Throws(AppError::class, CancellationException::class)
     suspend operator fun invoke(id: AttachmentID): ByteArray? {
         repository.attachmentBytes(id)?.let { return it }
+        // Checked before the row read: with no file API there is nothing a download could
+        // use, so the round trip to learn that would buy nothing.
+        val transport = transport ?: return null
         val attachment = repository.attachment(id) ?: return null
         // No `blobRef` means the bytes were never uploaded, so there is nothing to fetch
         // and no reason to spend a round trip learning that.

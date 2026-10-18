@@ -1625,6 +1625,9 @@ private fun WorkItemEditorDestination(
     // `null` in a demo graph: the editor then keeps attachments local instead of handing
     // off an upload to a file API that does not exist.
     val blobTransport = projectEnvironment?.blobTransport
+    // Separate from the transport on purpose: opening a file this device attached is a cache
+    // read, so a graph with no server still opens its own attachments.
+    val opener = projectEnvironment?.opener
     val model = remember(
         projectID,
         workItemID,
@@ -1634,6 +1637,7 @@ private fun WorkItemEditorDestination(
         initialSprintID,
         currentUserID,
         blobTransport,
+        opener,
     ) {
         WorkItemEditorModel(
             projectID,
@@ -1644,6 +1648,7 @@ private fun WorkItemEditorDestination(
             initialSprintID,
             currentUserID = currentUserID,
             blobTransport = blobTransport,
+            opener = opener,
         )
     }
 
@@ -1846,6 +1851,10 @@ private fun WorkItemEditorDestination(
         // Per-row upload progress. The model owns the states; the list only names them, so a
         // row can say "waiting" or "not uploaded" without the view guessing from `blobRef`.
         attachmentSyncState = model::syncStateOf,
+        // Opening is offered only when the graph has an opener: with none, the name is not a
+        // press target at all, rather than a tap that quietly does nothing.
+        onOpenAttachment = opener?.let { { id -> scope.launch { model.openAttachment(id) } } },
+        attachmentOpening = { attachment -> model.isOpening(attachment.id) },
         onDismissRequest = {
             if (!isBusy) {
                 onDismiss()

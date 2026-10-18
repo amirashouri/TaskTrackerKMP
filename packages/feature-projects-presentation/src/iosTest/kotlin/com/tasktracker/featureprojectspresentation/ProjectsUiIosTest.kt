@@ -197,6 +197,18 @@ class ProjectsUiIosTest {
     fun tappingACardSelectsItsTask() = runComposeUiTest(block = WorkItemCardScenarios.tappingACardSelectsItsTask)
 
     @Test
+    fun aRowWithNoOpenerIsNotPressable() = runComposeUiTest(block = AttachmentRowScenarios.aRowWithNoOpenerIsNotPressable)
+
+    @Test
+    fun pressingTheNameAsksToOpenThatFile() = runComposeUiTest(block = AttachmentRowScenarios.pressingTheNameAsksToOpenThatFile)
+
+    @Test
+    fun anOpenInFlightReplacesTheStateCaption() = runComposeUiTest(block = AttachmentRowScenarios.anOpenInFlightReplacesTheStateCaption)
+
+    @Test
+    fun aRowThatIsNotOpeningShowsItsSyncState() = runComposeUiTest(block = AttachmentRowScenarios.aRowThatIsNotOpeningShowsItsSyncState)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

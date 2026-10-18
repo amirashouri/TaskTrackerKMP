@@ -10,6 +10,7 @@ import platform.Foundation.create
 import platform.Foundation.dataWithBytes
 import platform.Foundation.stringByDeletingLastPathComponent
 import platform.Foundation.writeToFile
+import platform.posix.memcpy
 
 /**
  * iOS blob writes through `NSFileManager`.
@@ -45,9 +46,14 @@ internal actual fun readBlobFile(path: String): ByteArray? {
     val data = NSFileManager.defaultManager.contentsAtPath(path) ?: return null
     val size = data.length.toInt()
     if (size == 0) return ByteArray(0)
-    return ByteArray(size).apply {
-        usePinned { pinned ->
-            data.getBytes(pinned.addressOf(0), data.length)
+    // `getBytes` is absent under this Kotlin version's `NSData` projection — the same gap
+    // `FilePicker.ios` and `AttachmentOpener.ios` document — so the read goes through `bytes`
+    // and `memcpy`. This compiled as `getBytes` in no build until one was actually run for
+    // iOS, which is how it survived: the module's iOS target had never been compiled.
+    val source = data.bytes ?: return ByteArray(0)
+    return ByteArray(size).also { out ->
+        out.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), source, size.toULong())
         }
     }
 }

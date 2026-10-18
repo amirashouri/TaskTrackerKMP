@@ -254,6 +254,10 @@ fun WorkItemEditorSheet(
     onRemoveAttachment: (AttachmentID) -> Unit = {},
     /** See [AttachmentList.syncStateOf]. */
     attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
+    /** See [AttachmentList.onOpen]. `null` means this caller has no platform opener. */
+    onOpenAttachment: ((AttachmentID) -> Unit)? = null,
+    /** See [AttachmentList.isOpening]. */
+    attachmentOpening: ((Attachment) -> Boolean)? = null,
     /** See [WorkItemEditorForm.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     /** See [WorkItemEditorForm.resolveSelected]. */
@@ -324,6 +328,8 @@ fun WorkItemEditorSheet(
         onAttachClick = onAttachClick,
         onRemoveAttachment = onRemoveAttachment,
         attachmentSyncState = attachmentSyncState,
+        onOpenAttachment = onOpenAttachment,
+        attachmentOpening = attachmentOpening,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -420,6 +426,10 @@ private fun ProjectsEditorFullScreen(
     onRemoveAttachment: (AttachmentID) -> Unit = {},
     /** See [AttachmentList.syncStateOf]. */
     attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
+    /** See [AttachmentList.onOpen]. `null` means this caller has no platform opener. */
+    onOpenAttachment: ((AttachmentID) -> Unit)? = null,
+    /** See [AttachmentList.isOpening]. */
+    attachmentOpening: ((Attachment) -> Boolean)? = null,
 ) {
     Column(
         modifier = modifier
@@ -572,6 +582,8 @@ private fun ProjectsEditorFullScreen(
             onAttachClick = onAttachClick,
             onRemove = onRemoveAttachment,
             syncStateOf = attachmentSyncState,
+            onOpen = onOpenAttachment,
+            isOpening = attachmentOpening,
         )
         Row(
             modifier = Modifier

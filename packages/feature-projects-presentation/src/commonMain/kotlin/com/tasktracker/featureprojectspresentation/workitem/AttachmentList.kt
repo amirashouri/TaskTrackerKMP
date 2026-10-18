@@ -27,6 +27,7 @@ import com.tasktracker.resources.attachment_remove
 import com.tasktracker.resources.attachment_section_label
 import com.tasktracker.resources.attachment_state_failed
 import com.tasktracker.resources.attachment_state_local_only
+import com.tasktracker.resources.attachment_state_opening
 import com.tasktracker.resources.attachment_state_synced
 import com.tasktracker.resources.attachment_state_uploading
 import com.tasktracker.resources.attachment_state_waiting
@@ -65,13 +66,14 @@ enum class AttachmentSyncState {
 /**
  * One work item's attachments: the files, plus the button to add one.
  *
- * ## A listing, not a browser
+ * ## A listing that opens, but only where it can
  *
- * Rows show the picked name, the formatted size and — when the caller has a server —
- * how far the file has got towards it. Opening or previewing a file is not in this slice,
- * so the row is metadata rather than a doorway. That absence is deliberate rather than
- * deferred-looking: a row that promised to open something nobody can open would be the
- * exact mock the repo refuses.
+ * Rows show the picked name, the formatted size and — when the caller has a server — how far
+ * the file has got towards it. [onOpen] turns the name into a doorway: pressing it fetches
+ * the bytes if this device does not hold them and hands them to the platform. It is nullable,
+ * and `null` means this caller has no opener, so the row is not pressable at all. A row that
+ * looks tappable and opens nothing is the mock this repo refuses; the absence is the honest
+ * rendering of an absent platform seam.
  *
  * ## Sync state is optional, and null is not "synced"
  *
@@ -80,6 +82,14 @@ enum class AttachmentSyncState {
  * "Synced", because a default would put a checkmark next to a file that never left the
  * device. This mirrors the editor's own convention for [attachments]: the caller that has
  * nothing to say passes nothing, and the section says nothing.
+ *
+ * ## Why opening is not a sync state
+ *
+ * [isOpening] is separate from [syncStateOf] because the two answer different questions:
+ * sync state is a durable fact about where the file is, and opening is a few seconds of
+ * activity while its bytes are fetched. Folding "opening" into the sync enum would put a
+ * transient activity in a slot that otherwise never lies about the file's location. The list
+ * still renders both in one place — the caption slot — because two captions per row is worse.
  */
 @Composable
 fun AttachmentList(
@@ -87,6 +97,8 @@ fun AttachmentList(
     onAttachClick: () -> Unit,
     onRemove: (AttachmentID) -> Unit,
     syncStateOf: ((Attachment) -> AttachmentSyncState)? = null,
+    onOpen: ((AttachmentID) -> Unit)? = null,
+    isOpening: ((Attachment) -> Boolean)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -128,31 +140,63 @@ fun AttachmentList(
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val name = "${attachment.fileName} · ${formatAttachmentSize(attachment.sizeBytes)}"
+                val open = onOpen
                 ttText(
                     // The size rides with the name: a listing that needs a second look
                     // to see how big a file is has hidden the one fact that decides
                     // whether touching it is cheap. The formatter is file-local below —
                     // it is this view's contract, not a shared token, and two callers
                     // must never be able to disagree about the same number.
-                    text = "${attachment.fileName} · ${formatAttachmentSize(attachment.sizeBytes)}",
+                    //
+                    // The name is the press target rather than the whole row: a full-width
+                    // tap area would sit under the Remove action and turn a near-miss into a
+                    // file opening instead of a file being removed.
+                    text = name,
                     style = ttTypography.callout,
                     color = ttLabel(),
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (open == null) {
+                                Modifier
+                            } else {
+                                Modifier
+                                    .testTag(WorkItemAttachmentOpenTag(attachment.id))
+                                    .clickable(role = Role.Button) { open(attachment.id) }
+                            },
+                        ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                // The state rides beside the name for the same reason the size does: it is
-                // a fact about this file, not about the list, and a column of it reads at a
-                // glance. Only `Failed` takes the error colour — the other four are
-                // progress, and painting "waiting" red would call a normal queue a fault.
-                syncStateOf?.let { stateOf ->
-                    val state = stateOf(attachment)
+                // One caption slot, two sources: an open in flight wins because it is the
+                // thing that just happened, and the sync state comes back when it ends.
+                val opening = isOpening?.invoke(attachment) == true
+                if (opening) {
                     ttText(
-                        text = state.label(),
+                        text = stringResource(Res.string.attachment_state_opening),
                         style = ttTypography.captionEmphasised,
-                        color = if (state == AttachmentSyncState.Failed) ttError() else ttLabelSecondary(),
+                        color = ttLabelSecondary(),
                         modifier = Modifier.testTag(WorkItemAttachmentStateTag(attachment.id)),
                     )
+                } else {
+                    // The state rides beside the name for the same reason the size does: it
+                    // is a fact about this file, not about the list, and a column of it reads
+                    // at a glance. Only `Failed` takes the error colour — the other four are
+                    // progress, and painting "waiting" red would call a normal queue a fault.
+                    syncStateOf?.let { stateOf ->
+                        val state = stateOf(attachment)
+                        ttText(
+                            text = state.label(),
+                            style = ttTypography.captionEmphasised,
+                            color = if (state == AttachmentSyncState.Failed) {
+                                ttError()
+                            } else {
+                                ttLabelSecondary()
+                            },
+                            modifier = Modifier.testTag(WorkItemAttachmentStateTag(attachment.id)),
+                        )
+                    }
                 }
                 ttText(
                     text = stringResource(Res.string.attachment_remove),
@@ -199,6 +243,14 @@ fun WorkItemAttachmentTag(id: AttachmentID): String = "workItem.editor.attachmen
 fun WorkItemAttachmentRemoveTag(id: AttachmentID): String = "workItem.editor.attachment.remove.$id"
 
 fun WorkItemAttachmentStateTag(id: AttachmentID): String = "workItem.editor.attachment.state.$id"
+
+/**
+ * The press target that opens a file, which is the name rather than the row.
+ *
+ * A separate tag from [WorkItemAttachmentTag] so a test can tell "this row is on screen"
+ * from "this row can be opened" — the difference the nullable `onOpen` exists to express.
+ */
+fun WorkItemAttachmentOpenTag(id: AttachmentID): String = "workItem.editor.attachment.open.$id"
 
 /**
  * Bytes to a one-decimal read, in this view's own words.

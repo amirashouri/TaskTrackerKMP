@@ -32,6 +32,7 @@ import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
+import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -158,6 +159,9 @@ fun RootScreen(
                 // `null` in a demo graph, where there is no file API: the editor then keeps
                 // attachments local instead of attempting an upload that cannot succeed.
                 resolver.getOrNull(AttachmentBlobTransport::class),
+                // Not tied to the transport above: opening a file this device attached is a
+                // cache read, so a graph with no server still opens its own attachments.
+                resolver.getOrNull(AttachmentOpener::class),
             )
         }
     }

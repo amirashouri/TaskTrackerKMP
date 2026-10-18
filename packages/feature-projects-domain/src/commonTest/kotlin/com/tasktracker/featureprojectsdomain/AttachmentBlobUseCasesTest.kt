@@ -198,6 +198,34 @@ class AttachmentBlobUseCasesTest {
         assertEquals(0, transport.downloads)
     }
 
+    /**
+     * A build with no file API can still open the files it attached itself.
+     *
+     * This is the case the editor got wrong first: it built no `FetchAttachment` at all
+     * without a transport, so a demo graph could not open a single one of its own
+     * attachments — the local cache was never consulted. A `null` transport means "no server
+     * to ask", not "this use case is unavailable", and the cache read comes first.
+     */
+    @Test
+    fun `a cached file is served with no transport at all`() = runTest {
+        val (repository, itemID) = seeded()
+        val attachment = repository.seedAttachment(itemID)
+        repository.seedBytes(attachment.id, byteArrayOf(4, 5))
+
+        val bytes = FetchAttachment(repository)(attachment.id)
+
+        assertContentEquals(byteArrayOf(4, 5), bytes)
+    }
+
+    /** ...and a row whose bytes are not here has nothing to answer with, rather than throwing. */
+    @Test
+    fun `a missing file with no transport has nothing to fetch`() = runTest {
+        val (repository, itemID) = seeded()
+        val attachment = repository.seedAttachment(itemID, blobRef = "on-the-server", sizeBytes = 0)
+
+        assertNull(FetchAttachment(repository)(attachment.id))
+    }
+
     // MARK: Fixtures
 
     private suspend fun seeded(): Pair<FakeProjectRepository, WorkItemID> {

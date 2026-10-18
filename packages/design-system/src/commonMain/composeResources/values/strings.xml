@@ -198,6 +198,13 @@
     <string name="attachment_state_waiting">Waiting to upload</string>
     <string name="attachment_state_failed">Not uploaded</string>
     <string name="attachment_state_local_only">On this device</string>
+    <!--
+      Not a sixth sync state: this one replaces the state caption only while the bytes are
+      being fetched so the file can be opened, and the sync state comes back when it ends.
+      It reads as a promise the row keeps within seconds, which is why it may share a slot
+      with a durable fact where "waiting to upload" never could.
+    -->
+    <string name="attachment_state_opening">Opening…</string>
     <plurals name="project_task_count">
         <item quantity="one">%1$d task</item>
         <item quantity="other">%1$d tasks</item>

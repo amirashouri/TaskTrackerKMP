@@ -24,6 +24,7 @@ import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.AttachFile
 import com.tasktracker.featureprojectsdomain.AttachFileResult
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
+import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.DeleteAttachment
 import com.tasktracker.featureprojectsdomain.ExpandRecurrence
 import com.tasktracker.featureprojectsdomain.FetchAttachment
@@ -99,6 +100,15 @@ class WorkItemEditorModel(
      * the user would see after a perfectly successful attach.
      */
     blobTransport: AttachmentBlobTransport? = null,
+    /**
+     * The platform's file opener, or `null` when this graph has none.
+     *
+     * Nullable for the same reason [blobTransport] is — a preview graph and a test graph have
+     * no platform to hand a file to. `null` means the row is not tappable at all, which is
+     * the honest answer: a row that looks openable and opens nothing is the mock this
+     * feature has refused at every other step.
+     */
+    opener: AttachmentOpener? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -111,7 +121,13 @@ class WorkItemEditorModel(
     private val storeAttachment = AttachFile(repository, dateProvider)
     private val dropAttachment = DeleteAttachment(repository)
     private val uploadBlob = blobTransport?.let { UploadAttachment(repository, it, dateProvider) }
-    private val fetchBlob = blobTransport?.let { FetchAttachment(repository, it) }
+
+    // Built even with no transport, because `FetchAttachment` still answers from the local
+    // cache without one — a demo graph's own attachments must stay openable.
+    private val fetchBlob = FetchAttachment(repository, blobTransport)
+    // Held under a second name because a constructor parameter without `val` is not visible
+    // inside a method, and the parameter keeps the name call sites use: `opener = …`.
+    private val fileOpener = opener
 
     // MARK: Comments
 
@@ -214,6 +230,19 @@ class WorkItemEditorModel(
      * request that will be refused identically every time. Cleared on a success.
      */
     private var refusedIDs by mutableStateOf<Set<AttachmentID>>(emptySet())
+
+    /**
+     * Files whose bytes are being fetched so they can be opened right now.
+     *
+     * Separate from [uploadingIDs] because it is a separate journey: an upload is the file
+     * travelling to the server, an open is the file travelling to the user's screen, and one
+     * can happen without the other in either direction. The set is what stops a second tap
+     * from starting a second download of the same file while the first is still running.
+     */
+    private var openingIDs by mutableStateOf<Set<AttachmentID>>(emptySet())
+
+    /** Whether this file's bytes are being fetched to open right now. */
+    fun isOpening(id: AttachmentID): Boolean = id in openingIDs
 
     /**
      * What to tell the user about one file's progress towards the server.
@@ -369,9 +398,43 @@ class WorkItemEditorModel(
      * not reached the server. A download failure is a real failure the user asked for, so
      * it lands in the banner via [reporting] rather than being swallowed.
      */
-    suspend fun attachmentBytes(id: AttachmentID): ByteArray? {
-        val useCase = fetchBlob ?: return null
-        return reporting { useCase(id) }
+    suspend fun attachmentBytes(id: AttachmentID): ByteArray? = reporting { fetchBlob(id) }
+
+    /**
+     * Opens one file, fetching its bytes first when they are not on this device.
+     *
+     * ## The three silent cases, and why silence is right
+     *
+     * No opener in this graph, no such row, or bytes that neither the cache nor the server
+     * has — each returns without a banner. None of them is a failure of the press: the first
+     * means the row is not tappable at all, and the other two mean the file is not here yet,
+     * which the row's own caption already says. A banner would be a second, louder copy of a
+     * fact already on screen.
+     *
+     * A failure that *is* the press's own — a download that failed, or no app that can open
+     * the type — goes to the banner through [reporting], because the user asked for this and
+     * "nothing happened" is the answer this feature refuses to give.
+     *
+     * ## The re-entrancy guard
+     *
+     * [isOpening] is set for the whole fetch-and-open, so a second tap while a remote file is
+     * downloading joins the first attempt instead of starting a second download of the same
+     * bytes. It is a guard, not a spinner: the list renders it as its own caption because a
+     * download the user cannot see is a download they will ask for twice.
+     */
+    suspend fun openAttachment(id: AttachmentID) {
+        val opener = fileOpener ?: return
+        if (id in openingIDs) return
+        val attachment = attachments.firstOrNull { it.id == id } ?: return
+        openingIDs = openingIDs + id
+        try {
+            val bytes = attachmentBytes(id) ?: return
+            reporting { opener.open(attachment.fileName, attachment.mimeType, bytes) }
+        } finally {
+            // In a `finally` so a cancelled open — the editor dismissed mid-download — cannot
+            // leave a row saying "opening" for the rest of the model's life.
+            openingIDs = openingIDs - id
+        }
     }
 
     /**
