@@ -504,6 +504,24 @@ interface ProjectRepositoryPort {
      */
     suspend fun markAttachmentUploaded(id: AttachmentID, blobRef: String, uploadedAt: Instant) = Unit
 
+    /**
+     * Every attachment whose bytes are on this device and nowhere else, oldest first.
+     *
+     * The editor's own retry covers the rows it can see, so the case this answers is the one
+     * it cannot: a user who attached a file and left the editor before the upload landed.
+     * Their bytes sat local-only until they came back. A sweep that runs after a successful
+     * sync cycle — when the metadata is known to be on the server, so an upload cannot be
+     * refused with `404` — drains the list and closes that hole.
+     *
+     * A row that is already synced, and a pulled row whose bytes are not here, are both
+     * excluded: the first has nothing to send and the second has nothing to send *with*, so
+     * including either would have a sweep spin over rows it can only conclude nothing about.
+     *
+     * The default answers an empty list, the same "no blob cache" contract as the bytes
+     * methods above: a store with nothing attached has nothing pending.
+     */
+    suspend fun pendingAttachmentIDs(): List<AttachmentID> = emptyList()
+
     // MARK: Change notifications
 
     /**

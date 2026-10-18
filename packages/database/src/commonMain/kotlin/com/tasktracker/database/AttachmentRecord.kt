@@ -106,6 +106,20 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE id = :id")
     suspend fun byID(id: String): AttachmentRecord?
 
+    /**
+     * Every attachment whose bytes are still on this device and nowhere else, oldest first.
+     *
+     * The two `IS NOT` conditions are one question, not two filters: a row with a [AttachmentRecord.blobRef]
+     * is already on the server, and a row with a blank [AttachmentRecord.blobPath] has no bytes
+     * here to send — a pulled row arrives as metadata only. What survives is the set the
+     * post-sync sweep exists to drain: files this device attached and has not pushed yet.
+     *
+     * Ordered by `createdAt, sequence` — the same pair [byWorkItem] uses — so a sweep uploads
+     * the oldest file first and, given a clock that ties, in insertion order.
+     */
+    @Query("SELECT id FROM attachments WHERE blobRef IS NULL AND blobPath != '' ORDER BY createdAt ASC, sequence ASC")
+    suspend fun pendingUploads(): List<String>
+
     @Query("DELETE FROM attachments WHERE workItemID = :workItemID")
     suspend fun deleteByWorkItem(workItemID: String)
 

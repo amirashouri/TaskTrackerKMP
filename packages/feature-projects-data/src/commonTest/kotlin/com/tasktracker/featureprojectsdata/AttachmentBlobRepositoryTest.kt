@@ -186,6 +186,90 @@ class AttachmentBlobRepositoryTest {
         )
     }
 
+    /**
+     * The drain list the post-sync sweep reads, answered by SQL rather than by a filter over
+     * every row.
+     *
+     * Two shapes are excluded by the query itself, and one is not. A synced row has nothing
+     * to send; a pulled row has no bytes here at all, so its `blobPath` is blank and the
+     * answers diverge there. A row whose file was evicted *stays* in the list — SQL cannot
+     * see the filesystem, and a row that still names a file is indistinguishable from one
+     * that has it — so it costs one local read per sweep and lands in the report's
+     * `noLocalBytes` bucket rather than being confused with a row that was never sent.
+     */
+    @Test
+    fun `only this devices unsent rows are pending`() = runTest {
+        val harness = Harness()
+        val item = aWorkItemIn(harness)
+        val mine = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "mine.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(1),
+            now = Moments.start,
+        )
+        val uploaded = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "uploaded.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(2),
+            now = Moments.later,
+        )
+        harness.repository.markAttachmentUploaded(
+            id = uploaded.id,
+            blobRef = uploaded.id.stringValue,
+            uploadedAt = Moments.later,
+        )
+        // A pull: metadata only, so `blobPath` is blank and there are no bytes here at all.
+        val pulled = Attachment(
+            id = randomAttachmentID(),
+            workItemID = item.id,
+            projectID = item.projectID,
+            fileName = "from-a-teammate.png",
+            mimeType = "image/png",
+            sizeBytes = 12L,
+            blobRef = "blob-on-the-server",
+            createdAt = Moments.later,
+        )
+        harness.sink.apply(upsertOf(pulled))
+        // ...and a local row whose file is gone. The row still names it, so the query keeps
+        // it; the store cannot read it, which is what the sweep finds out on its own.
+        val evicted = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "evicted.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(3),
+            now = Moments.later,
+        )
+        harness.blobStore.delete(harness.blobStore.writes.last())
+
+        assertEquals(listOf(mine.id, evicted.id), harness.repository.pendingAttachmentIDs())
+        assertNull(harness.repository.attachmentBytes(evicted.id), "its file really is gone")
+    }
+
+    /** The row is removed from the drain list the moment its upload lands, not on the next read. */
+    @Test
+    fun `a row stops being pending once its upload is recorded`() = runTest {
+        val harness = Harness()
+        val item = aWorkItemIn(harness)
+        val attachment = harness.repository.addAttachment(
+            workItemID = item.id,
+            fileName = "crash-report.txt",
+            mimeType = "text/plain",
+            bytes = byteArrayOf(1, 2, 3),
+            now = Moments.start,
+        )
+        assertEquals(listOf(attachment.id), harness.repository.pendingAttachmentIDs())
+
+        harness.repository.markAttachmentUploaded(
+            id = attachment.id,
+            blobRef = attachment.id.stringValue,
+            uploadedAt = Moments.later,
+        )
+
+        assertTrue(harness.repository.pendingAttachmentIDs().isEmpty())
+    }
+
     // MARK: Fixtures
 
     /** A project with one work item, which is the least an attachment can hang off. */

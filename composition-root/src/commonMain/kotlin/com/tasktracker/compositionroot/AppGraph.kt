@@ -35,6 +35,8 @@ import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.createAttachmentOpener
 import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
+import com.tasktracker.featureprojectsdomain.UploadAttachment
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.SettingsPort
@@ -538,6 +540,24 @@ object AppGraph {
             app<AttachmentBlobTransport> { resolver ->
                 SyncBackedAttachmentBlobTransport(resolver.resolve(SyncTransport::class))
             }
+
+            // The sweep that drains the attachments a closed editor left behind, and the
+            // `UploadAttachment` it runs. Registered under the same switch as the transport
+            // above, and for the same reason: with no file API there is nowhere to send
+            // bytes, so a registered sweep would be a loop over rows it can only conclude
+            // nothing about. The coordinator asks for it with `getOrNull`, so a demo graph
+            // simply gets no post-cycle hook.
+            app<SweepPendingAttachments> { resolver ->
+                val repository = resolver.resolve(ProjectRepositoryPort::class)
+                SweepPendingAttachments(
+                    repository = repository,
+                    upload = UploadAttachment(
+                        repository = repository,
+                        transport = resolver.resolve(AttachmentBlobTransport::class),
+                        dateProvider = resolver.resolve(DateProvider::class),
+                    ),
+                )
+            }
         }
 
         app<SyncEngine> { resolver ->
@@ -567,11 +587,32 @@ object AppGraph {
         // Decides *when* to sync, which is a different problem from knowing how: a timer, an
         // app lifecycle and the connectivity monitor can all fire at once, and without one
         // gate here each would start a cycle.
+        //
+        // The post-cycle hook is the sweep, and only when a backend is configured —
+        // `getOrNull` rather than `resolve` because the demo graph deliberately has no
+        // `AttachmentBlobTransport` and so no `SweepPendingAttachments` either. Two triggers
+        // want a cycle, and two things want to run after one; the second is bound here
+        // rather than inside the coordinator because `:packages:sync` must not know what a
+        // project is.
         app<SyncCoordinator> { resolver ->
+            // Resolved once, here, rather than inside the hook: a hook that resolved on every
+            // cycle would be a second resolution path per cycle, would resolve from whichever
+            // thread the cycle finished on, and would throw once the container is stopped —
+            // after `AppGraph.stop`, when a sweep is still finishing its last upload.
+            val sweep = resolver.getOrNull(SweepPendingAttachments::class)
             SyncCoordinator(
                 engine = resolver.resolve(SyncEngine::class),
                 monitor = resolver.resolve(NetworkMonitor::class),
                 dateProvider = resolver.resolve(DateProvider::class),
+                // An `if` rather than `?.let { … } ?: { }`, because a lambda literal nested
+                // inside `let`'s result is inferred as a plain lambda and then rejected as a
+                // suspend function type. Both branches are lambdas over the same parameter,
+                // so the shape is uniform and the branch is the only difference.
+                onCycleSucceeded = if (sweep == null) {
+                    { }
+                } else {
+                    { sweep() }
+                },
             )
         }
     }

@@ -15,6 +15,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
@@ -71,6 +72,7 @@ class SyncCoordinatorTest {
         transport: StubSyncTransport = StubSyncTransport(),
         queue: InMemoryOutboxQueue = InMemoryOutboxQueue(),
         schedule: SyncSchedule = SyncSchedule.manual,
+        onCycleSucceeded: suspend (SyncReport) -> Unit = {},
     ): Pair<SyncCoordinator, InMemoryOutboxQueue> {
         val engine = SyncEngine(
             outbox = queue,
@@ -85,6 +87,7 @@ class SyncCoordinatorTest {
             monitor = monitor,
             schedule = schedule,
             scope = scope,
+            onCycleSucceeded = onCycleSucceeded,
         ) to queue
     }
 
@@ -215,6 +218,91 @@ class SyncCoordinatorTest {
 
         assertNotNull(subject.currentStatus.report)
         assertFalse(subject.isSyncing)
+    }
+
+    // MARK: - Post-cycle hook
+
+    /**
+     * The hook runs once per successful cycle, in the coordinator's own scope.
+     *
+     * `advanceUntilIdle` rather than a sleep because the hook is launched into [scope], and
+     * an instruction is the honest way to wait for a coroutine on a virtual clock.
+     */
+    @Test
+    fun `a successful cycle runs the post-cycle hook with the cycles own report`() = runTest {
+        var calls = 0
+        var handedBack: SyncReport? = null
+        val (subject, _) = subject(this, monitor()) { report ->
+            calls++
+            handedBack = report
+        }
+
+        assertNotNull(subject.synchronize(SyncTrigger.Manual))
+        assertEquals(0, calls, "the hook runs in the background, not inside the cycle")
+        advanceUntilIdle()
+
+        assertEquals(1, calls)
+        assertEquals(subject.lastReport, handedBack)
+    }
+
+    @Test
+    fun `a deferred cycle leaves the post-cycle hook alone`() = runTest {
+        // A cycle that could not push must not read as a success to anything downstream:
+        // work that waits for the server would run against a server that just failed.
+        val transport = StubSyncTransport()
+        transport.setPushBehaviour(StubSyncTransport.PushBehaviour.Fail(AppError.Transport("no route")))
+        var calls = 0
+        val (subject, queue) = subject(this, monitor(), transport) { calls++ }
+        queue.enqueue(newEntry("change-1"))
+
+        val report = assertNotNull(subject.synchronize(SyncTrigger.Manual))
+        assertTrue(report.isDeferred)
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun `a dead session leaves the post-cycle hook alone`() = runTest {
+        val transport = StubSyncTransport()
+        transport.setPushBehaviour(StubSyncTransport.PushBehaviour.Fail(AppError.Forbidden))
+        var calls = 0
+        val (subject, queue) = subject(this, monitor(), transport) { calls++ }
+        queue.enqueue(newEntry("change-1"))
+
+        val report = assertNotNull(subject.synchronize(SyncTrigger.Manual))
+        assertTrue(report.requiresSignOut)
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun `a cycle that never started leaves the post-cycle hook alone`() = runTest {
+        var calls = 0
+        val (subject, _) = subject(this, monitor(Connectivity.Unsatisfied)) { calls++ }
+
+        assertNull(subject.synchronize(SyncTrigger.Manual))
+        advanceUntilIdle()
+
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun `a hook that throws does not disturb the cycle that ran it`() = runTest {
+        // The hook is launched into a scope with no exception handler, so an uncaught throw
+        // would reach the platform's default handler — on iOS that is the process. `runTest`
+        // reports an uncaught child exception as a test failure, so this test failing *is*
+        // the assertion that the coordinator contained it.
+        val (subject, _) = subject(this, monitor()) {
+            throw IllegalStateException("the sweep is somebody else's background convenience")
+        }
+
+        assertNotNull(subject.synchronize(SyncTrigger.Manual))
+        advanceUntilIdle()
+
+        assertTrue(subject.lastSyncedAt != null, "the cycle still succeeded")
+        assertTrue(subject.currentStatus is SyncStatus.Succeeded)
     }
 
     // MARK: - Loop

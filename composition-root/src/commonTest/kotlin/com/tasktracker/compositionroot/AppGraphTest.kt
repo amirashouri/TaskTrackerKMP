@@ -14,6 +14,7 @@ import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featureteamsdata.HttpMemberAdminRemote
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -227,6 +228,47 @@ class AppGraphTest {
             "the sync client's one interceptor must be the bearer-token one, or every push " +
                 "and pull reaches the server unauthenticated",
         )
+    }
+
+    /**
+     * The attachment sweep, and the switch that governs it.
+     *
+     * It rides the same switch as the blob transport, and for the same reason: bytes are
+     * server-only, so a graph with no backend must not register a loop that would drain a
+     * queue it has nowhere to send to. Asserted by registration rather than by making a sync
+     * happen, because "which half got bound" is a wiring question and a request would only
+     * prove that a socket answers.
+     *
+     * Resolving is a separate fact from registering, and it opens a Room store on the way to
+     * the repository — so the resolution half is guarded by [thisHostOpensRoomStores], the
+     * same guard the hosted scenarios use. The registration half runs everywhere, and it is
+     * the half that would catch the bug: a sweep registered unconditionally would leave a
+     * demo graph attempting uploads through a transport whose blob methods throw.
+     */
+    @Test
+    fun `the attachment sweep is registered only when there is a backend`() {
+        val offline = testGraph()
+        val online = AppGraph.start(testBindings(startServices = false, apiBaseUrl = "http://127.0.0.1:8080"))
+
+        try {
+            assertFalse(offline.isRegistered(SweepPendingAttachments::class))
+            assertTrue(online.isRegistered(SweepPendingAttachments::class))
+
+            if (thisHostOpensRoomStores()) {
+                assertNull(offline.getOrNull(SweepPendingAttachments::class))
+                // Resolved from the demo graph on purpose: the coordinator reads the sweep
+                // with `getOrNull`, so a graph with no backend must still build its
+                // coordinator rather than fail on a port it deliberately does not have.
+                assertNotNull(offline.resolve(SyncCoordinator::class), "the demo graph still syncs")
+                assertNotNull(online.getOrNull(SweepPendingAttachments::class))
+                assertNotNull(online.resolve(SyncCoordinator::class))
+            } else {
+                println("skipped: this host cannot open a Room store to resolve the sweep and the coordinator")
+            }
+        } finally {
+            offline.stop()
+            online.stop()
+        }
     }
 
     /**

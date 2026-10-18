@@ -10,6 +10,7 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.core.parseAttachmentID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseUserID
@@ -1161,6 +1162,19 @@ class RoomProjectRepository(
         }
         parseProjectID(row.projectID)?.let { changeBus.announceWorkItems(it) }
     }
+
+    /**
+     * The post-sync drain list, answered by the query that mirrors the two conditions.
+     *
+     * The DAO already excludes synced rows and rows with no local bytes, so this is the parse
+     * and nothing else — a `mapNotNull` rather than a `map` because an id the store cannot
+     * parse is a corrupt row, and dropping it keeps a sweep from throwing on one bad row
+     * while the rest of the list is perfectly uploadable.
+     */
+    override suspend fun pendingAttachmentIDs(): List<AttachmentID> =
+        inTransaction(database) {
+            database.attachmentDao().pendingUploads().mapNotNull { parseAttachmentID(it) }
+        }
 
     /**
      * Removes a blob outside the transaction, never throwing.

@@ -649,6 +649,126 @@ class UploadAttachment(
     }
 }
 
+/** One attachment's upload attempt as the sweep saw it: the row, and why it did not make it. */
+data class AttachmentSweepFailure(
+    val id: AttachmentID,
+    val error: AppError,
+)
+
+/**
+ * What one sweep of the pending-attachment queue found, in full.
+ *
+ * ## Why a report and not a count
+ *
+ * The only caller today is a post-sync hook that logs a line, but "3 uploaded" is not
+ * enough to say what happened to the other seven: a row the store has no bytes for is a
+ * permanent local state, a row the server refused is a verdict on that one file, and a row
+ * that was mid-flight is a timing artefact. Three different facts, three different
+ * follow-ups, and one number would have flattened them into nothing.
+ *
+ * ## The order is the story
+ *
+ * [refused] and [interruptedBy] are the only two that carry an [AppError], and they are
+ * different breaks of the same rule rather than two spellings of one failure. See
+ * [SweepPendingAttachments] for why one keeps going and the other stops.
+ */
+data class AttachmentSweepReport(
+    /** The bytes are now on the server and the row is marked synced. */
+    val uploaded: List<AttachmentID> = emptyList(),
+    /** Another path — an open editor, most likely — uploaded the same row first. */
+    val alreadySynced: List<AttachmentID> = emptyList(),
+    /** The row exists but its bytes are not on this device. Retrying cannot help. */
+    val noLocalBytes: List<AttachmentID> = emptyList(),
+    /** The server has no metadata row for it yet, so the next sweep retries. */
+    val notYetOnServer: List<AttachmentID> = emptyList(),
+    /** The server refused these outright. The sweep kept going past them. */
+    val refused: List<AttachmentSweepFailure> = emptyList(),
+    /** The first transport-level failure, which stopped the sweep. The rest were not tried. */
+    val interruptedBy: AttachmentSweepFailure? = null,
+) {
+    /** Rows the sweep touched at all, in either direction. */
+    val attempted: Int
+        get() = uploaded.size + alreadySynced.size + noLocalBytes.size +
+            notYetOnServer.size + refused.size + if (interruptedBy == null) 0 else 1
+
+    /** Whether there was nothing to do — the common case, and the one that must stay cheap. */
+    val isEmpty: Boolean get() = attempted == 0
+}
+
+/**
+ * Drains every attachment whose bytes are still local-only, one [UploadAttachment] at a time.
+ *
+ * ## Why this exists at all
+ *
+ * [UploadAttachment] is fired by the editor after an attach, which means the queue is only
+ * drained while an editor is open. A user who attaches a file and leaves the card before the
+ * upload lands keeps `blobRef == null` until they come back — the bytes are safe on this
+ * device, but the file is invisible to teammates for as long as that lasts. Running the same
+ * use case after every *successful* sync cycle closes it: by then the metadata row is on the
+ * server, so an upload cannot be answered with the `404` that [UploadAttachmentResult.NotYetOnServer]
+ * describes, and the list is empty on the overwhelmingly common cycles.
+ *
+ * ## Refusals continue, transport failures stop
+ *
+ * The distinction is [AppError.isRetryable] again, the same property the sync engine retries
+ * on and the editor's own retry reads, because the reasoning is the same:
+ *
+ * - A **refusal** is a verdict on one file — a `413` from a cap that drifted, a `400` from a
+ *   row the server will never accept. It says nothing about the next row, so stopping would
+ *   strand perfectly uploadable files behind one bad one. The row is recorded and the sweep
+ *   moves on.
+ * - A **transport failure** is a fact about the path — no route, a timeout, a 500. Every
+ *   remaining row would walk the same broken road, so the sweep stops at the first one and
+ *   lets the next successful sync pick the queue back up.
+ *
+ * ## What it does not coordinate
+ *
+ * It does not know about the editor's `uploadingIDs`, and does not need to: the upload is
+ * idempotent end to end, so the same row uploaded twice by two paths overwrites the same
+ * blob and lands on the same `blobRef`. The report's [AttachmentSweepReport.alreadySynced]
+ * bucket exists for exactly that overlap, so a race reads as a fact rather than as an error.
+ */
+class SweepPendingAttachments(
+    private val repository: ProjectRepositoryPort,
+    private val upload: UploadAttachment,
+) {
+
+    @Throws(CancellationException::class)
+    suspend operator fun invoke(): AttachmentSweepReport {
+        var report = AttachmentSweepReport()
+        for (id in repository.pendingAttachmentIDs()) {
+            val outcome = try {
+                upload(id)
+            } catch (cancellation: CancellationException) {
+                // A cancelled sweep is not a failed one, and must not be reported as one.
+                throw cancellation
+            } catch (failure: AppError) {
+                if (!failure.isRetryable) {
+                    // A verdict on one file, not on the path: recorded, and the sweep keeps
+                    // going, because the next row is a different file.
+                    report = report.copy(refused = report.refused + AttachmentSweepFailure(id, failure))
+                    continue
+                }
+                // The path just failed. Every remaining row would walk the same broken
+                // road, so the next successful sync picks the queue back up.
+                return report.copy(interruptedBy = AttachmentSweepFailure(id, failure))
+            }
+            report = when (outcome) {
+                UploadAttachmentResult.Uploaded -> report.copy(uploaded = report.uploaded + id)
+                UploadAttachmentResult.AlreadySynced ->
+                    report.copy(alreadySynced = report.alreadySynced + id)
+
+                UploadAttachmentResult.NoLocalBytes ->
+                    report.copy(noLocalBytes = report.noLocalBytes + id)
+
+                UploadAttachmentResult.NotYetOnServer ->
+                    report.copy(notYetOnServer = report.notYetOnServer + id)
+            }
+        }
+        return report
+    }
+}
+
 /**
  * Returns one attachment's bytes, downloading and caching them on first read.
  *

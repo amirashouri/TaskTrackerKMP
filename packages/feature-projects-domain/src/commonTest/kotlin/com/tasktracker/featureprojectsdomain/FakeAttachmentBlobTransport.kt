@@ -12,10 +12,15 @@ import com.tasktracker.core.WorkItemID
  * use cases promise is about calls that *should not happen*: an already-synced row must not
  * upload, a row with no bytes must not upload, and a cached file must not download. A
  * recorder that only kept successes would let every one of those pass by accident.
+ *
+ * [failureFor] is the per-row override, and it exists for the sweep specifically: a sweep is
+ * tested on what it does about one refused row *and the next one*, which a single blanket
+ * failure cannot express.
  */
 class FakeAttachmentBlobTransport(
     var failure: AppError? = null,
     var downloadBytes: ByteArray = byteArrayOf(9, 9, 9),
+    private var failureFor: ((AttachmentID) -> AppError?)? = null,
 ) : AttachmentBlobTransport {
 
     var attempts: Int = 0
@@ -42,7 +47,7 @@ class FakeAttachmentBlobTransport(
         bytes: ByteArray,
     ) {
         attempts += 1
-        failure?.let { throw it }
+        (failureFor?.invoke(attachmentID) ?: failure)?.let { throw it }
         uploads += attachmentID
         lastUploadedBytes = bytes
         lastProjectID = projectID

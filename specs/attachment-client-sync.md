@@ -178,11 +178,71 @@ and invisible to teammates.
   - **Stale docs corrected:** the `Attachment` entity's "device-local, never queued" section, the
     `addAttachment` port KDoc's "no outbox row", and `AttachmentRecord`'s "no pull path / no
     `projectID` column" note all predated T5 and now describe the synced behaviour.
-- **Remaining gap (follow-up):** the retry sweep lives in the editor model, so it only runs while
-  an editor is open. A user who attaches and immediately leaves the editor before the metadata
-  push lands keeps `blobRef == null` until they reopen it. A global sweep (e.g. a post-sync
-  coordinator hook that drains all `blobRef == null` rows with local bytes) would close this;
-  it needs an "all pending attachments" query on the port.
+- **Done (#20):** the global sweep that drains attachments a closed editor left behind.
+  - **The gap it closes.** The upload was fired by the editor after an attach, so the queue
+    was only drained while an editor was open. A user who attached a file and left the card
+    before the upload landed kept `blobRef == null` — bytes safe on this device, file
+    invisible to teammates — until they came back. The spec's own follow-up asked for a
+    post-sync hook; this is it.
+  - **The seam is a closure, not an import.** `SyncCoordinator` gained
+    `onCycleSucceeded: suspend (SyncReport) -> Unit = {}`, invoked after a cycle whose
+    report `isSuccess` and launched in the coordinator's own scope. `:packages:sync` may not
+    name a feature, so the dependency is handed in the same way the engine takes its sink
+    map. Launched rather than awaited because the gate is held for the length of a cycle,
+    and a callback that uploads a 25 MiB body would hold it for as long as the body takes to
+    leave the device — a periodic trigger arriving in that window would be dropped for a
+    reason that has nothing to do with a cycle already running.
+  - **Every failure is contained there.** The hook is a child of a scope whose job is a
+    `SupervisorJob` with no exception handler, so a throwing hook would reach the platform's
+    default handler — on iOS, the process. `runHook` logs and returns; only
+    `CancellationException` propagates. A test in `SyncCoordinatorTest` does the assertion
+    by throwing: `runTest` reports an uncaught child exception as a failure, so that test
+    failing *is* the proof of containment.
+  - **The port query the spec asked for.** `AttachmentDao.pendingUploads`
+    (`blobRef IS NULL AND blobPath != ''`, ordered `createdAt, sequence`), surfaced as
+    `pendingAttachmentIDs()` on the port with a `mapNotNull` parse in the repository. Both
+    conditions are one question: a row with a ref has nothing to send, and a row with a
+    blank path has nothing to send *with*. A row whose file was evicted keeps a non-blank
+    path — SQL cannot see the filesystem — so it stays in the list and costs one local read
+    per sweep, landing in the report rather than being confused with a row never sent.
+  - **`SweepPendingAttachments`** runs the same `UploadAttachment` the editor runs, one row
+    at a time, and the failure split is the editor's own: a **refusal** (`!isRetryable`) is
+    a verdict on one file, so it is recorded and the sweep continues — stopping would strand
+    the rows behind it; a **transport failure** is a fact about the path, so the sweep stops
+    and the next successful sync picks the queue back up. The report carries `uploaded`,
+    `alreadySynced`, `noLocalBytes`, `notYetOnServer`, `refused` and `interruptedBy` rather
+    than a count, because "3 uploaded" cannot say what happened to the other seven.
+  - **Overlap with the editor is a fact, not an error.** The upload is idempotent end to
+    end, so the same row uploaded by two paths overwrites the same blob and lands on the
+    same `blobRef`; the `alreadySynced` bucket exists so that race reads honestly.
+  - **Wiring** follows the blob transport's switch: the sweep and its `UploadAttachment` are
+    registered only when `apiBaseUrl != null`, read by the coordinator through `getOrNull`,
+    and resolved once at coordinator construction — a hook that resolved per cycle would be
+    a second resolution path per cycle and would throw after `AppGraph.stop` while a sweep
+    is still finishing its last upload. A demo graph gets no hook and keeps its attachments
+    local, exactly as before.
+  - **Tests:** 5 in `SyncCoordinatorTest` (a success runs the hook with the cycle's own
+    report; a deferred cycle, a dead session and a cycle that never started do not; a hook
+    that throws does not disturb the cycle), 8 in `AttachmentBlobUseCasesTest` (every pending
+    row oldest first with a synced row skipped, an empty queue, a row with no bytes recorded
+    while the sweep continues, `NotYetOnServer` left for the next sweep, a refusal continuing,
+    a transport failure stopping with the rest still pending, another path's upload read as
+    `alreadySynced`, a cancellation propagating), 2 in `AttachmentBlobRepositoryTest`
+    (only this device's unsent rows are pending; a row stops being pending once its upload
+    is recorded) and 1 in `AppGraphTest` (the sweep is registered only with a backend, and a
+    demo graph still builds its coordinator). Both `FakeProjectRepository`s gained
+    `pendingAttachmentIDs`, mirroring the SQL rather than returning everything, so the
+    sweep cannot be tested against a store that filters nothing.
+  - **Baseline:** regenerated after a green three-host run — **1802 jvm / 1751 iOS /
+    1460 Android-host, 0 failures** (the Android host's 62 skips are the store-opening
+    scenarios `thisHostOpensRoomStores` guards, including the resolution half of the graph
+    test above).
+- **Remaining gap (follow-up):** a one-time backfill enqueue for attachments that predate
+  sync — rows written before the outbox entry existed, so a store that upgrades has local
+  files teammates have never seen. Their bytes are on this device, and the sweep above now
+  uploads any row that has no `blobRef`, so what is missing is the metadata row in the
+  outbox, not the bytes.
+- **Next step:** the backfill enqueue above.
 - **Done (#14):** per-row sync state, and the refusal/transient split behind it.
   - **Five states, not two.** `AttachmentSyncState` (`AttachmentList.kt`) is `Synced`,
     `Uploading`, `Waiting`, `Failed`, `LocalOnly`. The original plan's "`blobRef == null` means
@@ -315,8 +375,9 @@ and invisible to teammates.
     now records **1786 jvm / 1735 iOS / 1446 Android-host, 0 failures**. That full run is also
     the first time `iosSimulatorArm64Test` has executed since the attachment work began, which
     is why the two iOS breaks above went unnoticed — `jvmTest` alone never sees them.
-- **Next step:** the two follow-ups already listed above — a global `blobRef == null` sweep,
-  and a one-time backfill enqueue for attachments that predate sync.
+- **Next step:** the one-time backfill enqueue for attachments that predate sync — the only
+  remaining follow-up. The sweep above already uploads any row with no `blobRef`, so what is
+  missing is the metadata row in the outbox, not the bytes.
 - **Gotchas:** do NOT put bytes in the sync payload — that is the server's file API job.
   Preserve the sink invariant ("never writes the outbox"); attachments pulled are metadata
   only. Keep `AttachFile` offline-first (no network block). Backfill: existing local-only

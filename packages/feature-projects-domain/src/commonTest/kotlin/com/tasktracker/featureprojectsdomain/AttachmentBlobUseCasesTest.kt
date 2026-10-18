@@ -1,22 +1,27 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.AttachmentID
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItemStatus
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
- * The two blob use cases, against a fake port and a fake file API.
+ * The blob use cases — uploading, fetching, and the sweep that drains the upload queue —
+ * against a fake port and a fake file API.
  *
  * ## Why the "nothing happened" assertions carry this file
  *
@@ -24,6 +29,13 @@ import kotlin.time.Instant
  * to send, nothing to fetch. Those are indistinguishable from a bug that simply forgot to
  * call the transport, so each one asserts the call count as well as the result. A use case
  * that uploaded anyway would pass a test that only checked the return value.
+ *
+ * ## The sweep's two break rules, asserted separately
+ *
+ * One refused row must not stop the next one, and one failed path must not walk the rest of
+ * the queue. Both are failures of the same loop, and the only way to tell them apart is a
+ * file API that refuses *one* row and allows the rest — which is why the fake gained a
+ * per-row failure.
  */
 class AttachmentBlobUseCasesTest {
 
@@ -226,6 +238,195 @@ class AttachmentBlobUseCasesTest {
         assertNull(FetchAttachment(repository)(attachment.id))
     }
 
+    // MARK: Sweeping
+
+    /**
+     * Every pending row, oldest first, and only the pending rows.
+     *
+     * The synced row is in the list to prove the filter is not decoration: a fake that
+     * returned every attachment would still upload two rows here and the assertion would
+     * pass, so the third one is what makes the test mean anything.
+     */
+    @Test
+    fun `a sweep uploads every pending row and leaves a synced one alone`() = runTest {
+        val (repository, itemID) = seeded()
+        val first = repository.seedAttachment(itemID, fileName = "first.txt")
+        val second = repository.seedAttachment(itemID, fileName = "second.txt")
+        val done = repository.seedAttachment(itemID, fileName = "done.txt", blobRef = "already-there")
+        repository.seedBytes(first.id, byteArrayOf(1))
+        repository.seedBytes(second.id, byteArrayOf(2))
+        repository.seedBytes(done.id, byteArrayOf(3))
+        val transport = FakeAttachmentBlobTransport()
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(listOf(first.id, second.id), transport.uploads, "oldest first, and only pending rows")
+        assertEquals(listOf(first.id, second.id), report.uploaded)
+        assertEquals(2, report.attempted)
+        assertFalse(report.isEmpty)
+        assertEquals(first.id.stringValue, repository.attachment(first.id)?.blobRef)
+    }
+
+    /** The overwhelmingly common cycle: nothing is waiting, so nothing is sent. */
+    @Test
+    fun `an empty queue is a sweep that sends nothing`() = runTest {
+        val (repository, itemID) = seeded()
+        val transport = FakeAttachmentBlobTransport()
+
+        val report = sweep(repository, transport)()
+
+        assertTrue(report.isEmpty)
+        assertEquals(0, transport.attempts, "a pending query that matches nothing must not call the file API")
+    }
+
+    /**
+     * A row with no local bytes cannot be uploaded from here, and retrying cannot change
+     * that — so it is recorded, not thrown, and not spent a round trip on either. The sweep
+     * continues past it: the next row is a different file with its own bytes.
+     */
+    @Test
+    fun `a row with no local bytes is recorded and the sweep continues`() = runTest {
+        val (repository, itemID) = seeded()
+        val gone = repository.seedAttachment(itemID, fileName = "evicted.txt")
+        val kept = repository.seedAttachment(itemID, fileName = "kept.txt")
+        repository.seedBytes(kept.id, byteArrayOf(9))
+        val transport = FakeAttachmentBlobTransport()
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(listOf(gone.id), report.noLocalBytes)
+        assertEquals(listOf(kept.id), report.uploaded)
+        assertEquals(1, transport.attempts, "the row with no bytes must not be sent")
+    }
+
+    /** The 404 that means the metadata push has not landed: expected, and retried next time. */
+    @Test
+    fun `a not-yet-on-server row is left for the next sweep`() = runTest {
+        val (repository, itemID) = seeded()
+        val first = repository.seedAttachment(itemID, fileName = "first.txt")
+        val second = repository.seedAttachment(itemID, fileName = "second.txt")
+        repository.seedBytes(first.id, byteArrayOf(1))
+        repository.seedBytes(second.id, byteArrayOf(2))
+        val transport = FakeAttachmentBlobTransport(failure = AppError.NotFound("attachment not found"))
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(listOf(first.id, second.id), report.notYetOnServer)
+        assertTrue(transport.uploads.isEmpty(), "a refused upload must not claim the bytes are up")
+        assertNull(repository.attachment(first.id)?.blobRef)
+    }
+
+    /**
+     * The split the whole sweep turns on: a refusal is a verdict on *one* file, so stopping
+     * would strand the rows behind it. Asserted through the transport's call list, because a
+     * sweep that stopped at the refusal would leave the second row's bytes on this device
+     * forever while reporting success.
+     */
+    @Test
+    fun `a refused row does not stop the sweep from reaching the next one`() = runTest {
+        val (repository, itemID) = seeded()
+        val refused = repository.seedAttachment(itemID, fileName = "too-big.txt")
+        val fine = repository.seedAttachment(itemID, fileName = "fine.txt")
+        repository.seedBytes(refused.id, byteArrayOf(1))
+        repository.seedBytes(fine.id, byteArrayOf(2))
+        val verdict = AppError.Validation("That file is larger than the 25 MB limit.")
+        val transport = FakeAttachmentBlobTransport(failureFor = { if (it == refused.id) verdict else null })
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(2, transport.attempts)
+        assertEquals(listOf(fine.id), transport.uploads)
+        assertEquals(listOf(AttachmentSweepFailure(refused.id, verdict)), report.refused)
+        assertNull(report.interruptedBy)
+    }
+
+    /**
+     * And the other half: a transport failure is a fact about the path, so the remaining
+     * rows would walk the same broken road. The sweep stops at the first one and the next
+     * successful sync picks the queue back up — which is why the second row must still be
+     * pending afterwards rather than silently forgotten.
+     */
+    @Test
+    fun `a transport failure stops the sweep and leaves the rest pending`() = runTest {
+        val (repository, itemID) = seeded()
+        val first = repository.seedAttachment(itemID, fileName = "first.txt")
+        val second = repository.seedAttachment(itemID, fileName = "second.txt")
+        repository.seedBytes(first.id, byteArrayOf(1))
+        repository.seedBytes(second.id, byteArrayOf(2))
+        val weather = AppError.Transport("no route to host")
+        val transport = FakeAttachmentBlobTransport(failureFor = { if (it == first.id) weather else null })
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(1, transport.attempts, "the second row would have failed the same way")
+        assertEquals(AttachmentSweepFailure(first.id, weather), report.interruptedBy)
+        assertTrue(report.uploaded.isEmpty())
+        assertNull(repository.attachment(second.id)?.blobRef, "an untried row must stay pending")
+    }
+
+    /**
+     * The overlap with an open editor, which uploads the same rows for the same reason.
+     *
+     * The upload is idempotent, so two paths racing on one row is a timing fact rather than
+     * an error — and a report that could not say so would have to call it a failure.
+     */
+    @Test
+    fun `a row another path uploaded first is recorded as already synced`() = runTest {
+        val (repository, itemID) = seeded()
+        val first = repository.seedAttachment(itemID, fileName = "first.txt")
+        val second = repository.seedAttachment(itemID, fileName = "second.txt")
+        repository.seedBytes(first.id, byteArrayOf(1))
+        repository.seedBytes(second.id, byteArrayOf(2))
+        // An open editor finishing the second row's upload while the sweep is on the first:
+        // the sweep's own attempt then finds `blobRef` already set.
+        val transport = object : AttachmentBlobTransport {
+            override suspend fun upload(
+                projectID: ProjectID,
+                workItemID: WorkItemID,
+                attachmentID: AttachmentID,
+                bytes: ByteArray,
+            ) {
+                repository.markAttachmentUploaded(second.id, "editor-did-this-one", now)
+            }
+
+            override suspend fun download(
+                projectID: ProjectID,
+                workItemID: WorkItemID,
+                attachmentID: AttachmentID,
+            ): ByteArray = byteArrayOf()
+        }
+
+        val report = sweep(repository, transport)()
+
+        assertEquals(listOf(second.id), report.alreadySynced)
+        assertEquals(listOf(first.id), report.uploaded)
+        assertTrue(report.refused.isEmpty() && report.interruptedBy == null)
+    }
+
+    /** A cancelled sweep is a stopped sweep, not a failed one. */
+    @Test
+    fun `a cancelled sweep propagates rather than reporting a failure`() = runTest {
+        val (repository, itemID) = seeded()
+        val attachment = repository.seedAttachment(itemID)
+        repository.seedBytes(attachment.id, byteArrayOf(1))
+        val transport = object : AttachmentBlobTransport {
+            override suspend fun upload(
+                projectID: ProjectID,
+                workItemID: WorkItemID,
+                attachmentID: AttachmentID,
+                bytes: ByteArray,
+            ) = throw CancellationException("left the screen")
+
+            override suspend fun download(
+                projectID: ProjectID,
+                workItemID: WorkItemID,
+                attachmentID: AttachmentID,
+            ): ByteArray = byteArrayOf()
+        }
+
+        assertFailsWith<CancellationException> { sweep(repository, transport)() }
+    }
+
     // MARK: Fixtures
 
     private suspend fun seeded(): Pair<FakeProjectRepository, WorkItemID> {
@@ -248,4 +449,7 @@ class AttachmentBlobUseCasesTest {
         )
         return repository to item.id
     }
+
+    private fun sweep(repository: ProjectRepositoryPort, transport: AttachmentBlobTransport) =
+        SweepPendingAttachments(repository, UploadAttachment(repository, transport, TestDateProvider(now)))
 }

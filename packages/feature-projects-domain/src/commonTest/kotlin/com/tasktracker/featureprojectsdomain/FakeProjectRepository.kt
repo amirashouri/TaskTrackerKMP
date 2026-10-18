@@ -725,6 +725,27 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    /**
+     * The rows the real store's `pendingUploads` query returns, filtered the same way.
+     *
+     * Both conditions are mirrored, not just the first: a row that already has a [Attachment.blobRef]
+     * has nothing to send, and a row whose [Attachment.blobPath] is blank has no bytes to send
+     * *with*. A fake that kept either would let the sweep be tested against a store that
+     * filters nothing, which is the one shape that cannot produce a bug report.
+     */
+    override suspend fun pendingAttachmentIDs(): List<AttachmentID> {
+        throwIfFailing()
+        return lock.withLock {
+            storedAttachments.withIndex()
+                .filter { it.value.blobRef == null && it.value.blobPath.isNotEmpty() }
+                .sortedWith(
+                    compareBy<IndexedValue<Attachment>> { it.value.createdAt }
+                        .thenBy { it.index },
+                )
+                .map { it.value.id }
+        }
+    }
+
     // MARK: Recovering refused changes
 
     /**

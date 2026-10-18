@@ -6,6 +6,7 @@ import com.tasktracker.core.TTLogger
 import com.tasktracker.core.logMessage
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.NetworkMonitor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,6 +51,35 @@ class SyncCoordinator(
      */
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val dateProvider: DateProvider = SystemDateProvider(),
+    /**
+     * Runs after a cycle that succeeded, in a child of [scope].
+     *
+     * ## Why a closure, and why it lives here
+     *
+     * Some work is not a sync cycle but depends on one having finished: the attachment
+     * sweep uploads bytes the metadata push may have just made acceptable, and it must
+     * never run before it — the file API answers `404` for a row it has not seen. This
+     * module may not depend on any feature, so the dependency is handed in rather than
+     * named, exactly the way [SyncEngine] takes its sink map rather than importing the
+     * repository.
+     *
+     * ## Why it is launched rather than awaited
+     *
+     * The gate is held for the length of [synchronize], and a callback that uploads a file
+     * would hold it for as long as a 25 MiB body takes to leave the device — a periodic
+     * trigger arriving in that window would be dropped for a reason that has nothing to do
+     * with a cycle already running. Launched in [scope] it is best-effort background work:
+     * it cannot delay a cycle, and it cannot be delayed by one.
+     *
+     * ## Why every failure is contained here
+     *
+     * This is a child of [scope], whose job is a [SupervisorJob] with no exception handler,
+     * so a throwing hook would reach the platform's default handler — on iOS that is the
+     * process. The hook is somebody else's background convenience, so it is not allowed to
+     * take down the thing that schedules it: [runHook] logs and returns. A caller that
+     * wants its failures seen should write them somewhere durable.
+     */
+    private val onCycleSucceeded: suspend (SyncReport) -> Unit = {},
 ) {
     private val logger = TTLogger.sync
 
@@ -186,9 +216,42 @@ class SyncCoordinator(
                     else -> SyncStatus.Failed(report)
                 },
             )
+            // Published first so the status a subscriber reads is already the terminal one
+            // when the hook starts: work that depends on a success is work that may be
+            // observed while it runs.
+            if (report.isSuccess) {
+                scope.launch { runHook(report) }
+            }
             return report
         } finally {
             gate.unlock()
+        }
+    }
+
+    /**
+     * Runs [onCycleSucceeded], and swallows whatever it throws.
+     *
+     * The swallowing is the whole method, and it is not a shrug: the hook is launched into
+     * a scope with no [kotlinx.coroutines.CoroutineExceptionHandler], so an uncaught throw
+     * would reach the platform's default handler — which on iOS ends the process. Losing a
+     * background convenience must never cost the user their app, so the failure is logged
+     * instead, and [kotlinx.coroutines.CancellationException] is the one that still
+     * propagates, because a cancelled coroutine is a *stopped* one, not a failed one.
+     */
+    private suspend fun runHook(report: SyncReport) {
+        try {
+            onCycleSucceeded(report)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (failure: Throwable) {
+            logger.warning {
+                logMessage {
+                    append("sync: the post-cycle hook failed after a successful cycle: ")
+                    append(failure::class.simpleName ?: "unknown")
+                    append(" ")
+                    append(failure.message ?: "")
+                }
+            }
         }
     }
 
