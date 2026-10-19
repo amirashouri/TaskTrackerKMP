@@ -42,8 +42,10 @@ import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featureteamsdata.HttpMemberAdminRemote
+import com.tasktracker.featureteamsdata.HttpTeamRemote
 import com.tasktracker.featureteamsdata.MemberAdminRepository
 import com.tasktracker.featureteamsdata.RoomTeamRepository
+import com.tasktracker.featureteamsdata.ServerTeamRepository
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.keychain.KeychainAccess
@@ -469,15 +471,31 @@ object AppGraph {
     /**
      * The user directory: [TeamPort] resolves a UserID into a User profile.
      *
-     * Backed by the session cache, which SessionCoordinator seeds on sign-in, so the directory
-     * can always answer for the signed-in account. Registered after persistence and projects —
-     * both depend only on [SessionCache], which persistence owns, and projects reads it too.
+     * The session cache answers for the signed-in account without a request, so the directory
+     * always has at least one honest name. With a backend bound, [ServerTeamRepository] wraps
+     * that local half and replaces search/resolution with the server's live account list —
+     * the member picker was showing a fixed fixture until this wiring existed, which meant a
+     * newly created project could not name the colleagues the admin had just added.
+     *
+     * Registered after persistence and projects — both depend only on [SessionCache], which
+     * persistence owns, and projects reads it too.
      */
     private fun ResolverBuilder.registerTeams(platforms: PlatformBindings) {
         app<TeamPort> { resolver ->
-            RoomTeamRepository(
+            val local = RoomTeamRepository(
                 sessionCache = resolver.resolve(SessionCache::class),
             )
+            platforms.apiBaseUrl?.let { url ->
+                ServerTeamRepository(
+                    local = local,
+                    remote = HttpTeamRemote(
+                        client = platforms.httpClient(
+                            url,
+                            listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                        ),
+                    ),
+                )
+            } ?: local
         }
         // The admin half of the directory, and the same two rules the projects admin pair
         // records: bind it only when a backend is configured, and build the client from

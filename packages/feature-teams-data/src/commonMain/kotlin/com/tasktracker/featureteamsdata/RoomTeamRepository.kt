@@ -8,13 +8,14 @@ import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.featureteamsdomain.UserStatus
 
 /**
- * TeamPort backed by the session cache.
+ * TeamPort backed by the session cache: the offline directory.
  *
  * The signed-in identity is the one user the directory can always return: it is written to
  * SessionCache on sign-in (SessionCoordinator caches UserIdentity), and a UserID is a
  * distinct value type, so matching against it is exact rather than a fragile string compare
- * against a name two people could share. Other members land in a dedicated users table once a
- * sync transport exists; until then they are unknown here and the lookup returns null for them.
+ * against a name two people could share. With a backend bound, [ServerTeamRepository] wraps
+ * this repository and answers from the server's directory; this half remains the always-there
+ * identity lookup and the offline fallback.
  */
 class RoomTeamRepository(
     private val sessionCache: SessionCache? = null,
@@ -33,20 +34,17 @@ class RoomTeamRepository(
     }
 
     /**
-     * The member picker's candidate list: the signed-in user plus the fake directory,
-     * filtered by [query], sorted by name.
+     * The offline candidate list: the signed-in user, filtered by [query].
      *
-     * The session user is merged in rather than special-cased into a separate row, so a
-     * fresh install — where they are the only real person in the app — still shows a list
-     * the search box can filter. Ordering is [FakeMemberDirectory]'s job and stays
-     * alphabetical across the merge, which means the backend can replace the fake's
-     * `people` with its own list and no caller can tell the swap happened.
+     * A fresh demo install has exactly one person the app can honestly name, so that is the
+     * list the search box filters. Once [ServerTeamRepository] is bound the backend directory
+     * replaces this for search and resolution; this method stays as its unreachable-server
+     * fallback rather than inventing colleagues that are not accounts.
      */
     override suspend fun searchMembers(query: String): List<User> {
-        val session = sessionCache?.current()
-        val sessionUser = session?.let { fromSession(it, UserID(it.userID)) }
-        val candidates = listOfNotNull(sessionUser) + FakeMemberDirectory.people
-        return FakeMemberDirectory.search(candidates, query)
+        val session = sessionCache?.current() ?: return emptyList()
+        val sessionUser = fromSession(session, UserID(session.userID))
+        return searchDirectory(listOf(sessionUser), query)
     }
 
     private fun fromSession(session: CachedSession, id: UserID): User = User(

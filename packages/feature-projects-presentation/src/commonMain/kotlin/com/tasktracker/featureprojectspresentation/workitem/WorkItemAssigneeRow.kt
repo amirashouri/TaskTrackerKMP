@@ -25,9 +25,9 @@ import org.jetbrains.compose.resources.stringResource
  * The old row offered exactly two choices, Unassigned and the signed-in user, because that
  * was honestly all the directory knew. [MemberPicker] replaces it: the same field the
  * project editor's members use, in single-select mode with an Unassigned escape, so "who is
- * this for" is one interaction everywhere it appears. The directory behind it is a fake
- * until the backend member API lands — see [com.tasktracker.featureteamsdata.FakeMemberDirectory]
- * — and a member the directory cannot name still shows as their raw id.
+ * this for" is one interaction everywhere it appears. The directory behind it is the server's
+ * live account list when a backend is bound, and a member the directory cannot name still
+ * shows as their raw id.
  *
  * The sprint editor's owner field is this same row wearing the sprint's label and test tag,
  * because "who is this for" is one interaction with two names — see [SprintEditorSheet].
