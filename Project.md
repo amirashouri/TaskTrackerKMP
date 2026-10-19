@@ -144,11 +144,18 @@ reaches the machine running the server.
 | iOS | `Info.plist` key `TaskTrackerApiBaseUrl` | the `TASKTRACKER_API_BASE_URL` build setting, set in `iosApp/project.yml` |
 | Android | manifest `<meta-data android:name="com.tasktracker.API_BASE_URL">` | `-Ptasktracker.apiBaseUrl=https://…` (or `gradle.properties`) |
 
-Two consequences worth knowing. First, naming a URL binds the real `HttpAuthRemote` /
+Three consequences worth knowing. First, naming a URL binds the real `HttpAuthRemote` /
 `HttpSyncTransport` and disables the offline sample seed — that is the point, but it means a
 launched app now expects a reachable server rather than working standalone. Second, Android blocks
 cleartext HTTP by default, so `androidApp/src/main/res/xml/network_security_config.xml` permits it
 for the two local hosts only; a deployment whose server is plain HTTP must add its host there.
+Third, Android 17 gates an app's access to its own local network — `10.0.2.2`, any RFC1918 or
+CGNAT address, an mDNS name — behind the runtime `ACCESS_LOCAL_NETWORK` permission. The app
+declares it and requests it at launch only when its root is local
+(`apiRootRequiresLocalNetworkAccess`); without the grant the connection is not refused but
+**times out**, and reads as "Could not reach the server" against a server that is running. A LAN
+API root therefore needs both that permission and, if it is plain HTTP, the cleartext entry above.
+See `specs/android-local-network-permission.md`.
 
 ---
 

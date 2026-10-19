@@ -18,6 +18,17 @@ class TaskTrackerApplication : Application() {
     lateinit var resolver: Resolver
         private set
 
+    /**
+     * The API root this build talks to, read once, from this app's manifest meta-data.
+     *
+     * Held rather than re-read in `MainActivity`, which needs it to decide whether to ask for
+     * local-network access: the manifest read is what makes the value a single thing, and a
+     * second read would be a second answer to the same question. See `platformApiBaseUrl` for
+     * where the value comes from.
+     */
+    lateinit var apiBaseUrl: String
+        private set
+
     override fun onCreate() {
         super.onCreate()
         // `this`, not an activity context: the graph is process-scoped, and the keychain
@@ -25,11 +36,10 @@ class TaskTrackerApplication : Application() {
         // `.applicationContext` internally, so passing the Application here is also the
         // point at which that leak-safety is established.
         //
-        // `apiBaseUrl` is the address the graph talks to, read from this app's manifest
-        // meta-data by the shared resolver. Naming it is what binds the real HTTP remote and
-        // transport; without it the graph would keep the in-process demo pair and never reach
-        // the server. See `platformApiBaseUrl` for where the value comes from.
-        resolver = AppGraph.start(this, apiBaseUrl = platformApiBaseUrl(this))
+        // Naming the URL is what binds the real HTTP remote and transport; without it the
+        // graph would keep the in-process demo pair and never reach the server.
+        apiBaseUrl = platformApiBaseUrl(this)
+        resolver = AppGraph.start(this, apiBaseUrl = apiBaseUrl)
     }
 
     override fun onTerminate() {

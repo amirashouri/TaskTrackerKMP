@@ -4,6 +4,23 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+        Local-network access, for the API roots that can legitimately be on the local network:
+        the emulator's `10.0.2.2` host alias, and any LAN address a deployment names. Android's
+        Local Network Protection gates those connections behind this runtime permission, and it
+        fails silently — a blocked connection times out instead of being refused — so without
+        the permission the app reports "Could not reach the server" against a server that is
+        running and reachable. Measured on an API 37 emulator: every port from the app's uid
+        timed out while the same probe from `adb shell` answered.
+
+        Requested from `MainActivity`, and only when the build's API root is itself a
+        local-network address (`apiRootRequiresLocalNetworkAccess`), so a deployment pointed at
+        a public hostname is never asked. Declared here unconditionally because the permission
+        only exists, and is only required, from `targetSdk` 37 — which is where this app sits;
+        older platforms ignore an unknown permission.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <application
         android:name=".TaskTrackerApplication"
         android:allowBackup="true"
