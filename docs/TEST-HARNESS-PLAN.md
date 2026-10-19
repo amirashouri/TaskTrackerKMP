@@ -46,7 +46,7 @@ The current flow cannot distinguish a new regression from the standing red:
 5. `scripts/check.sh` excludes the Android host and lint because they are red, while
    `./gradlew check` includes them. There are two definitions of “done”.
 6. Host totals are duplicated in `Project.md`, `AGENTS.md`, `docs/TEST-HOSTS.md`, and
-   `.opencode/skills/kmp-compose-tests/SKILL.md`; they have drifted (1588/1539/1283 in
+   `.agents/skills/kmp-compose-tests/SKILL.md`; they have drifted (1588/1539/1283 in
    `Project.md` against 1722/1670/1390 in the generated baseline).
 
 The harness also manufactures failures:
@@ -271,7 +271,7 @@ removed.
 - `AGENTS.md` — host table becomes a link to the generated baseline and
   `docs/TESTING.md`.
 - `README.md` — point at the fast/full commands.
-- `.opencode/skills/kmp-compose-tests/SKILL.md` — update the guard and host instructions
+- `.agents/skills/kmp-compose-tests/SKILL.md` — update the guard and host instructions
   to match the new contract.
 
 **Acceptance**

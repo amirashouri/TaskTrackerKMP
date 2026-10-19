@@ -248,20 +248,25 @@ domain code are organised.
 
 ## Skills
 
-Skills under `.opencode/skills/*/SKILL.md` carry the detail this file omits.
-**Read each skill's frontmatter `description` at session start.** Load full
-instructions **on demand** — only when its description matches your task.
+Portable, on-demand skills under `.agents/skills/*/SKILL.md` carry the detail
+this file omits. **Read each skill's frontmatter `description` at session
+start.** Load full instructions **on demand** — only when its description
+matches your task.
 
-- `kmp-architecture-workflow` — Clean Architecture boundaries, the checked Gradle
-  graph, KMP source sets, Liquid Glass design-system ownership.
-- `kmp-compose-tests` — the three-host matrix, source-set layout, Android host
-  gaps, the rasterisation skip, screenshot capture.
-- `rendered-ui-measurement` — mutation-first ritual, twin-frame differencing,
-  estimator robustness, measuring on two rasterisers.
-- `kmp-desktop-entry` — Compose Desktop (JVM) target: entry point, classpath,
-  run task, per-OS caveats.
-- `kmp-room-database-migrations` — Room schemas, DAOs, outbox queues, builders,
-  transactions, migration verification.
+- [`kmp-architecture-workflow`](.agents/skills/kmp-architecture-workflow/SKILL.md)
+  — Clean Architecture boundaries, the checked Gradle graph, KMP source sets,
+  Liquid Glass design-system ownership.
+- [`kmp-compose-tests`](.agents/skills/kmp-compose-tests/SKILL.md) — the
+  three-host matrix, source-set layout, Android host gaps, the rasterisation
+  skip, screenshot capture.
+- [`rendered-ui-measurement`](.agents/skills/rendered-ui-measurement/SKILL.md)
+  — mutation-first ritual, twin-frame differencing, estimator robustness,
+  measuring on two rasterisers.
+- [`kmp-desktop-entry`](.agents/skills/kmp-desktop-entry/SKILL.md) — Compose
+  Desktop (JVM) target: entry point, classpath, run task, per-OS caveats.
+- [`kmp-room-database-migrations`](.agents/skills/kmp-room-database-migrations/SKILL.md)
+  — Room schemas, DAOs, outbox queues, builders, transactions, migration
+  verification.
 
 The `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) reviews a
 proposed test adversarially — use it for pixel-reading tests only.

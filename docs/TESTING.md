@@ -117,4 +117,4 @@ when the common source is compiled for Native — a name can look fine under
 - `docs/TEST-HARNESS-PLAN.md` — the phased cleanup and acceptance criteria.
 - `docs/TEST-HOSTS.md` — the historical failure catalog; the policy above supersedes it.
 - `docs/DECISIONS.md` — the measurement lore behind pixel and contrast tests.
-- `.opencode/skills/kmp-compose-tests/SKILL.md` — the procedural companion.
+- `.agents/skills/kmp-compose-tests/SKILL.md` — the procedural companion.

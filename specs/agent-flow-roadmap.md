@@ -51,10 +51,10 @@ Do not change app behavior or wire contracts.
 - **Pending:** Push and open a PR; no remote operation was requested.
 - **Next step:** Push this branch when authorized, then follow the KMP PR
   workflow.
-- **Gotchas:** Keep KMP-specific skills under `.opencode/skills/` per the shared
-  workspace guidance. Server-connection tasks 6.1–6.4 require the cross-repo
-  ACK protocol even when a particular client-only slice does not change the
-  shared link contract.
+- **Gotchas:** KMP portable skills live in `.agents/skills/`; OpenCode-specific
+  agents remain under `.opencode/`. Server-connection tasks 6.1–6.4 require the
+  cross-repo ACK protocol even when a particular client-only slice does not
+  change the shared link contract.
 
 ## Risks / notes
 
