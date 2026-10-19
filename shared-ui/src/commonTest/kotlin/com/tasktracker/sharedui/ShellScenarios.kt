@@ -902,6 +902,32 @@ object ShellScenarios {
     }
 
     /**
+     * A single project is chosen by default on the scoped tabs.
+     *
+     * With exactly one project, landing on the Board tab opens it straight away instead of
+     * showing the "no project selected" empty state and forcing the user to pick the only
+     * option there is. Backlog and Sprints are served by the same scoped-tab screen.
+     */
+    val aSingleProjectIsChosenByDefaultOnTheBoard: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val router = Router()
+        setUpShell(session = ScriptedSession(restored = signedIn()), router = router, projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Board)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            project.id,
+            router.state.value.activeProjectID,
+            "expected the only project to be chosen by default on the board",
+        )
+        onNodeWithTag(ProjectBoardScreenTag).assertIsDisplayed()
+    }
+
+    /**
      * The bar floats: inset from the left and right edges, sitting on the bottom edge.
      *
      * This is the inverse of the assertion it replaces, and deliberately so. That one demanded

@@ -860,6 +860,24 @@ private fun ProjectScopedTabScreen(
     val routerState by router.state.collectAsState()
     val activeProjectID = routerState.activeProjectID
 
+    // When nothing is chosen and there is exactly one project, open it by default instead of
+    // showing the empty-state "choose project" prompt. The model's own `selectedProjectID` is
+    // deliberately left untouched here: choosing is a navigation decision owned by the router,
+    // not by the picker, and `ProjectPickerModel` pins "starts with nothing chosen."
+    val picker = remember(repository) { ProjectPickerModel(repository) }
+    DisposableEffect(picker) {
+        picker.observe(scope)
+        onDispose { picker.stopObserving() }
+    }
+
+    // Navigates on load rather than during composition. Once `activeProjectID` is set the
+    // guard fails, so this opens at most once per load.
+    LaunchedEffect(activeProjectID, picker.projects) {
+        if (activeProjectID == null && picker.projects.size == 1) {
+            router.openProject(picker.projects.single().id)
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         if (activeProjectID == null) {
             ScopedEmptyState(

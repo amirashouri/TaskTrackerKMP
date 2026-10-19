@@ -66,10 +66,13 @@ for teams. Every team feature below depends on this being real.
 ## Implementation order at a glance
 
 1. **P0**: 0.1 → 0.2 → 0.3 — the identity foundation. Nothing team-shaped can ship without real `UserID` assignment.
-2. **P1 wave A (team)**: 1.1 → 1.2 → 1.3 → 1.4 — comments, mentions, inbox, local notifications. These turn the board into a collaboration surface.
-3. **P1 wave B (personal)**: 2.1 → 2.2 → 2.3 — recurring tasks, due-date reminders, search. The most universally requested personal features.
-4. **P2**: 1.5, 1.6, 1.8, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2 — polish and depth on both front.
-5. **P3**: 1.7, 2.8, 2.9, 3.3, 3.4, 3.5 — schema-level or layout-heavy niches.
+2. **P0, independent**: 6.1 → 6.3 → 6.2 → 6.4 — the configurable API root (§6). Independent of the
+   feature work above, and the prerequisite for the server's `tt` CLI being usable by anyone who
+   did not build the app.
+3. **P1 wave A (team)**: 1.1 → 1.2 → 1.3 → 1.4 — comments, mentions, inbox, local notifications. These turn the board into a collaboration surface.
+4. **P1 wave B (personal)**: 2.1 → 2.2 → 2.3 — recurring tasks, due-date reminders, search. The most universally requested personal features.
+5. **P2**: 1.5, 1.6, 1.8, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2 — polish and depth on both front.
+6. **P3**: 1.7, 2.8, 2.9, 3.3, 3.4, 3.5 — schema-level or layout-heavy niches.
 
 ## Notes on fit
 
@@ -961,6 +964,73 @@ platform check anywhere.
 - **The threshold is a decision, not a constant.** It is pinned by an exact-value test for
   the reason `AGENTS.md` gives about numbers a test already holds: moving it should be a
   deliberate edit that a reader can see in a diff.
+
+---
+
+## 6. Server connection: a configurable API root
+
+Today the API root is **build-time only**: an Android Gradle property into the manifest
+(`tasktracker.apiBaseUrl` → `com.tasktracker.API_BASE_URL`), an `Info.plist` key on iOS
+(`TaskTrackerApiBaseUrl` ← `TASKTRACKER_API_BASE_URL`), and `TASKTRACKER_API_URL` on the
+JVM. `platformApiBaseUrl` in `:composition-root` reads one of those and falls back to
+`http://localhost:8080` (`10.0.2.2` on Android).
+
+That is the right design for a developer and the wrong one for a customer: **nobody who
+installs the server can rebuild the app.** The server side of this is `TaskTrackerServer`
+`docs/PLAN.md` Milestone 9, which ships a `tt` CLI that prints the URL to connect to —
+and prints it into a void, because the app has no way to accept it.
+
+This section is the client half. It is provider-agnostic on purpose: whether the customer
+exposes the server over the LAN, Tailscale Funnel, or their own Cloudflare hostname, the
+client's job is the same — accept a URL at runtime, validate it, and persist it.
+
+- [ ] **6.1 Runtime API root override** · P0 · `composition-root` (`PlatformApiBaseUrl` +
+  the three actuals) and `user-defaults` (a new `DefaultsKey`) — `platformApiBaseUrl`
+  keeps its build-time value as the **default** and gains a persisted override that wins
+  over it. The override is a preference, not a credential, so it belongs in
+  `user-defaults` beside `LastSeenProject`; tokens stay in the keychain. Every existing
+  host test keeps its current expectation, because an unset override is the build-time
+  path. *Why P0:* nothing else in this section is observable without it, and every remote
+  exposure option the server ships is unusable by a non-technical customer until it lands.
+- [ ] **6.2 Server field in Settings** · P0 · `feature-settings-domain` (`SettingsPort`),
+  `feature-settings-data` (`LiveSettingsService`), `feature-settings-presentation`
+  (`SettingsModel` + a row/sheet) — A "Server" row showing the current API root, an edit
+  sheet that accepts a URL, and a reset-to-default action. The model stays a plain class
+  testable without a composition, per the existing `SettingsModel` contract; validation
+  is a domain rule, not a UI check.
+- [ ] **6.3 Validate before accepting a URL** · P0 · `feature-settings-domain` (a pure
+  validator) + `feature-settings-data` (the `GET /healthz` probe) — Scheme must be
+  `https` (or `http` only for a loopback/LAN address the platform already permits),
+  the host must parse, and `/healthz` must answer `ok` before the value is saved. A URL
+  that fails is reported **at pairing time**, not at first sync — the difference between
+  "the address is wrong, here is what answered" and a sync failure days later.
+- [ ] **6.4 `tasktracker://connect?url=…` pairing link** · P0 · `routing`
+  (`DeepLinkParser`) + `shared-ui` (`NavigationHost` dispatch) — The parser is
+  host-and-path only today, so a query string is a new case and needs the same
+  pure-function treatment as the rest of the grammar: percent-decoding, a rejected
+  malformed URL, and a test per branch. The link lands on Settings with 6.2's field
+  prefilled and 6.3's validation already run. This is what makes the CLI's QR code work:
+  scan, confirm, connected.
+
+### 6.0 Implementation order
+
+1. **P0**: 6.1 → 6.3 → 6.2 → 6.4. The override is the foundation; the validator is a pure
+   rule and lands before the UI that calls it; the link is last because it only prefills a
+   field that must already exist and validate.
+
+### 6.0 Notes on fit
+
+- **No wire-format change.** No response gains a field and no DTO moves, so this is not a
+  dual-engine contract change in the DTO sense — but it is still **cross-repo ACK** work,
+  because the server's `tt` CLI renders the link and the two halves have to agree on the
+  link grammar.
+- **The build-time value stays the default.** Every test host, the simulator, the emulator
+  and the desktop default keep working untouched; only an explicit override changes the
+  root. A change that alters the default turns an existing `PlatformApiBaseUrl` test red.
+- **Cleartext is not widened.** `androidApp`'s `network_security_config.xml` permits
+  cleartext only for `localhost` and `10.0.2.2`. A customer whose server is plain HTTP on
+  the LAN therefore cannot use the Android client; that is a documented limitation of the
+  `lan` provider, not something this section works around by adding hosts to the allow-list.
 
 # PLAN — Admin Member & Project Management (KMP client side)
 

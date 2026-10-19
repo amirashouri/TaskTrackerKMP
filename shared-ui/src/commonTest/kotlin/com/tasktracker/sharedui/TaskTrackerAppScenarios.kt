@@ -71,6 +71,8 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun switchingProjectsFromTheSprintsTabCallsOpenProject() = runComposeUiTest(block = ShellScenarios.switchingProjectsFromTheSprintsTabCallsOpenProject)
     @Test
+    fun aSingleProjectIsChosenByDefaultOnTheBoard() = runComposeUiTest(block = ShellScenarios.aSingleProjectIsChosenByDefaultOnTheBoard)
+    @Test
     fun theTabBarFloatsAboveTheBottomEdge() = runComposeUiTest(block = ShellScenarios.theTabBarFloatsAboveTheBottomEdge)
     @Test
     fun theTabBarIsWiderThanItsTabs() = runComposeUiTest(block = ShellScenarios.theTabBarIsWiderThanItsTabs)
