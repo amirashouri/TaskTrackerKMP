@@ -127,9 +127,9 @@ object ViewPreviewData {
      * The directory a preview's member picker searches, so a preview renders the real
      * control rather than an empty list.
      *
-     * Filters [previewUserNames] the same way `FakeMemberDirectory` filters its people —
-     * case-insensitive substring, blank query returns all — so a preview's list has the
-     * shape production's has, under the same port method the host passes.
+     * Filters [previewUserNames] the way the real directory does — case-insensitive
+     * substring, blank query returns all — so a preview's list has the shape production's
+     * has, under the same port method the host passes.
      */
     val previewSearchMembers: suspend (String) -> List<User> = { query ->
         val normalised = query.trim().lowercase()

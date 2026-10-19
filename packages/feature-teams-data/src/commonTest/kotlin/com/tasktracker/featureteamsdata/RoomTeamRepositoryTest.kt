@@ -61,59 +61,55 @@ class RoomTeamRepositoryTest {
     }
 
     @Test
-    fun aBlankQueryReturnsTheWholeDirectoryIncludingTheSessionUser() = runTest {
+    fun aBlankQueryReturnsTheSessionUserOnly() = runTest {
         val session = StubSessionCache()
         val repo = RoomTeamRepository(sessionCache = session)
         session.signIn(displayName = "Amir")
 
         val everyone = repo.searchMembers("")
 
-        // Seven people: the six in the fake directory plus the signed-in user. The order is
-        // alphabetical by greeting across the merge, so the session user sits among the
-        // fake people rather than being pinned to a row — and the message names the count
-        // because "empty list" and "session user only" are the two ways this breaks when
-        // the merge is wrong.
+        // The offline directory is exactly one person: nobody else is a real account this
+        // device knows. A fixture leaking back in here is the defect this assertion names.
         assertEquals(
-            listOf(
-                "Ada Lovelace",
-                "Alan Turing",
-                "Amir",
-                "Barbara Liskov",
-                "Grace Hopper",
-                "Katherine Johnson",
-                "Radia Perlman",
-            ),
+            listOf("Amir"),
             everyone.map { it.preferredGreeting },
-            "expected the session user plus the six fake people, sorted by name",
+            "expected only the signed-in user without a backend directory",
         )
     }
 
     @Test
-    fun theQueryFiltersByNameCaseInsensitively() = runTest {
+    fun aBlankQueryIsEmptyWhenNobodyIsSignedIn() = runTest {
         val repo = RoomTeamRepository(sessionCache = StubSessionCache())
+
+        assertEquals(emptyList(), repo.searchMembers(""))
+    }
+
+    @Test
+    fun theQueryFiltersTheSessionUserByNameCaseInsensitively() = runTest {
+        val session = StubSessionCache()
+        val repo = RoomTeamRepository(sessionCache = session)
+        session.signIn(displayName = "Grace Hopper")
 
         val matches = repo.searchMembers("gRaCe")
 
         assertEquals(
             listOf("Grace Hopper"),
             matches.map { it.preferredGreeting },
-            "expected exactly Grace, matched regardless of the query's case",
+            "expected the session user, matched regardless of the query's case",
         )
+        assertEquals(emptyList(), repo.searchMembers("ada"), "nobody else is in the offline directory")
     }
 
     @Test
-    fun theQueryFiltersByEmailAsWellAsName() = runTest {
+    fun theQueryFiltersTheSessionUserByEmailAsWellAsName() = runTest {
         val session = StubSessionCache()
         val repo = RoomTeamRepository(sessionCache = session)
-        session.signIn(displayName = "Amir")
+        session.signIn(email = "katherine@example.com", displayName = "Katherine Johnson")
 
         val byEmail = repo.searchMembers("katherine@")
-        val everyoneAtExample = repo.searchMembers("@example.com")
 
         assertEquals(listOf("Katherine Johnson"), byEmail.map { it.preferredGreeting })
-        // All six fake people use @example.com; the session user does too, so the email
-        // filter must not silently drop the one real person in the list.
-        assertEquals(7, everyoneAtExample.size, "expected the email query to match everyone")
+        assertEquals(emptyList(), repo.searchMembers("@elsewhere"), "a non-matching address filters out")
     }
 
     @Test
