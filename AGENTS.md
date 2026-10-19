@@ -12,6 +12,9 @@ This file is the short version of *how to work here* and points at the rest.
 For build setup, JDK, run commands, and test-host details see **`Project.md`** and
 **`docs/TEST-HOSTS.md`**. This file contains rules only; facts live there.
 
+`docs/PLAN.md` is the concise active roadmap; `docs/PLAN-ARCHIVE.md` preserves
+detailed history. Read the selected task's spec, not the entire archive.
+
 ## Execution scope
 
 ### 1. Read with a target, not a net
@@ -53,7 +56,21 @@ to do in one sentence, then do it.
 - **Drift:** If a file outside the approved plan must be edited, abort, output
   an updated plan, and request a secondary `ACK`.
 
-### 4. Clean Architecture and Package Boundaries
+### 4. Task specs and status
+
+- For roadmap work, select the task from `docs/PLAN.md`. If it has no spec,
+  consult only its matching section in `docs/PLAN-ARCHIVE.md`, then create a
+  spec from `specs/_template.md` before implementation.
+- Keep a spec `in-progress` while implementation, validation, or review
+  remains. At the end of each session, update `## Handoff` with verified
+  progress, pending work, the next step, and gotchas.
+- After the contract and required checks pass and the diff review is approved,
+  set the spec to `done` in the final task-branch update before merge. Update
+  the active roadmap status in the same change when applicable.
+- Use provider-neutral handoff language; the committed spec, not chat context,
+  carries task state between agents, tools, and sessions.
+
+### 5. Clean Architecture and Package Boundaries
 Gradle modules are the architecture boundary. Domain holds rules and ports;
 data implements those ports; presentation renders UI; `:composition-root` binds;
 `:shared-ui` assembles the screen tree. Before adding a dependency or module,
@@ -249,14 +266,13 @@ instructions **on demand** — only when its description matches your task.
 The `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) reviews a
 proposed test adversarially — use it for pixel-reading tests only.
 
-## Where a task's detail lives
+## Task detail and continuity
 
-A pending task's *how* lives in one spec, `specs/<plan-id>-<slug>.md`. Read that
-spec and this file, plus the files the spec names — not all of `docs/PLAN.md`.
-
-**Cross-harness continuity:** the spec is also your handoff unit when switching
-agent providers — keep its `## Handoff` section current and commit it on the
-branch. On resume in a new harness, start from that section. See `../AGENTS.md` §6.
+Use the concise `docs/PLAN.md` to choose work. Read the selected spec and its
+named files; if no spec exists, read only that task's section in
+`docs/PLAN-ARCHIVE.md` and create a spec before implementation. Keep the
+spec's `## Handoff` current so another agent, tool, or session can resume from
+the committed state. For cross-repository work, follow `../AGENTS.md` §6.
 
 ## Local rules
 

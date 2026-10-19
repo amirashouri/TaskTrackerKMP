@@ -2,9 +2,9 @@
 
 - **status:** in-progress
 - **priority:** P0
-- **plan:** no `docs/PLAN.md` entry — found from an emulator's sign-in failure rather than
+- **plan:** no active `docs/PLAN.md` entry — found from an emulator's sign-in failure rather than
   picked off the roadmap, so this file *is* the record. It is a prerequisite for this repo's
-  §6 (server connection) and for Milestone 9's `lan` provider in
+  §6 (server connection; details in `docs/PLAN-ARCHIVE.md`) and for Milestone 9's `lan` provider in
   `../TaskTrackerServer/docs/PLAN.md`: without it no Android client can reach a LAN server,
   whatever the CLI prints.
 
@@ -111,7 +111,8 @@ DNS traffic to a local DNS server on port 53.
   customer points the app at a tailnet address, the permission is the difference between a
   working sync and a timeout.
 - **Cleartext is still the second gate** for a LAN root (`network_security_config.xml` allows
-  only `localhost` and `10.0.2.2`), and it is a separate decision recorded in `docs/PLAN.md`
+  only `localhost` and `10.0.2.2`), and it is a separate decision recorded in
+  `docs/PLAN-ARCHIVE.md`
   §6. This change does not widen it.
 - Android 16 enforces the same idea under `NEARBY_WIFI_DEVICES`; the manifest declares the
   Android 17 permission only, because that is where this app's `targetSdk` sits. An app whose

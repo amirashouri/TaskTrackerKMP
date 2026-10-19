@@ -6,9 +6,9 @@ matrix all hold; what remains is `scripts/check-test-matrix.py` running in no ga
 Branch: landed on `main`; there is no open branch for this plan.
 Scope: the KMP client only (`TaskTrackerKMP`). No server or wire-format changes.
 
-This is the working plan for making the client test matrix trustworthy. It is not the
-feature roadmap; `docs/PLAN.md` remains the append-only roadmap. A short pointer to this
-document is added there.
+This is the working plan for making the client test matrix trustworthy. It is separate
+from the feature roadmap: `docs/PLAN.md` indexes it, while this file retains its detailed
+phases and progress history.
 
 ## Decisions already made
 

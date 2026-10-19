@@ -2,7 +2,7 @@
 
 - **status:** in-progress
 - **priority:** P0
-- **plan:** proposed (no `docs/PLAN.md` entry). Follow-up to the attachment work recorded in
+- **plan:** proposed (no active `docs/PLAN.md` entry). Follow-up to the attachment work recorded in
   [`attachment-client-sync.md`](attachment-client-sync.md); the editor surface is the one
   entry 3.3 landed.
 

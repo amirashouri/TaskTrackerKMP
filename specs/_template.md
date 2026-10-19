@@ -1,9 +1,10 @@
-# <PLAN-id> — <imperative title>
+# <Task ID or slug> — <imperative title>
 
-- **status:** pending | in-progress | done
+- **status:** pending | in-progress | done (`done` means validated, reviewed, and ready to merge)
 - **priority:** P0 | P1 | P2 | P3
-- **plan:** [`docs/PLAN.md`](../docs/PLAN.md) §<section>, entry `<id>` — the *what* and the
-  rationale live there; this file is the *how*.
+- **plan:** [`docs/PLAN.md`](../docs/PLAN.md) §<section>, entry `<id>`, or
+  `none` for standalone work — the active roadmap is the index; this file is
+  the task's implementation contract.
 
 ## Scope
 
@@ -29,12 +30,13 @@ checks these, not good intentions.
 - Run: `scripts/check.sh <scope>`
 - Counts: <how `test-baseline.json` should move — which host(s), and why>. Regenerate with
   `scripts/test-baseline.py`; `scripts/check-baseline.sh` must pass.
-- Tests added go through the `test-reviewer` subagent before the PR.
+- Pixel-reading tests go through the `test-reviewer` subagent before the PR.
+  Structural and behavioral tests do not need this review.
 
 ## Handoff
 
-Filled at end of each session. Carries state across agent providers (OpenCode →
-FreeBuf → WorkBuddy) — chat context dies on a switch, a committed spec does not.
+Filled at the end of each session. Carries state across agents, tools, and
+sessions; a committed spec does not depend on chat context.
 
 - **Done:** <what is finished and verified>
 - **Pending:** <what remains>

@@ -86,10 +86,10 @@ Desktop exists in Gradle but not as something a developer can launch.
 
 ## Current state of this target
 
-This target is **planned, not shipped**. The plan is in `docs/PLAN.md`, section 4. Until
-the entry point and the run task exist, there is no Desktop app to run and no Desktop host
-to test on. Do not treat the JVM target's existing test-host behaviour as evidence that the
-Desktop app works.
+This target is shipped. Its implementation history is in
+`docs/PLAN-ARCHIVE.md`, section 4. Keep launchability and Desktop host coverage aligned
+with the current build setup; a passing JVM test host alone does not prove the app can be
+launched.
 
 ## Per-OS notes
 
