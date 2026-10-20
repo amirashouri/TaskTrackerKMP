@@ -344,8 +344,8 @@ jobs:
             echo
             echo "### Server Compatibility"
             echo
-            echo "This release works with TaskTrackerServer at the same version tag."
-            echo "See [TaskTrackerServer releases](https://github.com/amirashouri/TaskTrackerServer/releases/tag/${RELEASE_TAG})."
+            echo "This release works with the server at the same version tag, where that release exists."
+            echo "Server releases: [amirashouri/TaskTracker releases](https://github.com/amirashouri/TaskTracker/releases)."
           } > release-body.md
 
           cat release-body.md
