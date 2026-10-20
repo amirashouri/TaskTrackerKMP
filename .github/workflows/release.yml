@@ -280,6 +280,14 @@ jobs:
           BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
           RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
 
+          # The version `:shared-ui` actually packaged, derived the same way the build
+          # script derives it: `jpackage` rejects a macOS bundle version whose first
+          # number is 0, so a zero major becomes 1 (`v0.1.7` -> `1.1.7`).
+          INSTALLER_VERSION="${RELEASE_TAG#v}"
+          case "${INSTALLER_VERSION}" in
+            0.*) INSTALLER_VERSION="1.${INSTALLER_VERSION#0.}" ;;
+          esac
+
           assets=(release-assets/*)
           {
             echo "## TaskTracker ${RELEASE_TAG}"
@@ -316,8 +324,10 @@ jobs:
             echo
             echo "**Linux:** Download the \`.deb\` and install with \`sudo apt install ./TaskTracker-${RELEASE_TAG}.deb\` (Ubuntu/Debian)."
             echo
-            echo "The desktop installers report version \`1.<minor>.<patch>\` — \`1.1.6\` for \`v0.1.6\` — because \`jpackage\` refuses a macOS bundle version whose first number is 0. The asset name keeps the tag."
-            echo
+            if [ "${INSTALLER_VERSION}" != "${RELEASE_TAG#v}" ]; then
+              echo "The desktop installers report version \`${INSTALLER_VERSION}\`, not \`${RELEASE_TAG#v}\`: \`jpackage\` refuses a macOS bundle version whose first number is 0, so a zero major is bumped to 1. The asset name keeps the tag."
+              echo
+            fi
             echo "### Not in this run"
             echo
             missing=()
