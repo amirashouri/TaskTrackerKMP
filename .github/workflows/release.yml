@@ -1,7 +1,7 @@
 name: release
 
 # Runs only on tag push (v*) or manual dispatch — not on every push to main.
-# Builds Android APK, iOS archive, and Desktop (JVM) JAR, then creates a GitHub Release.
+# Builds Android APK, iOS archive, and Desktop native packages, then creates a GitHub Release.
 
 on:
   push:
@@ -19,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write  # needed to create release and upload assets
+  contents: write
 
 jobs:
   android:
@@ -45,11 +45,7 @@ jobs:
           cache-read-only: false
 
       - name: Point Gradle at the runner's JDK, apply the tuning flags
-        run: |
-          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
-          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
-            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
-          done
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties && for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties; done
 
       - name: Build Android debug APK (release signing needs keystore setup)
         run: ./gradlew :androidApp:assembleDebug --no-daemon --stacktrace
@@ -77,23 +73,18 @@ jobs:
           cache-read-only: false
 
       - name: Point Gradle at the runner's JDK, apply the tuning flags
-        run: |
-          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
-          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
-            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
-          done
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties && for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties; done
 
-      # Linux deb and Windows msi can be built on Ubuntu
-      - name: Build Desktop native packages (Linux: deb, Windows: msi)
+      - name: "Build Desktop native packages (Linux: deb, Windows: msi)"
         run: ./gradlew :shared-ui:packageDeb :shared-ui:packageMsi --no-daemon --stacktrace
 
       - name: Upload Desktop native packages
         uses: actions/upload-artifact@v4
         with:
           name: desktop-native
-          path: |
-            shared-ui/build/compose/binaries/main/deb/*.deb
-            shared-ui/build/compose/binaries/main/msi/*.msi
+          path:
+            - shared-ui/build/compose/binaries/main/deb/*.deb
+            - shared-ui/build/compose/binaries/main/msi/*.msi
           if-no-files-found: warn
 
   desktop-macos:
@@ -112,14 +103,9 @@ jobs:
           cache-read-only: false
 
       - name: Point Gradle at the runner's JDK, apply the tuning flags
-        run: |
-          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
-          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
-            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
-          done
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties && for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties; done
 
-      # macOS .dmg needs macOS runner
-      - name: Build Desktop native package (macOS: dmg)
+      - name: "Build Desktop native package (macOS: dmg)"
         run: ./gradlew :shared-ui:packageDmg --no-daemon --stacktrace
 
       - name: Upload Desktop native package
@@ -155,11 +141,7 @@ jobs:
           cache-read-only: false
 
       - name: Point Gradle at the runner's JDK, apply the tuning flags
-        run: |
-          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
-          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
-            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
-          done
+        run: echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties && for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties; done
 
       - name: Generate Xcode project
         run: cd iosApp && xcodegen generate
