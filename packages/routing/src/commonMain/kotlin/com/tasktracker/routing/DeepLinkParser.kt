@@ -24,7 +24,12 @@ object DeepLinkParser {
      * tasktracker://sprint/<projectID>/<sprintID> -> one sprint's own screen
      * tasktracker://workitem/<projectID>/<itemID> -> edit a specific work item
      * tasktracker://workitem/<projectID>/new      -> create a work item
+     * tasktracker://connect?url=<encoded URL>     -> settings, with the address prefilled
      * ```
+     *
+     * The last shape is the CLI's pairing link. It is the only one whose payload is in the
+     * query rather than the path, so [connectLink] reads the raw string; [split] deliberately
+     * drops the query so a `?utm=` cannot corrupt a trailing id.
      *
      * Takes a [String] rather than a platform `URL` because common Kotlin has no URL
      * type: the iOS shell passes `URL.absoluteString` and the Android shell
@@ -38,6 +43,10 @@ object DeepLinkParser {
         return when (root) {
             "projects", "dashboard" -> ParsedLink(AppTab.Projects, route = null, path = emptyList())
             "settings" -> ParsedLink(AppTab.Settings, route = null, path = emptyList())
+
+            // The pairing link. A path after the host would be a second shape for one idea,
+            // so it is refused rather than ignored; every other root uses the path.
+            "connect" -> if (components.size == 1) connectLink(url) else null
 
             "board" -> components.projectIDAt(1)?.let {
                 ParsedLink(AppTab.Board, route = null, path = listOf(AppRoute.Board(it)))
@@ -96,6 +105,71 @@ object DeepLinkParser {
 
     private fun List<String>.projectIDAt(index: Int): com.tasktracker.core.ProjectID? =
         getOrNull(index)?.let { parseProjectID(it) }
+
+    /**
+     * `tasktracker://connect?url=<percent-encoded server URL>`.
+     *
+     * The value is percent-decoded here and **exactly once**. The CLI encodes the URL whole, so
+     * a URL that itself carries a `%` sequence arrives with its `%` written as `%25` and
+     * survives the one decode intact; decoding twice would turn a legitimate `%2F` in a path
+     * into `/` and change the address. Nothing else in the link is decoded.
+     *
+     * A malformed escape is refused rather than passed through, because the alternative is
+     * prefilling a different address from the one the CLI printed. This is a check on the
+     * *link*, not on the server: scheme policy, reachability and normalisation belong to
+     * `CheckServerAddress`, which runs when the prefilled sheet is saved, so this function
+     * never decides whether the URL is usable.
+     */
+    private fun connectLink(url: String): ParsedLink? {
+        // The fragment is stripped before looking for `?`: a question mark after `#` is part
+        // of the fragment, not a query.
+        val withoutFragment = url.substringAfter("://", "").substringBefore('#')
+        val query = withoutFragment.substringAfter('?', "")
+        if (query.isEmpty()) return null
+
+        val encoded = query.split('&')
+            .firstOrNull { it.substringBefore('=') == "url" }
+            ?.substringAfter('=', "")
+            .orEmpty()
+        if (encoded.isEmpty()) return null
+
+        val address = encoded.percentDecodedExactlyOnce() ?: return null
+        if (address.isEmpty()) return null
+
+        return ParsedLink(
+            tab = AppTab.Settings,
+            route = null,
+            path = emptyList(),
+            serverAddress = address,
+        )
+    }
+
+    /**
+     * Decodes `%XX` escapes, refusing a malformed one.
+     *
+     * Unlike [percentDecoded], which keeps the rest of the grammar forgiving, the pairing value
+     * has one correct answer: a truncated escape or a non-hex pair means the link is broken and
+     * the honest response is to reject it.
+     */
+    private fun String.percentDecodedExactlyOnce(): String? {
+        if (!contains('%')) return this
+        val out = StringBuilder(length)
+        var i = 0
+        while (i < length) {
+            val char = this[i]
+            if (char != '%') {
+                out.append(char)
+                i++
+                continue
+            }
+            if (i + 2 >= length) return null
+            val hex = substring(i + 1, i + 3)
+            if (!hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+            out.append(hex.toInt(16).toChar())
+            i += 3
+        }
+        return out.toString()
+    }
 
     /**
      * Splits into lowercased host + path segments, or returns null if this is not one of

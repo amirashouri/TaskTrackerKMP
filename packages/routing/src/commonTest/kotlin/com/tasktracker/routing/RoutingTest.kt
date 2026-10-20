@@ -187,6 +187,60 @@ class DeepLinkParserTest {
         assertNull(DeepLinkParser.route("tasktracker://"))
         assertNull(DeepLinkParser.route(""))
     }
+
+    @Test
+    fun `a connect link carries a decoded address to settings`() {
+        val link = DeepLinkParser.route("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+        assertEquals(AppTab.Settings, link?.tab)
+        assertNull(link?.route)
+        assertEquals(emptyList(), link?.path)
+        assertEquals("https://tasks.example.com", link?.serverAddress)
+    }
+
+    @Test
+    fun `a connect link decodes its value exactly once`() {
+        // The CLI encodes the URL whole, so the `%` in the URL's own `%2F` arrives as `%25`.
+        // One decode has to give back `%2F`; a second would turn it into a slash and change
+        // the address the customer confirmed.
+        val link = DeepLinkParser.route(
+            "tasktracker://connect?url=https%3A%2F%2Ftasks.example.com%2Fa%252Fb",
+        )
+        assertEquals("https://tasks.example.com/a%2Fb", link?.serverAddress)
+    }
+
+    @Test
+    fun `a connect link reads only its own query parameter`() {
+        val link = DeepLinkParser.route(
+            "tasktracker://connect?utm_source=cli&url=https%3A%2F%2Ftasks.example.com#top",
+        )
+        assertEquals("https://tasks.example.com", link?.serverAddress)
+    }
+
+    @Test
+    fun `a connect link without an address is refused`() {
+        assertNull(DeepLinkParser.route("tasktracker://connect"))
+        assertNull(DeepLinkParser.route("tasktracker://connect?utm_source=cli"))
+        assertNull(DeepLinkParser.route("tasktracker://connect?url="))
+    }
+
+    @Test
+    fun `a connect link with a malformed escape is refused`() {
+        // The alternative is prefilling an address the CLI never printed. A literal `%` is
+        // not forgiven here the way it is in a path segment.
+        assertNull(DeepLinkParser.route("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com%2"))
+        assertNull(DeepLinkParser.route("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com%ZZ"))
+    }
+
+    @Test
+    fun `a connect link with a path instead of a query is refused`() {
+        assertNull(DeepLinkParser.route("tasktracker://connect/now?url=https%3A%2F%2Ftasks.example.com"))
+    }
+
+    @Test
+    fun `only a connect link carries an address`() {
+        assertNull(DeepLinkParser.route("tasktracker://settings")?.serverAddress)
+        assertNull(DeepLinkParser.route("tasktracker://board/$PROJECT_UUID")?.serverAddress)
+    }
 }
 
 class RouterTest {
@@ -368,6 +422,83 @@ class RouterTest {
         val router = Router()
         assertFalse(router.open("tasktracker://projects"))
         assertEquals(RootDestination.Auth, router.root)
+    }
+
+    @Test
+    fun `a pairing link opens settings and keeps its address for the screen`() {
+        val router = Router()
+        router.enterMain()
+
+        assertTrue(router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com"))
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertTrue(router.path(AppTab.Settings).isEmpty())
+        assertEquals("https://tasks.example.com", router.state.value.pendingServerAddress)
+    }
+
+    @Test
+    fun `a pairing link scanned while signed out waits for sign-in`() {
+        val router = Router()
+
+        assertTrue(router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com"))
+        assertEquals(RootDestination.Auth, router.root)
+        assertEquals("https://tasks.example.com", router.state.value.pendingServerAddress)
+
+        router.enterMain()
+
+        assertEquals(RootDestination.Main, router.root)
+        assertEquals(
+            AppTab.Settings,
+            router.selectedTab,
+            "expected the first signed-in frame to be the screen that can finish the pairing",
+        )
+        assertEquals("https://tasks.example.com", router.state.value.pendingServerAddress)
+    }
+
+    @Test
+    fun `an already signed-out session keeps a scanned address while it restores`() {
+        // The launch sequence asks the session layer after the link arrives; `enterAuth` on a
+        // root that is already Auth must not read as a sign-out and throw the link away.
+        val router = Router()
+        router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+
+        router.enterAuth()
+
+        assertEquals("https://tasks.example.com", router.state.value.pendingServerAddress)
+    }
+
+    @Test
+    fun `an unconsumed address survives an unrelated link`() {
+        val router = Router()
+        router.enterMain()
+        router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+
+        router.open("tasktracker://projects")
+
+        assertEquals(AppTab.Projects, router.selectedTab)
+        assertEquals("https://tasks.example.com", router.state.value.pendingServerAddress)
+    }
+
+    @Test
+    fun `consuming an address clears it exactly once`() {
+        val router = Router()
+        router.enterMain()
+        router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+
+        assertEquals("https://tasks.example.com", router.consumePendingServerAddress())
+        assertNull(router.consumePendingServerAddress())
+        assertNull(router.state.value.pendingServerAddress)
+    }
+
+    @Test
+    fun `signing out discards an address the session did not consume`() {
+        val router = Router()
+        router.enterMain()
+        router.open("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+
+        router.enterAuth()
+
+        assertNull(router.state.value.pendingServerAddress)
     }
 
     @Test

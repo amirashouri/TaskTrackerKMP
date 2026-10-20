@@ -130,6 +130,7 @@ fun RootScreen(
     resolver: Resolver,
     modifier: Modifier = Modifier,
     splashMinimumHoldMillis: Long = SPLASH_MINIMUM_HOLD_MILLIS,
+    deepLinks: DeepLinkSource = appDeepLinks,
 ) {
     val router = remember(resolver) { resolver.resolve(Router::class) }
     // Handed to `ProvideAuthSession` for the sign-in form's own model. Not a subscription:
@@ -188,6 +189,12 @@ fun RootScreen(
     // where the splash and the tree disagree about the session.
     var navigation by remember(router) { mutableStateOf(router.state.value) }
     LaunchedEffect(router) { router.state.collect { navigation = it } }
+
+    // The one place platform-delivered URLs become navigation. The source buffers, so a link
+    // that launched the process is still here when this effect starts; `Router.open` is also
+    // what decides that a pairing link scanned on the auth gate waits for sign-in, so this
+    // collector must not grow a second policy of its own.
+    LaunchedEffect(deepLinks) { deepLinks.urls.collect { router.open(it) } }
 
     val showsSplash = !hasHeldMinimum || navigation.isRestoringSession
 

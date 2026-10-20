@@ -304,6 +304,24 @@ class SettingsModelTest {
     }
 
     @Test
+    fun openingTheEditorForAPairingLinkPrefillsTheLinkOverTheSavedOverride() = runTest {
+        val port = RecordingSettingsPort().apply {
+            serverAddressValue = ServerAddressSettings(
+                inUse = "https://old.example.com",
+                savedOverride = "https://new.example.com",
+            )
+        }
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.openServerAddressEditor(prefill = "https://paired.example.com")
+
+        // The link is the address the customer just chose by scanning. A preference they set
+        // before the scan must not hide it, or the pairing link becomes a no-op.
+        assertEquals("https://paired.example.com", model.serverAddressEditor?.draft)
+    }
+
+    @Test
     fun openingTheEditorWithNoOverridePrefillsTheInUseAddress() = runTest {
         val port = RecordingSettingsPort()
         val model = SettingsModel(port)

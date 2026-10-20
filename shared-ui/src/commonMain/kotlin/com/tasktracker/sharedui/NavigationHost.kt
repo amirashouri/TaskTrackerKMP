@@ -1970,6 +1970,18 @@ private fun SettingsDestination(
     // member and project management.
     val isAdmin = preferences.currentUserRole.collectAsState().value == UserRole.Admin
 
+    // A pairing link arrives as an intent, not a screen: the router holds the address until
+    // this destination exists to carry it out. Consuming on arrival is what makes it one-shot —
+    // a recomposition, or a later visit to the tab, finds nothing and leaves the editor closed.
+    // The model lets the link win over the saved override for the same reason it was scanned:
+    // it is the address the user just chose.
+    val pendingServerAddress = router.state.collectAsState().value.pendingServerAddress
+    LaunchedEffect(pendingServerAddress) {
+        val prefill = pendingServerAddress ?: return@LaunchedEffect
+        model.openServerAddressEditor(prefill = prefill)
+        router.consumePendingServerAddress()
+    }
+
     SettingsScreen(
         connectivity = model.connectivity,
         activity = model.activity,

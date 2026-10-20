@@ -61,7 +61,7 @@ link contract.
 | 6.1 | Complete | P0 | Runtime API root override | None | [`6.1-runtime-api-root.md`](../specs/6.1-runtime-api-root.md) |
 | 6.3 | Complete | P0 | Validate a server URL before saving | 6.1 | [`6.3-server-url-validation.md`](../specs/6.3-server-url-validation.md) |
 | 6.2 | Complete | P0 | Server field in Settings | 6.1, 6.3 | [`6.2-server-field-in-settings.md`](../specs/6.2-server-field-in-settings.md) |
-| 6.4 | Pending | P0 | `tasktracker://connect?url=…` pairing link | 6.1–6.3; server T9.7 | [`6.4-connect-deep-link.md`](../specs/6.4-connect-deep-link.md) |
+| 6.4 | Complete | P0 | `tasktracker://connect?url=…` pairing link | 6.1–6.3; server T9.7 | [`6.4-connect-deep-link.md`](../specs/6.4-connect-deep-link.md) |
 
 The intended order is 6.1 → 6.3 → 6.2 → 6.4. The server-side CLI work and shared link grammar are tracked in
 [`TaskTrackerServer/docs/PLAN.md`](../../TaskTrackerServer/docs/PLAN.md), T9.7.

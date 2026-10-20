@@ -20,6 +20,12 @@ struct TaskTrackerApp: App {
         WindowGroup {
             MainViewControllerContainer()
                 .ignoresSafeArea(.all)
+                // The custom scheme, including the CLI's `tasktracker://connect` pairing
+                // link. Kotlin's sink buffers until Compose is collecting, so a cold start
+                // that delivers this before the controller exists is not lost.
+                .onOpenURL { url in
+                    DeepLinkSourceKt.receiveDeepLink(url: url.absoluteString)
+                }
         }
     }
 }

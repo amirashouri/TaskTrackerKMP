@@ -51,6 +51,9 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun theSettingsTabEndsTheSession() = runComposeUiTest(block = ShellScenarios.theSettingsTabEndsTheSession)
     @Test
+    fun aConnectLinkOpensSettingsWithTheAddressPrefilled() =
+        runComposeUiTest(block = ShellScenarios.aConnectLinkOpensSettingsWithTheAddressPrefilled)
+    @Test
     fun signingOutClearsTheNavigationStack() = runComposeUiTest(block = ShellScenarios.signingOutClearsTheNavigationStack)
     @Test
     fun openingAProjectShowsItsBoard() = runComposeUiTest(block = ShellScenarios.openingAProjectShowsItsBoard)

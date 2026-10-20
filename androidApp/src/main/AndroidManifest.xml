@@ -48,11 +48,26 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.TaskTracker"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                The custom scheme every shared deep link uses, including the CLI's
+                `tasktracker://connect` pairing link. `BROWSABLE` is what lets a scanner or a
+                browser hand the URL over; `DEFAULT` makes the implicit intent resolvable. The
+                scheme is the whole selector: the shared parser validates the host and path, so
+                a filter per screen would be a second grammar that could disagree with it.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tasktracker" />
             </intent-filter>
         </activity>
     </application>

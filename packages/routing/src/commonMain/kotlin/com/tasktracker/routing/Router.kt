@@ -31,6 +31,15 @@ data class RouterState(
     val sprintsPath: List<AppRoute> = emptyList(),
     val settingsPath: List<AppRoute> = emptyList(),
     val activeProjectID: ProjectID? = null,
+    /**
+     * A server address from a `tasktracker://connect` link, waiting for Settings to consume it.
+     *
+     * Not part of any path: it is an intent the Settings screen carries out once (open its
+     * editor with this value), not a screen. [Router.open] fills it and
+     * [Router.consumePendingServerAddress] empties it. It lives on the state so a link scanned
+     * before sign-in survives `enterMain`.
+     */
+    val pendingServerAddress: String? = null,
 ) {
     /**
      * The navigation stack belonging to [onTab].
@@ -114,7 +123,17 @@ class Router {
             state.copy(isRestoringSession = false)
         } else {
             logNotice("routing -> main")
-            state.clearedNavigation().copy(root = RootDestination.Main, isRestoringSession = false)
+            state.clearedNavigation().copy(
+                root = RootDestination.Main,
+                isRestoringSession = false,
+                // A pairing link scanned before sign-in is waiting on the screen that can
+                // carry it out, so the first signed-in frame is already on Settings.
+                selectedTab = if (state.pendingServerAddress != null) {
+                    AppTab.Settings
+                } else {
+                    AppTab.Projects
+                },
+            )
         }
     }
 
@@ -135,6 +154,9 @@ class Router {
                 root = RootDestination.Auth,
                 isRestoringSession = false,
                 selectedTab = AppTab.Projects,
+                // A link the previous session had not consumed must not greet the next one:
+                // identity changed, and an address is a decision about whose server it is.
+                pendingServerAddress = null,
             )
         }
     }
@@ -331,6 +353,15 @@ class Router {
         }
         // A link must not be a way around the auth gate.
         if (_state.value.root != RootDestination.Main) {
+            // The pairing link is the one intent worth keeping across sign-in: the customer
+            // scans the code the CLI printed before this device knows who they are. It does
+            // not navigate, so it cannot bypass the gate — `enterMain` lands on Settings and
+            // the screen opens its editor. Every other link keeps the reject.
+            if (link.serverAddress != null) {
+                update { it.copy(pendingServerAddress = link.serverAddress) }
+                logNotice("routing: held a pairing link until sign-in")
+                return true
+            }
             TTLogger.routing.warning { logMessage { append("routing: ignoring link while signed out") } }
             return false
         }
@@ -338,10 +369,30 @@ class Router {
             state.copy(
                 selectedTab = link.tab,
                 activeProjectID = link.path.firstOrNull()?.selectsActiveProject ?: state.activeProjectID,
+                // A later link without an address must not drop one not yet consumed.
+                pendingServerAddress = link.serverAddress ?: state.pendingServerAddress,
             ).withPath(link.tab, link.path)
         }
         logNotice("routing: opened deep link")
         return true
+    }
+
+    /**
+     * Takes the address a pairing link delivered, or `null` when there is none.
+     *
+     * One-shot by construction: the Settings destination calls this when it opens the editor,
+     * so a recomposition or a return to the tab does not reopen it. A compare-and-set loop
+     * rather than [update] because the caller needs the value it removed; reading and then
+     * clearing would let a link arriving in between be silently dropped.
+     */
+    fun consumePendingServerAddress(): String? {
+        while (true) {
+            val current = _state.value
+            val pending = current.pendingServerAddress ?: return null
+            if (_state.compareAndSet(current, current.copy(pendingServerAddress = null))) {
+                return pending
+            }
+        }
     }
 
     /**
