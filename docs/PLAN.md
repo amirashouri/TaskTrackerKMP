@@ -59,7 +59,7 @@ link contract.
 | Task | State | Priority | Intent | Depends on | Execution details |
 | --- | --- | --- | --- | --- | --- |
 | 6.1 | Complete | P0 | Runtime API root override | None | [`6.1-runtime-api-root.md`](../specs/6.1-runtime-api-root.md) |
-| 6.3 | Pending | P0 | Validate a server URL before saving | 6.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 6.3 |
+| 6.3 | Complete | P0 | Validate a server URL before saving | 6.1 | [`6.3-server-url-validation.md`](../specs/6.3-server-url-validation.md) |
 | 6.2 | Pending | P0 | Server field in Settings | 6.1, 6.3 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 6.2 |
 | 6.4 | Pending | P0 | `tasktracker://connect?url=…` pairing link | 6.1–6.3; server T9.7 | [`6.4-connect-deep-link.md`](../specs/6.4-connect-deep-link.md) |
 
