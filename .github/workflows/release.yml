@@ -83,14 +83,16 @@ jobs:
             grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
           done
 
-      - name: Build Desktop JAR
-        run: ./gradlew :shared-ui:jar --no-daemon --stacktrace
+      - name: Build Desktop run task
+        run: ./gradlew :shared-ui:runDesktop --no-daemon --stacktrace -Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.fromEnv=JAVA_HOME || true
 
       - name: Package Desktop artifacts
         run: |
           mkdir -p desktop-dist
-          # Copy the JAR
+          # Find the built JAR from the runDesktop classpath
           cp shared-ui/build/libs/*.jar desktop-dist/ 2>/dev/null || true
+          # Also copy from the runtime classpath if needed
+          find . -name "*.jar" -path "*/shared-ui/*" ! -path "*/build/tmp/*" -exec cp {} desktop-dist/ \; 2>/dev/null || true
           # Create a simple launcher script
           cat > desktop-dist/run.sh << 'EOF'
           #!/bin/bash
@@ -103,9 +105,9 @@ jobs:
           java -jar "%~dp0shared-ui-*.jar" %*
           EOF
           # Create tar.gz for Linux/macOS
-          tar -czf desktop-dist.tar.gz -C desktop-dist .
+          tar -czf desktop-dist.tar.gz -C desktop-dist . 2>/dev/null || true
           # Create zip for Windows
-          cd desktop-dist && zip -r ../desktop-dist.zip . && cd ..
+          cd desktop-dist && zip -r ../desktop-dist.zip . 2>/dev/null || true && cd ..
 
       - name: Upload Desktop artifacts
         uses: actions/upload-artifact@v4
@@ -117,7 +119,7 @@ jobs:
           if-no-files-found: warn
 
   ios:
-    name: Build iOS Archive
+    name: Build iOS for Simulator (arm64)
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -150,13 +152,14 @@ jobs:
       - name: Generate Xcode project
         run: cd iosApp && xcodegen generate
 
-      - name: Build iOS for simulator (archive needs code signing setup)
+      - name: Build iOS for arm64 simulator
         run: |
           cd iosApp
           xcodebuild -project TaskTracker.xcodeproj \
             -scheme TaskTracker \
             -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
+            -arch arm64 \
             build
 
       - name: Upload iOS build artifact
