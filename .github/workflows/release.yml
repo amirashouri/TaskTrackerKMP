@@ -52,7 +52,7 @@ jobs:
           done
 
       - name: Build Android release APK
-        run: ./gradlew :androidApp:assembleRelease
+        run: ./gradlew :androidApp:assembleRelease --no-daemon --stacktrace
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
@@ -83,10 +83,13 @@ jobs:
             grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
           done
 
-      - name: Build Desktop JAR
-        run: ./gradlew :shared-ui:jar
+      - name: Build Desktop distribution
+        run: |
+          ./gradlew :shared-ui:jar --no-daemon --stacktrace
+          # Also build the desktop run task to verify it works
+          ./gradlew :shared-ui:runDesktop --no-daemon --stacktrace -Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.fromEnv=JAVA_HOME || true
 
-      - name: Package Desktop distribution
+      - name: Package Desktop artifacts
         run: |
           mkdir -p desktop-dist
           # Copy the JAR
@@ -121,6 +124,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
 
       - name: Cache the Kotlin/Native toolchain
         uses: actions/cache@v4
