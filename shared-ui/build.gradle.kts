@@ -1,6 +1,26 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+
 plugins {
     id("tasktracker.kmp.library")
     id("tasktracker.kmp.compose")
+}
+
+// The installer version, and only the installer version. `jpackage` validates it per
+// format — Windows wants three numeric parts, and Debian wants a leading digit — so the
+// release workflow strips the tag's leading `v` and passes the rest here as
+// `-PtasktrackerVersion=0.1.6`. The fallback keeps a plain
+// `./gradlew :shared-ui:packageDmg` working on a developer machine.
+val tagVersion = (findProperty("tasktrackerVersion") as String? ?: "0.0.0").removePrefix("v")
+
+// macOS rejects a zero major outright: jpackage stops with "The first number in an
+// app-version cannot be zero or negative", which is every tag this project has cut so
+// far (v0.1.3, v0.1.6). A zero major is bumped to 1 and the rest is left alone, so
+// `v0.1.6` packages as `1.1.6`: valid for `CFBundleShortVersionString`, still ordered
+// across releases, and the release asset is renamed back to the tag by the workflow.
+// The desktop About row reads its version from the bundle only on Android, so nothing
+// in the app displays this number.
+val desktopPackageVersion = tagVersion.split(".").let { parts ->
+    if (parts.first() == "0") (listOf("1") + parts.drop(1)).joinToString(".") else tagVersion
 }
 
 dependencies {
@@ -107,6 +127,22 @@ compose.desktop {
         // 1024px render from tools/generate_app_icon.py; iconutil packed it into
         // AppIcon.icns at shared-ui/src/jvmMain/resources/AppIcon.icns.
         nativeDistributions {
+            // One packaging task is registered per *declared* format, and Compose 1.12
+            // defaults this set to empty: without this line `packageDmg` (and
+            // `packageDeb` / `packageMsi`) do not exist at all — the build exposes only
+            // the deprecated `package` alias and a `packageDistributionForCurrentOS`
+            // that depends on nothing, so the release job fails with
+            // "task 'packageDmg' not found in project ':shared-ui'".
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+
+            // Both feed `jpackage --name/--version`, and therefore both the installer
+            // file name and the `.app` bundle name. Left unset they fall back to the
+            // module name, which is how a `.dmg` would have shipped as
+            // `shared-ui-1.0.0.dmg`. Pinned so the release asset is
+            // `TaskTracker-<version>.dmg` and TaskTracker.app is what the user drags
+            // to /Applications.
+            packageName = "TaskTracker"
+            packageVersion = desktopPackageVersion
             macOS {
                 iconFile = file("src/jvmMain/resources/AppIcon.icns")
             }
