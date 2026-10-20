@@ -51,14 +51,14 @@ jobs:
             grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
           done
 
-      - name: Build Android release APK
-        run: ./gradlew :androidApp:assembleRelease --no-daemon --stacktrace
+      - name: Build Android debug APK (release signing needs keystore setup)
+        run: ./gradlew :androidApp:assembleDebug --no-daemon --stacktrace
 
       - name: Upload Android APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: androidApp/build/outputs/apk/release/*.apk
+          path: androidApp/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
   desktop:
@@ -83,11 +83,8 @@ jobs:
             grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
           done
 
-      - name: Build Desktop distribution
-        run: |
-          ./gradlew :shared-ui:jar --no-daemon --stacktrace
-          # Also build the desktop run task to verify it works
-          ./gradlew :shared-ui:runDesktop --no-daemon --stacktrace -Porg.gradle.java.installations.auto-detect=false -Porg.gradle.java.installations.fromEnv=JAVA_HOME || true
+      - name: Build Desktop JAR
+        run: ./gradlew :shared-ui:jar --no-daemon --stacktrace
 
       - name: Package Desktop artifacts
         run: |
@@ -153,21 +150,20 @@ jobs:
       - name: Generate Xcode project
         run: cd iosApp && xcodegen generate
 
-      - name: Build iOS archive (Release)
+      - name: Build iOS for simulator (archive needs code signing setup)
         run: |
           cd iosApp
           xcodebuild -project TaskTracker.xcodeproj \
             -scheme TaskTracker \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
-            -archivePath ../TaskTracker.xcarchive \
-            archive
+            -destination 'generic/platform=iOS Simulator' \
+            build
 
-      - name: Upload iOS archive artifact
+      - name: Upload iOS build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-archive
-          path: TaskTracker.xcarchive
+          name: ios-build
+          path: iosApp/build/
           if-no-files-found: warn
 
   release:
@@ -187,10 +183,10 @@ jobs:
           name: desktop-binaries
           path: artifacts/desktop
 
-      - name: Download iOS archive
+      - name: Download iOS build
         uses: actions/download-artifact@v4
         with:
-          name: ios-archive
+          name: ios-build
           path: artifacts/ios
 
       - name: List artifacts
@@ -214,15 +210,15 @@ jobs:
 
             | Platform | File |
             |----------|------|
-            | Android (APK) | `tasktracker-android-${{ github.ref_name }}.apk` |
-            | iOS (xcarchive) | `TaskTracker.xcarchive` (open in Xcode to export IPA) |
+            | Android (APK, debug) | `tasktracker-android-${{ github.ref_name }}.apk` |
+            | iOS (simulator build) | See iOS build artifacts |
             | Desktop (Linux/macOS/Windows) | `desktop-dist.tar.gz` / `desktop-dist.zip` |
 
             ### Installation
 
-            **Android:** Download the APK and install on your device. Enable "Install from unknown sources" if needed.
+            **Android:** Download the APK and install on your device. Enable "Install from unknown sources" if needed. *This is a debug build.*
 
-            **iOS:** Open `TaskTracker.xcarchive` in Xcode → Organizer → Distribute App to export an IPA, or use `xcodebuild -exportArchive`.
+            **iOS:** This build is for iOS Simulator only. For device installation, configure code signing and create an archive in Xcode.
 
             **Desktop:** Extract `desktop-dist.tar.gz` (Linux/macOS) or `desktop-dist.zip` (Windows) and run `./run.sh` or `run.bat`.
 
@@ -233,7 +229,7 @@ jobs:
 
           files: |
             artifacts/android/*.apk
-            artifacts/ios/TaskTracker.xcarchive
+            artifacts/ios/**/*
             artifacts/desktop/*.tar.gz
             artifacts/desktop/*.zip
         env:
