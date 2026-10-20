@@ -1,0 +1,234 @@
+name: release
+
+# Runs only on tag push (v*) or manual dispatch — not on every push to main.
+# Builds Android APK, iOS archive, and Desktop (JVM) JAR, then creates a GitHub Release.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to create (e.g., v1.0.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write  # needed to create release and upload assets
+
+jobs:
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Accept the Android SDK licences
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
+
+      - name: Build Android release APK
+        run: ./gradlew :androidApp:assembleRelease
+
+      - name: Upload Android APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: androidApp/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  desktop:
+    name: Build Desktop (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
+
+      - name: Build Desktop JAR
+        run: ./gradlew :shared-ui:jar
+
+      - name: Package Desktop distribution
+        run: |
+          mkdir -p desktop-dist
+          # Copy the JAR
+          cp shared-ui/build/libs/*.jar desktop-dist/ 2>/dev/null || true
+          # Create a simple launcher script
+          cat > desktop-dist/run.sh << 'EOF'
+          #!/bin/bash
+          java -jar $(dirname "$0")/shared-ui-*.jar "$@"
+          EOF
+          chmod +x desktop-dist/run.sh
+          # Also create a Windows batch file
+          cat > desktop-dist/run.bat << 'EOF'
+          @echo off
+          java -jar "%~dp0shared-ui-*.jar" %*
+          EOF
+          # Create tar.gz for Linux/macOS
+          tar -czf desktop-dist.tar.gz -C desktop-dist .
+          # Create zip for Windows
+          cd desktop-dist && zip -r ../desktop-dist.zip . && cd ..
+
+      - name: Upload Desktop artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-binaries
+          path: |
+            desktop-dist.tar.gz
+            desktop-dist.zip
+          if-no-files-found: warn
+
+  ios:
+    name: Build iOS Archive
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the Kotlin/Native toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('**/libs.versions.toml') }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Point Gradle at the runner's JDK, apply the tuning flags
+        run: |
+          echo "org.gradle.java.home=${JAVA_HOME}" >> gradle.properties
+          for prop in org.gradle.parallel=true org.gradle.caching=true org.gradle.configuration-cache=true; do
+            grep -qx "$prop" gradle.properties || echo "$prop" >> gradle.properties
+          done
+
+      - name: Generate Xcode project
+        run: cd iosApp && xcodegen generate
+
+      - name: Build iOS archive (Release)
+        run: |
+          cd iosApp
+          xcodebuild -project TaskTracker.xcodeproj \
+            -scheme TaskTracker \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath ../TaskTracker.xcarchive \
+            archive
+
+      - name: Upload iOS archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-archive
+          path: TaskTracker.xcarchive
+          if-no-files-found: warn
+
+  release:
+    name: Create GitHub Release
+    needs: [android, desktop, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Android APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts/android
+
+      - name: Download Desktop binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-binaries
+          path: artifacts/desktop
+
+      - name: Download iOS archive
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-archive
+          path: artifacts/ios
+
+      - name: List artifacts
+        run: |
+          echo "Android artifacts:"
+          ls -la artifacts/android/ || true
+          echo "Desktop artifacts:"
+          ls -la artifacts/desktop/ || true
+          echo "iOS artifacts:"
+          ls -la artifacts/ios/ || true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: TaskTracker ${{ github.ref_name }}
+          body: |
+            ## TaskTracker ${{ github.ref_name }}
+
+            ### Downloads
+
+            | Platform | File |
+            |----------|------|
+            | Android (APK) | `tasktracker-android-${{ github.ref_name }}.apk` |
+            | iOS (xcarchive) | `TaskTracker.xcarchive` (open in Xcode to export IPA) |
+            | Desktop (Linux/macOS/Windows) | `desktop-dist.tar.gz` / `desktop-dist.zip` |
+
+            ### Installation
+
+            **Android:** Download the APK and install on your device. Enable "Install from unknown sources" if needed.
+
+            **iOS:** Open `TaskTracker.xcarchive` in Xcode → Organizer → Distribute App to export an IPA, or use `xcodebuild -exportArchive`.
+
+            **Desktop:** Extract `desktop-dist.tar.gz` (Linux/macOS) or `desktop-dist.zip` (Windows) and run `./run.sh` or `run.bat`.
+
+            ### Server Compatibility
+
+            This release works with TaskTrackerServer at the same version tag.
+            See [TaskTrackerServer releases](https://github.com/amirashouri/TaskTrackerServer/releases/tag/${{ github.ref_name }}).
+
+          files: |
+            artifacts/android/*.apk
+            artifacts/ios/TaskTracker.xcarchive
+            artifacts/desktop/*.tar.gz
+            artifacts/desktop/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
