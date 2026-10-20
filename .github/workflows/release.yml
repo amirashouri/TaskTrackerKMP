@@ -158,8 +158,7 @@ jobs:
           xcodebuild -project TaskTracker.xcodeproj \
             -scheme TaskTracker \
             -configuration Release \
-            -destination 'generic/platform=iOS Simulator' \
-            -arch arm64 \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
             build
 
       - name: Upload iOS build artifact
