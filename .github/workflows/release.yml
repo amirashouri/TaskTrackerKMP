@@ -167,6 +167,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [android, desktop, desktop-macos, ios]
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Download Android APK
