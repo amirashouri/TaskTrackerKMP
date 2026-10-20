@@ -12,9 +12,16 @@ package com.tasktracker.compositionroot
  * Split into [jvmApiBaseUrl] and this one-line `actual` so the rule is a pure function of a
  * map. A test can then pin both the default and the override without owning the test process's
  * environment, which it cannot mutate safely anyway.
+ *
+ * A server address saved in Settings wins over the environment variable. That preference is
+ * read through [storedApiBaseUrl]; the environment stays the build-time answer for a build a
+ * customer has not configured yet.
  */
-actual fun platformApiBaseUrl(@Suppress("UNUSED_PARAMETER") host: Any?): String =
-    jvmApiBaseUrl(System.getenv())
+actual fun platformApiBaseUrl(host: Any?): String =
+    apiBaseUrlWithOverride(
+        buildTime = jvmApiBaseUrl(System.getenv()),
+        storedOverride = storedApiBaseUrl(host),
+    )
 
 /** The environment variable that overrides [platformApiBaseUrl] on the JVM. */
 internal const val API_BASE_URL_ENV_VAR: String = "TASKTRACKER_API_URL"

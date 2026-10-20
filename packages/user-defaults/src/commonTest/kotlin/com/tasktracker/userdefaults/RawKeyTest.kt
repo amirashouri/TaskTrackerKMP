@@ -102,6 +102,31 @@ class RawKeyTest {
     }
 
     /**
+     * The customer's server address survives sign-out.
+     *
+     * The same property as the test above, named for the key that depends on it. A server
+     * address belongs to the device; if it moved into [DefaultsKey], this test goes red
+     * while a generic "raw keys persist" test stays green.
+     */
+    @Test
+    fun `the saved server address survives sign-out`() = runTest {
+        val backend = InMemoryPreferences()
+        val store = UserDefaultsStore(backend)
+
+        store.set("https://tasks.example.com", key = API_BASE_URL_PREFERENCE_KEY)
+        store.set("p1", key = DefaultsKey.LastSeenProject)
+
+        store.removeAll()
+
+        assertEquals(
+            "https://tasks.example.com",
+            store.value(API_BASE_URL_PREFERENCE_KEY),
+            "signing out must not make the customer re-enter their server address",
+        )
+        assertNull(store.value(DefaultsKey.LastSeenProject))
+    }
+
+    /**
      * The value is the plain string, not a JSON encoding.
      *
      * Asserted on the stored bytes rather than on the round trip, for the same reason as the
