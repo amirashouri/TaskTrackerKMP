@@ -230,12 +230,20 @@ jobs:
       # linked from the same list, so a link cannot point at a file that is not
       # attached.
       - name: Stage release assets
+        env:
+          # `download-artifact` keys each directory by artifact *name*, so these
+          # have to match the upload steps above. `android-apk` did not, and the
+          # APK was silently dropped from v0.1.7's release while its job was green.
+          ANDROID_RESULT: ${{ needs.android.result }}
+          DEB_RESULT: ${{ needs.desktop.result }}
+          MSI_RESULT: ${{ needs.desktop-windows.result }}
+          DMG_RESULT: ${{ needs.desktop-macos.result }}
         run: |
           set -euo pipefail
           shopt -s nullglob
           mkdir -p release-assets
 
-          for f in artifacts/android/*.apk; do
+          for f in artifacts/android-apk/*.apk; do
             cp "$f" "release-assets/tasktracker-android-${RELEASE_TAG}.apk"
           done
           for f in artifacts/desktop-deb/*.deb; do
@@ -250,6 +258,20 @@ jobs:
 
           echo "Staged assets:"
           ls -la release-assets
+
+          # A green build job that produced no asset means a path in this script is
+          # wrong, not that the platform was skipped — fail instead of publishing a
+          # release that quietly lost a platform.
+          require() {
+            if [ "$1" = "success" ] && [ ! -e "$2" ]; then
+              echo "::error::$3 finished successfully but no asset was staged at $2"
+              exit 1
+            fi
+          }
+          require "$ANDROID_RESULT" "release-assets/tasktracker-android-${RELEASE_TAG}.apk" "Android APK"
+          require "$DEB_RESULT" "release-assets/TaskTracker-${RELEASE_TAG}.deb" "Linux DEB"
+          require "$MSI_RESULT" "release-assets/TaskTracker-${RELEASE_TAG}.msi" "Windows MSI"
+          require "$DMG_RESULT" "release-assets/TaskTracker-${RELEASE_TAG}.dmg" "macOS DMG"
 
       - name: Compose the release body
         run: |
