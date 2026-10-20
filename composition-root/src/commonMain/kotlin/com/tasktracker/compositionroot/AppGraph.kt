@@ -38,8 +38,10 @@ import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
 import com.tasktracker.featureprojectsdomain.UploadAttachment
+import com.tasktracker.featuresettingsdata.HttpServerAddressProbe
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
+import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featureteamsdata.HttpMemberAdminRemote
 import com.tasktracker.featureteamsdata.HttpTeamRemote
@@ -759,6 +761,12 @@ object AppGraph {
                         now = resolver.resolve(DateProvider::class).now(),
                     )
                 },
+                // The in-use root, read from the same binding the shells passed, and the
+                // validate-then-probe pair 6.3 landed. `HttpServerAddressProbe()` builds no
+                // engine until a check runs, so constructing it here keeps graph construction
+                // free of platform calls — the property `HostedGraphScenarios` asserts.
+                apiBaseUrl = platforms.apiBaseUrl,
+                checkServerAddress = CheckServerAddress(HttpServerAddressProbe()),
                 defaults = resolver.resolve(UserDefaultsStore::class),
             )
         }

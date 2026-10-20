@@ -15,6 +15,8 @@ import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
@@ -343,6 +345,22 @@ class FakeShellSettingsPort(
     override fun userDetailsUpdates(): Flow<UserDetails> = emptyFlow()
 
     override suspend fun setUserDetails(details: UserDetails) = Unit
+
+    /**
+     * Inert, like the feature's own fake, and for the same reason: the shell scenarios that
+     * reach Settings are testing what the shell *binds*, not the save/probe order, which
+     * `LiveSettingsServiceTest` asserts against the real service and a fake probe.
+     *
+     * A no-server state is the honest stand-in: these scenarios build the shell without a
+     * backend, so a non-null address here would be a value nothing is listening on.
+     */
+    override suspend fun serverAddress(): ServerAddressSettings =
+        ServerAddressSettings(inUse = null, savedOverride = null)
+
+    override suspend fun setServerAddress(input: String): ServerAddressValidation =
+        ServerAddressValidation.Valid(input)
+
+    override suspend fun resetServerAddress() = Unit
 }
 
 /** A signed-in state for tests, with a recognisable address. */

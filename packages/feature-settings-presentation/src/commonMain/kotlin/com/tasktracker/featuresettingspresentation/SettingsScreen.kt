@@ -27,6 +27,7 @@ import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_activity_failed
@@ -44,6 +45,10 @@ import com.tasktracker.resources.settings_manage_members
 import com.tasktracker.resources.settings_manage_projects
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_outcome_offline
+import com.tasktracker.resources.settings_server_label
+import com.tasktracker.resources.settings_server_none
+import com.tasktracker.resources.settings_server_reset_notice
+import com.tasktracker.resources.settings_server_saved_notice
 import com.tasktracker.resources.settings_sign_out
 import com.tasktracker.resources.settings_signout_blocked_body
 import com.tasktracker.resources.settings_signout_blocked_title
@@ -134,6 +139,22 @@ fun SettingsScreen(
     isAdmin: Boolean = false,
     onManageMembers: () -> Unit = {},
     onManageProjects: () -> Unit = {},
+    /**
+     * The API root this launch is using and the one saved for the next, the open editor (or
+     * `null` when the sheet is closed), and the last save/reset notice.
+     *
+     * All defaulted so the previews and the scenarios that do not exercise the Server field
+     * compile unchanged, and so the screen stays a function of its arguments — the model owns
+     * every one of these values and the shell binds them.
+     */
+    serverAddress: ServerAddressSettings = ServerAddressSettings(inUse = null, savedOverride = null),
+    serverAddressEditor: ServerAddressEditor? = null,
+    serverAddressNotice: ServerAddressNotice? = null,
+    onEditServerAddress: () -> Unit = {},
+    onServerAddressDraftChange: (String) -> Unit = {},
+    onSaveServerAddress: () -> Unit = {},
+    onResetServerAddress: () -> Unit = {},
+    onDismissServerAddress: () -> Unit = {},
 ) {
     // The list and the confirmation popup are siblings in one box, so the popup floats over
     // the list rather than scrolling with it. `modifier` lands here rather than on the
@@ -238,6 +259,34 @@ fun SettingsScreen(
                         onPreview = onGlassIntensityPreview,
                         onCommit = onGlassIntensityCommit,
                     )
+                }
+            }
+            // The Server section leads the connection group. Its row shows the address the
+            // running clients are bound to — the honest reading, since a save cannot take
+            // effect until the next launch — and the sheet edits the address the next launch
+            // will read. A save or reset leaves a notice here saying so, which is the whole of
+            // the restart promise surfaced where the user makes the choice.
+            item {
+                SettingsSection {
+                    ServerAddressRow(
+                        label = stringResource(Res.string.settings_server_label),
+                        address = serverAddressLabel(serverAddress),
+                        icon = ttSettingsIcons.connectivity,
+                        onClick = onEditServerAddress,
+                        modifier = Modifier.testTag(SettingsServerRowTag),
+                    )
+                    serverAddressNotice?.let { notice ->
+                        SettingsDivider()
+                        ttText(
+                            text = serverAddressNoticeLabel(notice),
+                            style = ttTypography.footnote,
+                            color = ttLabelSecondary(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = ttSpacing.sm)
+                                .testTag(SettingsServerNoticeTag),
+                        )
+                    }
                 }
             }
             item {
@@ -397,6 +446,23 @@ fun SettingsScreen(
                 tag = SettingsForceSignOutTag,
             )
         }
+
+        // The editor is a second sibling of the list, for the same reason the popup is: it has
+        // to float over the whole screen rather than scroll with the row that opened it. The
+        // model's editor being non-null is both the visibility and the draft — see
+        // `ServerAddressEditor` — so there is no flag here that could disagree with the field.
+        serverAddressEditor?.let { editor ->
+            ServerAddressSheet(
+                draft = editor.draft,
+                isChecking = editor.isChecking,
+                failure = editor.failure,
+                canReset = serverAddress.isCustom,
+                onDraftChange = onServerAddressDraftChange,
+                onSave = onSaveServerAddress,
+                onReset = onResetServerAddress,
+                onDismiss = onDismissServerAddress,
+            )
+        }
     }
 }
 
@@ -444,6 +510,26 @@ private fun outcomeMessage(outcome: SyncOutcome): String? = when (outcome) {
     SyncOutcome.Offline -> stringResource(Res.string.settings_outcome_offline)
 }
 
+/**
+ * The Server row's value: the address this launch is using, or the no-server label.
+ *
+ * Deliberately the *in-use* root and not the saved override. A save cannot rebind the running
+ * clients, so showing the saved value here would claim the change is live; the notice below the
+ * row is what carries "next launch".
+ */
+@Composable
+private fun serverAddressLabel(address: ServerAddressSettings): String =
+    address.inUse ?: stringResource(Res.string.settings_server_none)
+
+/** The notice under the Server row, as the sentence for the command that raised it. */
+@Composable
+private fun serverAddressNoticeLabel(notice: ServerAddressNotice): String = stringResource(
+    when (notice) {
+        ServerAddressNotice.Saved -> Res.string.settings_server_saved_notice
+        ServerAddressNotice.Reset -> Res.string.settings_server_reset_notice
+    },
+)
+
 const val SettingsScreenTag = "settings.screen"
 const val SettingsSyncNowTag = "settings.syncNow"
 const val SettingsSignOutTag = "settings.signOut"
@@ -462,6 +548,11 @@ const val SettingsRetryStuckTag = "settings.retryStuck"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
+
+/** The Server row and the restart notice it can raise. Both tags, because a scenario has to be
+ * able to say "the row is there" and "the notice says so" as two separate claims. */
+const val SettingsServerRowTag = "settings.serverRow"
+const val SettingsServerNoticeTag = "settings.serverNotice"
 
 /**
  * The two admin-only entries. Tags of their own rather than one shared tag, because the gate and

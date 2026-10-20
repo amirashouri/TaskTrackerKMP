@@ -121,4 +121,34 @@ interface SettingsPort {
 
     /** Read once, not streamed: a running app's version cannot change. */
     fun appVersion(): AppVersion
+
+    /**
+     * The address this process is using, and the address saved for the next one.
+     *
+     * Two values rather than one, and the split is the feature: the API root is bound once,
+     * while the app-scoped HTTP clients are built, so a saved change cannot take effect until
+     * the next launch. The screen shows [ServerAddressSettings.inUse] and offers to edit
+     * [ServerAddressSettings.savedOverride].
+     */
+    suspend fun serverAddress(): ServerAddressSettings
+
+    /**
+     * Checks [input] as a TaskTracker server and, only when it answers, saves the normalized
+     * address for the next launch.
+     *
+     * Validation, the health probe and the write are one operation here rather than three the
+     * screen has to sequence, because "saved" *is* "checked": a caller cannot forget the middle
+     * step. The return value is the check's own answer — the screen renders the failure reason
+     * and does not repeat the rule.
+     */
+    suspend fun setServerAddress(input: String): ServerAddressValidation
+
+    /**
+     * Forgets any saved address, so the next launch falls back to the build-time default.
+     *
+     * The counterpart to [setServerAddress], and the reason the setting is reversible: a
+     * customer who mistypes an address, or moves off a temporary exposure, is not stranded with
+     * a value only a reinstall could clear.
+     */
+    suspend fun resetServerAddress()
 }

@@ -1,7 +1,10 @@
 package com.tasktracker.featuresettingsdata
 
 import com.tasktracker.featuresettingsdomain.AppVersion
+import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
@@ -11,6 +14,7 @@ import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncStatus
 import com.tasktracker.sync.SyncTrigger
+import com.tasktracker.userdefaults.API_BASE_URL_PREFERENCE_KEY
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.Flow
@@ -78,6 +82,23 @@ class LiveSettingsService(
      * every build was in before this existed.
      */
     private val onRetryStuckChanges: suspend () -> Unit = {},
+    /**
+     * The API root this process bound its app-scoped clients to, or `null` in the offline demo.
+     *
+     * Passed in rather than read from the preference, and that is the decision the whole Server
+     * field turns on: the preference is the *next* launch's root, while this is the one already
+     * on the wire. Reading the preference here would make the row report a change the running
+     * clients have not taken.
+     */
+    private val apiBaseUrl: String?,
+    /**
+     * The validate-then-probe operation, as 6.3 landed it.
+     *
+     * Injected rather than constructed here so the save path is testable without a socket, and
+     * so this data service never has to name the Ktor probe — the composition root builds the
+     * pair.
+     */
+    private val checkServerAddress: CheckServerAddress,
     private val defaults: UserDefaultsStore,
 ) : SettingsPort {
 
@@ -184,6 +205,46 @@ class LiveSettingsService(
         // Persist so the choice survives a process restart — avatarId, fullName, position
         // and email are all kept together so a picked portrait comes back on the next launch.
         defaults.set(details, DefaultsKey.UserProfile)
+    }
+
+    // MARK: - Server Address
+
+    /**
+     * The in-use root from the constructor, plus the raw override the next launch will read.
+     *
+     * The override is read through the store's **raw**-key overload, so the value is exactly the
+     * one 6.1's resolver reads at startup — same key, same verbatim spelling, no namespace. A
+     * blank value is treated as no override: an empty key is not a server address, and reporting
+     * it as `isCustom` would offer a Reset that has nothing to clear.
+     */
+    override suspend fun serverAddress(): ServerAddressSettings = ServerAddressSettings(
+        inUse = apiBaseUrl,
+        savedOverride = defaults.value(API_BASE_URL_PREFERENCE_KEY)?.takeIf { it.isNotBlank() },
+    )
+
+    /**
+     * Saves only what the probe has just answered for.
+     *
+     * The validator normalises the address, so what lands in the preference is the canonical
+     * form rather than the user's typing; that is the same string the resolver would have to
+     * build a client from, and normalising at read time would be a second chance to disagree.
+     * An `Invalid` result writes nothing — the sheet stays open on the reason.
+     *
+     * The write uses the raw-key overload and ignores its boolean, for the reason 6.1's read
+     * ignores a missing key: this store's `set(String, String)` returns `true` unconditionally.
+     * A preference write is local and synchronous; the failure mode this would otherwise have to
+     * model does not exist here.
+     */
+    override suspend fun setServerAddress(input: String): ServerAddressValidation {
+        val result = checkServerAddress.check(input)
+        if (result is ServerAddressValidation.Valid) {
+            defaults.set(result.baseUrl, API_BASE_URL_PREFERENCE_KEY)
+        }
+        return result
+    }
+
+    override suspend fun resetServerAddress() {
+        defaults.remove(API_BASE_URL_PREFERENCE_KEY)
     }
 
     // MARK: - Translation

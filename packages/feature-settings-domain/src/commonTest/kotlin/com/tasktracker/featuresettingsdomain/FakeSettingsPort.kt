@@ -108,4 +108,22 @@ class FakeSettingsPort(
         userDetailsValue = details
         userDetailsFlow.value = details
     }
+
+    /**
+     * The server-address half is inert here on purpose.
+     *
+     * This fake exists for the domain rules that consume the *other* methods; the save/probe
+     * order and the raw-key write are asserted against `LiveSettingsService` in the data
+     * module, where the real preference store and a fake probe are available. A second
+     * implementation of that rule in a test double would be a second answer to it.
+     */
+    override suspend fun serverAddress(): ServerAddressSettings = ServerAddressSettings(
+        inUse = null,
+        savedOverride = null,
+    )
+
+    override suspend fun setServerAddress(input: String): ServerAddressValidation =
+        ServerAddressValidation.Valid(input)
+
+    override suspend fun resetServerAddress() = Unit
 }

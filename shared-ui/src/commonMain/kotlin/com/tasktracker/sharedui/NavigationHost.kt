@@ -2018,6 +2018,18 @@ private fun SettingsDestination(
         // screen itself is part of that stack.
         onManageMembers = { router.openAdminMembers() },
         onManageProjects = { router.openAdminProjects() },
+        // The Server field. State is read straight from the model; the two writes are
+        // coroutines because each runs a health probe, and the editor's dismissal is a plain
+        // state clear. The model owns the draft and the notice, so the shell decides nothing
+        // here — it only binds.
+        serverAddress = model.serverAddress,
+        serverAddressEditor = model.serverAddressEditor,
+        serverAddressNotice = model.serverAddressNotice,
+        onEditServerAddress = { model.openServerAddressEditor() },
+        onServerAddressDraftChange = { draft -> model.updateServerAddressDraft(draft) },
+        onSaveServerAddress = { scope.launch { model.saveServerAddress() } },
+        onResetServerAddress = { scope.launch { model.resetServerAddress() } },
+        onDismissServerAddress = { model.dismissServerAddressEditor() },
     )
 }
 

@@ -6,6 +6,8 @@ import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SettingsPort
@@ -115,6 +117,20 @@ class PreviewSettingsPort(
     override fun userDetailsUpdates(): kotlinx.coroutines.flow.Flow<UserDetails> = kotlinx.coroutines.flow.flowOf(UserDetails())
 
     override suspend fun setUserDetails(details: UserDetails) = Unit
+
+    /**
+     * A preview has no process to restart, so the server field is inert here.
+     *
+     * The screen's own previews pass their server state as screen parameters, like every other
+     * reading; this is only what the interface requires of a stand-in.
+     */
+    override suspend fun serverAddress(): ServerAddressSettings =
+        ServerAddressSettings(inUse = null, savedOverride = null)
+
+    override suspend fun setServerAddress(input: String): ServerAddressValidation =
+        ServerAddressValidation.Valid(input)
+
+    override suspend fun resetServerAddress() = Unit
 }
 
 
