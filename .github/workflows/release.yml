@@ -175,12 +175,14 @@ jobs:
         with:
           name: android-apk
           path: artifacts/android
+        continue-on-error: true
 
       - name: Download Desktop native packages (Linux/Windows)
         uses: actions/download-artifact@v4
         with:
           name: desktop-native
           path: artifacts/desktop
+        continue-on-error: true
 
       - name: Download Desktop .dmg (macOS)
         uses: actions/download-artifact@v4
