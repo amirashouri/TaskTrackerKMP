@@ -295,15 +295,19 @@ class SettingsModel(private val port: SettingsPort) {
     // MARK: - Server Address
 
     /**
-     * Opens the editor, prefilled with what the next launch will use.
+     * Opens the editor, prefilled with the pending pairing address or what the next launch will
+     * use.
      *
-     * The saved override wins over the in-use root, because the field edits the *preference*:
+     * [prefill] is a `tasktracker://connect` link's address. It wins over both the saved
+     * override and the in-use root, because it is the address the customer just chose by
+     * scanning the CLI's code; showing them anything else would make the link a no-op. The
+     * saved override then wins over the in-use root, because the field edits the *preference*:
      * a user who saved an address and reopened the sheet before restarting means to adjust what
      * they just typed, not to retype the old root.
      */
-    fun openServerAddressEditor() {
+    fun openServerAddressEditor(prefill: String? = null) {
         serverAddressEditor = ServerAddressEditor(
-            draft = serverAddress.savedOverride ?: serverAddress.inUse.orEmpty(),
+            draft = prefill ?: serverAddress.savedOverride ?: serverAddress.inUse.orEmpty(),
         )
         serverAddressNotice = null
     }

@@ -111,6 +111,7 @@ import com.tasktracker.featureprojectspresentation.SprintRowTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featuresettingspresentation.ServerAddressFieldTag
 import com.tasktracker.featuresettingspresentation.SettingsManageMembersTag
 import com.tasktracker.featuresettingspresentation.SettingsManageProjectsTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
@@ -230,6 +231,7 @@ object ShellScenarios {
         splashHold: Long = 0L,
         width: Dp? = PHONE_WIDTH,
         widthState: MutableState<Dp>? = null,
+        deepLinks: DeepLinkSource = DeepLinkSource(),
         navigationEventOwner: NavigationEventDispatcherOwner? = null,
         memberAdminPort: MemberAdminPort? = null,
         adminProjectsPort: AdminProjectsPort? = null,
@@ -266,10 +268,18 @@ object ShellScenarios {
             val shellWidth = widthState?.value ?: width
             val app: @Composable () -> Unit = {
                 if (shellWidth == null) {
-                    TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+                    TaskTrackerApp(
+                        resolver,
+                        splashMinimumHoldMillis = splashHold,
+                        deepLinks = deepLinks,
+                    )
                 } else {
                     Box(modifier = Modifier.width(shellWidth)) {
-                        TaskTrackerApp(resolver, splashMinimumHoldMillis = splashHold)
+                        TaskTrackerApp(
+                            resolver,
+                            splashMinimumHoldMillis = splashHold,
+                            deepLinks = deepLinks,
+                        )
                     }
                 }
             }
@@ -475,6 +485,36 @@ object ShellScenarios {
             onAllNodes(hasText(signedIn().identity.email)).fetchSemanticsNodes().isEmpty(),
             "expected the signed-in identity to stay out of the shell",
         )
+    }
+
+    /**
+     * A pairing link is the CLI's handoff, and the shell is the only place its hops meet.
+     *
+     * The parser is tested in `:packages:routing` and the prefill in
+     * `:packages:feature-settings-presentation`, but neither proves the URL the OS delivered is
+     * the one in the field: the source, the root collector, the router's one-shot address and
+     * the Settings destination can each be correct alone and still not be connected.
+     *
+     * The address is encoded the way `tt` prints it, including a `%` in the payload, so a
+     * second decode or a lost escape shows up here as a different string instead of passing.
+     */
+    val aConnectLinkOpensSettingsWithTheAddressPrefilled: suspend ComposeUiTest.() -> Unit = {
+        val deepLinks = DeepLinkSource()
+        val settings = FakeShellSettingsPort()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            settings = settings,
+            deepLinks = deepLinks,
+        )
+        waitForIdle()
+
+        deepLinks.receive("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com%2Fa%252Fb")
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Settings)).assertIsSelected()
+        onNodeWithTag(ServerAddressFieldTag)
+            .assertIsDisplayed()
+            .assert(hasText("https://tasks.example.com/a%2Fb"))
     }
 
     /**

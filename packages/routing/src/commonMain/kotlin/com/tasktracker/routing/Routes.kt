@@ -168,6 +168,16 @@ data class ParsedLink(
     val route: AppRoute?,
     /** The navigation stack to install before presenting [route]. */
     val path: List<AppRoute>,
+    /**
+     * The address a `tasktracker://connect` link wants prefilled, or `null` for every other
+     * link.
+     *
+     * Carried beside the navigation state rather than as an [AppRoute], because it is a
+     * one-shot intent rather than a destination: the Settings screen opens its editor once
+     * and clears it. A route in the stack would survive a revisit and reopen the editor every
+     * time the user came back to the tab.
+     */
+    val serverAddress: String? = null,
 )
 
 /** Custom URL scheme registered in the iOS `Info.plist` and the Android manifest. */

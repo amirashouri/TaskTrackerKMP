@@ -43,6 +43,14 @@ fun TaskTrackerApp(
      * point into `RootScreen` to keep a suite of signed-in scenarios from paying 700ms each.
      */
     splashMinimumHoldMillis: Long = SPLASH_MINIMUM_HOLD_MILLIS,
+    /**
+     * The platform's URL sink, forwarded to [RootScreen].
+     *
+     * Defaults to the process-wide [appDeepLinks] because production shells deliver links
+     * through [receiveDeepLink] and have no reference to this function's caller. Tests pass
+     * a fresh source so one scenario's link cannot leak into the next.
+     */
+    deepLinks: DeepLinkSource = appDeepLinks,
 ) {
     Box(
         modifier = modifier.fillMaxSize(),
@@ -50,6 +58,7 @@ fun TaskTrackerApp(
         RootScreen(
             resolver = resolver,
             splashMinimumHoldMillis = splashMinimumHoldMillis,
+            deepLinks = deepLinks,
         )
     }
 }
