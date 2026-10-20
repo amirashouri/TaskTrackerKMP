@@ -109,13 +109,10 @@ compose.desktop {
         nativeDistributions {
             macOS {
                 iconFile = file("src/jvmMain/resources/AppIcon.icns")
-                packageType = "dmg"
             }
             windows {
-                packageType = "msi"
             }
             linux {
-                packageType = "deb"
             }
         }
     }
