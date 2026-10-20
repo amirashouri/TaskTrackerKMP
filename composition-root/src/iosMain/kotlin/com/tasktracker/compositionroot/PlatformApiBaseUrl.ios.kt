@@ -17,9 +17,18 @@ import platform.Foundation.NSBundle
  *
  * Split into [iosApiBaseUrl] and this `actual` so the rule is a pure function of a key reader.
  * A test host has no bundle to ask, so a test would otherwise be unable to reach either branch.
+ *
+ * A server address saved in Settings wins over the plist. That preference is read through
+ * [storedApiBaseUrl]; the plist stays the build-time answer for a build a customer has not
+ * configured yet.
  */
-actual fun platformApiBaseUrl(@Suppress("UNUSED_PARAMETER") host: Any?): String =
-    iosApiBaseUrl { key -> NSBundle.mainBundle.objectForInfoDictionaryKey(key) as? String }
+actual fun platformApiBaseUrl(host: Any?): String =
+    apiBaseUrlWithOverride(
+        buildTime = iosApiBaseUrl { key ->
+            NSBundle.mainBundle.objectForInfoDictionaryKey(key) as? String
+        },
+        storedOverride = storedApiBaseUrl(host),
+    )
 
 /** The `Info.plist` key that overrides [platformApiBaseUrl] on iOS. */
 internal const val API_BASE_URL_PLIST_KEY: String = "TaskTrackerApiBaseUrl"

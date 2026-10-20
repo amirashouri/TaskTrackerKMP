@@ -74,3 +74,18 @@ enum class DefaultsKey(val wireValue: String) {
      */
     CachedUserEmail("auth.cachedUserEmail"),
 }
+
+/**
+ * The customer's server address, stored verbatim rather than as a [DefaultsKey].
+ *
+ * Two reasons, both load-bearing:
+ *
+ * - [UserDefaultsStore.removeAll] runs on sign-out and walks [DefaultsKey.entries]. A
+ *   server address belongs to the device, not the session; signing out must not make the
+ *   customer type it again. The raw-key path is the store's existing answer to that.
+ * - It is a URL, not a credential, so it stays in preferences rather than the keychain.
+ *
+ * The value is the whole API root (`https://tasks.example.com`), not a host name. It is
+ * read once at graph start by `platformApiBaseUrl`; see `specs/6.1-runtime-api-root.md`.
+ */
+public const val API_BASE_URL_PREFERENCE_KEY: String = "com.tasktracker.server.apiBaseUrl"

@@ -23,11 +23,18 @@ import android.content.pm.PackageManager
  * throwing: this runs while the graph is being described, and a missing API root is not worth
  * refusing to start the app over.
  *
+ * A server address saved in Settings wins over the manifest value. That preference is read
+ * through [storedApiBaseUrl] — and because it is part of what this function returns, the
+ * local-network permission decision in `MainActivity` covers it too.
+ *
  * Split into [androidApiBaseUrl] and this `actual` so the rule is a pure function of the
  * configured string, which a test can drive without a manifest.
  */
 actual fun platformApiBaseUrl(host: Any?): String =
-    androidApiBaseUrl(readConfiguredApiBaseUrl(host))
+    apiBaseUrlWithOverride(
+        buildTime = androidApiBaseUrl(readConfiguredApiBaseUrl(host)),
+        storedOverride = storedApiBaseUrl(host),
+    )
 
 /** The manifest `<meta-data>` name that overrides [platformApiBaseUrl] on Android. */
 internal const val API_BASE_URL_META_DATA_KEY: String = "com.tasktracker.API_BASE_URL"
