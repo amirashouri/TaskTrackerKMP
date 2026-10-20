@@ -82,9 +82,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: desktop-native
-          path:
-            - shared-ui/build/compose/binaries/main/deb/*.deb
-            - shared-ui/build/compose/binaries/main/msi/*.msi
+          path: |
+            shared-ui/build/compose/binaries/main/deb/*.deb
+            shared-ui/build/compose/binaries/main/msi/*.msi
           if-no-files-found: warn
 
   desktop-macos:
