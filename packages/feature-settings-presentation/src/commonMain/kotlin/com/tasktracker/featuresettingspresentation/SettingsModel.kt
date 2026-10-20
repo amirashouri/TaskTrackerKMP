@@ -7,6 +7,8 @@ import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.RetryStuckChanges
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncNow
@@ -17,6 +19,31 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+
+/**
+ * The open server-address editor: what the user has typed, whether 6.3's check is in flight,
+ * and the check's own answer.
+ *
+ * Its **null-ness is the sheet's visibility** — a non-null editor is the only reason the screen
+ * shows the sheet, so there is no second boolean that could disagree with it and leave a sheet
+ * open over a closed state. The failure is the domain [ServerAddressValidation.Invalid] rather
+ * than a sentence, for the reason [SettingsModel] gives about `commandOutcome`: a model is a
+ * plain class and must not read a resource.
+ */
+data class ServerAddressEditor(
+    val draft: String,
+    val isChecking: Boolean = false,
+    val failure: ServerAddressValidation.Invalid? = null,
+)
+
+/**
+ * What the last server-address command did, in the model's words rather than the screen's.
+ *
+ * Both cases share one promise — the preference is written and the running clients are not
+ * reconfigured until the next launch — which is why the screen renders them through the same
+ * notice and only the verb differs.
+ */
+enum class ServerAddressNotice { Saved, Reset }
 
 /**
  * Drives the Settings screen.
@@ -98,6 +125,30 @@ class SettingsModel(private val port: SettingsPort) {
     var userDetails: UserDetails by mutableStateOf(UserDetails())
         private set
 
+    /**
+     * The address this launch is using, and the address saved for the next, as one value.
+     *
+     * Two fields rather than one current address, because they genuinely differ between a save
+     * and the next launch; see [ServerAddressSettings].
+     */
+    var serverAddress: ServerAddressSettings by mutableStateOf(
+        ServerAddressSettings(inUse = null, savedOverride = null),
+    )
+        private set
+
+    /** The open editor, or `null` when the sheet is closed. See [ServerAddressEditor]. */
+    var serverAddressEditor: ServerAddressEditor? by mutableStateOf(null)
+        private set
+
+    /**
+     * The last save or reset, or `null` when there is nothing to say.
+     *
+     * Cleared when the editor is opened again rather than on a timer: a notice that faded on
+     * its own would leave the row showing the old address with nothing explaining why.
+     */
+    var serverAddressNotice: ServerAddressNotice? by mutableStateOf(null)
+        private set
+
     /** Read once, because a running app's version cannot change. */
     val version: AppVersion = port.appVersion()
 
@@ -134,6 +185,7 @@ class SettingsModel(private val port: SettingsPort) {
         connectivity = port.connectivity()
         activity = port.syncActivity()
         userDetails = port.userDetails()
+        serverAddress = port.serverAddress()
     }
 
     // MARK: - Commands
@@ -238,6 +290,72 @@ class SettingsModel(private val port: SettingsPort) {
 
     fun restoreUserDetails(details: UserDetails) {
         userDetails = details
+    }
+
+    // MARK: - Server Address
+
+    /**
+     * Opens the editor, prefilled with what the next launch will use.
+     *
+     * The saved override wins over the in-use root, because the field edits the *preference*:
+     * a user who saved an address and reopened the sheet before restarting means to adjust what
+     * they just typed, not to retype the old root.
+     */
+    fun openServerAddressEditor() {
+        serverAddressEditor = ServerAddressEditor(
+            draft = serverAddress.savedOverride ?: serverAddress.inUse.orEmpty(),
+        )
+        serverAddressNotice = null
+    }
+
+    fun dismissServerAddressEditor() {
+        serverAddressEditor = null
+    }
+
+    fun updateServerAddressDraft(value: String) {
+        serverAddressEditor = serverAddressEditor?.copy(draft = value)
+    }
+
+    /**
+     * Asks the port to check and save the draft, and holds the answer.
+     *
+     * The port is the whole operation — validate, probe, write — so "saved" here cannot mean
+     * less than "checked". On [ServerAddressValidation.Valid] the editor closes and the notice
+     * says a restart is needed; the row keeps showing [serverAddress]'s in-use root, which is
+     * still what is on the wire. On [ServerAddressValidation.Invalid] the editor stays open with
+     * the reason and the preference is untouched.
+     *
+     * `isChecking` is set before the call because the probe can take seconds, which is the only
+     * feedback the field can give while it waits. A cancelled call leaves it set, deliberately:
+     * the screen that would have rendered it is being disposed with the same scope.
+     */
+    suspend fun saveServerAddress() {
+        val editor = serverAddressEditor ?: return
+        serverAddressEditor = editor.copy(isChecking = true, failure = null)
+        when (val result = port.setServerAddress(editor.draft)) {
+            is ServerAddressValidation.Valid -> {
+                serverAddress = port.serverAddress()
+                serverAddressEditor = null
+                serverAddressNotice = ServerAddressNotice.Saved
+            }
+            is ServerAddressValidation.Invalid -> {
+                serverAddressEditor = editor.copy(isChecking = false, failure = result)
+            }
+        }
+    }
+
+    /**
+     * Forgets any saved address so the next launch falls back to the build-time default.
+     *
+     * No probe: there is nothing to reach, only something to remove. The notice is raised for
+     * the same reason a save raises one — the running clients keep the old root until the next
+     * launch.
+     */
+    suspend fun resetServerAddress() {
+        port.resetServerAddress()
+        serverAddress = port.serverAddress()
+        serverAddressEditor = null
+        serverAddressNotice = ServerAddressNotice.Reset
     }
 
     /** Clears [commandOutcome], for a screen that shows the banner only until it is read. */

@@ -1,16 +1,24 @@
 package com.tasktracker.featuresettingsdata
 
 import com.tasktracker.featuresettingsdomain.AppVersion
+import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.ServerAddressProbe
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.ConnectivityWatcher
 import com.tasktracker.network.NetworkMonitor
+import com.tasktracker.userdefaults.API_BASE_URL_PREFERENCE_KEY
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The connectivity half of [LiveSettingsService]: the four-way translation, and the override.
@@ -74,14 +82,21 @@ class LiveSettingsServiceTest {
         return service(monitor) to watcher
     }
 
-    private fun service(monitor: NetworkMonitor) = LiveSettingsService(
+    private fun service(
+        monitor: NetworkMonitor,
+        apiBaseUrl: String? = null,
+        checkServerAddress: CheckServerAddress = CheckServerAddress(ServerAddressProbe { true }),
+        defaults: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
+    ) = LiveSettingsService(
         monitor = monitor,
         // Never asked to sync by the connectivity tests; see `UnusedSyncDependencies`.
         coordinator = unusedSyncCoordinator(),
         version = AppVersion(marketing = "1.0", build = "1"),
         onEndSession = {},
         onForceEndSession = {},
-        defaults = UserDefaultsStore(InMemoryPreferences()),
+        apiBaseUrl = apiBaseUrl,
+        checkServerAddress = checkServerAddress,
+        defaults = defaults,
     )
 
     @Test
@@ -154,10 +169,125 @@ class LiveSettingsServiceTest {
             version = version,
             onEndSession = {},
             onForceEndSession = {},
+            apiBaseUrl = null,
+            checkServerAddress = CheckServerAddress(ServerAddressProbe { true }),
             defaults = UserDefaultsStore(InMemoryPreferences()),
         )
 
         assertEquals(version, service.appVersion())
         assertEquals("2.1 (77)", service.appVersion().display)
+    }
+
+    // MARK: - Server Address
+
+    /**
+     * A probe that records every address it is asked about.
+     *
+     * The list is the assertion, not the boolean: a save path that validated the shape but
+     * skipped the network would still persist a well-formed address, so the only thing that
+     * tells "checked" apart from "looked valid" is that the probe was asked.
+     */
+    private class RecordingProbe : ServerAddressProbe {
+        val asked = mutableListOf<String>()
+
+        override suspend fun answersOk(baseUrl: String): Boolean {
+            asked += baseUrl
+            return true
+        }
+    }
+
+    private fun emptyMonitor() = NetworkMonitor.forWatcher(FakeConnectivityWatcher())
+
+    @Test
+    fun theServerAddressReportsTheInUseRootWithNoOverrideYet() = runTest {
+        val service = service(
+            monitor = emptyMonitor(),
+            apiBaseUrl = "https://tasks.example.com",
+        )
+
+        assertEquals(
+            ServerAddressSettings(inUse = "https://tasks.example.com", savedOverride = null),
+            service.serverAddress(),
+        )
+        assertFalse(service.serverAddress().isCustom)
+    }
+
+    @Test
+    fun aCheckedAddressIsProbedAndSavedInItsNormalisedForm() = runTest {
+        val probe = RecordingProbe()
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(probe),
+            defaults = store,
+        )
+
+        val result = service.setServerAddress("HTTPS://Tasks.Example.COM/")
+
+        assertEquals(ServerAddressValidation.Valid("https://tasks.example.com"), result)
+        // The raw key 6.1's resolver reads at startup, and the normalised form rather than the
+        // user's typing — the two must be the same string or the row and the wire disagree.
+        assertEquals("https://tasks.example.com", store.value(API_BASE_URL_PREFERENCE_KEY))
+        assertEquals("https://tasks.example.com", service.serverAddress().savedOverride)
+        assertEquals(listOf("https://tasks.example.com"), probe.asked)
+    }
+
+    @Test
+    fun anUnreachableAddressIsNotSaved() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(ServerAddressProbe { false }),
+            defaults = store,
+        )
+
+        val result = service.setServerAddress("https://tasks.example.com")
+
+        assertEquals(
+            ServerAddressValidation.Invalid(ServerAddressValidation.Reason.Unreachable),
+            result,
+        )
+        assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
+        assertNull(service.serverAddress().savedOverride)
+    }
+
+    @Test
+    fun aMalformedAddressIsNeverProbedAndNotSaved() = runTest {
+        val probe = RecordingProbe()
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(probe),
+            defaults = store,
+        )
+
+        val result = service.setServerAddress("not a url")
+
+        assertTrue(result is ServerAddressValidation.Invalid)
+        assertEquals(emptyList(), probe.asked)
+        assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
+    }
+
+    @Test
+    fun aBlankStoredValueReadsAsNoOverride() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set("", API_BASE_URL_PREFERENCE_KEY)
+        val service = service(monitor = emptyMonitor(), defaults = store)
+
+        assertNull(service.serverAddress().savedOverride)
+        assertFalse(service.serverAddress().isCustom)
+    }
+
+    @Test
+    fun resetRemovesTheSavedOverride() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set("https://tasks.example.com", API_BASE_URL_PREFERENCE_KEY)
+        val service = service(monitor = emptyMonitor(), defaults = store)
+        assertEquals("https://tasks.example.com", service.serverAddress().savedOverride)
+
+        service.resetServerAddress()
+
+        assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
+        assertNull(service.serverAddress().savedOverride)
     }
 }

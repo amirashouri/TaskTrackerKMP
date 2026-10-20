@@ -106,4 +106,28 @@ abstract class SettingsViewScenarios {
     @Test
     fun anAdminSeesTheManagementEntriesAndTheyDispatch() =
         runComposeUiTest(block = SettingsScenarios.anAdminSeesTheManagementEntriesAndTheyDispatch)
+
+    @Test
+    fun theServerRowShowsTheAddressInUse() =
+        runComposeUiTest(block = SettingsScenarios.theServerRowShowsTheAddressInUse)
+
+    @Test
+    fun tappingTheServerRowOpensTheEditor() =
+        runComposeUiTest(block = SettingsScenarios.tappingTheServerRowOpensTheEditor)
+
+    @Test
+    fun aRefusedAddressShowsItsReason() =
+        runComposeUiTest(block = SettingsScenarios.aRefusedAddressShowsItsReason)
+
+    @Test
+    fun resetIsOfferedOnlyWhenAnOverrideExists() =
+        runComposeUiTest(block = SettingsScenarios.resetIsOfferedOnlyWhenAnOverrideExists)
+
+    @Test
+    fun aCheckInFlightDisablesTheOtherActions() =
+        runComposeUiTest(block = SettingsScenarios.aCheckInFlightDisablesTheOtherActions)
+
+    @Test
+    fun aSavedChangeRaisesTheRestartNotice() =
+        runComposeUiTest(block = SettingsScenarios.aSavedChangeRaisesTheRestartNotice)
 }

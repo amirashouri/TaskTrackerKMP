@@ -23,6 +23,8 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
@@ -36,6 +38,8 @@ import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
+import com.tasktracker.resources.settings_server_error_cleartext_not_permitted
+import com.tasktracker.resources.settings_server_saved_notice
 import com.tasktracker.resources.settings_sync_waiting
 import kotlin.math.abs
 import kotlin.test.assertEquals
@@ -412,6 +416,178 @@ object SettingsScenarios {
         assertEquals(1, membersTaps, "the Manage Members row must dispatch its own command")
         assertEquals(1, projectsTaps, "the Manage Projects row must dispatch its own command")
     }
+
+    /**
+     * The Server row shows the address the running clients are bound to.
+     *
+     * Scrolled to rather than asserted on mount: the row sits below User details and
+     * Appearance, and a `LazyColumn` does not compose what is past the fold — an
+     * `assertIsDisplayed` without the scroll would be a host-dependent pass.
+     */
+    val theServerRowShowsTheAddressInUse: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(
+            serverAddress = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = null,
+            ),
+        )
+
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsServerRowTag))
+        onNodeWithTag(SettingsServerRowTag).assertIsDisplayed()
+        onNodeWithText("https://tasks.example.com").assertIsDisplayed()
+    }
+
+    /**
+     * Tapping the row opens the editor, prefilled with the address the row showed.
+     *
+     * The editor state is local to the scenario because visibility is the model's in
+     * production; what this pins is the screen's half — the row dispatches, and a non-null
+     * editor renders the sheet with the draft in it.
+     */
+    val tappingTheServerRowOpensTheEditor: suspend ComposeUiTest.() -> Unit = {
+        var editor by mutableStateOf<ServerAddressEditor?>(null)
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    serverAddress = ServerAddressSettings(
+                        inUse = "https://tasks.example.com",
+                        savedOverride = null,
+                    ),
+                    serverAddressEditor = editor,
+                    onEditServerAddress = {
+                        editor = ServerAddressEditor(draft = "https://tasks.example.com")
+                    },
+                    onDismissServerAddress = { editor = null },
+                )
+            }
+        }
+
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsServerRowTag))
+        onNodeWithTag(SettingsServerRowTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(ServerAddressSheetTag).assertIsDisplayed()
+        onNodeWithTag(ServerAddressFieldTag).assertIsDisplayed()
+    }
+
+    /** A refused address keeps the sheet open and says which part was wrong. */
+    val aRefusedAddressShowsItsReason: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(
+            serverAddress = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = null,
+            ),
+            serverAddressEditor = ServerAddressEditor(
+                draft = "http://example.com",
+                failure = ServerAddressValidation.Invalid(
+                    ServerAddressValidation.Reason.CleartextNotPermitted,
+                ),
+            ),
+        )
+        waitForIdle()
+
+        onNodeWithTag(ServerAddressSheetTag).assertIsDisplayed()
+        onNodeWithTag(ServerAddressErrorTag).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_server_error_cleartext_not_permitted))
+            .assertIsDisplayed()
+    }
+
+    /**
+     * Reset is present only when an override exists.
+     *
+     * One composition whose state changes, not two `setContent` calls, for the reason the
+     * version scenario gives: a `LazyColumn` and Android's `ComponentActivity` both make the
+     * second call the wrong shape. The negative case is the assertion that matters — a Reset
+     * on a build with no override is a control that claims to have changed something.
+     */
+    val resetIsOfferedOnlyWhenAnOverrideExists: suspend ComposeUiTest.() -> Unit = {
+        var override by mutableStateOf<String?>(null)
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    serverAddress = ServerAddressSettings(
+                        inUse = "https://tasks.example.com",
+                        savedOverride = override,
+                    ),
+                    serverAddressEditor = ServerAddressEditor(draft = "https://tasks.example.com"),
+                )
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(ServerAddressResetTag).assertDoesNotExist()
+
+        override = "https://old.example.com"
+        waitForIdle()
+
+        onNodeWithTag(ServerAddressResetTag).assertIsDisplayed()
+    }
+
+    /**
+     * While the check runs, the only available action is waiting.
+     *
+     * The save is already dispatched to the shell's scope, so neither Cancel nor Reset can
+     * cancel it: Cancel would hide a save that then lands, and Reset would race it. The dimmed
+     * controls are the honest signal that the check owns the sheet until it answers.
+     */
+    val aCheckInFlightDisablesTheOtherActions: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(
+            serverAddress = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = "https://old.example.com",
+            ),
+            serverAddressEditor = ServerAddressEditor(
+                draft = "https://new.example.com",
+                isChecking = true,
+            ),
+        )
+        waitForIdle()
+
+        onNodeWithTag(ServerAddressResetTag).assertIsNotEnabled()
+        onNodeWithTag(ServerAddressCancelTag).assertIsNotEnabled()
+    }
+
+    /**
+     * A save raises the restart notice, and the notice says *when* the change applies.
+     *
+     * The row still reads the in-use address in this state, which is the honest pairing: the
+     * notice is the only thing that can explain why the address the user just saved is not the
+     * address on screen.
+     */
+    val aSavedChangeRaisesTheRestartNotice: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(
+            serverAddress = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = "https://new.example.com",
+            ),
+            serverAddressNotice = ServerAddressNotice.Saved,
+        )
+
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsServerNoticeTag))
+        onNodeWithTag(SettingsServerNoticeTag).assertIsDisplayed()
+        val notice = getString(Res.string.settings_server_saved_notice)
+        onNodeWithText(notice).assertIsDisplayed()
+        assertTrue(
+            notice.contains("next time"),
+            "\"$notice\" does not say when the saved address takes effect",
+        )
+    }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -421,6 +597,9 @@ private fun ComposeUiTest.screenShowing(
     version: AppVersion = SettingsPreviewData.version,
     commandOutcome: SyncOutcome? = null,
     isAdmin: Boolean = false,
+    serverAddress: ServerAddressSettings = ServerAddressSettings(inUse = null, savedOverride = null),
+    serverAddressEditor: ServerAddressEditor? = null,
+    serverAddressNotice: ServerAddressNotice? = null,
 ) {
     setContent {
         Themed {
@@ -434,6 +613,9 @@ private fun ComposeUiTest.screenShowing(
                 onSyncNow = {},
                 onSignOut = {},
                 isAdmin = isAdmin,
+                serverAddress = serverAddress,
+                serverAddressEditor = serverAddressEditor,
+                serverAddressNotice = serverAddressNotice,
             )
         }
     }

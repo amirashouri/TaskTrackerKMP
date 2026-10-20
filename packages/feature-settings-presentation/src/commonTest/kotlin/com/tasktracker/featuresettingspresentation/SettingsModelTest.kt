@@ -3,13 +3,17 @@ package com.tasktracker.featuresettingspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
+import com.tasktracker.featuresettingsdomain.ServerAddressSettings
+import com.tasktracker.featuresettingsdomain.ServerAddressValidation
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -278,6 +282,159 @@ class SettingsModelTest {
         assertEquals(ConnectivitySummary.Unknown, model.connectivity)
         model.stopObserving()
     }
+
+    // MARK: - Server Address
+
+    @Test
+    fun openingTheEditorPrefillsTheSavedOverrideOverTheInUseAddress() = runTest {
+        val port = RecordingSettingsPort().apply {
+            serverAddressValue = ServerAddressSettings(
+                inUse = "https://old.example.com",
+                savedOverride = "https://new.example.com",
+            )
+        }
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.openServerAddressEditor()
+
+        // The override wins: the field edits the *preference*, so reopening before a restart
+        // must show what the user last saved rather than the address still on the wire.
+        assertEquals("https://new.example.com", model.serverAddressEditor?.draft)
+    }
+
+    @Test
+    fun openingTheEditorWithNoOverridePrefillsTheInUseAddress() = runTest {
+        val port = RecordingSettingsPort()
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.openServerAddressEditor()
+
+        assertEquals("https://tasks.example.com", model.serverAddressEditor?.draft)
+    }
+
+    @Test
+    fun openingTheEditorWithNoServerAtAllPrefillsEmpty() = runTest {
+        val port = RecordingSettingsPort().apply {
+            serverAddressValue = ServerAddressSettings(inUse = null, savedOverride = null)
+        }
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.openServerAddressEditor()
+
+        assertEquals("", model.serverAddressEditor?.draft)
+    }
+
+    @Test
+    fun aSuccessfulSaveClosesTheEditorAndRaisesTheRestartNotice() = runTest {
+        val port = RecordingSettingsPort().apply {
+            setServerAddressResult = ServerAddressValidation.Valid("https://new.example.com")
+        }
+        val model = SettingsModel(port)
+        model.reload()
+        model.openServerAddressEditor()
+        model.updateServerAddressDraft("https://new.example.com")
+
+        model.saveServerAddress()
+
+        assertEquals(listOf("https://new.example.com"), port.setServerAddressInputs)
+        assertNull(model.serverAddressEditor)
+        assertEquals(ServerAddressNotice.Saved, model.serverAddressNotice)
+        // The in-use root is unchanged — a save cannot rebind the running clients — and the
+        // override the next launch will read is the checked address.
+        assertEquals("https://tasks.example.com", model.serverAddress.inUse)
+        assertEquals("https://new.example.com", model.serverAddress.savedOverride)
+    }
+
+    @Test
+    fun aSaveInFlightIsMarkedCheckingUntilItAnswers() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val port = RecordingSettingsPort().apply { setServerAddressGate = gate }
+        val model = SettingsModel(port)
+        model.reload()
+        model.openServerAddressEditor()
+        model.updateServerAddressDraft("https://new.example.com")
+
+        val save = launch { model.saveServerAddress() }
+        advanceUntilIdle()
+
+        // The field has to say it is working, because the probe can take seconds and a control
+        // that looks inert invites the second tap that would start a second probe.
+        assertTrue(model.serverAddressEditor?.isChecking == true)
+
+        gate.complete(Unit)
+        save.join()
+        assertNull(model.serverAddressEditor)
+        assertEquals(ServerAddressNotice.Saved, model.serverAddressNotice)
+    }
+
+    @Test
+    fun aRefusedSaveKeepsTheEditorOpenAndSavesNothing() = runTest {
+        val port = RecordingSettingsPort().apply {
+            setServerAddressResult = ServerAddressValidation.Invalid(
+                ServerAddressValidation.Reason.Unreachable,
+            )
+        }
+        val model = SettingsModel(port)
+        model.reload()
+        model.openServerAddressEditor()
+        model.updateServerAddressDraft("https://nobody.example.com")
+
+        model.saveServerAddress()
+
+        val editor = model.serverAddressEditor
+        assertNotNull(editor)
+        assertEquals(
+            ServerAddressValidation.Invalid(ServerAddressValidation.Reason.Unreachable),
+            editor.failure,
+        )
+        assertFalse(editor.isChecking)
+        // Nothing was persisted, and the model did not optimistically update the override: the
+        // row still reads the same in-use root and no saved address.
+        assertNull(model.serverAddress.savedOverride)
+        assertEquals(1, port.setServerAddressCalls)
+    }
+
+    @Test
+    fun resetClearsTheOverrideAndRaisesTheRestartNotice() = runTest {
+        val port = RecordingSettingsPort().apply {
+            serverAddressValue = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = "https://old.example.com",
+            )
+        }
+        val model = SettingsModel(port)
+        model.reload()
+        model.openServerAddressEditor()
+
+        model.resetServerAddress()
+
+        assertEquals(1, port.resetServerAddressCalls)
+        assertNull(model.serverAddress.savedOverride)
+        assertNull(model.serverAddressEditor)
+        assertEquals(ServerAddressNotice.Reset, model.serverAddressNotice)
+    }
+
+    @Test
+    fun openingTheEditorClearsThePreviousNotice() = runTest {
+        val port = RecordingSettingsPort().apply {
+            serverAddressValue = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = "https://new.example.com",
+            )
+        }
+        val model = SettingsModel(port)
+        model.reload()
+        model.openServerAddressEditor()
+        model.saveServerAddress()
+        assertEquals(ServerAddressNotice.Saved, model.serverAddressNotice)
+
+        model.openServerAddressEditor()
+
+        assertNull(model.serverAddressNotice)
+    }
 }
 
 /**
@@ -382,5 +539,52 @@ class RecordingSettingsPort(
     override fun userDetailsUpdates(): kotlinx.coroutines.flow.Flow<UserDetails> = kotlinx.coroutines.flow.flowOf(UserDetails())
 
     override suspend fun setUserDetails(details: UserDetails) = Unit
+
+    /**
+     * The address state [serverAddress] reports; set it to script the row.
+     *
+     * The default names a real in-use root and no override, so a test that only cares about
+     * the editor's prefill starts from the ordinary case.
+     */
+    var serverAddressValue: ServerAddressSettings =
+        ServerAddressSettings(inUse = "https://tasks.example.com", savedOverride = null)
+
+    /** What [setServerAddress] answers; a `Valid` by default. */
+    var setServerAddressResult: ServerAddressValidation =
+        ServerAddressValidation.Valid("https://tasks.example.com")
+
+    /** When set, [setServerAddress] suspends on it, so a test can observe the busy state. */
+    var setServerAddressGate: CompletableDeferred<Unit>? = null
+
+    var setServerAddressCalls: Int = 0
+        private set
+
+    /** Every draft the model handed to [setServerAddress], in order. */
+    val setServerAddressInputs = mutableListOf<String>()
+
+    var resetServerAddressCalls: Int = 0
+        private set
+
+    override suspend fun serverAddress(): ServerAddressSettings = serverAddressValue
+
+    /**
+     * Mirrors the real service's write-on-valid rule, so a model test against this fake is
+     * testing the model's sequencing and not a second copy of the persistence rule.
+     */
+    override suspend fun setServerAddress(input: String): ServerAddressValidation {
+        setServerAddressCalls++
+        setServerAddressInputs += input
+        setServerAddressGate?.await()
+        val result = setServerAddressResult
+        if (result is ServerAddressValidation.Valid) {
+            serverAddressValue = serverAddressValue.copy(savedOverride = result.baseUrl)
+        }
+        return result
+    }
+
+    override suspend fun resetServerAddress() {
+        resetServerAddressCalls++
+        serverAddressValue = serverAddressValue.copy(savedOverride = null)
+    }
 }
 

@@ -505,6 +505,29 @@
     <string name="settings_connectivity_offline">Offline</string>
     <string name="settings_connectivity_needs_connection">Needs connection</string>
     <string name="settings_connectivity_unknown">Unknown</string>
+    <!--
+      The Server field. The row shows the address the *running* app is using; the sheet edits
+      the address the *next* launch will use, which is why both the body and the notices say a
+      restart is needed. The body and the notices are the whole of 6.1's "restart required"
+      promise surfaced where the user makes the choice.
+    -->
+    <string name="settings_server_label">Server</string>
+    <!-- Shown in the row's value slot when the graph bound no backend at all: the offline demo. -->
+    <string name="settings_server_none">No server</string>
+    <string name="settings_server_title">Server address</string>
+    <string name="settings_server_body">The address of your TaskTracker server. The app checks it before saving, and uses the new address the next time it opens.</string>
+    <string name="settings_server_hint">https://tasks.example.com</string>
+    <string name="settings_server_reset">Reset to Default</string>
+    <string name="settings_server_saved_notice">Saved. The app will use the new address the next time it opens.</string>
+    <string name="settings_server_reset_notice">Reset. The app will use the default address the next time it opens.</string>
+    <!-- One sentence per validation reason, so the field says which part is wrong. -->
+    <string name="settings_server_error_blank">Enter a server address.</string>
+    <string name="settings_server_error_missing_scheme">Start with http:// or https://.</string>
+    <string name="settings_server_error_unsupported_scheme">Use http:// or https://.</string>
+    <string name="settings_server_error_missing_host">Enter the server address, for example https://tasks.example.com.</string>
+    <string name="settings_server_error_cleartext_not_permitted">Plain http is only allowed for a server on your local network. Use https for a remote one.</string>
+    <string name="settings_server_error_malformed">That does not look like a web address.</string>
+    <string name="settings_server_error_unreachable">No TaskTracker server answered at that address.</string>
     <string name="settings_sync_section">Sync</string>
     <string name="settings_sync_waiting">Waiting to sync</string>
     <string name="settings_sync_stuck">Could not be sent</string>
