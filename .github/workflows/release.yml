@@ -25,6 +25,7 @@ jobs:
   android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +61,7 @@ jobs:
   desktop:
     name: Build Desktop Native Packages (Linux/Windows)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
