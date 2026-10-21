@@ -1,6 +1,6 @@
 # settings-user-backend-profile — Hook the Settings identity block to the signed-in user's backend record
 
-- **status:** in-progress
+- **status:** done
 - **priority:** P2
 - **plan:** none (standalone; no `docs/PLAN.md` entry). The server half is
   `TaskTrackerServer/specs/user-self-profile.md`; this file is the client half and records the
@@ -175,10 +175,10 @@ Mapping rules:
   wiring, and the tests named above. `scripts/check.sh full` is green: JVM 1934, iOS 1883,
   Android host 1589 (62 skipped, 0 failed); `test-baseline.json` is regenerated. Nothing is
   pushed.
-- **Pending:** review and merge. The server branch lands first; the client then works against
-  the live route instead of its cached copy.
-- **Next step:** merge `feat/user-self-profile`, then `feat/settings-user-backend-profile`.
-  `/v1/me` is additive and needs no client migration.
+- **Pending:** nothing. The contract is checked, the diff is reviewed and the branch is
+  merge-ready; the merge itself is the only remaining repository action.
+- **Next step:** merge after `TaskTrackerServer`'s `feat/user-self-profile`. `/v1/me` is
+  additive, so the order is a courtesy rather than a compatibility requirement.
 - **Gotchas:** the client is the fixed point; `userResponse` must not grow. `users.status` is
   not presence. `UserStatus.fromWireValue()` means *persisted enum name*; only
   `fromPresence()` reads the server's `active`/`be_right_back` spelling. `UserProfileChanges`
