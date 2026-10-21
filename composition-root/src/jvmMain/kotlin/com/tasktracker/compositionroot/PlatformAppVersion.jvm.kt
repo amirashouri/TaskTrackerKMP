@@ -3,18 +3,17 @@ package com.tasktracker.compositionroot
 import com.tasktracker.featuresettingsdomain.AppVersion
 
 /**
- * The version the release was cut as, read from this module's own jar manifest.
+ * The app's version, read from this module's own jar manifest.
  *
- * `Implementation-Version` is stamped by `composition-root/build.gradle.kts` from the same
- * `-PtasktrackerVersion` the release workflow passes to the packaging tasks. The packaged
- * Desktop app runs from jars, so the manifest travels with it and the Settings About row
- * can finally report a real number — the `actual` used to answer blanks because a JVM host
- * was only a test or a desktop preview.
+ * `Implementation-Version` is stamped by `composition-root/build.gradle.kts`: the release
+ * tag when the release workflow passes `-PtasktrackerVersion`, otherwise the declared
+ * project version (`1.0.0`). The packaged Desktop app and Android Studio's hot-reload run
+ * both launch from jars — `hotRunJvm` copies this jar onto its classpath — so the manifest
+ * travels with the app and the Settings About row reports a real number.
  *
- * A classes-directory host (the test suite, an IDE run) has no manifest, so
- * `Package.implementationVersion` is `null` and the answer is still blanks. That keeps the
- * row hidden rather than printing a placeholder, which is the same rule [AppVersion.display]
- * states: a fallback number would be a number nobody shipped.
+ * A classes-directory host (the test suite, a plain IDE run) has no manifest, so
+ * `Package.implementationVersion` is `null` and the answer is blanks. That keeps the row
+ * hidden rather than printing a placeholder for a build that declares no version at all.
  *
  * [VersionAnchor] rather than `AppVersion` as the anchor: the version belongs to this
  * module's jar, and anchoring on a type from `:packages:feature-settings-domain` would read

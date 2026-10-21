@@ -12,9 +12,11 @@ import kotlin.test.assertNull
  * `platformAppVersion` reads `Package.implementationVersion`, which is only populated when
  * the class is loaded from a jar carrying `Implementation-Version`. The test suite loads
  * classes from directories, so there is no manifest to assert against here; the stamp
- * itself is checked by unzipping a `:composition-root:jvmJar` built with
- * `-PtasktrackerVersion`. This test pins the half that can be wrong independently: what the
- * row shows for a given stamped value, and that "no stamp" hides it.
+ * itself is checked by unzipping a `:composition-root:jvmJar` built both for a release
+ * (`-PtasktrackerVersion`) and for a development run (the project-version default that
+ * Android Studio's hot-reload configuration picks up). This test pins the half that can be
+ * wrong independently: what the row shows for a given stamped value, and that "no stamp"
+ * hides it.
  */
 class PlatformAppVersionJvmTest {
 
