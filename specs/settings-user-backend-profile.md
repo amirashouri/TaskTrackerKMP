@@ -150,6 +150,11 @@ Mapping rules:
 - [x] The account email is rendered as its own labelled, read-only row
       (`settings_email_label`, `SettingsEmailRowTag`), not as an editable field and not only
       as the name's fallback.
+- [x] A rename reaches the shell greeting without a root change, and a failed PATCH reverts it.
+      `ShellPreferencesTest` seeds `CachedProfile` and `UserProfile` and asserts that the
+      persisted profile name wins over the sign-in snapshot, that a profile whose account email
+      differs from the cached identity is ignored, and that `applyUserDetails()` renames and
+      falls back to `preferredGreeting` when the name is cleared.
 - [x] With no base URL the graph never constructs an HTTP client for the gateway
       (`HostedGraphScenarios` keeps graph construction free of platform calls).
 - [x] Reverting the read-through to the cache-only body fails the first test; reverting the
@@ -172,8 +177,11 @@ Mapping rules:
   mappings, `HttpUserProfileGateway` (`GET`/`PATCH /v1/me`), read-through/cache/delta/revert in
   `LiveSettingsService`, the name sheet, picker commits, the note's Done/blur commit and
   code-point cap, the read-only account-email row, the dismissible failure banner, graph
-  wiring, and the tests named above. `scripts/check.sh full` is green: JVM 1934, iOS 1883,
-  Android host 1589 (62 skipped, 0 failed); `test-baseline.json` is regenerated. Nothing is
+  wiring, and the tests named above. The greeting follow-up recorded in the previous handoff is
+  closed here too: `ShellPreferences` prefers the persisted `UserProfile` name and `RootScreen`
+  applies `SettingsPort.userDetailsUpdates()` while the root is `Main`, so a rename no longer
+  waits for sign-in to rewrite `CachedProfile`. `scripts/check.sh full` is green: JVM 1937, iOS 1886,
+  Android host 1592 (62 skipped, 0 failed); `test-baseline.json` is regenerated. Nothing is
   pushed.
 - **Pending:** nothing. The contract is checked, the diff is reviewed and the branch is
   merge-ready; the merge itself is the only remaining repository action.
@@ -187,9 +195,14 @@ Mapping rules:
   confirmed snapshot rather than re-reading `port.userDetails()`, which is a networked
   read-through and would add a GET exactly when the connection is known bad. Cap free text
   with `capToCodePoints`, not `take` — the server counts runes and a unit cut can split a
-  surrogate pair. The shell greeting still reads `DefaultsKey.CachedProfile` via
-  `ShellPreferences.refreshCurrentUser()`; a rename refreshes the Settings row but not the
-  greeting until that cache is rewritten — a deliberate follow-up.
+  surrogate pair. The shell greeting reads the name Settings edits, not the sign-in snapshot:
+  `ShellPreferences.refreshCurrentUser()` prefers a nonblank `UserDetails.fullName` from
+  `DefaultsKey.UserProfile` (when its account email is blank or matches the cached identity)
+  and falls back to `UserIdentity.preferredGreeting`; `RootScreen` collects
+  `SettingsPort.userDetailsUpdates()` while the root is `Main` and applies each emission
+  through `ShellPreferences.applyUserDetails()`, so a rename — and a failed-PATCH revert —
+  reaches the greeting without a root change. A profile left by another account is ignored by
+  the email check, because the app-scoped settings flow outlives a sign-out.
 
 ## Decisions to confirm at ACK
 
@@ -208,10 +221,14 @@ Mapping rules:
 
 ## Risks / notes
 
-- The Settings greeting in the shell reads `DefaultsKey.CachedProfile` via
-  `ShellPreferences.refreshCurrentUser()`. A rename refreshes this row but not the shell
-  greeting until the cache is rewritten; that is a deliberate follow-up, not part of this
-  task.
+- The shell greeting used to read only `DefaultsKey.CachedProfile` via
+  `ShellPreferences.refreshCurrentUser()`, so a rename refreshed the Settings row but not the
+  greeting until sign-in rewrote that cache. Closed on this branch: the name now prefers the
+  persisted `DefaultsKey.UserProfile` (what `LiveSettingsService` writes on every save) and the
+  shell subscribes to `SettingsPort.userDetailsUpdates()` while the root is `Main`, so a save
+  and a failed-PATCH revert both land immediately. `ShellPreferencesTest` pins the precedence,
+  the other-account guard, and the live apply/fallback path; the collector itself is shell
+  wiring and has no rendered greeting to assert against yet.
 - The status note commits on Done or focus loss, not per keystroke. A screen close in the same
   frame as the last keystroke relies on that focus-loss callback; the value is staged locally
   either way, so the worst case is one lost note edit, not a wrong one.
