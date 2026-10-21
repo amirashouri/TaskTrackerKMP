@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.AppError
@@ -16,6 +20,7 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
@@ -44,7 +49,9 @@ import com.tasktracker.resources.settings_connectivity_unknown
 import com.tasktracker.resources.settings_manage_members
 import com.tasktracker.resources.settings_manage_projects
 import com.tasktracker.resources.settings_outcome_already_running
+import com.tasktracker.resources.settings_email_label
 import com.tasktracker.resources.settings_outcome_offline
+import com.tasktracker.resources.settings_profile_save_failed
 import com.tasktracker.resources.settings_server_label
 import com.tasktracker.resources.settings_server_none
 import com.tasktracker.resources.settings_server_reset_notice
@@ -99,6 +106,15 @@ import org.jetbrains.compose.resources.stringResource
  * completed, [signOutFailure] is non-null and the screen raises [ConfirmPopup] offering the
  * device-only sign-out instead. See `SettingsModel.signOut` for where that failure is caught,
  * and `SettingsPort.forceEndSession` for what the second button discards.
+ *
+ * ## The identity block edits optimistically and reverts on refusal
+ *
+ * A picker or the name sheet stages its value through [onUserDetailsChange] first, so the
+ * header moves on the same frame; [onUserDetailsCommit] is the network step that follows and
+ * the only one that can fail. A refused write is reverted by the adapter and reported in
+ * [profileFailure], a dismissible banner above the block. The edit is deliberately not queued:
+ * a profile write is server-owned identity, not offline work, and showing an unsaved value as
+ * saved would be worse than asking the user to try again.
  */
 @Composable
 fun SettingsScreen(
@@ -125,6 +141,23 @@ fun SettingsScreen(
     onGlassIntensityCommit: (Float) -> Unit = {},
     userDetails: UserDetails = UserDetails(),
     onUserDetailsChange: (UserDetails) -> Unit = {},
+    /**
+     * Writes the staged identity edit to the signed-in user's record.
+     *
+     * Separate from [onUserDetailsChange] because the two have different jobs: change is the
+     * optimistic, synchronous update that keeps a picker responsive, and this is the network
+     * write that either confirms it or makes the screen revert and show [profileFailure].
+     * Defaulted so the previews and the scenarios that only read the header compile unchanged.
+     */
+    onUserDetailsCommit: () -> Unit = {},
+    /**
+     * The last profile write the server refused, or `null` when there is nothing to report.
+     *
+     * Rendered as a dismissible banner above the identity block. The model holds the
+     * [AppError] and the screen owns the sentence, the same split as every other failure here.
+     */
+    profileFailure: AppError? = null,
+    onDismissProfileFailure: () -> Unit = {},
     signOutFailure: AppError? = null,
     onForceSignOut: () -> Unit = {},
     onDismissSignOutFailure: () -> Unit = {},
@@ -156,6 +189,11 @@ fun SettingsScreen(
     onResetServerAddress: () -> Unit = {},
     onDismissServerAddress: () -> Unit = {},
 ) {
+    // The name editor's visibility. Local rather than in the model: the draft never leaves the
+    // sheet, and the model only ever sees the committed value. `false` is closed, which is the
+    // state every other screen starts in.
+    var nameEditorOpen by remember { mutableStateOf(false) }
+
     // The list and the confirmation popup are siblings in one box, so the popup floats over
     // the list rather than scrolling with it. `modifier` lands here rather than on the
     // `LazyColumn`, which is what lets the overlay cover the whole screen instead of only the
@@ -179,6 +217,19 @@ fun SettingsScreen(
             contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
+            // Above the identity block, because it is the identity block that failed. A failed
+            // write has already been reverted, so this is a report, not an instruction the user
+            // has to answer; the dismiss is the only action.
+            profileFailure?.let {
+                item {
+                    Box(modifier = Modifier.testTag(SettingsProfileFailureTag)) {
+                        ttBanner(
+                            message = stringResource(Res.string.settings_profile_save_failed),
+                            onDismiss = onDismissProfileFailure,
+                        )
+                    }
+                }
+            }
             item {
                 // First section on the page: it is the identity the rest of the screen belongs to,
                 // not a preference filed with the others. It renders even when empty — the row that
@@ -188,14 +239,35 @@ fun SettingsScreen(
                 SettingsSection {
                     UserDetailsRow(
                         details = userDetails,
-                        onDetailsChange = onUserDetailsChange,
+                        // An avatar pick is complete the moment it lands: there is no draft to
+                        // finish, so the optimistic update is followed by the write in the same
+                        // gesture. Position and presence work the same way below; only the free
+                        // text fields wait for Done or focus loss.
+                        onDetailsChange = { updated ->
+                            onUserDetailsChange(updated)
+                            onUserDetailsCommit()
+                        },
+                        onEditName = { nameEditorOpen = true },
                         modifier = Modifier.testTag(SettingsUserDetailsTag),
                     )
+                    // The account address, read-only and labelled as such. It is not a profile
+                    // field and has no editor: changing it needs a verification flow the app
+                    // does not have, so a row that looked editable would promise one.
+                    if (userDetails.email.isNotBlank()) {
+                        SettingsDivider()
+                        SettingsIconRow(
+                            label = stringResource(Res.string.settings_email_label),
+                            value = userDetails.email,
+                            icon = ttSettingsIcons.account,
+                            modifier = Modifier.testTag(SettingsEmailRowTag),
+                        )
+                    }
                     SettingsDivider()
                     UserPositionPickerRow(
                         selected = userDetails.position,
                         onSelect = { position ->
                             onUserDetailsChange(userDetails.copy(position = position))
+                            onUserDetailsCommit()
                         },
                         modifier = Modifier.testTag(SettingsPositionRowTag),
                     )
@@ -204,6 +276,7 @@ fun SettingsScreen(
                         selected = userDetails.status,
                         onSelect = { status ->
                             onUserDetailsChange(userDetails.copy(status = status))
+                            onUserDetailsCommit()
                         },
                         modifier = Modifier.testTag(SettingsUserStatusRowTag),
                     )
@@ -213,6 +286,7 @@ fun SettingsScreen(
                         onValueChange = { statusText ->
                             onUserDetailsChange(userDetails.copy(statusText = statusText))
                         },
+                        onCommit = onUserDetailsCommit,
                         modifier = Modifier.testTag(SettingsStatusTextRowTag),
                     )
                 }
@@ -463,6 +537,22 @@ fun SettingsScreen(
                 onDismiss = onDismissServerAddress,
             )
         }
+
+        // The name editor, in the same overlay layer as the Server sheet. Saving closes it
+        // first and then dispatches, so a slow write cannot leave the sheet sitting over a
+        // header that has already changed; the write's failure reverts the header *and* raises
+        // the banner above it.
+        if (nameEditorOpen) {
+            UserNameSheet(
+                initial = userDetails.fullName,
+                onSave = { name ->
+                    nameEditorOpen = false
+                    onUserDetailsChange(userDetails.copy(fullName = name))
+                    onUserDetailsCommit()
+                },
+                onDismiss = { nameEditorOpen = false },
+            )
+        }
     }
 }
 
@@ -548,6 +638,12 @@ const val SettingsRetryStuckTag = "settings.retryStuck"
 const val SettingsFailuresTag = "settings.failures"
 const val SettingsOutcomeTag = "settings.outcome"
 const val SettingsVersionRowTag = "settings.versionRow"
+
+/** The failed-profile-write banner above the identity block. */
+const val SettingsProfileFailureTag = "settings.profileFailure"
+
+/** The read-only account address under the identity header. */
+const val SettingsEmailRowTag = "settings.email"
 
 /** The Server row and the restart notice it can raise. Both tags, because a scenario has to be
  * able to say "the row is there" and "the notice says so" as two separate claims. */

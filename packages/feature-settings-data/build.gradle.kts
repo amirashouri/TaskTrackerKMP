@@ -13,6 +13,10 @@ dependencies {
     commonMainImplementation(project(":packages:feature-settings-domain"))
     commonMainImplementation(project(":packages:user-defaults"))
 
+    // `HttpUserProfileGateway`'s wire DTO is `@Serializable`; core carries the runtime as
+    // `implementation`, so it does not reach this module's compile classpath through it.
+    commonMainImplementation(libs.kotlinx.serialization.json)
+
     // `:packages:core` carries coroutines as `implementation`, so the `Flow` types in the
     // port's signatures are not re-exported to this module's compile classpath.
     commonMainImplementation(libs.kotlinx.coroutines.core)

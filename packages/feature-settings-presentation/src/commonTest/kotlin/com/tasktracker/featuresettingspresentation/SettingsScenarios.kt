@@ -12,13 +12,19 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasTestTag
+import com.tasktracker.core.AppError
+import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
@@ -38,6 +44,7 @@ import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
+import com.tasktracker.resources.settings_profile_save_failed
 import com.tasktracker.resources.settings_server_error_cleartext_not_permitted
 import com.tasktracker.resources.settings_server_saved_notice
 import com.tasktracker.resources.settings_sync_waiting
@@ -588,6 +595,148 @@ object SettingsScenarios {
             "\"$notice\" does not say when the saved address takes effect",
         )
     }
+
+    /**
+     * The name has an editor, and saving it stages the new value and asks for one write.
+     *
+     * Two callbacks rather than one because the screen's job is split: the staged value is what
+     * the header shows immediately, and the commit is the network step that can fail. A test
+     * that only saw the staged value would pass for a screen that never asked the server.
+     */
+    val theNameSheetStagesAndCommitsANewName: suspend ComposeUiTest.() -> Unit = {
+        var staged: UserDetails? = null
+        var commits = 0
+        screenShowing(
+            userDetails = UserDetails(fullName = "Sam", email = "sam@example.com"),
+            onUserDetailsChange = { staged = it },
+            onUserDetailsCommit = { commits++ },
+        )
+
+        onNodeWithTag(SettingsEditNameTag).performClick()
+        waitForIdle()
+        onNodeWithTag(UserNameSheetTag).assertIsDisplayed()
+
+        onNodeWithTag(UserNameFieldTag).performTextClearance()
+        onNodeWithTag(UserNameFieldTag).performTextInput("Samantha")
+        waitForIdle()
+        onNodeWithTag(UserNameSaveTag).assertIsEnabled()
+        onNodeWithTag(UserNameSaveTag).performClick()
+        waitForIdle()
+
+        assertEquals(
+            UserDetails(fullName = "Samantha", email = "sam@example.com"),
+            staged,
+            "the sheet must route the whole profile with only the name changed",
+        )
+        assertEquals(1, commits, "saving the name must ask for exactly one write")
+        onNodeWithTag(UserNameSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * Save is unavailable for a blank or an unchanged name.
+     *
+     * The unchanged case is the one a blank guard alone misses: pressing Save on the value that
+     * is already there would be a PATCH with an empty delta, and the closed sheet would read as
+     * evidence that something was saved.
+     */
+    val theNameSaveIsDisabledForABlankOrUnchangedName: suspend ComposeUiTest.() -> Unit = {
+        screenShowing(userDetails = UserDetails(fullName = "Sam", email = "sam@example.com"))
+
+        onNodeWithTag(SettingsEditNameTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(UserNameSaveTag).assertIsNotEnabled()
+
+        onNodeWithTag(UserNameFieldTag).performTextClearance()
+        waitForIdle()
+        onNodeWithTag(UserNameSaveTag).assertIsNotEnabled()
+
+        onNodeWithTag(UserNameFieldTag).performTextInput("Samantha")
+        waitForIdle()
+        onNodeWithTag(UserNameSaveTag).assertIsEnabled()
+    }
+
+    /**
+     * The note writes when the user finishes, and never past the server's limit.
+     *
+     * The zero after typing is the assertion that matters: a field that committed per keystroke
+     * would still pass the final `1`, while having sent eight PATCHes and raced seven of them.
+     * `performImeAction` is the Done path the keyboard's return key takes.
+     */
+    val theStatusNoteCommitsOnDoneAndStopsAtTheLimit: suspend ComposeUiTest.() -> Unit = {
+        var value by mutableStateOf("")
+        var commits = 0
+        setContent {
+            Themed {
+                StatusTextEditor(
+                    value = value,
+                    onValueChange = { value = it },
+                    onCommit = { commits++ },
+                )
+            }
+        }
+
+        val field = onNode(hasSetTextAction())
+        field.performTextInput("On vacation")
+        waitForIdle()
+
+        assertEquals("On vacation", value)
+        assertEquals(0, commits, "typing must not write; only Done and focus loss do")
+
+        field.performImeAction()
+        waitForIdle()
+        assertEquals(1, commits)
+
+        // A paste is cut to 280 rather than refused outright, so the field never holds a value
+        // the server would answer with a 400.
+        field.performTextClearance()
+        field.performTextInput("x".repeat(300))
+        waitForIdle()
+        assertEquals(280, value.length)
+    }
+
+    /**
+     * A refused write is reported above the identity block, and dismissing the report leaves
+     * the reverted profile untouched.
+     *
+     * The banner is a report, not a question: the edit was reverted before it appeared, so there
+     * is nothing to retry from here. The name below is still the confirmed one, which is the
+     * other half of that promise.
+     */
+    val aFailedProfileWriteRaisesADismissibleBanner: suspend ComposeUiTest.() -> Unit = {
+        var failure by mutableStateOf<AppError?>(AppError.Transport("the connection dropped"))
+        var dismissed = 0
+        setContent {
+            Themed {
+                SettingsScreen(
+                    connectivity = ConnectivitySummary.Online,
+                    activity = SyncActivity(),
+                    themeScheme = ThemeScheme.System,
+                    version = SettingsPreviewData.version,
+                    commandOutcome = null,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    userDetails = UserDetails(fullName = "Sam", email = "sam@example.com"),
+                    profileFailure = failure,
+                    onDismissProfileFailure = {
+                        dismissed++
+                        failure = null
+                    },
+                )
+            }
+        }
+
+        onNodeWithTag(SettingsProfileFailureTag).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_profile_save_failed)).assertIsDisplayed()
+
+        onNodeWithTag(TTBannerDismissTag).performClick()
+        waitForIdle()
+
+        assertEquals(1, dismissed)
+        onNodeWithTag(SettingsProfileFailureTag).assertDoesNotExist()
+        onNodeWithText("Sam").assertIsDisplayed()
+    }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -600,6 +749,11 @@ private fun ComposeUiTest.screenShowing(
     serverAddress: ServerAddressSettings = ServerAddressSettings(inUse = null, savedOverride = null),
     serverAddressEditor: ServerAddressEditor? = null,
     serverAddressNotice: ServerAddressNotice? = null,
+    userDetails: UserDetails = UserDetails(),
+    profileFailure: AppError? = null,
+    onUserDetailsChange: (UserDetails) -> Unit = {},
+    onUserDetailsCommit: () -> Unit = {},
+    onDismissProfileFailure: () -> Unit = {},
 ) {
     setContent {
         Themed {
@@ -616,6 +770,11 @@ private fun ComposeUiTest.screenShowing(
                 serverAddress = serverAddress,
                 serverAddressEditor = serverAddressEditor,
                 serverAddressNotice = serverAddressNotice,
+                userDetails = userDetails,
+                onUserDetailsChange = onUserDetailsChange,
+                onUserDetailsCommit = onUserDetailsCommit,
+                profileFailure = profileFailure,
+                onDismissProfileFailure = onDismissProfileFailure,
             )
         }
     }

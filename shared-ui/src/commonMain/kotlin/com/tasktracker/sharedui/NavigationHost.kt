@@ -2021,6 +2021,13 @@ private fun SettingsDestination(
         // state would look correct until the next reload put the stored value back.
         userDetails = model.userDetails,
         onUserDetailsChange = { details -> scope.launch { model.applyUserDetails(details) } },
+        // The write half. A picker dispatches change then commit in the same gesture; the two
+        // launches are ordered on the composition's dispatcher, and the service updates its flow
+        // synchronously before it persists, so the commit always sees the value the change just
+        // staged.
+        onUserDetailsCommit = { scope.launch { model.saveUserDetails() } },
+        profileFailure = model.profileFailure,
+        onDismissProfileFailure = { model.dismissProfileFailure() },
         isAdmin = isAdmin,
         // The two admin rows. The screen reports the tap; where it lands is navigation, so it
         // goes through the router rather than holding a flag here — and through

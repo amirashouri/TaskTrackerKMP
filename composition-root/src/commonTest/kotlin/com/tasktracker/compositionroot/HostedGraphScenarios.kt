@@ -8,6 +8,7 @@ import com.tasktracker.database.RoomOutboxQueue
 import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.network.SessionInvalidationReason
 import com.tasktracker.sync.SyncCoordinator
@@ -100,11 +101,25 @@ object HostedGraphScenarios {
      * would turn the About row into a launch failure.
      */
     val theSettingsPortResolvesAndIsOneInstance: suspend TestScope.() -> Unit = {
-        val resolver = AppGraph.start(testBindings())
+        val resolver = AppGraph.start(
+            testBindings(
+                // These bindings have no API root, which is the offline demo. Reaching this
+                // factory would mean the settings registration built an authenticated client
+                // for a server that was never configured — the fake would hide it, so the
+                // factory throws and the scenario fails.
+                httpClient = { _, _ ->
+                    error("the settings gateway must not build a client without an API root")
+                },
+            ),
+        )
         try {
             val settings = resolver.resolve(SettingsPort::class)
             assertNotNull(settings)
             assertSame(settings, resolver.resolve(SettingsPort::class))
+
+            // With no gateway the commit is local: no client, no request, no failure for a build
+            // that never had a backend.
+            assertEquals(UserDetails(), settings.commitUserDetails())
         } finally {
             resolver.stop()
         }

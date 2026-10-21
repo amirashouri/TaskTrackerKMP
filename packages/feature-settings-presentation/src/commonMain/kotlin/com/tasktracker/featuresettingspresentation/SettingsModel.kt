@@ -126,6 +126,26 @@ class SettingsModel(private val port: SettingsPort) {
         private set
 
     /**
+     * The last profile write the server refused, or `null` when there is nothing to report.
+     *
+     * Held as the [AppError] rather than as a sentence, for the reason [signOutFailure] is: the
+     * model cannot read a resource. The screen renders it as a banner over the identity block
+     * and offers a dismiss, because the failed edit has already been reverted and there is no
+     * second action that could make it succeed.
+     */
+    var profileFailure: AppError? by mutableStateOf(null)
+        private set
+
+    /**
+     * The last value the server confirmed, i.e. the value to fall back to when a write fails.
+     *
+     * Not Compose state: the screen never renders it, and it must not cause a recomposition.
+     * Set by [reload] and by every successful commit, so the revert lands on the same value the
+     * adapter restored rather than on the optimistic one the user just saw rejected.
+     */
+    private var confirmedUserDetails: UserDetails? = null
+
+    /**
      * The address this launch is using, and the address saved for the next, as one value.
      *
      * Two fields rather than one current address, because they genuinely differ between a save
@@ -185,6 +205,7 @@ class SettingsModel(private val port: SettingsPort) {
         connectivity = port.connectivity()
         activity = port.syncActivity()
         userDetails = port.userDetails()
+        confirmedUserDetails = userDetails
         serverAddress = port.serverAddress()
     }
 
@@ -290,6 +311,43 @@ class SettingsModel(private val port: SettingsPort) {
 
     fun restoreUserDetails(details: UserDetails) {
         userDetails = details
+    }
+
+    /**
+     * Writes the edits staged by [applyUserDetails] to the signed-in user's record.
+     *
+     * The optimistic value is already on screen, so this is the step that either confirms it or
+     * takes it back. On failure the adapter has restored the last confirmed profile and emitted
+     * it; the local assignment here makes the revert immediate, so the banner and the reverted
+     * field appear on the same frame rather than whenever the collector resumes.
+     *
+     * [CancellationException] is rethrown for the reason [signOut] gives: leaving the tab
+     * mid-write must not arm a failure banner for the screen the user navigated to. The adapter
+     * does not revert on cancellation either — the process is disposing the screen, and the
+     * next [reload] reads the server's truth.
+     */
+    suspend fun saveUserDetails() {
+        try {
+            val saved = port.commitUserDetails()
+            userDetails = saved
+            confirmedUserDetails = saved
+            profileFailure = null
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            confirmedUserDetails?.let { userDetails = it }
+            profileFailure = failure
+        }
+    }
+
+    /**
+     * Clears [profileFailure], for a user who has read the banner.
+     *
+     * Dismissing leaves the reverted profile in place: the server kept the old value and the
+     * screen now shows it, so there is nothing to undo and nothing to retry without a new edit.
+     */
+    fun dismissProfileFailure() {
+        profileFailure = null
     }
 
     // MARK: - Server Address

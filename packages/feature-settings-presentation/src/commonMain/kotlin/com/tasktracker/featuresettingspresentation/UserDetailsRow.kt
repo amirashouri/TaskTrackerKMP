@@ -32,6 +32,7 @@ import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttInitialsAvatar
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -48,6 +49,7 @@ import com.tasktracker.resources.avatar_7
 import com.tasktracker.resources.avatar_8
 import com.tasktracker.resources.avatar_9
 import com.tasktracker.resources.settings_avatar_label
+import com.tasktracker.resources.settings_edit_name
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -55,6 +57,13 @@ import org.jetbrains.compose.resources.stringResource
 const val SettingsUserDetailsTag = "settings.userDetails"
 const val SettingsAvatarTag = "settings.avatar"
 const val AvatarPickerTag = "settings.avatarPicker"
+
+/**
+ * The name tap target. A tag of its own rather than one on the header, because "the identity
+ * block is there" and "the name can be edited" are separate claims: a build that dropped the
+ * editor would still pass a scenario that only looked for the header.
+ */
+const val SettingsEditNameTag = "settings.editName"
 
 /** Per-portrait tag, so a scenario can pick "7" without a positional matcher. */
 fun AvatarOptionTag(id: Int): String = "settings.avatarOption.$id"
@@ -68,6 +77,7 @@ fun AvatarOptionTag(id: Int): String = "settings.avatarOption.$id"
 internal fun UserDetailsRow(
     details: UserDetails,
     onDetailsChange: (UserDetails) -> Unit,
+    onEditName: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var avatarPickerOpen by remember { mutableStateOf(false) }
@@ -112,14 +122,42 @@ internal fun UserDetailsRow(
                 }
             }
         }
-        ttText(
-            text = if (details.fullName.isNotBlank()) details.fullName else details.email,
-            style = ttTypography.headline,
-            color = ttLabel(),
-            textAlign = TextAlign.Center,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            ttText(
+                text = if (details.fullName.isNotBlank()) details.fullName else details.email,
+                style = ttTypography.headline,
+                color = ttLabel(),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // Clear of the pencil at the end of the row; without it a long name would run
+                // underneath the icon rather than ellipsizing before it.
+                modifier = Modifier
+                    .padding(horizontal = EditNameTargetSize)
+                    .clickable(role = Role.Button, onClick = onEditName)
+                    .padding(vertical = ttSpacing.xs),
+            )
+            if (details.fullName.isNotBlank()) {
+                // The pencil says the name is a control, not a heading. It carries the test tag
+                // rather than the text so the tap target stays a full 48dp square instead of
+                // the height of one line.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(EditNameTargetSize)
+                        .clickable(role = Role.Button, onClick = onEditName)
+                        .testTag(SettingsEditNameTag),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ttIcon(
+                        image = ttActionIcons.edit,
+                        contentDescription = stringResource(Res.string.settings_edit_name),
+                        tint = ttLabelSecondary(),
+                        modifier = Modifier.size(EditNameIconSize),
+                    )
+                }
+            }
+        }
         if (avatarPickerOpen) {
             Column(
                 modifier = Modifier.fillMaxWidth().testTag(AvatarPickerTag),
@@ -190,6 +228,10 @@ private fun avatarResource(id: Int): DrawableResource = when (id) {
 
 /** The profile picture's diameter. A named constant so the KDoc's 72 and the render agree. */
 private val UserDetailsAvatarSize = 72.dp
+
+/** The pencil's tap target, 48dp so it is the size a finger can hit rather than the glyph. */
+private val EditNameTargetSize = 48.dp
+private val EditNameIconSize = 18.dp
 
 /** The grid thumb: 44dp x 5 with `ttSpacing.xs` gaps is 236dp, inside the section's 264dp. */
 private val UserDetailsAvatarOptionSize = 44.dp

@@ -346,6 +346,9 @@ class FakeShellSettingsPort(
 
     override suspend fun setUserDetails(details: UserDetails) = Unit
 
+    /** The shell binds the commit callback; these scenarios have no server to write to. */
+    override suspend fun commitUserDetails(): UserDetails = UserDetails()
+
     /**
      * Inert, like the feature's own fake, and for the same reason: the shell scenarios that
      * reach Settings are testing what the shell *binds*, not the save/probe order, which

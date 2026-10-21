@@ -1,24 +1,33 @@
 package com.tasktracker.featuresettingsdata
 
+import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.ServerAddressProbe
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
 import com.tasktracker.featuresettingsdomain.ServerAddressValidation
+import com.tasktracker.featuresettingsdomain.UserDetails
+import com.tasktracker.featuresettingsdomain.UserPosition
+import com.tasktracker.featuresettingsdomain.UserProfileChanges
+import com.tasktracker.featuresettingsdomain.UserProfileGateway
+import com.tasktracker.featuresettingsdomain.UserStatus
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.ConnectivityWatcher
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.userdefaults.API_BASE_URL_PREFERENCE_KEY
+import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * The connectivity half of [LiveSettingsService]: the four-way translation, and the override.
@@ -87,6 +96,7 @@ class LiveSettingsServiceTest {
         apiBaseUrl: String? = null,
         checkServerAddress: CheckServerAddress = CheckServerAddress(ServerAddressProbe { true }),
         defaults: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
+        profileGateway: UserProfileGateway? = null,
     ) = LiveSettingsService(
         monitor = monitor,
         // Never asked to sync by the connectivity tests; see `UnusedSyncDependencies`.
@@ -97,6 +107,7 @@ class LiveSettingsServiceTest {
         apiBaseUrl = apiBaseUrl,
         checkServerAddress = checkServerAddress,
         defaults = defaults,
+        profileGateway = profileGateway,
     )
 
     @Test
@@ -289,5 +300,199 @@ class LiveSettingsServiceTest {
 
         assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
         assertNull(service.serverAddress().savedOverride)
+    }
+
+    // MARK: - Self profile
+
+    @Test
+    fun openingSettingsReadsTheServerProfileAndConfirmsIt() = runTest {
+        val profile = UserDetails(
+            fullName = "Ada",
+            position = UserPosition.Designer,
+            avatarId = 3,
+            email = "ada@example.com",
+            status = UserStatus.Away,
+            statusText = "At the dentist",
+        )
+        val gateway = FakeProfileGateway(loaded = profile)
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(monitor = emptyMonitor(), defaults = store, profileGateway = gateway)
+
+        assertEquals(profile, service.userDetails())
+        // One read for the screen, not one per field: the header, the pickers and the note all
+        // render from the same returned profile.
+        assertEquals(1, gateway.loads)
+        // The read is also the cache write, so the next launch has the profile before the GET
+        // answers — and an offline launch has it at all.
+        assertEquals(profile, store.value<UserDetails>(DefaultsKey.UserProfile))
+
+        // A commit with no local edit sends nothing: the profile already matches the confirmed
+        // copy, so there is no request to make and no answer to wait for.
+        assertEquals(profile, service.commitUserDetails())
+        assertTrue(gateway.changes.isEmpty())
+    }
+
+    @Test
+    fun aReadFailureKeepsThePersistedProfile() = runTest {
+        val profile = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(profile, DefaultsKey.UserProfile)
+        val gateway = FakeProfileGateway(loadFailure = AppError.Transport("down"))
+        val service = service(monitor = emptyMonitor(), defaults = store, profileGateway = gateway)
+
+        // Settings must still open offline; the cached profile is the answer, not an error.
+        assertEquals(profile, service.userDetails())
+    }
+
+    @Test
+    fun aDecodeFailureKeepsThePersistedProfile() = runTest {
+        // A server that added or renamed a key fails strict decoding rather than yielding a
+        // half-filled profile. That is still a read failure for Settings, not a reason to show
+        // the user an empty identity.
+        val profile = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(profile, DefaultsKey.UserProfile)
+        val gateway = FakeProfileGateway(loadFailure = AppError.Decoding("unknown key"))
+        val service = service(monitor = emptyMonitor(), defaults = store, profileGateway = gateway)
+
+        assertEquals(profile, service.userDetails())
+    }
+
+    @Test
+    fun commitSendsOnlyTheChangedFieldAndStoresTheServerCopy() = runTest {
+        val confirmed = UserDetails(
+            fullName = "Ada",
+            position = UserPosition.Designer,
+            avatarId = 3,
+            email = "ada@example.com",
+            status = UserStatus.Away,
+            statusText = "At the dentist",
+        )
+        val edited = confirmed.copy(fullName = "Ada Lovelace")
+        val gateway = FakeProfileGateway(loaded = confirmed, saved = edited)
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(monitor = emptyMonitor(), defaults = store, profileGateway = gateway)
+
+        service.userDetails()
+        service.setUserDetails(edited)
+        // Staging is local and synchronous; the write is the explicit commit below.
+        assertTrue(gateway.changes.isEmpty(), "an edit on screen must not reach the server by itself")
+        assertEquals(edited, service.commitUserDetails())
+
+        val change = gateway.changes.single()
+        assertEquals("Ada Lovelace", change.fullName)
+        // Everything the user did not touch is absent, so the server keeps its own values for
+        // them. A `position` or `presence` in this body would be a write nobody asked for.
+        assertNull(change.position)
+        assertNull(change.avatarId)
+        assertNull(change.status)
+        assertNull(change.statusText)
+
+        assertEquals(edited, store.value<UserDetails>(DefaultsKey.UserProfile))
+    }
+
+    @Test
+    fun aFreeTextPositionIsNotClearedByANameEdit() = runTest {
+        // The server holds something like "Senior Designer"; the picker cannot represent it and
+        // reports `null`. `null` therefore means "unchanged", not "the user chose nothing": an
+        // unrelated name edit must not send `position` and wipe the admin's column.
+        val confirmed = UserDetails(fullName = "Ada", position = null, email = "ada@example.com")
+        val edited = confirmed.copy(fullName = "Ada Lovelace")
+        val gateway = FakeProfileGateway(loaded = confirmed, saved = edited)
+        val service = service(monitor = emptyMonitor(), profileGateway = gateway)
+
+        service.userDetails()
+        service.setUserDetails(edited)
+        service.commitUserDetails()
+
+        val change = gateway.changes.single()
+        assertEquals("Ada Lovelace", change.fullName)
+        assertNull(change.position)
+        assertNull(change.status)
+        assertNull(change.avatarId)
+        assertNull(change.statusText)
+    }
+
+    @Test
+    fun aFailedCommitRestoresTheConfirmedProfileBeforeThrowing() = runTest {
+        val confirmed = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val edited = confirmed.copy(statusText = "On vacation")
+        val gateway = FakeProfileGateway(loaded = confirmed)
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val service = service(monitor = emptyMonitor(), defaults = store, profileGateway = gateway)
+
+        service.userDetails()
+        service.setUserDetails(edited)
+        gateway.updateFailure = AppError.Transport("the connection dropped")
+
+        assertFailsWith<AppError.Transport> { service.commitUserDetails() }
+
+        // The optimistic value is gone from both places the screen can read: an observer of the
+        // stream sees the confirmed profile, and a relaunch reads it back from the store.
+        assertEquals(confirmed, service.userDetailsUpdates().first())
+        assertEquals(confirmed, store.value<UserDetails>(DefaultsKey.UserProfile))
+    }
+
+    @Test
+    fun aCancelledCommitDoesNotRevertTheOptimisticValue() = runTest {
+        val confirmed = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val edited = confirmed.copy(statusText = "On vacation")
+        val gateway = FakeProfileGateway(loaded = confirmed)
+        val service = service(monitor = emptyMonitor(), profileGateway = gateway)
+
+        service.userDetails()
+        service.setUserDetails(edited)
+        gateway.updateFailure = CancellationException("the screen went away")
+
+        assertFailsWith<CancellationException> { service.commitUserDetails() }
+
+        // Cancellation is a disposed screen, not a refusal: the request may have reached the
+        // server, so reverting would show a value the server might not hold. The next read
+        // corrects it; that is what opening Settings does.
+        assertEquals(edited, service.userDetailsUpdates().first())
+    }
+
+    @Test
+    fun aCommitWithoutAGatewayIsALocalNoOp() = runTest {
+        // The offline demo has no server and therefore no gateway. A picker must still move,
+        // and Save must not turn into a failure for a build that never had a backend.
+        val service = service(monitor = emptyMonitor())
+        val local = UserDetails(fullName = "Local user")
+
+        service.setUserDetails(local)
+        assertEquals(local, service.commitUserDetails())
+    }
+}
+
+/**
+ * A gateway whose load and save answers are scripted, and whose change sets are recorded.
+ *
+ * The real service's contract is "send only the delta, restore the confirmed copy on failure";
+ * a fake that applied the change set itself would be a second implementation of that contract
+ * and could pass while the service was wrong.
+ */
+private class FakeProfileGateway(
+    private val loaded: UserDetails = UserDetails(),
+    var saved: UserDetails = loaded,
+    var loadFailure: AppError? = null,
+) : UserProfileGateway {
+
+    var updateFailure: Throwable? = null
+
+    var loads: Int = 0
+        private set
+
+    val changes = mutableListOf<UserProfileChanges>()
+
+    override suspend fun load(): UserDetails {
+        loads += 1
+        loadFailure?.let { throw it }
+        return loaded
+    }
+
+    override suspend fun update(changes: UserProfileChanges): UserDetails {
+        this.changes += changes
+        updateFailure?.let { throw it }
+        return saved
     }
 }

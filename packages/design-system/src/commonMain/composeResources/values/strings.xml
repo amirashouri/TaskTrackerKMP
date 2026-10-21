@@ -480,6 +480,12 @@
     <string name="settings_appearance_section">Appearance</string>
     <string name="settings_user_details_section">User details</string>
     <string name="settings_fullname_label">Full name</string>
+    <!--
+      The email is the account identity, not a profile field: it is what a password reset and
+      an invitation are addressed to. The label says whose it is so it does not read as another
+      editable row beside the name.
+    -->
+    <string name="settings_email_label">Account email</string>
     <string name="settings_avatar_label">Avatar</string>
     <string name="settings_position_label">Position</string>
     <string name="settings_position_developer">Developer</string>
@@ -487,6 +493,22 @@
     <string name="settings_position_product_owner">Product owner</string>
     <string name="settings_position_data_engineer">Data engineer</string>
     <string name="settings_position_manager">Manager</string>
+    <!--
+      The display-name editor. The body says what the field changes rather than how to use it:
+      the name is what the rest of the team sees, and a user who is about to change it is
+      entitled to know that before they type. The length limit is enforced by the field and by
+      the server; it is not a rule the copy has to recite.
+    -->
+    <string name="settings_name_title">Display name</string>
+    <string name="settings_name_body">The name your team sees. It can be different from your email.</string>
+    <string name="settings_name_hint">Your name</string>
+    <string name="settings_edit_name">Edit name</string>
+    <!--
+      One sentence for every failed profile write. The edit has already been reverted, so the
+      only useful instruction is to try again; naming the transport failure ("timed out",
+      "unexpected response") would describe the wire rather than what the user can do.
+    -->
+    <string name="settings_profile_save_failed">Could not save your profile. Check your connection and try again.</string>
 
     <string name="settings_theme_label">Theme</string>
     <!--
