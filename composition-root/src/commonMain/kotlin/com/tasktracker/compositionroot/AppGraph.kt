@@ -39,6 +39,7 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
 import com.tasktracker.featureprojectsdomain.UploadAttachment
 import com.tasktracker.featuresettingsdata.HttpServerAddressProbe
+import com.tasktracker.featuresettingsdata.HttpUserProfileGateway
 import com.tasktracker.featuresettingsdata.LiveSettingsService
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
@@ -768,6 +769,19 @@ object AppGraph {
                 apiBaseUrl = platforms.apiBaseUrl,
                 checkServerAddress = CheckServerAddress(HttpServerAddressProbe()),
                 defaults = resolver.resolve(UserDefaultsStore::class),
+                // The identity block's wire path. Built only when there is an API root, like
+                // every other authenticated remote: without one the profile stays a local
+                // preference, which is what the offline demo shows. `AuthInterceptor` gives
+                // it the same refresh-then-replay the directory and admin remotes get, so a
+                // token that expires mid-edit is refreshed rather than reported as a failure.
+                profileGateway = platforms.apiBaseUrl?.let { url ->
+                    HttpUserProfileGateway(
+                        client = platforms.httpClient(
+                            url,
+                            listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                        ),
+                    )
+                },
             )
         }
     }

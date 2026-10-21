@@ -119,6 +119,25 @@ interface SettingsPort {
 
     suspend fun setUserDetails(details: UserDetails)
 
+    /**
+     * Writes the pending [userDetails] edits to the signed-in user's own record.
+     *
+     * The screen applies an edit locally through [setUserDetails] first, so a picker moves on
+     * the same frame; this is the step that makes it durable on the server. The returned value
+     * is the server's confirmed copy, which may differ from the optimistic one (the server
+     * trims, and it always echoes `presence`).
+     *
+     * Only the fields that differ from the last confirmed profile are sent. On failure the
+     * adapter restores that confirmed profile before throwing, so the screen does not keep
+     * showing a value the server refused; the caller reports the [AppError] and does not queue
+     * the edit, because a profile write is not one of the changes the sync engine replays.
+     *
+     * With no server session (the offline demo) there is nothing to write to and this returns
+     * the current details unchanged.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun commitUserDetails(): UserDetails
+
     /** Read once, not streamed: a running app's version cannot change. */
     fun appVersion(): AppVersion
 

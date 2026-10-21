@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -453,6 +454,73 @@ class SettingsModelTest {
 
         assertNull(model.serverAddressNotice)
     }
+
+    // MARK: - Self profile
+
+    @Test
+    fun aSuccessfulSaveReplacesTheOptimisticValueWithTheServerCopy() = runTest {
+        val confirmed = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val edited = confirmed.copy(fullName = "Ada Lovelace")
+        val serverCopy = edited.copy(statusText = "trimmed by the server")
+        val port = RecordingSettingsPort().apply {
+            userDetailsValue = confirmed
+            commitUserDetailsResult = serverCopy
+        }
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.applyUserDetails(edited)
+        model.saveUserDetails()
+
+        assertEquals(serverCopy, model.userDetails)
+        assertNull(model.profileFailure)
+        assertEquals(1, port.commitUserDetailsCalls)
+    }
+
+    @Test
+    fun aFailedSaveRevertsToTheConfirmedProfileAndRaisesTheBanner() = runTest {
+        val confirmed = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val edited = confirmed.copy(fullName = "Ada Lovelace")
+        val failure = AppError.Transport("the connection dropped")
+        val port = RecordingSettingsPort().apply {
+            userDetailsValue = confirmed
+            commitUserDetailsFailure = failure
+        }
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.applyUserDetails(edited)
+        model.saveUserDetails()
+
+        // The banner and the reverted field are the two halves of one answer: the server kept
+        // the old value, and the screen must not keep showing a value it refused.
+        assertEquals(confirmed, model.userDetails)
+        assertEquals(failure, model.profileFailure)
+
+        model.dismissProfileFailure()
+
+        assertNull(model.profileFailure)
+        assertEquals(confirmed, model.userDetails)
+    }
+
+    @Test
+    fun aCancelledSaveIsRethrownWithoutRaisingTheBanner() = runTest {
+        val confirmed = UserDetails(fullName = "Ada", email = "ada@example.com")
+        val cancellation = CancellationException("the screen went away")
+        val port = RecordingSettingsPort().apply {
+            userDetailsValue = confirmed
+            commitUserDetailsFailure = cancellation
+        }
+
+        val model = SettingsModel(port)
+        model.reload()
+        model.applyUserDetails(confirmed.copy(fullName = "Ada Lovelace"))
+
+        assertFailsWith<CancellationException> { model.saveUserDetails() }
+
+        // A disposed screen must not arm a banner over whatever the user navigated to next.
+        assertNull(model.profileFailure)
+    }
 }
 
 /**
@@ -552,11 +620,37 @@ class RecordingSettingsPort(
         return version
     }
 
-    override suspend fun userDetails(): UserDetails = UserDetails()
+    /** The confirmed value [userDetails] answers, and what a failed commit reverts to. */
+    var userDetailsValue: UserDetails = UserDetails()
 
-    override fun userDetailsUpdates(): kotlinx.coroutines.flow.Flow<UserDetails> = kotlinx.coroutines.flow.flowOf(UserDetails())
+    var commitUserDetailsCalls: Int = 0
+        private set
 
-    override suspend fun setUserDetails(details: UserDetails) = Unit
+    /** When set, [commitUserDetails] throws it instead of confirming. */
+    var commitUserDetailsFailure: Throwable? = null
+
+    /** The server's answer to a successful commit; defaults to the staged value. */
+    var commitUserDetailsResult: UserDetails? = null
+
+    private val userDetailsFlow = MutableStateFlow(UserDetails())
+
+    override suspend fun userDetails(): UserDetails = userDetailsValue
+
+    override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
+
+    override suspend fun setUserDetails(details: UserDetails) {
+        // The optimistic half only. `userDetailsValue` stays at the last confirmed profile, so
+        // the real service's snapshot semantics are what the model is tested against.
+        userDetailsFlow.value = details
+    }
+
+    override suspend fun commitUserDetails(): UserDetails {
+        commitUserDetailsCalls += 1
+        commitUserDetailsFailure?.let { throw it }
+        val result = commitUserDetailsResult ?: userDetailsFlow.value
+        userDetailsValue = result
+        return result
+    }
 
     /**
      * The address state [serverAddress] reports; set it to script the row.

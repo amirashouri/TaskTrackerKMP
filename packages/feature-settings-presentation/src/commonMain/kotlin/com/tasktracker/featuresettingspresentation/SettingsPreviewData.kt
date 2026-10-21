@@ -118,6 +118,9 @@ class PreviewSettingsPort(
 
     override suspend fun setUserDetails(details: UserDetails) = Unit
 
+    /** A preview has no server to confirm a write, so a commit is the value it already has. */
+    override suspend fun commitUserDetails(): UserDetails = userDetails()
+
     /**
      * A preview has no process to restart, so the server field is inert here.
      *

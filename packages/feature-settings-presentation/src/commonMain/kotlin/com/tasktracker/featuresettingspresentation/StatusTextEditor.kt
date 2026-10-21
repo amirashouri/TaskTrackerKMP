@@ -9,8 +9,13 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -29,8 +34,17 @@ const val SettingsStatusTextRowTag = "settings.statusText"
 internal fun StatusTextEditor(
     value: String,
     onValueChange: (String) -> Unit,
+    /**
+     * Called when the field is finished, not on every keystroke.
+     *
+     * The note is a free-text profile field, so a write per character would be one PATCH per
+     * character and the same number of chances to race the next one. Done and focus loss are
+     * the two moments the user is saying "this is the value".
+     */
+    onCommit: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    var hadFocus by remember { mutableStateOf(false) }
     // No label: the hint inside the field already says what this is,
     // and a label beside it just squeezed the field into half the row.
     Box(
@@ -47,14 +61,26 @@ internal fun StatusTextEditor(
     ) {
         BasicTextField(
             value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
+            onValueChange = { next ->
+                // The server's limit is 280 runes; cutting on a code-point boundary is what
+                // keeps a pasted note under it without leaving half an emoji in the field.
+                onValueChange(next.capToCodePoints(MaxStatusTextLength))
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { focusState ->
+                    // Commit on the transition out, not on every focus event: `onFocusChanged`
+                    // also fires when the screen is first laid out, and committing there would
+                    // write a value the user has not touched.
+                    if (hadFocus && !focusState.isFocused) onCommit()
+                    hadFocus = focusState.isFocused
+                },
             textStyle = ttTypography.body.copy(color = ttLabel()),
             cursorBrush = SolidColor(ttAccent()),
             singleLine = true,
             maxLines = 1,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onAny = {}),
+            keyboardActions = KeyboardActions(onDone = { onCommit() }),
             decorationBox = { inner ->
                 Box(
                     modifier = Modifier.padding(
@@ -75,3 +101,6 @@ internal fun StatusTextEditor(
         )
     }
 }
+
+/** The server's `presence_note` limit, shared with the field so an overrun fails locally. */
+private const val MaxStatusTextLength = 280

@@ -130,4 +130,20 @@ abstract class SettingsViewScenarios {
     @Test
     fun aSavedChangeRaisesTheRestartNotice() =
         runComposeUiTest(block = SettingsScenarios.aSavedChangeRaisesTheRestartNotice)
+
+    @Test
+    fun theNameSheetStagesAndCommitsANewName() =
+        runComposeUiTest(block = SettingsScenarios.theNameSheetStagesAndCommitsANewName)
+
+    @Test
+    fun theNameSaveIsDisabledForABlankOrUnchangedName() =
+        runComposeUiTest(block = SettingsScenarios.theNameSaveIsDisabledForABlankOrUnchangedName)
+
+    @Test
+    fun theStatusNoteCommitsOnDoneAndStopsAtTheLimit() =
+        runComposeUiTest(block = SettingsScenarios.theStatusNoteCommitsOnDoneAndStopsAtTheLimit)
+
+    @Test
+    fun aFailedProfileWriteRaisesADismissibleBanner() =
+        runComposeUiTest(block = SettingsScenarios.aFailedProfileWriteRaisesADismissibleBanner)
 }

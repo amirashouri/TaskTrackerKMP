@@ -1,5 +1,6 @@
 package com.tasktracker.featuresettingsdata
 
+import com.tasktracker.core.AppError
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -9,6 +10,8 @@ import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
+import com.tasktracker.featuresettingsdomain.UserProfileChanges
+import com.tasktracker.featuresettingsdomain.UserProfileGateway
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
@@ -20,6 +23,9 @@ import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * [SettingsPort] over the real services.
@@ -100,6 +106,14 @@ class LiveSettingsService(
      */
     private val checkServerAddress: CheckServerAddress,
     private val defaults: UserDefaultsStore,
+    /**
+     * The self-profile transport, or `null` in a build with no API root (the offline demo).
+     *
+     * Defaulted rather than required so the demo composition and every settings test that does
+     * not touch the identity block keep compiling; a null gateway means the profile stays a
+     * local preference, which is exactly what those builds already do.
+     */
+    private val profileGateway: UserProfileGateway? = null,
 ) : SettingsPort {
 
     // MARK: - Connectivity
@@ -176,9 +190,54 @@ class LiveSettingsService(
 
     private val userDetailsFlow = MutableStateFlow(UserDetails())
 
+    /**
+     * The last profile the server confirmed, and the base for the next delta.
+     *
+     * Distinct from [userDetailsFlow] on purpose. The flow is what the screen shows and carries
+     * optimistic edits; this is what the server is known to hold, so a failed write can be
+     * reverted to it and the next write sends only what actually differs.
+     */
+    private var confirmedUserDetails: UserDetails? = null
+
+    /**
+     * Serialises commits.
+     *
+     * Two pickers tapped in quick succession stage two optimistic values; without this, the
+     * first response could land after the second edit and overwrite it with an older profile.
+     * The mutex makes the second commit read the first one's confirmed value.
+     */
+    private val profileMutex = Mutex()
+
+    /**
+     * Reads the profile, preferring the server and falling back to the persisted copy.
+     *
+     * A GET failure is not surfaced: Settings must open on a cached profile when the device is
+     * offline, and there is no field to attach the error to. The fallback is recorded as the
+     * confirmed value so a later edit still sends a delta against what the user is looking at.
+     */
     override suspend fun userDetails(): UserDetails {
-        // Seed from persisted values on first read. After that the flow owns the state and
-        // the store is only written to, never read from again unless the flow is empty.
+        seedUserDetails()
+
+        val gateway = profileGateway ?: return userDetailsFlow.value
+        return try {
+            val remote = gateway.load()
+            confirmedUserDetails = remote
+            userDetailsFlow.value = remote
+            defaults.set(remote, DefaultsKey.UserProfile)
+            remote
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: AppError) {
+            confirmedUserDetails = userDetailsFlow.value
+            userDetailsFlow.value
+        }
+    }
+
+    /**
+     * Seeds from persisted values on first read. After that the flow owns the state and the
+     * store is only written to, never read from again unless the flow is empty.
+     */
+    private suspend fun seedUserDetails() {
         if (!userDetailsFlow.value.fullName.isNotBlank() &&
             !userDetailsFlow.value.email.isNotBlank() &&
             userDetailsFlow.value.avatarId == null &&
@@ -195,7 +254,6 @@ class LiveSettingsService(
                 }
             }
         }
-        return userDetailsFlow.value
     }
 
     override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
@@ -206,6 +264,65 @@ class LiveSettingsService(
         // and email are all kept together so a picked portrait comes back on the next launch.
         defaults.set(details, DefaultsKey.UserProfile)
     }
+
+    /**
+     * Sends only the fields the user changed since the last confirmed profile.
+     *
+     * ## Why the snapshot is taken before the call, and restored on failure
+     *
+     * The screen has already applied the edit, so by the time this runs [userDetailsFlow] is the
+     * optimistic value. If the server refuses, leaving that value in the flow would make the
+     * store and the screen agree on something the server never accepted. Restoring the snapshot
+     * first, then rethrowing, means every observer sees the same reverted profile the caller
+     * reports the failure for.
+     *
+     * ## Cancellation does not revert
+     *
+     * A cancelled commit is a screen being disposed mid-write, not a refused write: the request
+     * may have reached the server. Reverting locally would show a value the server might not
+     * hold; leaving the optimistic value lets the next read correct it, and the next read is
+     * what opening Settings does anyway.
+     */
+    override suspend fun commitUserDetails(): UserDetails = profileMutex.withLock {
+        val gateway = profileGateway ?: return@withLock userDetailsFlow.value
+
+        val edited = userDetailsFlow.value
+        val confirmed = confirmedUserDetails ?: edited
+        val changes = changesBetween(confirmed, edited)
+
+        if (changes.isEmpty) {
+            confirmedUserDetails = edited
+            return@withLock edited
+        }
+
+        try {
+            val saved = gateway.update(changes)
+            confirmedUserDetails = saved
+            userDetailsFlow.value = saved
+            defaults.set(saved, DefaultsKey.UserProfile)
+            saved
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            userDetailsFlow.value = confirmed
+            defaults.set(confirmed, DefaultsKey.UserProfile)
+            throw failure
+        }
+    }
+
+    /**
+     * The nullable fields are compared as a whole: `null` here means "the screen could not
+     * represent the server's value" (free-text position, no cached presence), and treating that
+     * as "unchanged" is what keeps an unrelated name edit from clearing it.
+     */
+    private fun changesBetween(confirmed: UserDetails, edited: UserDetails): UserProfileChanges =
+        UserProfileChanges(
+            fullName = edited.fullName.takeIf { it != confirmed.fullName },
+            position = edited.position.takeIf { it != confirmed.position },
+            avatarId = edited.avatarId.takeIf { it != confirmed.avatarId },
+            status = edited.status.takeIf { it != confirmed.status },
+            statusText = edited.statusText.takeIf { it != confirmed.statusText },
+        )
 
     // MARK: - Server Address
 

@@ -17,6 +17,21 @@ enum class UserPosition(val wireValue: String, val displayName: String) {
         val all: List<UserPosition> = listOf(Developer, Designer, ProductOwner, DataEngineer, Manager)
 
         fun fromWireValue(value: String): UserPosition? = all.firstOrNull { it.wireValue == value }
+
+        /**
+         * Parses the label stored in the server's free-text `position` column.
+         *
+         * The admin form writes a human label ("Product owner"), not the enum's internal
+         * `wireValue`, so the label is what round-trips. Free text an admin typed by hand
+         * ("Senior Designer") matches nothing and returns `null`; the caller must treat that as
+         * "not representable here", not as "clear it".
+         */
+        fun fromLabel(value: String?): UserPosition? {
+            val label = value?.trim().orEmpty()
+            if (label.isEmpty()) return null
+            return all.firstOrNull { it.displayName.equals(label, ignoreCase = true) }
+                ?: fromWireValue(label.lowercase())
+        }
     }
 }
 
@@ -25,23 +40,34 @@ enum class UserPosition(val wireValue: String, val displayName: String) {
  */
 
 @Serializable
-enum class UserStatus(val displayName: String) {
+enum class UserStatus(val displayName: String, val wireValue: String) {
     /** Reading, available for work. */
-    Active("Active"),
+    Active("Active", "active"),
     /** Not here right now. */
-    Away("Away"),
+    Away("Away", "away"),
     /** Temporarily unavailable, will return soon. */
-    BeRightBack("Be Right Back"),
+    BeRightBack("Be Right Back", "be_right_back"),
     /** Unable to take on work right now. */
-    Busy("Busy");
+    Busy("Busy", "busy");
 
     companion object {
         /** Every case, in display order. */
         val all: List<UserStatus> = listOf(Active, Away, BeRightBack, Busy)
 
-        /** Parses a stored name, falling back to [Active] for `null` or unknown values. */
+        /**
+         * Parses the **persisted enum name** (`"Active"`, `"BeRightBack"`) stored in
+         * `DefaultsKey.UserProfile`, falling back to [Active] for `null` or unknown values.
+         *
+         * Not the server's wire value: use [fromPresence] for that. The two vocabularies differ
+         * (`Active` vs `active`, `BeRightBack` vs `be_right_back`), and changing this parser to
+         * the wire spelling would invalidate every profile already saved on a device.
+         */
         fun fromWireValue(value: String?): UserStatus =
             all.firstOrNull { it.name == value } ?: Active
+
+        /** Parses the server's `presence` value, falling back to [Active]. */
+        fun fromPresence(value: String?): UserStatus =
+            all.firstOrNull { it.wireValue == value?.trim() } ?: Active
     }
 }
 

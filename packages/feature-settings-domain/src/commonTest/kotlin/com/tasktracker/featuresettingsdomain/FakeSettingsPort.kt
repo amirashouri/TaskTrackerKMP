@@ -1,5 +1,6 @@
 package com.tasktracker.featuresettingsdomain
 
+import com.tasktracker.core.AppError
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -100,13 +101,39 @@ class FakeSettingsPort(
     private var userDetailsValue: UserDetails = UserDetails()
     private val userDetailsFlow = MutableStateFlow(UserDetails())
 
+    /** The last confirmed profile, which is what a failed commit reverts to in the real service. */
+    private var confirmedUserDetails: UserDetails = UserDetails()
+
+    /** When set, [commitUserDetails] throws it instead of confirming. */
+    var commitUserDetailsFailure: AppError? = null
+
+    var commitUserDetailsCount: Int = 0
+        private set
+
     override suspend fun userDetails(): UserDetails = userDetailsValue
 
     override fun userDetailsUpdates(): Flow<UserDetails> = userDetailsFlow
 
     override suspend fun setUserDetails(details: UserDetails) {
-        userDetailsValue = details
+        // Only the visible value; the confirmed one moves on commit, exactly as the real
+        // service's snapshot does. A fake that moved both would make a revert assertion pass
+        // even if the model forgot to restore anything.
         userDetailsFlow.value = details
+    }
+
+    /** Seeds both halves, for a test that starts from a signed-in profile. */
+    fun seedUserDetails(details: UserDetails) {
+        userDetailsValue = details
+        confirmedUserDetails = details
+        userDetailsFlow.value = details
+    }
+
+    override suspend fun commitUserDetails(): UserDetails {
+        commitUserDetailsCount += 1
+        commitUserDetailsFailure?.let { throw it }
+        confirmedUserDetails = userDetailsFlow.value
+        userDetailsValue = confirmedUserDetails
+        return confirmedUserDetails
     }
 
     /**
