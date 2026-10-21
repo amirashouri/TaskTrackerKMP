@@ -346,6 +346,11 @@ jobs:
             echo
             echo "This release works with the server at the same version tag, where that release exists."
             echo "Server releases: [amirashouri/TaskTracker releases](https://github.com/amirashouri/TaskTracker/releases)."
+            echo
+            echo "### License"
+            echo
+            echo "MIT + Commons Clause, plus one extra term: no rebranding. You can use this build in your own team, including in production; you may not sell it or repackage it under your own name and brand. The code stays the author's."
+            echo "Full text: [LICENSE](https://github.com/amirashouri/TaskTrackerKMP/blob/main/LICENSE)."
           } > release-body.md
 
           cat release-body.md
