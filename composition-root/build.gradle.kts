@@ -3,7 +3,7 @@ plugins {
 }
 
 /**
- * The version a release was cut as, stamped onto this module's JVM jar.
+ * The version stamped onto this module's JVM jar.
  *
  * The release workflow passes the same `-PtasktrackerVersion` to every `:shared-ui`
  * packaging task, and a Gradle property is build-wide, so this module sees it in the same
@@ -11,11 +11,16 @@ plugins {
  * `desktopPackageVersion`, which macOS bumps to a non-zero major (`1.1.6`) only because
  * jpackage refuses a zero one.
  *
- * Absent means a local build: the attribute is empty, `PlatformAppVersion.jvm` answers
- * blanks, and the About row hides itself instead of showing a version nobody shipped.
+ * Without that property the declared project version (`1.0.0`) is used. That is what
+ * Android's `versionName` and iOS's `MARKETING_VERSION` already report for an unreleased
+ * build, and it is what makes the version visible when Android Studio's hot-reload
+ * configuration launches `:shared-ui:hotRunJvm` without any `-P` flag: the task copies this
+ * jar onto its classpath, so the stamped manifest travels with it.
  */
 val releaseVersion: String =
-    (findProperty("tasktrackerVersion") as String? ?: "").removePrefix("v").trim()
+    (findProperty("tasktrackerVersion") as String? ?: project.version.toString())
+        .removePrefix("v")
+        .trim()
 
 tasks.withType<org.gradle.jvm.tasks.Jar>().configureEach {
     manifest.attributes["Implementation-Version"] = releaseVersion
