@@ -2,6 +2,7 @@ package com.tasktracker.sharedui
 
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.InMemoryPreferences
@@ -16,7 +17,7 @@ import kotlinx.coroutines.test.runTest
  *
  * ## Why this is a plain test and not a shell scenario
  *
- * Nothing here composes. The subject is one `StateFlow` fed by one `store.value` call, so it
+ * Nothing here composes. The subject is one `StateFlow` fed by two `store.value` reads, so it
  * runs as an ordinary `commonTest` class on all three targets — no per-host entry points,
  * because there is no composition for the Android host's Robolectric runner to wrap.
  *
@@ -26,6 +27,9 @@ import kotlinx.coroutines.test.runTest
  * body of [ShellPreferences.refreshCurrentUser] could be deleted with the suite unchanged. The
  * admin-only Settings section now takes its gate from that read, which makes the gap the
  * difference between "an admin sees the management screens" and "nobody ever does".
+ *
+ * The same read also feeds the shell's greeting, from the name Settings edits rather than the
+ * sign-in snapshot — see [thePersistedProfileNameWinsOverTheCachedIdentity].
  */
 class ShellPreferencesTest {
 
@@ -66,6 +70,107 @@ class ShellPreferencesTest {
         assertNull(
             preferences.currentUserRole.value,
             "a missing profile must read as no role at all, not as a member",
+        )
+    }
+
+    /**
+     * The name Settings edits is the name the shell shows.
+     *
+     * `CachedProfile` is the sign-in snapshot and a rename never rewrites it, so a greeting that
+     * read only that key would keep the pre-rename name forever after the Settings row changed.
+     * `UserProfile` is what `LiveSettingsService` persists on every save, and it wins.
+     */
+    @Test
+    fun thePersistedProfileNameWinsOverTheCachedIdentity() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(
+            UserIdentity(id = shellTestUserID, email = "ada@example.com"),
+            DefaultsKey.CachedProfile,
+        )
+        store.set(
+            UserDetails(fullName = "Ada Lovelace", email = "ada@example.com"),
+            DefaultsKey.UserProfile,
+        )
+
+        val preferences = ShellPreferences(store, Router())
+        preferences.refreshCurrentUser()
+
+        assertEquals(
+            "Ada Lovelace",
+            preferences.currentUserName.value,
+            "the shell reads \"${preferences.currentUserName.value}\" instead of the name the " +
+                "Settings row shows — a rename would change one and not the other",
+        )
+    }
+
+    /**
+     * A profile left on the device by another account cannot rename this one.
+     *
+     * The settings service is app-scoped and its flow outlives a sign-out, so the first value
+     * after signing in as somebody else can still be the previous person's profile. The email
+     * is the only field the two records share, and it is what the fallback turns on.
+     */
+    @Test
+    fun aProfileForAnotherAccountDoesNotRenameTheSignedInPerson() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(
+            UserIdentity(id = shellTestUserID, email = "grace@example.com"),
+            DefaultsKey.CachedProfile,
+        )
+        store.set(
+            UserDetails(fullName = "Ada Lovelace", email = "ada@example.com"),
+            DefaultsKey.UserProfile,
+        )
+
+        val preferences = ShellPreferences(store, Router())
+        preferences.refreshCurrentUser()
+
+        assertEquals(
+            "grace",
+            preferences.currentUserName.value,
+            "grace is signed in, so the greeting must be grace's, not the name left in the " +
+                "store by ada's session",
+        )
+    }
+
+    /**
+     * A live emission renames without a root change, and clearing the name restores the fallback.
+     *
+     * This is the shape `RootScreen` hands [ShellPreferences.applyUserDetails] from
+     * `SettingsPort.userDetailsUpdates()`: the committed value first, then the confirmed value
+     * a failed PATCH reverts to. Re-reading the store inside this path would race the service's
+     * flow-then-write order; the emitted value is the one the screen is showing.
+     */
+    @Test
+    fun aLiveProfileRenamesImmediatelyAndFallsBackWhenCleared() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(
+            UserIdentity(id = shellTestUserID, email = "ada@example.com"),
+            DefaultsKey.CachedProfile,
+        )
+
+        val preferences = ShellPreferences(store, Router())
+        preferences.refreshCurrentUser()
+        assertEquals(
+            "ada",
+            preferences.currentUserName.value,
+            "with no settings profile yet, the fallback is the email prefix",
+        )
+
+        preferences.applyUserDetails(
+            UserDetails(fullName = "Ada Lovelace", email = "ada@example.com"),
+        )
+        assertEquals(
+            "Ada Lovelace",
+            preferences.currentUserName.value,
+            "a committed rename must reach the greeting before the root changes",
+        )
+
+        preferences.applyUserDetails(UserDetails(fullName = "", email = "ada@example.com"))
+        assertEquals(
+            "ada",
+            preferences.currentUserName.value,
+            "a cleared name must fall back to the identity rather than render an empty greeting",
         )
     }
 }

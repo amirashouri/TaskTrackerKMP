@@ -220,9 +220,16 @@ fun RootScreen(
     // Keyed on the root rather than run once for the same reason as the two effects above: the
     // first `Main` after an auth-gate launch is the first moment the answer can differ from
     // `null`, and a sign-out back to `Auth` followed by another sign-in has to re-read it.
-    LaunchedEffect(isPreferencesRestored, navigation.root) {
+    //
+    // The Settings stream is collected here because a rename is committed through that port and
+    // writes `UserProfile`, not the identity read above: without it the greeting keeps the
+    // pre-rename name until the root changes, however many times Settings is saved. Collecting
+    // only inside `Main` also means the subscription ends with the session, so a signed-out
+    // device is not still listening to the previous account's profile.
+    LaunchedEffect(isPreferencesRestored, navigation.root, settings) {
         if (isPreferencesRestored && navigation.root == RootDestination.Main) {
             preferences.refreshCurrentUser()
+            settings?.userDetailsUpdates()?.collect(preferences::applyUserDetails)
         }
     }
 

@@ -6,6 +6,7 @@ import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -92,6 +93,15 @@ class ShellPreferences(
      */
     private val _forceOffline = MutableStateFlow(false)
     val forceOffline: StateFlow<Boolean> = _forceOffline.asStateFlow()
+
+    /**
+     * The cached identity the name falls back to, remembered by [refreshCurrentUser].
+     *
+     * [applyUserDetails] needs the same fallback rule for a live emission. Re-reading
+     * `CachedProfile` there would put a store read on every commit point for a value that only
+     * changes at sign-in or sign-out — the two moments [refreshCurrentUser] is already called.
+     */
+    private var cachedIdentity: UserIdentity? = null
 
     private val _currentUserName = MutableStateFlow<String?>(null)
 
@@ -183,12 +193,18 @@ class ShellPreferences(
         private set
 
     /**
-     * Re-reads the signed-in person's name from the cached profile.
+     * Re-reads the signed-in person's identity and name.
      *
      * Called when the router's root becomes `Main`, which is the first moment a cached profile
      * *can* be the current session's — a sign-in writes it before it moves the root, so this
      * cannot miss a fresh session, and it overwrites rather than accumulating, so a stale name
      * cannot survive a new sign-in as a different account's.
+     *
+     * The identity supplies the id and role, but the **name** prefers `DefaultsKey.UserProfile`,
+     * which is what Settings edits and what `LiveSettingsService` persists on every save. The
+     * cached identity's display name is the sign-in snapshot and is not rewritten by a rename,
+     * so reading only that key would leave the shell greeting on the pre-rename value after the
+     * Settings row had already changed.
      *
      * No `runCatching`, unlike the raw-key reads in [restore], and that is a considered
      * difference rather than an oversight: those reads have a documented fallback this one
@@ -201,12 +217,53 @@ class ShellPreferences(
      */
     suspend fun refreshCurrentUser() {
         val profile = store.value<UserIdentity>(DefaultsKey.CachedProfile)
-        _currentUserName.value = profile?.preferredGreeting
+        cachedIdentity = profile
+        _currentUserName.value = profile?.let { identity ->
+            greetingFor(identity, store.value<UserDetails>(DefaultsKey.UserProfile))
+        }
         _currentUserID.value = profile?.id
         // The raw role, not an `isAdmin` boolean: which role opens which screen is a decision for
         // the screen that gates on it, and the profile's own default has already failed closed to
         // `Member` for a missing or unrecognised claim.
         _currentUserRole.value = profile?.role
+    }
+
+    /**
+     * Applies the profile the Settings port publishes, without re-reading the store.
+     *
+     * The emission is the source rather than a trigger to refresh: `LiveSettingsService` writes
+     * the flow *before* it writes `DefaultsKey.UserProfile`, so a re-read inside this callback
+     * can still see the pre-edit value. The emitted [UserDetails] is the value the screen just
+     * committed (or the confirmed value it reverted to), which is exactly what the greeting
+     * should show.
+     *
+     * Another account's profile is ignored. The settings service is app-scoped and its flow is
+     * not reset by a sign-out, so a persisted `UserProfile` from the previous session can still
+     * be the first emission after the next sign-in. Matching the account email is what keeps
+     * one person's name off another person's shell; a blank email skips the check because there
+     * is nothing to match against.
+     */
+    fun applyUserDetails(details: UserDetails) {
+        val identity = cachedIdentity ?: return
+        _currentUserName.value = greetingFor(identity, details)
+    }
+
+    /**
+     * The name to show for [identity], given the Settings profile (or `null` before one exists).
+     *
+     * `UserDetails.fullName` wins only when it is nonblank and belongs to the signed-in account;
+     * otherwise the identity's own [UserIdentity.preferredGreeting] answers, so the shell never
+     * renders an empty name and never adopts a stale one from a previous account.
+     */
+    private fun greetingFor(identity: UserIdentity, details: UserDetails?): String {
+        val name = details?.fullName?.trim().orEmpty()
+        if (details == null || name.isEmpty()) return identity.preferredGreeting
+
+        val belongsToThisAccount = identity.email.isBlank() ||
+            details.email.isBlank() ||
+            details.email.equals(identity.email, ignoreCase = true)
+
+        return if (belongsToThisAccount) name else identity.preferredGreeting
     }
 
     /**
