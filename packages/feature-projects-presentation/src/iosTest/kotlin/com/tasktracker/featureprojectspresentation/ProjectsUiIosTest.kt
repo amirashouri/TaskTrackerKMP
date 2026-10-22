@@ -166,6 +166,11 @@ class ProjectsUiIosTest {
     fun theCopyControlFitsANarrowBacklogRow() =
         runComposeUiTest(block = ProjectBacklogScenarios.theCopyControlFitsANarrowRow)
 
+    /** The list runs under the switcher and section picker, and the first row starts below them. */
+    @Test
+    fun theBacklogListScrollsUnderTheHeader() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theListScrollsUnderTheHeader)
+
     @Test
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
 
