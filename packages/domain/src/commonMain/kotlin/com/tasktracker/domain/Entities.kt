@@ -313,6 +313,17 @@ data class Project(
     var nextItemNumber: Int = 1,
     val createdAt: Instant,
     var updatedAt: Instant,
+    /**
+     * The server's optimistic-locking token for the row.
+     *
+     * Redundant with the envelope-level `RemoteChange.version`, but the server re-serves it
+     * inside the project payload, so the client must tolerate it. Declared with a default so
+     * payloads without it (older servers, or stored rows written before this field existed)
+     * still decode — `JSONCoding` leaves `ignoreUnknownKeys` off, so an undeclared key is a
+     * hard failure rather than a skipped field.
+     */
+    @SerialName("version")
+    var version: String = "",
 ) {
     init {
         // A counter below 1 would re-issue a key that has already been used, so the

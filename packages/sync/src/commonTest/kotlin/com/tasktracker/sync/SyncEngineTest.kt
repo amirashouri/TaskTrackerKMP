@@ -796,6 +796,42 @@ class SyncEngineTest {
         assertEquals(1, reads)
         assertEquals(4, transport.pushCallCount)
     }
+
+    @Test
+    fun `a failed push cycle reports the stage and message of the failure`() = runTest {
+        val transport = StubSyncTransport()
+        transport.setPushBehaviour(
+            StubSyncTransport.PushBehaviour.Fail(AppError.Transport("the server is gone")),
+        )
+        val queue = InMemoryOutboxQueue()
+        queue.enqueue(newEntry("change-1"))
+
+        val report = engine(outbox = queue, transport = transport).run(SyncTrigger.Manual)
+
+        assertFalse(report.isSuccess)
+        assertEquals(1, report.failures.size)
+        val failure = report.failures.single()
+        assertEquals(SyncStage.Push, failure.stage)
+        assertTrue(failure.message.contains("the server is gone"))
+    }
+
+    @Test
+    fun `a failed pull cycle reports the stage and message of the failure`() = runTest {
+        val transport = StubSyncTransport()
+        transport.setPullError(AppError.Transport("the change log is gone"))
+
+        val report = engine(
+            outbox = InMemoryOutboxQueue(),
+            transport = transport,
+            scopes = listOf(SyncScope.WorkItems),
+        ).run(SyncTrigger.Manual)
+
+        assertFalse(report.isSuccess)
+        assertEquals(1, report.failures.size)
+        val failure = report.failures.single()
+        assertEquals(SyncStage.Pull(SyncScope.WorkItems), failure.stage)
+        assertTrue(failure.message.contains("the change log is gone"))
+    }
 }
 
 /**

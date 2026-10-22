@@ -14,6 +14,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 
 /**
+ * Whether this build is a debug build. Verbose sync traces print only when true.
+ *
+ * Defaults to `true` so a developer build logs sync failures to the console, where the
+ * user can copy them and send them to an agent for debugging. A release build should set
+ * this to `false` (wired from the platform build type) so the console is not spammed.
+ * It lives here rather than in `:packages:core` because that module has no platform
+ * source sets for an `expect`/`actual` build-type flag.
+ */
+internal var isDebug = true
+
+/**
  * One push-then-pull cycle, and the retry policy that governs it.
  *
  * The shape of a cycle is fixed and the order is not negotiable:
@@ -127,6 +138,41 @@ class SyncEngine(
                         append(" failure(s)")
                     }
                 }
+                if (isDebug) {
+                    logger.error {
+                        logMessage {
+                            append("sync: cycle FAILED (trigger=")
+                            append(trigger.wireName)
+                            append(")")
+                            append(" failures=")
+                            append(report.failures.size)
+                            for (failure in report.failures) {
+                                append(" stage=")
+                                append(failure.stage)
+                                append(" message=")
+                                append(failure.message)
+                            }
+                            append(" pushed=")
+                            append(report.pushed)
+                            append(" accepted=")
+                            append(report.accepted)
+                            append(" conflicts=")
+                            append(report.conflicts)
+                            append(" rejected=")
+                            append(report.rejected)
+                            append(" retrying=")
+                            append(report.retrying)
+                            append(" applied=")
+                            append(report.applied)
+                            append(" queueDepth=")
+                            append(report.queueDepth)
+                            append(" deadLetterCount=")
+                            append(report.deadLetterCount)
+                            append(" requiresSignOut=")
+                            append(report.requiresSignOut)
+                        }
+                    }
+                }
             }
             return report
         } finally {
@@ -216,6 +262,19 @@ class SyncEngine(
                 // Returning it to a retryable state is the only safe answer: the change ids
                 // are stable, so a server that dedupes drops the duplicate.
                 val message = describe(error)
+                if (isDebug) {
+                    logger.error {
+                        logMessage {
+                            append("sync: push transport failed (trigger=")
+                            append(report.trigger.wireName)
+                            append(") batchSize=")
+                            append(fresh.size)
+                            append(" error=")
+                            append(message)
+                            append(")")
+                        }
+                    }
+                }
                 if ((error as? AppError)?.requiresSignOut == true) {
                     // The session ending is not the change's fault, so the attempt is handed
                     // back. Charging it here would let a single sign-out push a user's
@@ -424,6 +483,19 @@ class SyncEngine(
             } catch (error: Exception) {
                 // The cursor is only advanced after a page is fully applied, so a failed
                 // pull simply re-reads the same page next cycle. Nothing to undo here.
+                if (isDebug) {
+                    logger.error {
+                        logMessage {
+                            append("sync: pull transport failed (scope=")
+                            append(scope.wireValue)
+                            append(" cursor=")
+                            append(cursor ?: "<none>")
+                            append(" error=")
+                            append(describe(error))
+                            append(")")
+                        }
+                    }
+                }
                 val signOut = (error as? AppError)?.requiresSignOut == true
                 return report.copy(requiresSignOut = report.requiresSignOut || signOut)
                     .withFailure(SyncStage.Pull(scope), describe(error))

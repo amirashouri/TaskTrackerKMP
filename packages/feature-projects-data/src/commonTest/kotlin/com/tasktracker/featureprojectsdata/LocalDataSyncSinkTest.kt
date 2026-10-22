@@ -93,6 +93,22 @@ class LocalDataSyncSinkTest {
         assertEquals(0, harness.queueDepth())
     }
 
+    @Test
+    fun aPulledProjectWithAVersionKeyDecodesInsteadOfRejectingThePage() = runTest {
+        val harness = Harness()
+        val project = aProject()
+        val payload = JSONCoding.json.encodeToString(Project.serializer(), project.copy(version = "abc-123"))
+
+        // Before `version` was declared on `Project`, this threw AppError.Decoding and
+        // aborted the whole pull page. Declaring it with a default tolerates the key.
+        harness.sink.apply(upsert(OutboxEntity.Project, payload))
+
+        // The project lands in the store. The version itself is already on the envelope
+        // (`RemoteChange.version`), so the domain default is sufficient client-side;
+        // `ProjectRecord` deliberately has no `version` column.
+        assertNotNull(harness.repository.project(project.id))
+    }
+
     /**
      * A row the admin surface learned from the server lands here without a pull.
      *
