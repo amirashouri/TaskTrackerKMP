@@ -22,7 +22,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -34,9 +36,12 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.work_item_copy
 import kotlin.time.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * A task as a card on the board.
@@ -73,6 +78,15 @@ import kotlinx.datetime.toLocalDateTime
 fun WorkItemCard(
     item: WorkItem,
     onClick: () -> Unit,
+    /**
+     * Hands the card's text to the host, which owns the clipboard.
+     *
+     * Taken as a callback rather than writing the clipboard here for two reasons: the card is a
+     * view and copying is an effect, and the host is also what shows the confirmation. The text
+     * is built by [clipboardText] so "what a copy contains" is one rule with a test, rather
+     * than a literal at whichever call site wired the button.
+     */
+    onCopy: (String) -> Unit,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
     /**
@@ -142,35 +156,65 @@ fun WorkItemCard(
         // it was redundant with the callee's guard, and the mutation check that established this
         // (deleting it left every scenario green) is why the comment claims the weaker thing.
         WorkItemCardDependencies(blockerKeys = blockedByKeys)
-        // The due date and the card's own action, on one row: the date at the leading edge and
-        // whatever the surface put in the action slot at the trailing one, so the action stays
-        // in the bottom corner whether or not the task has a date.
+        // The due date and the card's actions, on one row: the date at the leading edge, the
+        // card's own copy verb, then whatever the surface put in the action slot, so the
+        // surface's action stays in the bottom corner whether or not the task has a date.
         //
-        // The action is a *task*, not a property of the task, which is why it lives with the
-        // board rather than in this file: a card knows how to be a card and nothing about what
-        // a board lets you do to it. The board is the surface that has to agree with the
-        // backlog about what filing away means.
+        // The host's action is a *task*, not a property of the task, which is why it lives with
+        // the board rather than in this file: a card knows how to be a card and nothing about
+        // what a board lets you do to it. The board is the surface that has to agree with the
+        // backlog about what filing away means. Copy is different: it acts on the card's own
+        // text, which the card is the only thing that has, so it belongs here.
         //
-        // Composed only when it has something in it. An always-present row would leave an
-        // empty row behind on a card with neither a date nor an action, and the column's
-        // `spacedBy` would still charge it a gap - 8dp of nothing at the bottom of the card.
-        if (item.dueDate != null || trailing != null) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                item.dueDate?.let { due ->
-                    DueDateChip(
-                        dueDate = due,
-                        isOverdue = isOverdue(item, due),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
-                trailing?.invoke()
+        // Always composed, because the copy control is always there. It used to be guarded on
+        // having a date or a host action; with a permanent child the guard could only hide the
+        // copy button, and the row's own spacing was never the reason for it.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            item.dueDate?.let { due ->
+                DueDateChip(
+                    dueDate = due,
+                    isOverdue = isOverdue(item, due),
+                )
             }
+            Spacer(Modifier.weight(1f))
+            ttGlassIconButton(
+                image = ttActionIcons.copy,
+                contentDescription = stringResource(Res.string.work_item_copy),
+                onClick = { onCopy(clipboardText(item)) },
+                modifier = Modifier.testTag(WorkItemCardCopyTag),
+            )
+            trailing?.invoke()
         }
     }
+}
+
+/**
+ * What a copy of this card puts on the clipboard: the title, then the details.
+ *
+ * ## Why title *and* details, and nothing else
+ *
+ * The copied text is meant to be pasted into a message, a commit, or a note — and in those
+ * places the title is the heading and the details are the body. A blank line between them is
+ * what keeps the two from reading as one paragraph after the paste; a single newline is
+ * swallowed by every markdown renderer, so the heading would stop being a heading.
+ *
+ * The key, the status and the assignee are deliberately absent. They are handles for *this*
+ * app — a sender pasting "TT-142 · In Progress · Amir" into a chat has pasted three things the
+ * reader cannot act on, and one of them (the status) is the fact most likely to be stale by
+ * the time it is read. The card's own summary is the task's text; the copy carries the text.
+ *
+ * Details are trimmed first, so a task whose details are only whitespace copies as its title
+ * rather than as a title followed by blank space. The title is not trimmed: it is the one
+ * string the user sees verbatim on the card, and a copy that silently edits it would be a
+ * second version of the title.
+ */
+internal fun clipboardText(item: WorkItem): String {
+    val details = item.details.trim()
+    return if (details.isEmpty()) item.title else "${item.title}\n\n$details"
 }
 
 /**
@@ -319,6 +363,7 @@ private fun WorkItemCardPreview() = ProjectsPreview(ThemeScheme.Dark) {
             WorkItemCard(
                 item = item,
                 onClick = {},
+                onCopy = {},
                 assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
             )
         }
@@ -336,6 +381,7 @@ private fun WorkItemCardLightPreview() = ProjectsPreview(ThemeScheme.Light) {
             WorkItemCard(
                 item = item,
                 onClick = {},
+                onCopy = {},
                 assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
             )
         }
@@ -346,6 +392,15 @@ private fun WorkItemCardLightPreview() = ProjectsPreview(ThemeScheme.Light) {
 const val WorkItemCardTagPrefix = "workItem.card"
 const val WorkItemCardDueTag = "workItem.card.dueDate"
 const val WorkItemCardAssigneeTag = "workItem.card.assignee"
+
+/**
+ * The copy control's tag.
+ *
+ * Not suffixed with the key, unlike the card's own tag: a scenario composes one card, and the
+ * control is the same control on every card. The board's per-card verbs do suffix because the
+ * board composes many at once; this one is inside the card a test already scoped to.
+ */
+const val WorkItemCardCopyTag = "workItem.card.copy"
 
 /**
  * The card's tag.

@@ -275,6 +275,10 @@
     <string name="work_item_repeat_yearly">Yearly</string>
     <string name="work_item_delete">Delete Task</string>
     <string name="work_item_archive">File Away</string>
+    <!-- The card's copy action names what it copies, so the glyph is not the whole instruction. -->
+    <string name="work_item_copy">Copy title and details</string>
+    <!-- Shown transiently after a copy. It names the outcome, not the button that caused it. -->
+    <string name="work_item_copied">Copied to clipboard</string>
     <string name="work_item_expand">Expand</string>
     <string name="work_item_collapse">Collapse</string>
     <string name="work_item_key_read_only">%1$s is issued by the project and cannot be changed.</string>

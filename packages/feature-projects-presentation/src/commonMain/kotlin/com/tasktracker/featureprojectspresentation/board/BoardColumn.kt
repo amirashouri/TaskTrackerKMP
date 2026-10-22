@@ -117,6 +117,15 @@ fun BoardColumnView(
      * [WorkItemCard.blockedByKeys].
      */
     blockedByKeys: (WorkItem) -> List<WorkItemKey> = { emptyList() },
+    /**
+     * Hands a card's copy text to the host, which owns the clipboard and the confirmation.
+     *
+     * Only the text travels, not the item: the card has already decided what a copy contains
+     * ([clipboardText]), and the host's job is to put that string on the clipboard and say so.
+     * Defaults to nothing for the same reason the other resolvers do - a preview or a host that
+     * has not wired copy still draws a column.
+     */
+    onCopy: (String) -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -167,6 +176,7 @@ fun BoardColumnView(
                     WorkItemCard(
                         item = item,
                         onClick = { onSelect(item) },
+                        onCopy = onCopy,
                         modifier = Modifier.fillMaxWidth(),
                         trailing = { cardTrailing(item) },
                         assigneeName = assigneeName(item),
