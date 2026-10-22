@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,11 +12,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -50,6 +54,14 @@ import org.jetbrains.compose.resources.stringResource
  * state (three different sentences, also testable without guessing which list was in front), and
  * the busy id tracks the row the user tapped rather than the section now showing, so a write in
  * flight keeps its wait on whatever section the item is really in.
+ *
+ * ## The header floats over the list
+ *
+ * The switcher, banner and section picker are drawn over the list rather than above it, so
+ * scrolled rows pass behind their glass instead of stopping at a band. The header's height is
+ * measured and given back as the list's top `contentPadding`: the viewport runs to the top of
+ * the screen, the first row still starts below the header, and the last row keeps the tab bar's
+ * inset at the bottom.
  */
 @Composable
 fun ProjectBacklogScreen(
@@ -69,69 +81,25 @@ fun ProjectBacklogScreen(
     onAddTask: (() -> Unit)? = null,
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
+    var currentSection by remember { mutableStateOf(projection.currentSection) }
+
+    // The header floats over the list, so its own height is the only thing that can keep the
+    // first row out from under it. Measured rather than summed from tokens: the banner is
+    // conditional and the controls grow with the font setting, so a token sum would be wrong on
+    // at least one host. The same "measurement, not a token" reasoning as the shell's tab bar.
+    var headerHeightPx by remember { mutableIntStateOf(0) }
+    val firstRowInset = with(LocalDensity.current) {
+        headerHeightPx.toDp()
+    } + ttSpacing.lg
 
     ClipboardCopyHost(
         modifier = modifier.testTag(ProjectBacklogScreenTag),
     ) { onCopy ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                // Top only: bottom padding here would shrink the *list's viewport* and stop it short of the
-                // screen's bottom edge. The clearance that keeps the last row off the glass is the
-                // list's `contentPadding`.
-                .padding(horizontal = ttSpacing.xxl)
-                .padding(top = ttSpacing.screenGutterLarge),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-        ) {
-            onOpenSwitcher?.let { openSwitcher ->
-                // The add action rides the switcher's row so it does not overlap the clickable rows
-                // below; `weight(1f)` keeps the switcher at its own width, clear of the action.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                ) {
-                    ProjectSwitcherButton(
-                        project = projection.project,
-                        onClick = openSwitcher,
-                        modifier = Modifier.weight(1f),
-                        projects = projects,
-                        onSelectProject = onSelectProject,
-                    )
-                    onAddTask?.let { addTask ->
-                        ttGlassIconButton(
-                            image = ttActionIcons.add,
-                            contentDescription = stringResource(Res.string.board_add_task),
-                            onClick = addTask,
-                            modifier = Modifier.testTag(BacklogAddTaskTag),
-                        )
-                    }
-                }
-            }
-            errorMessage?.let { message ->
-                ttBanner(message = message, onDismiss = onDismissError)
-            }
-            var currentSection by remember { mutableStateOf(projection.currentSection) }
-            TTGlassSegmentedPicker(
-                options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
-                selection = currentSection,
-                onSelect = { currentSection = it },
-                modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBacklogSectionsTag),
-                title = { option ->
-                    when (option) {
-                        BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
-                        BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
-                        BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
-                    }
-                },
-                testTag = { option ->
-                    when (option) {
-                        BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
-                        BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
-                        BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
-                    }
-                }
-            )
+        Box(modifier = Modifier.fillMaxSize()) {
+            // The list keeps the whole screen height. Its horizontal gutter is on the list itself
+            // because it no longer sits inside the header's `Column`; its top clearance is
+            // `contentPadding`, not a viewport inset, which is what lets scrolled rows travel
+            // under the glass instead of stopping at a band below it.
             when (currentSection) {
                 // Section tags live on each list, not the shared container: a chained
                 // `testTag(a).testTag(b)` keeps only the first value in this Compose version, so
@@ -144,8 +112,9 @@ fun ProjectBacklogScreen(
                     onPutOnBoard = onPutOnBoard,
                     onFileAway = onFileAway,
                     onCopy = onCopy,
+                    contentTopInset = firstRowInset,
                     tabBarInset = tabBarInset,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = ttSpacing.xxl),
                 )
                 BacklogSection.Kanban -> KanbanSectionList(
                     projection = projection,
@@ -154,8 +123,9 @@ fun ProjectBacklogScreen(
                     onSelect = onSelect,
                     onFileAway = onFileAway,
                     onCopy = onCopy,
+                    contentTopInset = firstRowInset,
                     tabBarInset = tabBarInset,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = ttSpacing.xxl),
                 )
                 BacklogSection.Archived -> ArchivedSectionList(
                     projection = projection,
@@ -164,7 +134,69 @@ fun ProjectBacklogScreen(
                     onSelect = onSelect,
                     onUnarchive = onUnarchive,
                     onCopy = onCopy,
-                    modifier = Modifier.fillMaxSize(),
+                    contentTopInset = firstRowInset,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = ttSpacing.xxl),
+                )
+            }
+
+            // Drawn after the list and with no fill of its own. The list's rows passing behind
+            // the translucent switcher and picker is the effect; a background band here would
+            // put an opaque strip between the glass and the content.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onSizeChanged { headerHeightPx = it.height }
+                    .padding(horizontal = ttSpacing.xxl)
+                    .padding(top = ttSpacing.screenGutterLarge),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+            ) {
+                onOpenSwitcher?.let { openSwitcher ->
+                    // The add action rides the switcher's row rather than floating over the list;
+                    // `weight(1f)` keeps the switcher at its own width, clear of the action.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                    ) {
+                        ProjectSwitcherButton(
+                            project = projection.project,
+                            onClick = openSwitcher,
+                            modifier = Modifier.weight(1f),
+                            projects = projects,
+                            onSelectProject = onSelectProject,
+                        )
+                        onAddTask?.let { addTask ->
+                            ttGlassIconButton(
+                                image = ttActionIcons.add,
+                                contentDescription = stringResource(Res.string.board_add_task),
+                                onClick = addTask,
+                                modifier = Modifier.testTag(BacklogAddTaskTag),
+                            )
+                        }
+                    }
+                }
+                errorMessage?.let { message ->
+                    ttBanner(message = message, onDismiss = onDismissError)
+                }
+                TTGlassSegmentedPicker(
+                    options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
+                    selection = currentSection,
+                    onSelect = { currentSection = it },
+                    modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBacklogSectionsTag),
+                    title = { option ->
+                        when (option) {
+                            BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
+                            BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
+                            BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
+                        }
+                    },
+                    testTag = { option ->
+                        when (option) {
+                            BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
+                            BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
+                            BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
+                        }
+                    }
                 )
             }
         }
@@ -221,17 +253,21 @@ private fun BacklogSectionList(
     onPutOnBoard: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    contentTopInset: Dp,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (!isLoading && projection.backlogIsEmpty) {
         EmptyBacklogSection(
-            modifier = modifier.testTag(ProjectBacklogEmptyBacklogTag),
+            modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyBacklogTag),
         )
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogListTag),
-            contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
+            contentPadding = PaddingValues(
+                top = contentTopInset,
+                bottom = ttSpacing.xl + tabBarInset,
+            ),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
             items(projection.backlog, key = { it.id.stringValue }) { item ->
@@ -262,17 +298,21 @@ private fun KanbanSectionList(
     onSelect: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    contentTopInset: Dp,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (!isLoading && projection.kanbanIsEmpty) {
         EmptyKanbanSection(
-            modifier = modifier.testTag(ProjectBacklogEmptyKanbanTag),
+            modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyKanbanTag),
         )
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogKanbanListTag),
-            contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
+            contentPadding = PaddingValues(
+                top = contentTopInset,
+                bottom = ttSpacing.xl + tabBarInset,
+            ),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
             items(projection.kanban, key = { it.id.stringValue }) { item ->
@@ -302,16 +342,20 @@ private fun ArchivedSectionList(
     onSelect: (WorkItemID) -> Unit,
     onUnarchive: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    contentTopInset: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (!isLoading && projection.archivedIsEmpty) {
         EmptyArchivedSection(
-            modifier = modifier.testTag(ProjectBacklogEmptyArchivedTag),
+            modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyArchivedTag),
         )
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogArchivedListTag),
-            contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+            contentPadding = PaddingValues(
+                top = contentTopInset,
+                bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current,
+            ),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
             items(projection.archived, key = { it.id.stringValue }) { item ->

@@ -27,6 +27,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
@@ -64,6 +66,10 @@ object ProjectBacklogScenarios {
      * `Modifier.clickable(onClick = onPutOnBoard)` across its full width: tapping the bottom right
      * of a backlog did nothing instead of filing the task to the board. That is the defect, and
      * the row is what it has to be measured against.
+     *
+     * The header floats over the list now, so a row scrolled up behind it is deliberately under
+     * the add action. The **last** row is what this scenario keeps measuring: it is the one the
+     * floating button covered, and it is still the one at the bottom when the list ends.
      */
     val theAddActionDoesNotCoverTheLastRow: suspend ComposeUiTest.() -> Unit = {
         val items = backlogItems()
@@ -76,36 +82,45 @@ object ProjectBacklogScenarios {
         waitForIdle()
 
         val create = onNodeWithTag(BacklogAddTaskTag).fetchSemanticsNode().boundsInRoot
-        val rows = items.flatMap { composedRow(it) }
+        val lastRows = composedRow(items.last())
 
         assertTrue(
-            rows.isNotEmpty(),
-            "expected at least one row to be composed, or this asserts nothing",
+            lastRows.isNotEmpty(),
+            "expected the last row to be composed, or this asserts nothing",
         )
-        for (row in rows) {
+        // The last row, not every composed row: the header now floats over the list, so rows
+        // that have scrolled up behind it are *meant* to sit under the add action. The last row
+        // is the one the old floating button covered, and touching it must reach it.
+        for (row in lastRows) {
             assertFalse(
                 create.overlaps(row),
-                "the add action sits on a row: add=$create row=$row",
+                "the add action sits on the last row: add=$create row=$row",
             )
         }
     }
 
     /**
-     * The add action sits on the switcher's row, to its right, and not in the list.
+     * The add action sits on the switcher's row, to its right, and clear of the first row.
      *
      * The overlap assertion above would pass for a button placed *anywhere* clear of the rows -
      * a top app bar, a bottom bar, anywhere - so on its own it does not pin down what was asked
-     * for. This one does: the action is to the right of the switcher, and above the list.
+     * for. This one does: the action is to the right of the switcher, and above the first row.
+     *
+     * The row is the reference, not the list: the list's viewport deliberately starts at the top
+     * of the screen so scrolled rows can pass under the header, so `list.top` is above the add
+     * action by design. What must not happen is the action covering content, and the first row is
+     * the content that is there when the list is at rest.
      *
      * Two rectangles and a vertical comparison, rather than a screenshot, because "is it beside
      * this other thing" survives being read off the tree.
      */
     val theAddActionTrailsTheSwitcher: suspend ComposeUiTest.() -> Unit = {
-        backlogShowing(items = backlogItems(), onAddTask = {})
+        val items = backlogItems()
+        backlogShowing(items = items, onAddTask = {})
 
         val add = onNodeWithTag(BacklogAddTaskTag).fetchSemanticsNode().boundsInRoot
         val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
-        val list = onNodeWithTag(ProjectBacklogListTag).fetchSemanticsNode().boundsInRoot
+        val firstRow = onNested(WorkItemBacklogRowTag(items.first())).fetchSemanticsNode().boundsInRoot
 
         assertTrue(
             add.left >= switcher.right,
@@ -113,8 +128,52 @@ object ProjectBacklogScenarios {
                 "switcher=$switcher add=$add",
         )
         assertTrue(
-            add.bottom <= list.top,
-            "the add action should be above the list rather than over it: add=$add list=$list",
+            add.bottom <= firstRow.top,
+            "the add action should be above the first row rather than over it: " +
+                "add=$add firstRow=$firstRow",
+        )
+    }
+
+    /**
+     * The rows scroll under the switcher and the section picker, and start clear of them.
+     *
+     * Both halves are the feature. At rest the first row must be below the header, or it would be
+     * unreadable and untappable behind the glass. Once scrolled, the viewport must have rows
+     * *behind* the header's band, or the list would still be stopping at a strip above it and
+     * there would be no glass to see the content through.
+     *
+     * Bounds rather than a screenshot: "the list reaches the top of the screen", "the first row
+     * is below the picker" and "a row overlaps the picker's band" are three claims the semantics
+     * tree already reports, and they are the same three on every host.
+     */
+    val theListScrollsUnderTheHeader: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems()
+        backlogShowing(items = items, onAddTask = {})
+
+        val list = onNodeWithTag(ProjectBacklogListTag).fetchSemanticsNode().boundsInRoot
+        val sections = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val firstRow = onNested(WorkItemBacklogRowTag(items.first())).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            list.top < sections.top,
+            "the list viewport should start above the header, so rows can pass under it: " +
+                "list=$list sections=$sections",
+        )
+        assertTrue(
+            firstRow.top >= sections.bottom,
+            "at rest the first row should start below the picker: sections=$sections row=$firstRow",
+        )
+
+        onNodeWithTag(ProjectBacklogListTag).performTouchInput { swipeUp() }
+        waitForIdle()
+
+        val rows = items.flatMap { composedRow(it) }
+        val underHeader = rows.filter { it.top < sections.bottom && it.bottom > sections.top }
+
+        assertTrue(
+            underHeader.isNotEmpty(),
+            "after scrolling, a row should be visible under the picker's band: " +
+                "sections=$sections rows=$rows",
         )
     }
 
