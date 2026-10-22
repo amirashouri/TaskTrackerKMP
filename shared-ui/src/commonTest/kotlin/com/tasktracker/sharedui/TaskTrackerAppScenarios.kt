@@ -119,6 +119,14 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
 
     @Test
+    fun aWideBacklogHasNoDetailPaneUntilARowIsChosen() =
+        runComposeUiTest(block = ShellScenarios.aWideBacklogHasNoDetailPaneUntilARowIsChosen)
+
+    @Test
+    fun aWideBacklogPutsTheChosenItemBesideTheList() =
+        runComposeUiTest(block = ShellScenarios.aWideBacklogPutsTheChosenItemBesideTheList)
+
+    @Test
     fun theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt() =
         runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
 

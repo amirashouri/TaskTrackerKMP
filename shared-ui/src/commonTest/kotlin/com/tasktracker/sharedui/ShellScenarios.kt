@@ -20,6 +20,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasTestTag
@@ -2466,6 +2467,163 @@ object ShellScenarios {
                 "slot and is not supposed to move — what has to change is what is inside it, and " +
                 "the two sprints are named differently precisely so this cannot pass on a pane " +
                 "that ignored its route",
+        )
+    }
+
+    /**
+     * A wide Backlog has no second pane until a row is chosen.
+     *
+     * The list is the whole screen, as it is on a phone: no editor is drawn blank, and the list
+     * is not squeezed to half width in anticipation of a selection that has not happened. That
+     * is the difference between this tab and the Sprints pair, whose detail has an empty state
+     * to say.
+     *
+     * The second half of the claim is that choosing a row *does* open the pane, because an
+     * absent editor is also what a branch that never opens anything produces. Presence and
+     * absence are read from the destination tag rather than from the router: a route can be
+     * pushed by a list that then fails to render anything, and the user's problem would be the
+     * missing surface.
+     */
+    val aWideBacklogHasNoDetailPaneUntilARowIsChosen: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val item = shellTestWorkItem(
+            projectID = project.id,
+            number = 1,
+            title = "Untriaged",
+            status = WorkItemStatus.Backlog,
+        )
+        projects.seed(item)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        // The empty stack `openProject(inTab = Backlog)` installs is the no-selection state.
+        router.openProject(project.id, inTab = AppTab.Backlog)
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogScreenTag).assertIsDisplayed()
+        assertNothingTagged(
+            WorkItemEditorDestinationTag,
+            "the backlog drew a detail pane before any row was chosen. With nothing selected " +
+                "the list is the whole screen — an editor here would be a blank form for a " +
+                "task the user never picked, and would take half the width to show it",
+        )
+
+        onNodeWithTag(WorkItemBacklogRowTag(item))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists(
+            "choosing a backlog row did not open the editor in the right pane, so the split " +
+                "layout is missing the half that matters",
+        )
+    }
+
+    /**
+     * A wide Backlog draws the chosen item's editor beside the list, not over it.
+     *
+     * Presence is not the claim — the desktop editor window this tab used to open draws the
+     * editor over a list that is still composed underneath, so both are present there too. The
+     * panes have to be *beside* each other (`list.right < editor.left`) with the list still
+     * displayed, which is the one geometry the window cannot satisfy.
+     *
+     * Choosing a second row and re-tapping the first are the selection-as-pane half: the stack
+     * must stay one route deep, because Cancel's job is to close the pane and give the width
+     * back, not to walk back through every item visited. The title is read from the editor to
+     * prove the pane follows the row rather than staying on the first item.
+     */
+    val aWideBacklogPutsTheChosenItemBesideTheList: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val first = shellTestWorkItem(
+            projectID = project.id,
+            number = 1,
+            title = "Untriaged",
+            status = WorkItemStatus.Backlog,
+        )
+        val second = shellTestWorkItem(
+            projectID = project.id,
+            number = 2,
+            title = "Draft the migration",
+            status = WorkItemStatus.Backlog,
+        )
+        projects.seed(first)
+        projects.seed(second)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id, inTab = AppTab.Backlog)
+        waitForIdle()
+
+        onNodeWithTag(WorkItemBacklogRowTag(first))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+
+        val list = onNodeWithTag(ProjectBacklogListTag).getBoundsInRoot()
+        val editor = onNodeWithTag(WorkItemEditorDestinationTag).getBoundsInRoot()
+
+        assertTrue(
+            list.right.value < editor.left.value,
+            "the backlog list runs to ${list.right.value}dp and the editor starts at " +
+                "${editor.left.value}dp, so the editor is not beside the list. Both being " +
+                "present is not the claim — a window over the list has both, and the list's " +
+                "right edge is then past the editor's left one",
+        )
+        assertTrue(
+            list.right.value - list.left.value > 0f && editor.right.value - editor.left.value > 0f,
+            "the list is ${list.right.value - list.left.value}dp wide and the editor is " +
+                "${editor.right.value - editor.left.value}dp, so a pane has collapsed to nothing",
+        )
+        onNodeWithTag(ProjectBacklogListTag).assertIsDisplayed()
+        onNodeWithTag("title").assertTextEquals(first.title)
+
+        assertEquals(
+            1,
+            router.path(AppTab.Backlog).size,
+            "opening one backlog row left ${router.path(AppTab.Backlog).size} routes on the " +
+                "stack. The editor is the pane's content, not a destination pushed on top of it",
+        )
+
+        // The same route: re-tapping the selected row must leave the pane standing.
+        onNodeWithTag(WorkItemBacklogRowTag(first))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        onNodeWithTag(WorkItemEditorDestinationTag).assertExists(
+            "tapping the selected row again closed the pane, so a second click on the item " +
+                "being edited behaves like a Back press and discards it",
+        )
+
+        // A different row replaces the pane's content without growing the stack.
+        onNodeWithTag(WorkItemBacklogRowTag(second))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+
+        onNodeWithTag("title").assertTextEquals(second.title)
+        assertEquals(
+            1,
+            router.path(AppTab.Backlog).size,
+            "choosing a second row left ${router.path(AppTab.Backlog).size} routes on the " +
+                "stack. Cancel has to close the pane, not walk back through every item visited",
         )
     }
 
