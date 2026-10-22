@@ -338,6 +338,22 @@ fun NavigationHost(
                 val backgroundPath = if (editorOverlay) path.dropLast(1) else path
                 val backgroundPushed = backgroundPath.lastOrNull()
 
+                // The Backlog tab's editor is the right pane once the shell is wide enough for
+                // two columns, and a window everywhere else. Read once, above the arrangement
+                // and the modal list, so both agree: drawing the route in the pane *and* in the
+                // overlay would put a window on top of the pane it belongs beside.
+                //
+                // `openProject(inTab = Backlog)` installs an empty stack, so the editor is the
+                // only route and `backgroundPushed` is null while one is open. The pane branch
+                // below therefore has to be read before the `backgroundPushed == null` arm.
+                val backlogEditorInPane = if (
+                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Backlog
+                ) {
+                    pushed as? AppRoute.WorkItemEditor
+                } else {
+                    null
+                }
+
                 // System back mirrors the chevron every pushed screen carries: pop
                 // exactly one route, never leave the tab. The gate is `path.size > 1`,
                 // not `pushed != null` — the Sprints tab's *root* stack is
@@ -412,6 +428,27 @@ fun NavigationHost(
                 }
                 val noAdminSelected: @Composable () -> Unit = { AdminDetailPlaceholder() }
 
+                // The editor surface, as one value. The Backlog pane and the windowed overlay
+                // render the same destination from the same arguments; two copies of this
+                // argument list is exactly how the pane ends up with a different `tab`, a
+                // different dismissal, or a port the window has and the pane does not.
+                val editorDestination: @Composable (AppRoute.WorkItemEditor) -> Unit = { editorRoute ->
+                    WorkItemEditorDestination(
+                        projectID = editorRoute.projectID,
+                        workItemID = editorRoute.workItemID,
+                        initialStatus = editorRoute.initialStatus,
+                        initialSprintID = editorRoute.initialSprintID,
+                        repository = environment.repository,
+                        dateProvider = environment.dateProvider,
+                        scope = scope,
+                        router = router,
+                        tab = tab,
+                        preferences = preferences,
+                        teamPort = environment.teamPort,
+                        onDismiss = { dismissEditor(editorRoute) },
+                    )
+                }
+
                 // Which of the arrangements. Read off the layout class, never off the
                 // platform — see `ShellLayoutClass` for why — and off the tab, because a
                 // list-detail pair whose second pane is already a route in the same stack is
@@ -421,7 +458,9 @@ fun NavigationHost(
                 // deferral: its root is the projects list and its "detail" — the board — is a
                 // *different tab*, so a two-pane Projects would be drawing two panes belonging to
                 // two tabs and would need a second notion of "the project under the cursor" to
-                // reconcile them. Backlog's three sections are one screen, not pushes.
+                // reconcile them. Backlog is the fourth pair and a different shape again: its
+                // sections are one screen, and the only route ever pushed onto it is the editor,
+                // which is exactly what the right pane holds.
                 //
                 // The Settings tab's projects section is the second pair, and it qualifies for
                 // the same reason Sprints does: the selection is a route in this stack. The
@@ -445,6 +484,15 @@ fun NavigationHost(
                 // pane and the list goes back to full width, which is the right answer in both
                 // arrangements.
                 when {
+                    // The Backlog tab's selection. The list keeps its full width until an item
+                    // is chosen — this branch is only reached once one is — and from then on
+                    // the editor is the right pane: Cancel, Save and File Away pop the route,
+                    // and the width goes back to the list with it.
+                    backlogEditorInPane != null -> BacklogTwoPanes(
+                        listPane = tabRoot,
+                        detailPane = { editorDestination(backlogEditorInPane) },
+                    )
+
                     backgroundPushed == null -> tabRoot()
 
                     // The Sprints list-detail pair. Its root stack is `[SprintList]` and never
@@ -513,8 +561,16 @@ fun NavigationHost(
                 // that is born invisible so the enter transition actually plays. Dismissed
                 // editors stay composed until their exit transition finishes.
                 val editorsInPath = path.filterIsInstance<AppRoute.WorkItemEditor>()
-                // Keep dismissing editors composed so their exit transition can finish.
-                val editorsToRender = editorsInPath + dismissingEditors.filter { it !in editorsInPath }
+                // Keep dismissing editors composed so their exit transition can finish. When
+                // the Backlog pane holds this tab's editor, no window is rendered for the same
+                // tab: the pane is the surface, and a window over it would be the route drawn
+                // twice and the list hidden behind a modal it is meant to sit beside.
+                // `dismissingEditors` is the compact arm's list, so it cannot add one back.
+                val editorsToRender = if (backlogEditorInPane != null) {
+                    emptyList()
+                } else {
+                    editorsInPath + dismissingEditors.filter { it !in editorsInPath }
+                }
                 Box(Modifier.fillMaxSize()) {
                     editorsToRender.forEach { editorRoute ->
                         key(editorRoute) {
@@ -561,20 +617,7 @@ fun NavigationHost(
                                 },
                                 label = editorRoute.workItemID?.stringValue ?: "new-${editorRoute.projectID}",
                             ) {
-                                WorkItemEditorDestination(
-                                    projectID = editorRoute.projectID,
-                                    workItemID = editorRoute.workItemID,
-                                    initialStatus = editorRoute.initialStatus,
-                                    initialSprintID = editorRoute.initialSprintID,
-                                    repository = environment.repository,
-                                    dateProvider = environment.dateProvider,
-                                    scope = scope,
-                                    router = router,
-                                    tab = tab,
-                                    preferences = preferences,
-                                    teamPort = environment.teamPort,
-                                    onDismiss = { dismissEditor(editorRoute) },
-                                )
+                                editorDestination(editorRoute)
                             }
                         }
                     }
@@ -1135,13 +1178,30 @@ private fun BacklogDestination(
         onDispose { picker.stopObserving() }
     }
 
+    // A selection is the pane's content, not a history entry. From the list it pushes the
+    // editor; with one already in the pane it replaces that route rather than stacking a
+    // second; and tapping Add again while the create form stands leaves it there. A plain
+    // `push` would grow the stack with every row (Cancel would walk back through selections)
+    // and would turn a second Add into a pop that discards the draft.
+    val openEditor: (AppRoute.WorkItemEditor) -> Unit = { route ->
+        val stack = router.path(AppTab.Backlog)
+        if (stack.lastOrNull() != route) {
+            val next = if (stack.lastOrNull() is AppRoute.WorkItemEditor) {
+                stack.dropLast(1) + route
+            } else {
+                stack + route
+            }
+            router.setPath(next, AppTab.Backlog)
+        }
+    }
+
     ProjectBacklogScreen(
         projection = model.projection,
         isLoading = model.isLoading,
         errorMessage = model.errorMessage,
         busyItemID = model.busyItemID,
         onSelect = { itemID ->
-            router.push(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
+            openEditor(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
         },
         onPutOnBoard = { itemID -> scope.launch { model.putOnBoard(itemID) } },
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
@@ -1151,13 +1211,12 @@ private fun BacklogDestination(
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Backlog) },
         onAddTask = {
-            router.push(
+            openEditor(
                 AppRoute.WorkItemEditor(
                     projectID = projectID,
                     workItemID = null,
                     initialStatus = WorkItemStatus.Backlog,
                 ),
-                AppTab.Backlog,
             )
         },
     )
