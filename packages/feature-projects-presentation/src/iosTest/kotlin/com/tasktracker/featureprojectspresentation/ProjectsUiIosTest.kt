@@ -109,6 +109,10 @@ class ProjectsUiIosTest {
         runComposeUiTest(block = BoardDragScenarios.aQuickSwipeOnACardDoesNotLiftIt)
 
     @Test
+    fun aShorterHoldStillLiftsTheCard() =
+        runComposeUiTest(block = BoardDragScenarios.aShorterHoldStillLiftsTheCard)
+
+    @Test
     fun listsEveryProject() = runComposeUiTest(block = ProjectsListScenarios.listsEveryProject)
 
     @Test

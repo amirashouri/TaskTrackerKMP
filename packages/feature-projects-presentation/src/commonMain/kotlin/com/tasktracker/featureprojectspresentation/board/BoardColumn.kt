@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +31,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -223,59 +226,72 @@ fun BoardColumnView(
                     // been scrolled since the last placement still reports the right position
                     // when the press lands, because boundsInRoot is computed on demand.
                     var cardCoordinates by remember(item.id) { mutableStateOf<LayoutCoordinates?>(null) }
-                    WorkItemCard(
-                        item = item,
-                        onClick = { onSelect(item) },
-                        onCopy = onCopy,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            // The card stays in the lane, faded: removing it would make the
-                            // lane's cards jump while the ghost is still under the finger.
-                            .alpha(if (drag?.draggingItemID == item.id) 0.35f else 1f)
-                            .then(
-                                if (drag == null) {
-                                    Modifier
-                                } else {
-                                    Modifier
-                                        .onGloballyPositioned { cardCoordinates = it }
-                                        // Held, not dragged: a plain vertical swipe belongs to
-                                        // the lane's scroll, and only a press that has stayed
-                                        // still for the long-press timeout lifts a card. That is
-                                        // what keeps the whole column from becoming a drag handle.
-                                        .pointerInput(item.id) {
-                                            var active: BoardCardDrag? = null
-                                            detectDragGesturesAfterLongPress(
-                                                onDragStart = { at ->
-                                                    val coordinates = cardCoordinates
-                                                    active = if (coordinates != null && coordinates.isAttached) {
-                                                        currentDrag?.also {
-                                                            it.onStart(item, coordinates.boundsInRoot(), at)
+                    // The press that lifts a card is a drag handle, not the platform's
+                    // context-menu hold, so it gets its own timeout. Provided around this one
+                    // card rather than changed globally: the shorter hold is a board gesture,
+                    // and every other long press in the tree keeps the system's timing.
+                    val platformViewConfiguration = LocalViewConfiguration.current
+                    val cardViewConfiguration = remember(platformViewConfiguration) {
+                        object : ViewConfiguration by platformViewConfiguration {
+                            override val longPressTimeoutMillis: Long = BoardCardLiftTimeoutMillis
+                        }
+                    }
+                    CompositionLocalProvider(LocalViewConfiguration provides cardViewConfiguration) {
+                        WorkItemCard(
+                            item = item,
+                            onClick = { onSelect(item) },
+                            onCopy = onCopy,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // The card stays in the lane, faded: removing it would make the
+                                // lane's cards jump while the ghost is still under the finger.
+                                .alpha(if (drag?.draggingItemID == item.id) 0.35f else 1f)
+                                .then(
+                                    if (drag == null) {
+                                        Modifier
+                                    } else {
+                                        Modifier
+                                            .onGloballyPositioned { cardCoordinates = it }
+                                            // Held, not dragged: a plain vertical swipe belongs
+                                            // to the lane's scroll, and only a press that has
+                                            // stayed still for the lift timeout lifts a card.
+                                            // That is what keeps the whole column from becoming
+                                            // a drag handle.
+                                            .pointerInput(item.id) {
+                                                var active: BoardCardDrag? = null
+                                                detectDragGesturesAfterLongPress(
+                                                    onDragStart = { at ->
+                                                        val coordinates = cardCoordinates
+                                                        active = if (coordinates != null && coordinates.isAttached) {
+                                                            currentDrag?.also {
+                                                                it.onStart(item, coordinates.boundsInRoot(), at)
+                                                            }
+                                                        } else {
+                                                            null
                                                         }
-                                                    } else {
-                                                        null
-                                                    }
-                                                },
-                                                onDrag = { change, amount ->
-                                                    change.consume()
-                                                    active?.onDrag(amount)
-                                                },
-                                                onDragEnd = {
-                                                    active?.onEnd()
-                                                    active = null
-                                                },
-                                                onDragCancel = {
-                                                    active?.onCancel()
-                                                    active = null
-                                                },
-                                            )
-                                        }
-                                }
-                            ),
-                        trailing = { cardTrailing(item) },
-                        assigneeName = assigneeName(item),
-                        blockedByKeys = blockedByKeys(item),
-                        projectTags = projectTags,
-                    )
+                                                    },
+                                                    onDrag = { change, amount ->
+                                                        change.consume()
+                                                        active?.onDrag(amount)
+                                                    },
+                                                    onDragEnd = {
+                                                        active?.onEnd()
+                                                        active = null
+                                                    },
+                                                    onDragCancel = {
+                                                        active?.onCancel()
+                                                        active = null
+                                                    },
+                                                )
+                                            }
+                                    }
+                                ),
+                            trailing = { cardTrailing(item) },
+                            assigneeName = assigneeName(item),
+                            blockedByKeys = blockedByKeys(item),
+                            projectTags = projectTags,
+                        )
+                    }
                 }
             }
         }
@@ -408,6 +424,20 @@ fun BoardColumnEmptyTag(status: WorkItemStatus): String = "${BoardColumnTag(stat
 fun BoardColumnAddTaskTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.add"
 
 fun BoardColumnSortTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.sort"
+
+/**
+ * How long a finger rests on a card before the card is lifted.
+ *
+ * The platform's 500ms is the hold that opens a context menu, and on a board it reads as the
+ * card refusing to move: half a second of stillness before anything happens is what makes the
+ * drag feel sticky. 300ms is short enough to feel like a consequence of the press while still
+ * being far longer than the movement of a swipe, which is what keeps the lane's own vertical
+ * scroll — a swipe has left the card well inside this window.
+ *
+ * `internal` so the drag scenarios assert against the same number the gesture uses rather than
+ * a second copy of it that can drift.
+ */
+internal const val BoardCardLiftTimeoutMillis = 300L
 
 /**
  * The lane's width.

@@ -63,6 +63,37 @@ object BoardDragScenarios {
     }
 
     /**
+     * A hold shorter than the platform's long press already lifts the card.
+     *
+     * The board's own lift timeout is what makes the gesture feel like a drag rather than a
+     * wait, and this is the scenario that pins it: [holdAndDrag] holds for 400ms — under the
+     * platform's 500ms — and still expects the card to land in Done. A timeout that drifted
+     * back to the platform default would leave the card in its lane and fail here, rather than
+     * only feeling wrong in the hand.
+     */
+    val aShorterHoldStillLiftsTheCard: suspend ComposeUiTest.() -> Unit = {
+        val todo = todoCard()
+        val moves = mutableListOf<Pair<WorkItemID, WorkItemStatus>>()
+        boardShowing { id, status -> moves += id to status }
+
+        val screenWidth = onRoot().fetchSemanticsNode().size.width
+        val from = onNodeWithTag(WorkItemCardTag(todo)).fetchSemanticsNode().boundsInRoot.center
+
+        holdAndDrag(
+            from = from,
+            to = Offset(screenWidth - 24f, from.y),
+            settleAt = Offset(screenWidth - DONE_CENTRE_FROM_RIGHT_EDGE, from.y),
+            holdMillis = SHORT_HOLD_MS,
+        )
+
+        assertEquals(
+            listOf(todo.id to WorkItemStatus.Done),
+            moves,
+            "a 400ms hold is shorter than the platform long press and must still lift the card",
+        )
+    }
+
+    /**
      * Releasing a card back where it came from moves nothing.
      *
      * The drop target exists while the card hovers over its own lane - that is what the outline
@@ -127,7 +158,12 @@ private fun todoCard(): WorkItem =
  * must be away from the edge so the row stops moving before the release.
  */
 @OptIn(ExperimentalTestApi::class)
-private suspend fun ComposeUiTest.holdAndDrag(from: Offset, to: Offset, settleAt: Offset? = null) {
+private suspend fun ComposeUiTest.holdAndDrag(
+    from: Offset,
+    to: Offset,
+    settleAt: Offset? = null,
+    holdMillis: Long = LONG_PRESS_TIMEOUT_MS,
+) {
     // The drop target scrolls the row on every frame while the finger is at an edge, so the
     // test's clock would never be idle and `performTouchInput` would wait forever for it. The
     // frames are driven by hand instead; the gesture itself is a real injection either way.
@@ -136,7 +172,7 @@ private suspend fun ComposeUiTest.holdAndDrag(from: Offset, to: Offset, settleAt
         onRoot().performTouchInput { down(from) }
         // The timeout itself runs on the test clock; holding the finger still is what lets it
         // fire. Moving before this would be a swipe, which the lane's scroll owns.
-        mainClock.advanceTimeBy(LONG_PRESS_TIMEOUT_MS)
+        mainClock.advanceTimeBy(holdMillis)
         onRoot().performTouchInput { moveTo(to) }
         // Frames at the edge so the row can scroll a lane that was off-screen into reach. On a
         // window where Done is already under the finger this changes no target.
@@ -153,6 +189,9 @@ private suspend fun ComposeUiTest.holdAndDrag(from: Offset, to: Offset, settleAt
 
 /** Comfortably past the platform's 500ms long-press timeout. */
 private const val LONG_PRESS_TIMEOUT_MS = 700L
+
+/** Under the platform's 500ms, over the board's own [BoardCardLiftTimeoutMillis]. */
+private const val SHORT_HOLD_MS = 400L
 
 /** Long enough for the edge scroll to cross two lanes on the narrowest host. */
 private const val EDGE_SCROLL_MS = 2_000L
