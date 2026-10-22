@@ -5,24 +5,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.TagID
@@ -481,11 +479,6 @@ private fun ProjectsEditorFullScreen(
     /** Opens the project editor, where an admin writes the catalog. See [WorkItemTagPicker]. */
     onManageTags: (() -> Unit)? = null,
 ) {
-    // Measured so the scroll range can reserve the room the action slab covers. It starts at
-    // zero and settles on the first layout, mirroring how the shell publishes its tab-bar
-    // inset: the scroll range grows by the slab's height instead of guessing it from tokens.
-    var actionBarHeightPx by remember { mutableStateOf(0) }
-    val density = LocalDensity.current
     val tabBarInset = LocalTabBarScrollUnderInset.current
 
     Box(
@@ -496,15 +489,8 @@ private fun ProjectsEditorFullScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(ttSpacing.screenGutterLarge)
-                .verticalScroll(rememberScrollState())
-                // Content inset, not viewport inset: the last field and the attachments must
-                // be able to scroll clear of the floating slab, and of the tab bar under it.
-                .padding(
-                    bottom = tabBarInset +
-                        with(density) { actionBarHeightPx.toDp() } +
-                        ttSpacing.md,
-                ),
+                .padding(horizontal = ttSpacing.screenGutterLarge, vertical = ttSpacing.md)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
         ) {
             Row(
@@ -671,6 +657,7 @@ private fun ProjectsEditorFullScreen(
                 pendingAttachments = pendingAttachments,
                 onRemovePending = onRemovePending,
             )
+            Spacer(modifier.height(40.dp))
         }
 
         // The form's actions, pinned rather than last: on a phone the details, comments and
@@ -680,14 +667,10 @@ private fun ProjectsEditorFullScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge)
                 // Above the shell's tab bar instead of under it. Both are bottom-anchored, and
                 // the bar is drawn after this screen, so sharing the band would hide Save.
                 .padding(bottom = tabBarInset + ttSpacing.md)
-                // Measured from here inward: the slab's own padding is included and the screen
-                // margins above are not, which is exactly the room it covers.
-                .onSizeChanged { actionBarHeightPx = it.height }
                 .ttGlassCard()
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
@@ -796,8 +779,8 @@ private fun WorkItemEditorForm(
     onTagToggled: (TagID) -> Unit = {},
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -953,7 +936,7 @@ private fun WorkItemEditorForm(
                     label = stringResource(Res.string.work_item_archive),
                     onClick = { if (!isBusy) onFileAway() },
                     modifier = Modifier.testTag(WorkItemFileAwayTag),
-                    style = TTGlassButtonStyle(tint = ttError(), prominent = true),
+                    style = TTGlassButtonStyle(tint = ttError()),
                 )
             }
             ttGlassButton(
@@ -966,7 +949,7 @@ private fun WorkItemEditorForm(
                 onClick = { if (canSave && !isBusy) onSave() },
                 modifier = Modifier.testTag(WorkItemSaveTag),
                 style = if (canSave && !isBusy) {
-                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                    TTGlassButtonStyle(tint = ttAccent())
                 } else {
                     TTGlassButtonStyle()
                 },
