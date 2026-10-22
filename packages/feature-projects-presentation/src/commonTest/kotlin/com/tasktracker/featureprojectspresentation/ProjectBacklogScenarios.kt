@@ -14,14 +14,24 @@ package com.tasktracker.featureprojectspresentation
  * Nothing tested this screen's layout at all before now, which is the other half of why it
  * survived: there was no assertion here that could notice either shape.
  */
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.TTToastTag
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
@@ -107,7 +117,93 @@ object ProjectBacklogScenarios {
             "the add action should be above the list rather than over it: add=$add list=$list",
         )
     }
+
+    /**
+     * Copying a row raises the confirmation, and it leaves on its own.
+     *
+     * The clock is stopped for the click so the two states can both be observed: with
+     * auto-advance on, `waitForIdle` would run out the toast's two seconds before the first
+     * assertion and the scenario would assert its absence twice.
+     */
+    val copyingARowConfirmsItOnTheBoard: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        backlogShowing(items = listOf(item), onAddTask = null)
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        onNested(BacklogCopyTag(item)).performClick()
+        mainClock.advanceTimeByFrame()
+
+        onNodeWithTag(TTToastTag).assertIsDisplayed()
+
+        mainClock.advanceTimeBy(COPIED_TOAST_MILLIS + 1)
+        mainClock.advanceTimeByFrame()
+        onNodeWithTag(TTToastTag).assertDoesNotExist()
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /**
+     * At 320pt the copy control keeps its 44dp tap target by wrapping, not by shrinking.
+     *
+     * That is the width this placement exists for. The row's content is 264dp after the screen
+     * gutter and the row's padding; the two labelled verbs' outer widths total ~223dp, so the
+     * icon's 44dp plus one 6dp gap does not fit on the same line. Measured with all three forced
+     * onto one row, the icon collapsed to **35dp** — under the design-system minimum. It must
+     * stay a 44dp target and land either after the pair or on its own line, never overlapping.
+     * Bounds rather than a screenshot, because all three of those survive being read off the
+     * semantics tree, at whatever density the host runs.
+     */
+    val theCopyControlFitsANarrowRow: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        backlogShowing(items = listOf(item), onAddTask = null, width = 320.dp)
+        waitForIdle()
+
+        val row = onNested(WorkItemBacklogRowTag(item)).fetchSemanticsNode().boundsInRoot
+        val copy = onNested(BacklogCopyTag(item)).fetchSemanticsNode().boundsInRoot
+        val put = onNested(BacklogPutOnBoardTag(item)).fetchSemanticsNode().boundsInRoot
+        val file = onNested(BacklogFileAwayTag(item)).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            put.right <= file.left + EDGE_TOLERANCE_PX,
+            "the two triage verbs should not overlap: put=$put file=$file",
+        )
+        assertTrue(
+            copy.width >= densityPixels(44.dp) - EDGE_TOLERANCE_PX,
+            "the copy control must keep its 44dp tap target at 320dp: row=$row copy=$copy " +
+                "put=$put file=$file",
+        )
+        assertTrue(
+            copy.right <= row.right + EDGE_TOLERANCE_PX,
+            "the copy control must stay inside the row at 320dp: row=$row copy=$copy",
+        )
+        assertTrue(
+            copy.top >= file.bottom - EDGE_TOLERANCE_PX ||
+                copy.left >= file.right - EDGE_TOLERANCE_PX,
+            "copy must sit after the triage pair or on its own line, never over it: " +
+                "file=$file copy=$copy",
+        )
+    }
 }
+
+/**
+ * Half a pixel of slack for a bounds comparison.
+ *
+ * Layout works in integers at the host's density, but the comparison is in floating-point
+ * pixels; touching edges are a correct layout, so they must not be reported as an overlap.
+ */
+private const val EDGE_TOLERANCE_PX = 0.5f
+
+/**
+ * [dp] in the density this test is running at.
+ *
+ * Bounds are root pixels, so a tap target compared against a `Dp` has to be converted. A JVM
+ * host at 1.0 and an Android host at 3.0 are 44 and 132 pixels for the same 44dp control;
+ * hardcoding either would fail the other.
+ */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.densityPixels(dp: Dp): Float = with(density) { dp.toPx() }
 
 /**
  * Nine untriaged items for one project.
@@ -162,24 +258,36 @@ private fun ComposeUiTest.composedRow(item: WorkItem): List<Rect> =
 private fun ComposeUiTest.backlogShowing(
     items: List<WorkItem>,
     onAddTask: (() -> Unit)?,
+    width: Dp? = null,
 ) {
     setContent {
         Themed {
-            ProjectBacklogScreen(
-                projection = sectionedBacklogProjection(items, emptyList()),
-                isLoading = false,
-                errorMessage = null,
-                busyItemID = null,
-                onSelect = {},
-                onPutOnBoard = {},
-                onFileAway = {},
-                onUnarchive = {},
-                onDismissError = {},
-                onOpenSwitcher = {},
-                projects = ViewPreviewData.pickable(),
-                onSelectProject = {},
-                onAddTask = onAddTask,
-            )
+            // A fixed width is how the narrow-row scenario asks the screen the question a
+            // 320pt phone asks; the host's own window is wider than any phone. The default
+            // fills the test window, so the older scenarios' measured bounds are unchanged.
+            Box(
+                modifier = if (width == null) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier.width(width).fillMaxHeight()
+                },
+            ) {
+                ProjectBacklogScreen(
+                    projection = sectionedBacklogProjection(items, emptyList()),
+                    isLoading = false,
+                    errorMessage = null,
+                    busyItemID = null,
+                    onSelect = {},
+                    onPutOnBoard = {},
+                    onFileAway = {},
+                    onUnarchive = {},
+                    onDismissError = {},
+                    onOpenSwitcher = {},
+                    projects = ViewPreviewData.pickable(),
+                    onSelectProject = {},
+                    onAddTask = onAddTask,
+                )
+            }
         }
     }
 }
