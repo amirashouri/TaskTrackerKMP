@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,8 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -31,6 +38,7 @@ import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -342,13 +350,13 @@ fun WorkItemEditorSheet(
 
 @Composable
 /**
- * The same form, stretched to a full page.
+ * The same form, stretched to a full page, with its actions pinned.
  *
  * Shares the form's fields, the error banner, the key footnote and every button — the only
- * thing that changes is the frame. In the sheet the bottom row is the tab bar, so the form
- * scrolls with the tab-bar inset applied at its bottom; full-screen drops that inset and lets
- * the scroll run to the very bottom, and pairs the row of actions with a back affordance so
- * an over-content edit can't get lost.
+ * thing that changes is the frame. The tab bar floats over this route, so the scroll reserves
+ * its inset plus the action slab's measured height; the slab itself is a sibling of the scroll
+ * at `BottomCenter`, which keeps File Away / Cancel / Save reachable however far the form
+ * scrolls. The back affordance in the header keeps an over-content edit from getting lost.
  */
 private fun ProjectsEditorFullScreen(
     title: String,
@@ -437,178 +445,210 @@ private fun ProjectsEditorFullScreen(
     /** See [AttachmentList.onRemovePending]. */
     onRemovePending: (Int) -> Unit = {},
 ) {
-    Column(
+    // Measured so the scroll range can reserve the room the action slab covers. It starts at
+    // zero and settles on the first layout, mirroring how the shell publishes its tab-bar
+    // inset: the scroll range grows by the slab's height instead of guessing it from tokens.
+    var actionBarHeightPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val tabBarInset = LocalTabBarScrollUnderInset.current
+
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ttCanvas().copy(alpha = 0.96f))
-            .padding(ttSpacing.screenGutterLarge)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = LocalTabBarScrollUnderInset.current),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+            .background(ttCanvas().copy(alpha = 0.96f)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(ttSpacing.screenGutterLarge)
+                .verticalScroll(rememberScrollState())
+                // Content inset, not viewport inset: the last field and the attachments must
+                // be able to scroll clear of the floating slab, and of the tab bar under it.
+                .padding(
+                    bottom = tabBarInset +
+                        with(density) { actionBarHeightPx.toDp() } +
+                        ttSpacing.md,
+                ),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
         ) {
-            if (onBack != null) {
-                ttGlassIconButton(
-                    image = ttActionIcons.chevronLeft,
-                    contentDescription = stringResource(Res.string.work_item_back),
-                    onClick = onBack,
-                    modifier = Modifier.testTag(WorkItemBackTag),
-                )
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The header names the surface ("New Task" / "Edit TT-1"); `title` is the
-                // draft and belongs to the field below. Sharing one parameter between the
-                // two was the defect: the field rendered this constant and never the draft.
-                ttText(
-                    text = if (isCreating) {
-                        stringResource(Res.string.work_item_editor_new_title)
-                    } else {
-                        stringResource(
-                            Res.string.work_item_editor_edit_title,
-                            issuedKey?.toString().orEmpty(),
-                        )
-                    },
-                    style = ttTypography.title,
-                    color = ttLabel(),
-                )
-                errorMessage?.let { message ->
-                    ttBanner(message = message, onDismiss = onDismissError)
+                if (onBack != null) {
+                    ttGlassIconButton(
+                        image = ttActionIcons.chevronLeft,
+                        contentDescription = stringResource(Res.string.work_item_back),
+                        onClick = onBack,
+                        modifier = Modifier.testTag(WorkItemBackTag),
+                    )
                 }
-                issuedKey?.let { key ->
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                ) {
+                    // The header names the surface ("New Task" / "Edit TT-1"); `title` is the
+                    // draft and belongs to the field below. Sharing one parameter between the
+                    // two was the defect: the field rendered this constant and never the draft.
                     ttText(
-                        text = stringResource(Res.string.work_item_key_read_only, key.toString()),
-                        style = ttTypography.footnote,
+                        text = if (isCreating) {
+                            stringResource(Res.string.work_item_editor_new_title)
+                        } else {
+                            stringResource(
+                                Res.string.work_item_editor_edit_title,
+                                issuedKey?.toString().orEmpty(),
+                            )
+                        },
+                        style = ttTypography.title,
+                        color = ttLabel(),
+                    )
+                    errorMessage?.let { message ->
+                        ttBanner(message = message, onDismiss = onDismissError)
+                    }
+                    issuedKey?.let { key ->
+                        ttText(
+                            text = stringResource(Res.string.work_item_key_read_only, key.toString()),
+                            style = ttTypography.footnote,
+                            color = ttLabelSecondary(),
+                        )
+                    }
+                }
+            }
+            ProjectsTextField(
+                title = stringResource(Res.string.work_item_title_label),
+                value = title,
+                onValueChange = onTitleChanged,
+                imeAction = ImeAction.Next,
+            )
+            ProjectsTextField(
+                title = stringResource(Res.string.work_item_details_label),
+                value = details,
+                onValueChange = onDetailsChanged,
+                singleLine = false,
+                minLines = DETAILS_MIN_LINES,
+                imeAction = ImeAction.Next,
+            )
+            ProjectsTextField(
+                title = stringResource(Res.string.work_item_story_points_label),
+                value = storyPointsText,
+                onValueChange = onStoryPointsChanged,
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Next,
+            )
+            if (selectableStatuses.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
+                    ttText(
+                        text = stringResource(Res.string.work_item_status_label),
+                        style = ttTypography.captionEmphasised,
                         color = ttLabelSecondary(),
+                    )
+                    TTGlassFlowPicker(
+                        options = selectableStatuses,
+                        selection = status,
+                        onSelect = onStatusChanged,
+                        title = { statusLabel(it) },
+                        modifier = Modifier.testTag(WorkItemStatusPickerTag),
                     )
                 }
             }
-        }
-        ProjectsTextField(
-            title = stringResource(Res.string.work_item_title_label),
-            value = title,
-            onValueChange = onTitleChanged,
-            imeAction = ImeAction.Next,
-        )
-        ProjectsTextField(
-            title = stringResource(Res.string.work_item_details_label),
-            value = details,
-            onValueChange = onDetailsChanged,
-            singleLine = false,
-            minLines = DETAILS_MIN_LINES,
-            imeAction = ImeAction.Next,
-        )
-        ProjectsTextField(
-            title = stringResource(Res.string.work_item_story_points_label),
-            value = storyPointsText,
-            onValueChange = onStoryPointsChanged,
-            keyboardType = KeyboardType.Number,
-            imeAction = ImeAction.Next,
-        )
-        if (selectableStatuses.size > 1) {
             Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
                 ttText(
-                    text = stringResource(Res.string.work_item_status_label),
+                    text = stringResource(Res.string.work_item_priority_label),
                     style = ttTypography.captionEmphasised,
                     color = ttLabelSecondary(),
                 )
                 TTGlassFlowPicker(
-                    options = selectableStatuses,
-                    selection = status,
-                    onSelect = onStatusChanged,
-                    title = { statusLabel(it) },
-                    modifier = Modifier.testTag(WorkItemStatusPickerTag),
+                    options = Priority.entries,
+                    selection = priority,
+                    onSelect = onPriorityChanged,
+                    title = { priorityLabel(it) },
+                    modifier = Modifier.testTag(WorkItemPriorityPickerTag),
                 )
             }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
-            ttText(
-                text = stringResource(Res.string.work_item_priority_label),
-                style = ttTypography.captionEmphasised,
-                color = ttLabelSecondary(),
+            WorkItemAssigneeRow(
+                assigneeID = assigneeID,
+                onAssigneeChanged = onAssigneeChanged,
+                searchMembers = searchMembers,
+                resolveSelected = resolveSelected,
             )
-            TTGlassFlowPicker(
-                options = Priority.entries,
-                selection = priority,
-                onSelect = onPriorityChanged,
-                title = { priorityLabel(it) },
-                modifier = Modifier.testTag(WorkItemPriorityPickerTag),
-            )
-        }
-        WorkItemAssigneeRow(
-            assigneeID = assigneeID,
-            onAssigneeChanged = onAssigneeChanged,
-            searchMembers = searchMembers,
-            resolveSelected = resolveSelected,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
-        ) {
-            ttText(
-                text = stringResource(Res.string.work_item_due_label),
-                style = ttTypography.captionEmphasised,
-                color = ttLabelSecondary(),
-                modifier = Modifier.weight(1f),
-            )
-            ttGlassButton(
-                label = if (hasDueDate) {
-                    stringResource(Res.string.work_item_due_clear)
-                } else {
-                    stringResource(Res.string.work_item_due_set)
-                },
-                onClick = { onToggleDueDate(!hasDueDate) },
-                modifier = Modifier.testTag(WorkItemDueToggleTag),
-            )
-        }
-        WorkItemRecurrenceRow(
-            recurrence = recurrence,
-            onRecurrenceChanged = onRecurrenceChanged,
-            anchorDate = repeatAnchor,
-        )
-        WorkItemDependencyPills(
-            blockers = blockers,
-            onOpenBlocker = onOpenBlocker,
-            onRemoveBlocker = onRemoveBlocker,
-            onAddClick = onAddBlockerClick,
-        )
-        comments?.let { thread ->
-            if (!isCreating) {
-                CommentThread(
-                    comments = thread,
-                    authorNames = commentAuthorNames,
-                    canComment = currentUserID != null,
-                    draft = commentDraft,
-                    replyTo = commentReplyTo,
-                    onDraftChanged = onCommentDraftChanged,
-                    onReply = onCommentReply,
-                    onCancelReply = onCommentCancelReply,
-                    onSubmit = onCommentSubmit,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            ) {
+                ttText(
+                    text = stringResource(Res.string.work_item_due_label),
+                    style = ttTypography.captionEmphasised,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier.weight(1f),
+                )
+                ttGlassButton(
+                    label = if (hasDueDate) {
+                        stringResource(Res.string.work_item_due_clear)
+                    } else {
+                        stringResource(Res.string.work_item_due_set)
+                    },
+                    onClick = { onToggleDueDate(!hasDueDate) },
+                    modifier = Modifier.testTag(WorkItemDueToggleTag),
                 )
             }
+            WorkItemRecurrenceRow(
+                recurrence = recurrence,
+                onRecurrenceChanged = onRecurrenceChanged,
+                anchorDate = repeatAnchor,
+            )
+            WorkItemDependencyPills(
+                blockers = blockers,
+                onOpenBlocker = onOpenBlocker,
+                onRemoveBlocker = onRemoveBlocker,
+                onAddClick = onAddBlockerClick,
+            )
+            comments?.let { thread ->
+                if (!isCreating) {
+                    CommentThread(
+                        comments = thread,
+                        authorNames = commentAuthorNames,
+                        canComment = currentUserID != null,
+                        draft = commentDraft,
+                        replyTo = commentReplyTo,
+                        onDraftChanged = onCommentDraftChanged,
+                        onReply = onCommentReply,
+                        onCancelReply = onCommentCancelReply,
+                        onSubmit = onCommentSubmit,
+                    )
+                }
+            }
+            AttachmentList(
+                attachments = attachments,
+                onAttachClick = onAttachClick,
+                onRemove = onRemoveAttachment,
+                syncStateOf = attachmentSyncState,
+                onOpen = onOpenAttachment,
+                isOpening = attachmentOpening,
+                pendingAttachments = pendingAttachments,
+                onRemovePending = onRemovePending,
+            )
         }
-        AttachmentList(
-            attachments = attachments,
-            onAttachClick = onAttachClick,
-            onRemove = onRemoveAttachment,
-            syncStateOf = attachmentSyncState,
-            onOpen = onOpenAttachment,
-            isOpening = attachmentOpening,
-            pendingAttachments = pendingAttachments,
-            onRemovePending = onRemovePending,
-        )
+
+        // The form's actions, pinned rather than last: on a phone the details, comments and
+        // attachments push Save several screens down, and a save that has to be found is a
+        // draft the user abandons. The slab floats over the scroll and the scroll reserves its
+        // measured height, so nothing ends up permanently behind it.
         Row(
             modifier = Modifier
+                .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(top = ttSpacing.sm)
-                .padding(bottom = LocalTabBarScrollUnderInset.current),
+                .padding(horizontal = ttSpacing.screenGutterLarge)
+                // Above the shell's tab bar instead of under it. Both are bottom-anchored, and
+                // the bar is drawn after this screen, so sharing the band would hide Save.
+                .padding(bottom = tabBarInset + ttSpacing.md)
+                // Measured from here inward: the slab's own padding is included and the screen
+                // margins above are not, which is exactly the room it covers.
+                .onSizeChanged { actionBarHeightPx = it.height }
+                .ttGlassCard()
+                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!isFiledAway) {
                 ttGlassButton(
