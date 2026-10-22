@@ -295,6 +295,10 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = BoardDragScenarios.aQuickSwipeOnACardDoesNotLiftIt)
 
     @Test
+    fun aShorterHoldStillLiftsTheCard() =
+        runComposeUiTest(block = BoardDragScenarios.aShorterHoldStillLiftsTheCard)
+
+    @Test
     fun theCardShowsTheGoalAndItsEditButtonOpensTheEditor() = runComposeUiTest(block = SprintDetailScenarios.theCardShowsTheGoalAndItsEditButtonOpensTheEditor)
 
     @Test
