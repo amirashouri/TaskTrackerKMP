@@ -331,6 +331,14 @@ class ProjectsUiAndroidHostTest {
     fun theActionsFloatOverTheScrollingForm() = runComposeUiTest(block = WorkItemEditorScenarios.theActionsFloatOverTheScrollingForm)
 
     @Test
+    fun aMemberSeesNoTagSectionWithoutACatalog() =
+        runComposeUiTest(block = WorkItemEditorScenarios.aMemberSeesNoTagSectionWithoutACatalog)
+
+    @Test
+    fun anAdminCanOpenTheProjectEditorFromAnEmptyTagSection() =
+        runComposeUiTest(block = WorkItemEditorScenarios.anAdminCanOpenTheProjectEditorFromAnEmptyTagSection)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

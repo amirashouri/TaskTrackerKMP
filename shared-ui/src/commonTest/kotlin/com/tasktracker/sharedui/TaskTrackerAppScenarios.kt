@@ -171,6 +171,10 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.aNarrowShellHoldsTheEditorOnThePathWhileItsSlideFinishes)
 
     @Test
+    fun anAdminSeesTheLiveCatalogWhenTheLocalRowHasNone() =
+        runComposeUiTest(block = ShellScenarios.anAdminSeesTheLiveCatalogWhenTheLocalRowHasNone)
+
+    @Test
     fun exactlyOneRailDestinationIsMarkedSelected() =
         runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
 

@@ -10,12 +10,14 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -119,17 +121,53 @@ object WorkItemEditorScenarios {
     }
 
     /**
+     * A member in a project with no tag catalog sees no tag section at all.
+     *
+     * The section is hidden rather than shown empty because an "assign tags" control with
+     * nothing to assign is a dead control — see [WorkItemTagPicker]. The assertion is on the
+     * whole picker, not on its copy, so a regression that draws the header alone still fails.
+     */
+    val aMemberSeesNoTagSectionWithoutACatalog: suspend ComposeUiTest.() -> Unit = {
+        setContent { editorSheet(projectTags = emptyList(), isAdmin = false) }
+
+        onNodeWithTag(WorkItemTagPickerTag).assertDoesNotExist()
+    }
+
+    /**
+     * An admin sees the empty tag section and can reach the project editor from it.
+     *
+     * The catalog is admin-owned, so hiding the section from an admin hides the only screen
+     * that can create one. The callback is the whole assertion: a section that names the gap
+     * but cannot be acted on would still pass a visibility check.
+     */
+    val anAdminCanOpenTheProjectEditorFromAnEmptyTagSection: suspend ComposeUiTest.() -> Unit = {
+        var opens = 0
+        setContent {
+            editorSheet(isAdmin = true, onManageTags = { opens += 1 })
+        }
+
+        onNodeWithTag(WorkItemTagPickerTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(WorkItemManageTagsTag).performClick()
+
+        assertEquals(1, opens)
+    }
+
+    /**
      * The create editor, with the title as real state the way the host wires it.
      *
      * Every other field is a fixed value: this scenario is about the draft reaching the
      * field, so the title is the only thing that moves. The thread defaults to absent, as
      * the create editor passes it; the floating-action scenario passes a thread to overflow
-     * the fold.
+     * the fold. The tag catalog defaults to empty and the caller to a member, which is what
+     * the tag-section scenarios override.
      */
     @Composable
     private fun editorSheet(
         isCreating: Boolean = true,
         comments: List<Comment>? = null,
+        projectTags: List<ProjectTag> = emptyList(),
+        isAdmin: Boolean = false,
+        onManageTags: (() -> Unit)? = null,
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -166,6 +204,9 @@ object WorkItemEditorScenarios {
                 onCancel = {},
                 onDismissError = {},
                 comments = comments,
+                projectTags = projectTags,
+                isAdmin = isAdmin,
+                onManageTags = onManageTags,
             )
         }
     }

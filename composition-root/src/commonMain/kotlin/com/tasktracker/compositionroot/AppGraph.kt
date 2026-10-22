@@ -466,6 +466,11 @@ object AppGraph {
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     ),
+                    // The sink a pull uses, so a row the admin surface reads or writes is the
+                    // local project immediately. Without it the tag catalog an admin just
+                    // created stays server-side until the next cycle, and the work item
+                    // editor — which reads the local row — offers them the empty state.
+                    localStore = resolver.resolve(LocalDataSyncSink::class),
                 )
             }
         }

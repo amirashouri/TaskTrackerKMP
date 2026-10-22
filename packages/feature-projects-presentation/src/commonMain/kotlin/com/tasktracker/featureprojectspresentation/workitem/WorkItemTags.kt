@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.TagID
 import com.tasktracker.designsystem.TagTint
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -42,8 +43,10 @@ import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.TagRules
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.work_item_tags_count
+import com.tasktracker.resources.work_item_tags_empty
 import com.tasktracker.resources.work_item_tags_label
 import com.tasktracker.resources.work_item_tags_limit
+import com.tasktracker.resources.work_item_tags_manage
 import org.jetbrains.compose.resources.stringResource
 
 /** The test tag on the icon-only strip a card or row draws. */
@@ -51,6 +54,9 @@ const val WorkItemTagIconsTag = "workItem.tags"
 
 /** The test tag on the editor's tag picker. */
 const val WorkItemTagPickerTag = "workItem.tagPicker"
+
+/** The test tag on the admin-only "manage tags" affordance in an empty picker. */
+const val WorkItemManageTagsTag = "workItem.tagPicker.manage"
 
 /** The test tag on one option in the picker. */
 fun WorkItemTagOptionTag(tag: ProjectTag): String =
@@ -188,8 +194,15 @@ fun WorkItemTagIcons(
  * Options rather than a dropdown because there is no dropdown dependency and because the set
  * is small by construction ([TagRules.MAX_PER_PROJECT]). At the five-tag cap the unselected
  * options dim and stop accepting taps — a visible answer, rather than a tap that vanishes.
- * The section renders nothing when the project defines no tags: an "assign tags" control with
- * nothing to assign is a dead control, and the editor already has enough of those.
+ *
+ * ## An empty catalog is a different answer for a member and for an admin
+ *
+ * A member sees nothing: an "assign tags" control with nothing to assign is a dead control,
+ * and the editor already has enough of those. An admin sees the section with a way into the
+ * project editor, because the empty catalog is theirs to fix — hiding it from them is hiding
+ * the only path to a feature they administer. `onManageTags` is what makes that path real;
+ * with no callback there is nowhere to send them, so the section stays hidden even for an
+ * admin.
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -198,34 +211,22 @@ fun WorkItemTagPicker(
     selectedIDs: List<TagID>,
     onToggle: (TagID) -> Unit,
     modifier: Modifier = Modifier,
+    /** Whether the signed-in user administers the project's catalog. See the KDoc above. */
+    isAdmin: Boolean = false,
+    /** Opens the project editor, where an admin creates tags. `null` hides the affordance. */
+    onManageTags: (() -> Unit)? = null,
 ) {
-    if (tags.isEmpty()) return
+    if (tags.isEmpty()) {
+        if (!isAdmin || onManageTags == null) return
+        TagSectionEmpty(onManageTags = onManageTags, modifier = modifier)
+        return
+    }
 
     Column(
         modifier = modifier.fillMaxWidth().testTag(WorkItemTagPickerTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ttText(
-                text = stringResource(Res.string.work_item_tags_label),
-                style = ttTypography.captionEmphasised,
-                color = ttLabelSecondary(),
-                modifier = Modifier.weight(1f),
-            )
-            ttText(
-                text = stringResource(
-                    Res.string.work_item_tags_count,
-                    selectedIDs.size,
-                    TagRules.MAX_PER_ITEM,
-                ),
-                style = ttTypography.caption,
-                color = ttLabelSecondary(),
-            )
-        }
+        TagSectionHeader(selectedCount = selectedIDs.size)
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
@@ -249,6 +250,67 @@ fun WorkItemTagPicker(
                 color = ttLabelSecondary(),
             )
         }
+    }
+}
+
+/**
+ * The label and the "n of five" count, shared by the picker and its empty state.
+ *
+ * One composable rather than two copies so an empty catalog cannot drift into a section
+ * whose header says something the populated one does not.
+ */
+@Composable
+private fun TagSectionHeader(selectedCount: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ttText(
+            text = stringResource(Res.string.work_item_tags_label),
+            style = ttTypography.captionEmphasised,
+            color = ttLabelSecondary(),
+            modifier = Modifier.weight(1f),
+        )
+        ttText(
+            text = stringResource(
+                Res.string.work_item_tags_count,
+                selectedCount,
+                TagRules.MAX_PER_ITEM,
+            ),
+            style = ttTypography.caption,
+            color = ttLabelSecondary(),
+        )
+    }
+}
+
+/**
+ * The section an admin sees when the project defines no tags.
+ *
+ * It states the gap and offers the one action that closes it. Nothing is offered to a
+ * member: they cannot edit the catalog, so naming it would be an explanation of a screen
+ * they do not have.
+ */
+@Composable
+private fun TagSectionEmpty(
+    onManageTags: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth().testTag(WorkItemTagPickerTag),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        TagSectionHeader(selectedCount = 0)
+        ttText(
+            text = stringResource(Res.string.work_item_tags_empty),
+            style = ttTypography.caption,
+            color = ttLabelSecondary(),
+        )
+        ttGlassButton(
+            label = stringResource(Res.string.work_item_tags_manage),
+            onClick = onManageTags,
+            modifier = Modifier.testTag(WorkItemManageTagsTag),
+        )
     }
 }
 

@@ -72,6 +72,7 @@ import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -445,6 +446,7 @@ fun NavigationHost(
                         tab = tab,
                         preferences = preferences,
                         teamPort = environment.teamPort,
+                        adminProjectsPort = adminProjectsPort,
                         onDismiss = { dismissEditor(editorRoute) },
                     )
                 }
@@ -1672,6 +1674,17 @@ private fun WorkItemEditorDestination(
     tab: AppTab,
     preferences: ShellPreferences,
     teamPort: TeamPort? = null,
+    /**
+     * The admin projects surface, when this shell bound one.
+     *
+     * Two jobs, both about the tag catalog. It is where the empty-catalog affordance sends an
+     * admin, so with no port that affordance is withheld rather than offered dead. And it is
+     * the live copy of a catalog the local row may not have yet, which is the read this editor
+     * makes when an admin's row is empty — see the `catalog` state below.
+     *
+     * Supplied by the shell rather than read here because the port is a property of the graph.
+     */
+    adminProjectsPort: AdminProjectsPort? = null,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -1697,6 +1710,10 @@ private fun WorkItemEditorDestination(
     // id that arrives mid-edit must relabel rather than leave a stale name on the row.
     val currentUserID by preferences.currentUserID.collectAsState()
     val currentUserName by preferences.currentUserName.collectAsState()
+    // Who may write the project's tag catalog. The editor changes exactly one thing for an
+    // admin: a project with no tags shows the section with a way into the project editor,
+    // where the catalog is created, instead of hiding it from the only person who can fix it.
+    val isAdmin = preferences.currentUserRole.collectAsState().value == UserRole.Admin
     val projectEnvironment = currentProjectEnvironment
     val filePicker = projectEnvironment?.filePicker
     // `null` in a demo graph: the editor then keeps attachments local instead of handing
@@ -1713,6 +1730,34 @@ private fun WorkItemEditorDestination(
     val currentProject by produceState<Project?>(initialValue = null, projectID, repository) {
         value = runCatching { repository.project(projectID) }.getOrNull()
     }
+
+    // The tag catalog the picker offers and the draft validates against. `null` is "not known
+    // yet" and draws nothing; an empty list is a project whose admin defined no tags.
+    //
+    // The local row answers for everyone, which is what an offline member reads. An admin gets
+    // one extra read when that row has no tags: the admin project editor writes the server
+    // directly, so the device that created a catalog can be the last to see it, and the
+    // picker would tell the one person who can create tags that there are none. That read is
+    // also how the row catches up — `AdminProjectsRepository` projects what it read into the
+    // local store — so the board's chips appear without waiting for a pull.
+    val catalog by produceState<List<ProjectTag>?>(
+        initialValue = null,
+        projectID,
+        currentProject,
+        isAdmin,
+        adminProjectsPort,
+    ) {
+        val local = currentProject ?: return@produceState
+        if (local.tags.isNotEmpty() || !isAdmin || adminProjectsPort == null) {
+            value = local.tags
+            return@produceState
+        }
+        // A failed read is "no live catalog", not "the project has none": fall back to the
+        // local row, which is the same answer a member gets.
+        value = runCatching { adminProjectsPort?.project(projectID)?.project?.tags }.getOrNull()
+            ?: local.tags
+    }
+
     val model = remember(
         projectID,
         workItemID,
@@ -1724,6 +1769,7 @@ private fun WorkItemEditorDestination(
         blobTransport,
         opener,
         currentProject,
+        catalog,
     ) {
         WorkItemEditorModel(
             projectID,
@@ -1735,7 +1781,7 @@ private fun WorkItemEditorDestination(
             currentUserID = currentUserID,
             blobTransport = blobTransport,
             opener = opener,
-            availableTags = currentProject?.tags,
+            availableTags = catalog,
         )
     }
 
@@ -1913,9 +1959,20 @@ private fun WorkItemEditorDestination(
         // save", and Remove drops one before Save files the rest.
         pendingAttachments = model.stagedAttachments,
         onRemovePending = model::removeStagedAttachment,
-        projectTags = currentProject?.tags.orEmpty(),
+        projectTags = catalog.orEmpty(),
         selectedTagIDs = model.tagIDs,
         onTagToggled = model::toggleTag,
+        // The empty-catalog exit for an admin: the project editor is where tags are created,
+        // and `openAdminProjects` installs that section on the Settings stack rather than
+        // pushing onto the board's — the edit belongs to the admin surface, not to this tab.
+        // The draft stays where it is, so coming back to the board returns to this editor.
+        //
+        // Gated on the role, on the port, and on the catalog being known: a graph whose admin
+        // surface is unbound would answer that tap with a placeholder, and a catalog still
+        // loading is not an empty one. Passing `isAdmin = false` is how both cases reach the
+        // picker, which then hides the section exactly as it does for a member.
+        isAdmin = isAdmin && adminProjectsPort != null && catalog != null,
+        onManageTags = { router.openAdminProjects(projectID) },
         isAttaching = model.isAttaching,
         onAttachClick = {
             // The picker belongs to the environment, not the screen: the graph owns the
