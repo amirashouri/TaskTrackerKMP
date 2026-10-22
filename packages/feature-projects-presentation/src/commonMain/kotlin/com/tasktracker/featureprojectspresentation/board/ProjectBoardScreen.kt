@@ -5,7 +5,6 @@ import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,25 +15,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.ProjectID
-import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
@@ -46,7 +37,6 @@ import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
-import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
@@ -60,8 +50,6 @@ import com.tasktracker.resources.board_kanban
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
-import com.tasktracker.resources.work_item_copied
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -162,22 +150,10 @@ fun ProjectBoardScreen(
      */
     canAddTask: Boolean = true,
 ) {
-    // Both halves of the copy confirmation: the write itself, and a count that re-keys the
-    // timer so a second copy restarts the toast rather than leaving the first one's clock
-    // running. The count is not shown; it only exists to be a `LaunchedEffect` key.
-    @Suppress("DEPRECATION") // See copyToClipboard for why the deprecated half is used.
-    val clipboard = LocalClipboardManager.current
-    var copies by remember { mutableIntStateOf(0) }
-    LaunchedEffect(copies) {
-        if (copies == 0) return@LaunchedEffect
-        delay(COPIED_TOAST_MILLIS)
-        copies = 0
-    }
-
-    // A Box so the toast can float over the lanes instead of taking a row from the column.
+    // The host floats the confirmation over the lanes instead of taking a row from the column.
     // Inserting it into the column would shift every lane up while it is visible, which is
     // the layout jump a confirmation is not allowed to cause.
-    Box(modifier = modifier.fillMaxSize()) {
+    ClipboardCopyHost(modifier = modifier) { onCopy ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -293,10 +269,7 @@ fun ProjectBoardScreen(
                         BoardColumnView(
                             column = column,
                             onSelect = { onSelect(it.id) },
-                            onCopy = { text ->
-                                copyToClipboard(clipboard, text)
-                                copies++
-                            },
+                            onCopy = onCopy,
                             onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
                             modifier = Modifier,
                             assigneeName = { item ->
@@ -325,37 +298,7 @@ fun ProjectBoardScreen(
                 }
             }
         }
-
-        if (copies > 0) {
-            ttToast(
-                message = stringResource(Res.string.work_item_copied),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = ttSpacing.xxl)
-                    // Clear of the tab bar, so the glass bar cannot cover the confirmation.
-                    .padding(bottom = LocalTabBarScrollUnderInset.current + ttSpacing.xxl),
-            )
-        }
     }
-}
-
-/**
- * Writes plain text to the platform clipboard.
- *
- * `ClipboardManager` is the **deprecated** half of Compose's clipboard API, and it is used
- * deliberately. Its replacement, `Clipboard`, takes a `ClipEntry`, and in Compose
- * Multiplatform 1.12.1 `ClipEntry` has no common constructor: the iOS builder is
- * `@ExperimentalComposeUiApi` and every platform's constructor is `internal`. Writing through
- * the deprecated interface is therefore the only way to copy a string from `commonMain`
- * without an `expect`/`actual` seam and three platform implementations for one call.
- *
- * Isolated here rather than annotated at the call site so the suppression is one line and the
- * reason sits next to it. When `ClipEntry` gains a common constructor, this function is the
- * only place that has to change.
- */
-@Suppress("DEPRECATION")
-private fun copyToClipboard(clipboard: ClipboardManager, text: String) {
-    clipboard.setText(AnnotatedString(text))
 }
 
 /**
@@ -583,15 +526,3 @@ fun BoardMoveTag(item: WorkItem, status: WorkItemStatus): String =
 // Compose's own `MinFlingVelocityDp`, which is `internal` to foundation. `val`, not `const
 // val`: `Dp` is a value class, so `const val` is not allowed.
 private val MIN_FLANGE_VELOCITY_DP = 400.dp
-
-/**
- * How long the copy confirmation stays up.
- *
- * Two seconds is long enough to read four words and short enough that it is gone before the
- * next card is picked up. The timer lives with the board rather than in `ttToast` because the
- * board is what knows a copy happened; see the toast's own docs for why timing is the caller's.
- *
- * `internal` so the scenario that waits it out can hold the same number the screen uses, rather
- * than a second copy of it.
- */
-internal const val COPIED_TOAST_MILLIS = 2_000L

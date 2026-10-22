@@ -1,7 +1,6 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -71,11 +70,9 @@ fun ProjectBacklogScreen(
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .testTag(ProjectBacklogScreenTag),
-    ) {
+    ClipboardCopyHost(
+        modifier = modifier.testTag(ProjectBacklogScreenTag),
+    ) { onCopy ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -146,6 +143,7 @@ fun ProjectBacklogScreen(
                     onSelect = onSelect,
                     onPutOnBoard = onPutOnBoard,
                     onFileAway = onFileAway,
+                    onCopy = onCopy,
                     tabBarInset = tabBarInset,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -155,6 +153,7 @@ fun ProjectBacklogScreen(
                     isLoading = isLoading,
                     onSelect = onSelect,
                     onFileAway = onFileAway,
+                    onCopy = onCopy,
                     tabBarInset = tabBarInset,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -164,6 +163,7 @@ fun ProjectBacklogScreen(
                     isLoading = isLoading,
                     onSelect = onSelect,
                     onUnarchive = onUnarchive,
+                    onCopy = onCopy,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -220,6 +220,7 @@ private fun BacklogSectionList(
     onSelect: (WorkItemID) -> Unit,
     onPutOnBoard: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
+    onCopy: (String) -> Unit,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -240,6 +241,7 @@ private fun BacklogSectionList(
                     onFileAway = { onFileAway(item.id) },
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
+                    onCopy = onCopy,
                 )
             }
         }
@@ -259,6 +261,7 @@ private fun KanbanSectionList(
     isLoading: Boolean,
     onSelect: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
+    onCopy: (String) -> Unit,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
 ) {
@@ -279,6 +282,7 @@ private fun KanbanSectionList(
                     onFileAway = { onFileAway(item.id) },
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
+                    onCopy = onCopy,
                 )
             }
         }
@@ -297,6 +301,7 @@ private fun ArchivedSectionList(
     isLoading: Boolean,
     onSelect: (WorkItemID) -> Unit,
     onUnarchive: (WorkItemID) -> Unit,
+    onCopy: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (!isLoading && projection.archivedIsEmpty) {
@@ -317,6 +322,7 @@ private fun ArchivedSectionList(
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
                     onUnarchive = { onUnarchive(item.id) },
+                    onCopy = onCopy,
                 )
             }
         }

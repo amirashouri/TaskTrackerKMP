@@ -3,7 +3,10 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,8 +20,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -31,6 +36,7 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.sprint_remove_from_sprint
 import com.tasktracker.resources.work_item_archive
+import com.tasktracker.resources.work_item_copy
 import com.tasktracker.resources.archive_reopen
 import org.jetbrains.compose.resources.stringResource
 
@@ -79,7 +85,19 @@ import org.jetbrains.compose.resources.stringResource
  * has no business making. The caller passes `null` for every callback it does not want,
  * and a locked sprint (active or finished) passes [onRemoveFromSprint] as `null` too, so
  * the row renders read-only rather than offering a press that would be refused.
+ *
+ * ## Copy is an icon, and why it wraps
+ *
+ * Copy acts on the item's own text rather than triaging it, so it trails the action row as a
+ * 44dp icon instead of joining the two labelled verbs. The width is the reason: at 320pt the
+ * row has 264dp of content, the two labels' outer widths total ~223dp, and the icon plus one
+ * 6dp gap needs 273dp. Forcing all three onto one row measured the icon at 35dp — under the
+ * 44dp tap target — so the row is a `FlowRow`: the icon stays on the same line, at the trailing
+ * edge, when there is room (a 360pt phone has 304dp), and wraps to its own line at the leading
+ * edge when there is not. [onCopy] is nullable so a surface that does not own a clipboard — the
+ * sprint detail — draws no dead control.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WorkItemBacklogRow(
     item: WorkItem,
@@ -90,6 +108,13 @@ fun WorkItemBacklogRow(
     onOpen: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
     onRemoveFromSprint: (() -> Unit)? = null,
+    /**
+     * Hands the row's text to the host, which owns the clipboard and the confirmation.
+     *
+     * `null` on a surface that has no clipboard to write to — the sprint detail — so the row
+     * draws no copy control there rather than a press that silently does nothing.
+     */
+    onCopy: ((String) -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -134,9 +159,11 @@ fun WorkItemBacklogRow(
                 color = ttLabelSecondary(),
             )
         }
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             if (onRemoveFromSprint != null) {
                 // Sprint mode replaces the whole action row rather than joining it: see
@@ -172,6 +199,19 @@ fun WorkItemBacklogRow(
                         testTag = BacklogFileAwayTag(item),
                     )
                 }
+            }
+            // Trailing when the line has room: the weight spacer takes the slack, so copy sits at
+            // the far edge. When it does not (320pt), the icon wraps rather than being squeezed
+            // below its 44dp tap target. It stays live while [isBusy] because, unlike the triage
+            // pair, copying does not race the write in flight - the text is already in memory.
+            if (onCopy != null) {
+                Spacer(Modifier.weight(1f))
+                ttGlassIconButton(
+                    image = ttActionIcons.copy,
+                    contentDescription = stringResource(Res.string.work_item_copy),
+                    onClick = { onCopy(clipboardText(item)) },
+                    modifier = Modifier.testTag(BacklogCopyTag(item)),
+                )
             }
         }
     }
@@ -247,5 +287,13 @@ fun BacklogUnarchiveTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)
 
 /** The sprint detail's one verb, for the same reason the others are named. */
 fun BacklogRemoveFromSprintTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.removeFromSprint"
+
+/**
+ * The row's copy control.
+ *
+ * Suffixed with the key, unlike the card's: a backlog composes many rows at once, so a scenario
+ * has to name the row it means.
+ */
+fun BacklogCopyTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.copy"
 
 private const val BACKLOG_TITLE_MAX_LINES = 2

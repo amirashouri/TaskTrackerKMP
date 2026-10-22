@@ -140,6 +140,27 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = ProjectBacklogScenarios.theAddActionTrailsTheSwitcher)
 
     @Test
+    fun backlogRowShowsTheCopyControl() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTheCopyControl)
+
+    @Test
+    fun copyingABacklogRowHandsTheTitleAndDetailsToTheHost() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.copyingARowHandsTheTitleAndDetailsToTheHost)
+
+    @Test
+    fun aBacklogRowWithoutACopyHandlerOffersNoCopyControl() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.aRowWithoutACopyHandlerOffersNoCopyControl)
+
+    @Test
+    fun copyingABacklogRowConfirmsItOnTheBoard() =
+        runComposeUiTest(block = ProjectBacklogScenarios.copyingARowConfirmsItOnTheBoard)
+
+    /** The copy icon and the two triage verbs all stay inside the row at 320pt. */
+    @Test
+    fun theCopyControlFitsANarrowBacklogRow() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theCopyControlFitsANarrowRow)
+
+    @Test
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
 
     @Test
