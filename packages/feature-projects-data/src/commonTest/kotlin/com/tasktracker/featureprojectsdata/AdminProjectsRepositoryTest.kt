@@ -1,7 +1,12 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.parseTagID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.network.HttpMethod
@@ -105,6 +110,60 @@ class AdminProjectsRepositoryTest {
         }
     }
 
+    /**
+     * A row the admin surface read is also the local row, so member screens see it at once.
+     *
+     * The catalog is the reason: a work item editor reads the local project and nothing else,
+     * so an admin whose device kept the server's answer to itself offered an empty tag section
+     * for tags that existed.
+     */
+    @Test
+    fun projectWritesTheRowItReadIntoTheLocalStore() = runTest {
+        val id = randomProjectID()
+        val catalog = aTagCatalog()
+        val client = RecordingHttpClient()
+        client.respondWith(
+            projectBody(id = id.stringValue, name = "Solo", version = "v3", tags = catalog),
+        )
+        val store = RecordingProjectStore()
+
+        repositoryOver(client, store).project(id)
+
+        assertEquals(listOf(catalog), store.stored.map { it.tags })
+    }
+
+    @Test
+    fun updateProjectWritesTheStoredRowIntoTheLocalStore() = runTest {
+        val id = randomProjectID()
+        val catalog = aTagCatalog()
+        val client = RecordingHttpClient()
+        client.respondWith(
+            projectBody(id = id.stringValue, name = "Edit", version = "v4", tags = catalog),
+        )
+        val store = RecordingProjectStore()
+
+        repositoryOver(client, store).updateProject(aProject(id = id, name = "Edit"), version = "v3")
+
+        assertEquals(listOf(catalog), store.stored.map { it.tags })
+        assertEquals("Edit", store.stored.single().name)
+    }
+
+    /**
+     * The server has already accepted the write, so a local store that refuses the row is a
+     * delay, not a failed save: the pull applies the same row later. Reporting a failure here
+     * would send the admin to retry a save that already happened, against a stale version.
+     */
+    @Test
+    fun aLocalStoreFailureDoesNotTurnAConfirmedSaveIntoAFailure() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWith(projectBody(name = "Edit"))
+        val store = RecordingProjectStore(failure = IllegalStateException("the row would not write"))
+
+        val saved = repositoryOver(client, store).updateProject(aProject(name = "Edit"), version = "v3")
+
+        assertEquals("Edit", saved.project.name)
+    }
+
     @Test
     fun createProjectReachesTheWireAndReturnsTheStoredRow() = runTest {
         val client = RecordingHttpClient()
@@ -126,15 +185,46 @@ class AdminProjectsRepositoryTest {
         assertEquals("Gemini", stored.project.name)
     }
 
-    private fun repositoryOver(client: RecordingHttpClient): AdminProjectsRepository =
-        AdminProjectsRepository(HttpAdminProjectsRemote(client))
+    private fun repositoryOver(
+        client: RecordingHttpClient,
+        localStore: ConfirmedProjectStore? = null,
+    ): AdminProjectsRepository = AdminProjectsRepository(HttpAdminProjectsRemote(client), localStore)
+
+    /** One tag, with every field unlike its default, as the catalog a recorder compares. */
+    private fun aTagCatalog(): List<ProjectTag> = listOf(
+        ProjectTag(
+            id = parseTagID("77777777-7777-4777-8777-777777777777")!!,
+            name = "Bug",
+            color = TagColor.Red,
+            icon = TagIcon.Bug,
+        ),
+    )
 
     private fun projectBody(
         id: String = "11111111-1111-1111-1111-111111111111",
         name: String,
         version: String = "",
-    ): String =
-        """{"id":"$id","keyPrefix":"KP","name":"$name","details":"","memberIds":[],""" +
+        tags: List<ProjectTag> = emptyList(),
+    ): String {
+        val encodedTags = tags.joinToString(",") { tag ->
+            """{"id":"${tag.id.stringValue}","name":"${tag.name}",""" +
+                """"color":"${tag.color.wireValue}","icon":"${tag.icon.wireValue}"}"""
+        }
+        return """{"id":"$id","keyPrefix":"KP","name":"$name","details":"",""" +
+            """"tags":[$encodedTags],"memberIds":[],""" +
             """"isArchived":false,"nextItemNumber":1,""" +
             """"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:01Z","version":"$version"}"""
+    }
+
+    /** The seam the repository projects server-confirmed rows through. */
+    private class RecordingProjectStore(
+        private val failure: Exception? = null,
+    ) : ConfirmedProjectStore {
+        val stored = mutableListOf<Project>()
+
+        override suspend fun store(project: Project) {
+            failure?.let { throw it }
+            stored += project
+        }
+    }
 }

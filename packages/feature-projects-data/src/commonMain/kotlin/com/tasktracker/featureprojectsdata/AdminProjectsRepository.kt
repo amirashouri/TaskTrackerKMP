@@ -10,6 +10,21 @@ import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
+ * Writes a project row the server has already stored into the local store.
+ *
+ * The seam exists because the admin surface and the member surfaces read different things:
+ * the admin reads the server, while every member screen reads the local row a pull fills.
+ * Projecting the rows the admin surface read back into that store — through the same writer a
+ * pull uses, and with no outbox row — is what lets a catalog an administrator just created be
+ * selectable on the device that created it, instead of waiting for the next sync cycle.
+ *
+ * Implemented by [LocalDataSyncSink], the one class allowed to write a pulled row.
+ */
+fun interface ConfirmedProjectStore {
+    suspend fun store(project: Project)
+}
+
+/**
  * The project administration surface: every project on the server, in one of two buckets,
  * with edits applied through the change feed.
  *
@@ -22,11 +37,19 @@ import kotlin.coroutines.cancellation.CancellationException
  *
  * ## The admin calls are online-only, by design
  *
- * Nothing here queues an outbox row or caches the server's answer. The project list is an
- * administrative view of every project on the server, so a failed write is surfaced to the admin
- * rather than replayed later: an archive the server never saw is not an archive, and an offline
- * queue that claimed otherwise would show a project as archived while the server still held it
- * active for the rest of the team.
+ * Nothing here queues an outbox row. The project list is an administrative view of every
+ * project on the server, so a failed write is surfaced to the admin rather than replayed later:
+ * an archive the server never saw is not an archive, and an offline queue that claimed
+ * otherwise would show a project as archived while the server still held it active for the
+ * rest of the team.
+ *
+ * ## Rows the server confirmed are projected locally
+ *
+ * A row this class reads or writes is one the server already holds, so it is reported to
+ * [localStore] as well. The member-facing screens read that local row and nothing else, which
+ * is why the alternative — waiting for the change feed — left an administrator looking at a
+ * tag catalog that did not include the tags they had just created. The projection is a write
+ * of a server-confirmed fact, never a queued intent, so the outbox stays untouched.
  *
  * Every override re-states `@Throws(AppError, CancellationException)` even though the interface
  * already carries it. The annotation is not inherited by an override, and Kotlin/Native rejects
@@ -36,6 +59,13 @@ import kotlin.coroutines.cancellation.CancellationException
  */
 class AdminProjectsRepository(
     private val remote: HttpAdminProjectsRemote,
+    /**
+     * Where a server-confirmed row is projected so member surfaces can read it.
+     *
+     * `null` in a graph with no local store to write — the unit tests that drive this class
+     * over a recorded transport — and then the next pull is the only path into the store.
+     */
+    private val localStore: ConfirmedProjectStore? = null,
 ) : AdminProjectsPort {
 
     @Throws(AppError::class, CancellationException::class)
@@ -43,8 +73,11 @@ class AdminProjectsRepository(
         remote.projects(status)
 
     @Throws(AppError::class, CancellationException::class)
-    override suspend fun project(id: ProjectID): AdminProject? =
-        remote.project(id)
+    override suspend fun project(id: ProjectID): AdminProject? {
+        val found = remote.project(id) ?: return null
+        projectLocally(found.project)
+        return found
+    }
 
     @Throws(AppError::class, CancellationException::class)
     override suspend fun createProject(
@@ -55,9 +88,31 @@ class AdminProjectsRepository(
     ): AdminProject = remote.createProject(name, keyPrefix, details, memberIDs)
 
     @Throws(AppError::class, CancellationException::class)
-    override suspend fun updateProject(project: Project, version: String): AdminProject =
+    override suspend fun updateProject(project: Project, version: String): AdminProject {
         // The version is forwarded verbatim rather than defaulted away: a blank one is the
         // caller saying "overwrite whatever is there", which is exactly what the server does
         // with a push that carries none.
-        remote.updateProject(project, version)
+        val saved = remote.updateProject(project, version)
+        projectLocally(saved.project)
+        return saved
+    }
+
+    /**
+     * Writes a row the server already holds into the local store.
+     *
+     * Best effort on purpose: the server has accepted the read or the write, so a local
+     * failure must not be reported as one. The next pull applies the same row, which makes a
+     * refusal here a delay rather than a loss.
+     */
+    private suspend fun projectLocally(project: Project) {
+        val store = localStore ?: return
+        try {
+            store.store(project)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // The change feed is the backstop; there is nothing useful to tell the caller,
+            // whose save the server has already accepted.
+        }
+    }
 }

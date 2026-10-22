@@ -74,7 +74,9 @@ import com.tasktracker.featureteamspresentation.MembersListTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
+import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -96,6 +98,8 @@ import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.WorkItemCancelTag
 import com.tasktracker.featureprojectspresentation.WorkItemCardTag
 import com.tasktracker.featureprojectspresentation.WorkItemFileAwayTag
+import com.tasktracker.featureprojectspresentation.WorkItemManageTagsTag
+import com.tasktracker.featureprojectspresentation.WorkItemTagOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.designsystem.NavigationRailLensTag
@@ -3413,6 +3417,51 @@ object ShellScenarios {
             onAllNodes(hasTestTag(WorkItemEditorDestinationTag)).fetchSemanticsNodes().isEmpty(),
             "the editor is still composed after its exit finished",
         )
+    }
+
+    /**
+     * An admin's catalog is read live when the local row has none.
+     *
+     * ## The defect this exists for
+     *
+     * The admin project editor reads and writes the server, while the work item editor reads
+     * the local project row — which only catches up on a pull. So an administrator could
+     * create three tags and then be told, on the very device that created them, that the
+     * project had none. The editor now reads the catalog through the admin surface when the
+     * local row is empty, and this is that read: the option is drawn and the empty state's
+     * "manage tags" control is not.
+     */
+    val anAdminSeesTheLiveCatalogWhenTheLocalRowHasNone: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        // The local row predates the catalog: the seeded project carries no tags at all.
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val item = shellTestWorkItem(projectID = project.id, number = 1, title = "Committed task")
+        projects.seed(item)
+        val tag = ProjectTag(id = randomTagID(), name = "Bug")
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+            // The server's copy is the one with the catalog; the local row has none.
+            adminProjectsPort = FakeAdminProjectsPort(
+                listOf(shellTestAdminProject(project.copy(tags = listOf(tag)))),
+            ),
+            width = PHONE_WIDTH,
+        )
+        waitForIdle()
+
+        router.openProject(project.id)
+        waitForIdle()
+        router.push(AppRoute.WorkItemEditor(projectID = project.id, workItemID = item.id))
+        waitForIdle()
+
+        onNodeWithTag(WorkItemTagOptionTag(tag)).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(WorkItemManageTagsTag).assertDoesNotExist()
     }
 
     /**

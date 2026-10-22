@@ -57,7 +57,7 @@ import kotlinx.serialization.KSerializer
 class LocalDataSyncSink(
     private val database: TaskTrackerDatabase,
     private val changeBus: ProjectChangeBus,
-) : SyncApplySink {
+) : SyncApplySink, ConfirmedProjectStore {
 
     /**
      * Which kinds a change announces, decided by what it *did* rather than by what it was.
@@ -182,6 +182,25 @@ class LocalDataSyncSink(
         }
 
         val project = decode(Project.serializer(), change.payload, change.entity)
+        writeProject(project)
+        return project.id
+    }
+
+    /**
+     * Writes one project row, server-wins, and announces it on the shared bus.
+     *
+     * The admin project surface is the one caller outside a pull: it reads and writes the
+     * server directly, while every member-facing screen reads this row. Handing it the same
+     * writer a pull uses is what makes a catalog an administrator just created selectable on
+     * the device that created it, instead of waiting for the next sync cycle. It queues
+     * nothing — see the class KDoc's one rule.
+     */
+    override suspend fun store(project: Project) {
+        writeProject(project)
+        changeBus.send(ProjectChange(kind = ProjectChange.Kind.Projects, projectID = project.id))
+    }
+
+    private suspend fun writeProject(project: Project) {
         inTransaction(database) {
             val existing = database.projectDao().byID(project.id.stringValue)
             if (existing == null) {
@@ -193,7 +212,6 @@ class LocalDataSyncSink(
                 database.projectDao().update(existing.apply(project))
             }
         }
-        return project.id
     }
 
     /**

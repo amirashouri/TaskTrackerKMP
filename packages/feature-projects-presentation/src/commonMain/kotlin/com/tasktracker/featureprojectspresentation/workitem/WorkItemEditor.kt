@@ -294,6 +294,10 @@ fun WorkItemEditorSheet(
     selectedTagIDs: List<TagID> = emptyList(),
     /** See [ProjectsEditorFullScreen.onTagToggled]. */
     onTagToggled: (TagID) -> Unit = {},
+    /** See [ProjectsEditorFullScreen.isAdmin]. */
+    isAdmin: Boolean = false,
+    /** See [ProjectsEditorFullScreen.onManageTags]. */
+    onManageTags: (() -> Unit)? = null,
 ) {
     // The editor is now always full-screen. We keep the deprecated parameters
     // for binary compatibility with NavigationHost.
@@ -360,6 +364,8 @@ fun WorkItemEditorSheet(
         projectTags = projectTags,
         selectedTagIDs = selectedTagIDs,
         onTagToggled = onTagToggled,
+        isAdmin = isAdmin,
+        onManageTags = onManageTags,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -470,6 +476,10 @@ private fun ProjectsEditorFullScreen(
     selectedTagIDs: List<TagID> = emptyList(),
     /** Toggles one tag in the draft. */
     onTagToggled: (TagID) -> Unit = {},
+    /** Whether the signed-in user may create this project's tags. See [WorkItemTagPicker]. */
+    isAdmin: Boolean = false,
+    /** Opens the project editor, where an admin writes the catalog. See [WorkItemTagPicker]. */
+    onManageTags: (() -> Unit)? = null,
 ) {
     // Measured so the scroll range can reserve the room the action slab covers. It starts at
     // zero and settles on the first layout, mirroring how the shell publishes its tab-bar
@@ -602,6 +612,8 @@ private fun ProjectsEditorFullScreen(
                 tags = projectTags,
                 selectedIDs = selectedTagIDs,
                 onToggle = onTagToggled,
+                isAdmin = isAdmin,
+                onManageTags = onManageTags,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),

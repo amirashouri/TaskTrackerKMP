@@ -93,6 +93,28 @@ class LocalDataSyncSinkTest {
         assertEquals(0, harness.queueDepth())
     }
 
+    /**
+     * A row the admin surface learned from the server lands here without a pull.
+     *
+     * The admin project editor reads and writes the server, while every member-facing screen
+     * reads this store. Without this path an administrator's own device is the last to see the
+     * tag catalog they just created — the work item editor offered them an empty section. It is
+     * the same writer a pull uses, so it announces and queues nothing.
+     */
+    @Test
+    fun aConfirmedProjectIsStoredAndAnnouncedWithoutQueueing() = runTest {
+        val harness = Harness()
+        val project = aProject()
+        val seen = mutableListOf<ProjectChange>()
+        collecting(harness.bus.changes(), seen)
+
+        harness.sink.store(project)
+
+        assertEquals(project, harness.repository.project(project.id))
+        assertEquals(listOf(ProjectChange(ProjectChange.Kind.Projects, project.id)), seen)
+        assertEquals(0, harness.queueDepth())
+    }
+
     @Test
     fun deletingAProjectRemovesItsWorkItemsAndHistoryToo() = runTest {
         // A correction rather than a port: the original deleted the project and its history and

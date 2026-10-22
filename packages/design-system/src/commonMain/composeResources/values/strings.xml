@@ -661,6 +661,8 @@
     <string name="work_item_tags_label">Tags</string>
     <string name="work_item_tags_count">%1$d of %2$d</string>
     <string name="work_item_tags_limit">Deselect a tag to choose another.</string>
+    <string name="work_item_tags_empty">This project has no tags yet.</string>
+    <string name="work_item_tags_manage">Manage tags</string>
 
     <string name="admin_project_tags_title">Tags</string>
     <string name="admin_project_tags_body">Members can put up to five of these on a task. Only an administrator can create or remove them.</string>
