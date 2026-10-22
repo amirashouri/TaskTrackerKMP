@@ -678,10 +678,9 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(WorkItemEditorDestinationTag).assertExists()
 
-        // The row's own OnClick action rather than a coordinate tap: the form scrolls, and
-        // where the button's centre lands is geometry rather than wiring. A click that misses
-        // would leave no write at all and read as a broken store call.
-        onNodeWithTag(WorkItemFileAwayTag).performScrollTo()
+        // The row's own OnClick action rather than a coordinate tap: the actions float now, and
+        // a click that missed a centre would leave no write at all and read as a broken store
+        // call.
         onNodeWithTag(WorkItemFileAwayTag).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         // The compact editor holds the route for its exit slide, so the dismissal completes
@@ -1602,7 +1601,6 @@ object ShellScenarios {
         // The compact editor keeps the route mounted for EDITOR_EXIT_MS so the slide can
         // finish. Drive the clock past that hold, and use the row's own action rather than a
         // coordinate tap so the assertion is about dismissal rather than about geometry.
-        onNodeWithTag(WorkItemCancelTag).performScrollTo()
         onNodeWithTag(WorkItemCancelTag).performSemanticsAction(SemanticsActions.OnClick)
         mainClock.advanceTimeBy(EDITOR_EXIT_SLACK_MS)
         waitForIdle()

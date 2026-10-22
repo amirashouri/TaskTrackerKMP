@@ -249,6 +249,9 @@ class ProjectsUiJvmTest {
     fun theTitleFieldShowsWhatYouType() = runComposeUiTest(block = WorkItemEditorScenarios.theTitleFieldShowsWhatYouType)
 
     @Test
+    fun theActionsFloatOverTheScrollingForm() = runComposeUiTest(block = WorkItemEditorScenarios.theActionsFloatOverTheScrollingForm)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test
