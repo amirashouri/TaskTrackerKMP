@@ -143,6 +143,21 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun kanbanKeepsEveryLaneAdd() = runComposeUiTest(block = BoardLaneScenarios.kanbanKeepsEveryLaneAdd)
 
+    /** A held card can be carried to another lane and moved there on release. */
+    @Test
+    fun draggingACardToAnotherLaneMovesItThere() =
+        runComposeUiTest(block = BoardDragScenarios.draggingACardToAnotherLaneMovesItThere)
+
+    /** Releasing a card on its own lane is not a move. */
+    @Test
+    fun droppingACardOnItsOwnLaneDoesNotMoveIt() =
+        runComposeUiTest(block = BoardDragScenarios.droppingACardOnItsOwnLaneDoesNotMoveIt)
+
+    /** A quick swipe stays a scroll; it does not lift the card. */
+    @Test
+    fun aQuickSwipeOnACardDoesNotLiftIt() =
+        runComposeUiTest(block = BoardDragScenarios.aQuickSwipeOnACardDoesNotLiftIt)
+
     @Test
     fun listsEveryProject() = runComposeUiTest(block = ProjectsListScenarios.listsEveryProject)
 

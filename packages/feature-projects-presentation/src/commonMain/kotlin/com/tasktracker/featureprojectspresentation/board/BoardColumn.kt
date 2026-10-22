@@ -1,5 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,9 +17,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -25,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -126,12 +137,37 @@ fun BoardColumnView(
      * has not wired copy still draws a column.
      */
     onCopy: (String) -> Unit = {},
+    /**
+     * The drag this lane takes part in, or `null` when its cards are not draggable.
+     *
+     * The lane reports the gesture and draws the two ends of it - the original card dimmed,
+     * the lane outlined while a card hovers over it. Where the card actually lands is not its
+     * decision: only the board knows the other lanes and which one the pointer is over, so
+     * that stays in [ProjectBoardScreen]. Null is the default so previews and hosts that do
+     * not wire dragging render exactly what they did before.
+     */
+    drag: BoardCardDrag? = null,
+    /** Whether a lifted card is currently over this lane, which outlines it as the drop target. */
+    isDropTarget: Boolean = false,
 ) {
     Box(
         modifier = modifier
             .width(columnWidth)
             .fillMaxHeight()
             .ttGlassCard()
+            // Drawn after the glass so the lane's own surface cannot swallow it. Two points is
+            // the one thing that says "release here" while cards are passing behind the lane.
+            .then(
+                if (isDropTarget) {
+                    Modifier.border(
+                        width = 2.dp,
+                        color = ttAccent(),
+                        shape = RoundedCornerShape(ttRadius.surface),
+                    )
+                } else {
+                    Modifier
+                }
+            )
             .testTag(BoardColumnTag(column.status)),
     ) {
         // The slab's laid-out height, so the scroll can reserve exactly the room it covers.
@@ -141,6 +177,10 @@ fun BoardColumnView(
         var sortOrder by remember(column.status) { mutableStateOf(ColumnSortOrder.ByDate) }
         val tabBarInset = LocalTabBarScrollUnderInset.current
         val headerHeight = with(LocalDensity.current) { headerHeightPx.toDp() }
+        // Read only from inside the gesture below, never while composing this lane: the board
+        // rebuilds the holder on every drag frame, and a composition read of the updated state
+        // would make each rebuild invalidate the lane that just wrote it.
+        val currentDrag by rememberUpdatedState(drag)
 
         val sortedItems = remember(column.items, sortOrder) {
             when (sortOrder) {
@@ -173,11 +213,58 @@ fun BoardColumnView(
                 )
             } else {
                 sortedItems.forEach { item ->
+                    // The card's live coordinates, not a snapshot rectangle: a lane that has
+                    // been scrolled since the last placement still reports the right position
+                    // when the press lands, because boundsInRoot is computed on demand.
+                    var cardCoordinates by remember(item.id) { mutableStateOf<LayoutCoordinates?>(null) }
                     WorkItemCard(
                         item = item,
                         onClick = { onSelect(item) },
                         onCopy = onCopy,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // The card stays in the lane, faded: removing it would make the
+                            // lane's cards jump while the ghost is still under the finger.
+                            .alpha(if (drag?.draggingItemID == item.id) 0.35f else 1f)
+                            .then(
+                                if (drag == null) {
+                                    Modifier
+                                } else {
+                                    Modifier
+                                        .onGloballyPositioned { cardCoordinates = it }
+                                        // Held, not dragged: a plain vertical swipe belongs to
+                                        // the lane's scroll, and only a press that has stayed
+                                        // still for the long-press timeout lifts a card. That is
+                                        // what keeps the whole column from becoming a drag handle.
+                                        .pointerInput(item.id) {
+                                            var active: BoardCardDrag? = null
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = { at ->
+                                                    val coordinates = cardCoordinates
+                                                    active = if (coordinates != null && coordinates.isAttached) {
+                                                        currentDrag?.also {
+                                                            it.onStart(item, coordinates.boundsInRoot(), at)
+                                                        }
+                                                    } else {
+                                                        null
+                                                    }
+                                                },
+                                                onDrag = { change, amount ->
+                                                    change.consume()
+                                                    active?.onDrag(amount)
+                                                },
+                                                onDragEnd = {
+                                                    active?.onEnd()
+                                                    active = null
+                                                },
+                                                onDragCancel = {
+                                                    active?.onCancel()
+                                                    active = null
+                                                },
+                                            )
+                                        }
+                                }
+                            ),
                         trailing = { cardTrailing(item) },
                         assigneeName = assigneeName(item),
                         blockedByKeys = blockedByKeys(item),
@@ -255,6 +342,25 @@ enum class ColumnSortOrder {
     ByDate,
     ByPriority,
 }
+
+/**
+ * The board's half of a card drag, handed to every lane.
+ *
+ * A holder rather than one callback per seam: the lane needs to know which card is in the air
+ * so it can fade the original, and the board needs the start position in root coordinates so
+ * the ghost under the finger starts exactly where the card was. Keeping those on one object
+ * means the two halves cannot disagree about which card is lifted.
+ *
+ * [onStart] receives the card's bounds in root coordinates and the grab point inside it,
+ * which is what lets the board place the ghost before the first move arrives.
+ */
+class BoardCardDrag(
+    val draggingItemID: WorkItemID?,
+    val onStart: (item: WorkItem, bounds: Rect, grab: Offset) -> Unit,
+    val onDrag: (delta: Offset) -> Unit,
+    val onEnd: () -> Unit,
+    val onCancel: () -> Unit,
+)
 
 @Preview
 @Composable

@@ -2,27 +2,45 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.TargetedFlingBehavior
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.ProjectID
@@ -35,6 +53,7 @@ import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -50,6 +69,8 @@ import com.tasktracker.resources.board_kanban
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -150,6 +171,10 @@ fun ProjectBoardScreen(
      */
     canAddTask: Boolean = true,
 ) {
+    // The drag outlives a single lane: the ghost is drawn by the board, and a lane can leave
+    // composition when a projection reloads while a card is still under the finger.
+    val dragState = remember { BoardDragState() }
+
     // The host floats the confirmation over the lanes instead of taking a row from the column.
     // Inserting it into the column would shift every lane up while it is visible, which is
     // the layout jump a confirmation is not allowed to cause.
@@ -246,58 +271,247 @@ fun ProjectBoardScreen(
                 val scrollState = rememberScrollState()
                 val laneCount = projection.columns.size
                 val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
+                val density = LocalDensity.current
+                val gutterPx = with(density) { ttSpacing.xxl.toPx() }
+                val stridePx = with(density) { boardLaneStride.toPx() }
+                val laneWidthPx = with(density) { columnWidth.toPx() }
+                val edgePx = with(density) { 56.dp.toPx() }
+                val scrollStepPx = with(density) { 10.dp.toPx() }
 
-                Row(
+                // Where the lane row is on screen. The pointer, the lanes and the ghost are all
+                // compared in root coordinates, because the ghost is drawn outside the row.
+                var viewport by remember { mutableStateOf(Rect.Zero) }
+
+                /**
+                 * The lane under [pointer], or null when the pointer is not over the row.
+                 *
+                 * Derived from [boardLaneStride] and the scroll offset rather than measured per
+                 * lane: the stride exists so the row's layout and the snap's arithmetic cannot
+                 * disagree, and the drop target is one more reader of that contract. The gap
+                 * between lanes is not a target - releasing there cancels, which is honest about
+                 * an 8dp seam a finger cannot really aim at.
+                 */
+                fun laneAt(pointer: Offset): WorkItemStatus? {
+                    val row = viewport
+                    if (row.width <= 0f || pointer.y < row.top || pointer.y > row.bottom) return null
+                    val contentX = pointer.x - row.left - gutterPx + scrollState.value
+                    if (contentX < 0f) return null
+                    val index = floor(contentX / stridePx).toInt()
+                    if (index !in 0 until laneCount) return null
+                    return if (contentX - index * stridePx <= laneWidthPx) {
+                        projection.columns[index].status
+                    } else {
+                        null
+                    }
+                }
+
+                val drag = BoardCardDrag(
+                    draggingItemID = dragState.item?.id,
+                    onStart = { item, bounds, grab ->
+                        // Done is terminal, and the move verbs already refuse it; letting a drag
+                        // pull a finished card back onto the board would be a second, contradictory
+                        // rule. Busy means a move is already in flight for that card.
+                        if (movingItemID == null && !item.status.isTerminal) {
+                            dragState.start(item, bounds, grab)
+                            dragState.retarget(laneAt(dragState.pointer))
+                        }
+                    },
+                    onDrag = { delta ->
+                        dragState.move(delta)
+                        dragState.retarget(laneAt(dragState.pointer))
+                    },
+                    onEnd = {
+                        val ended = dragState.end()
+                        if (ended != null) {
+                            val (dragged, target) = ended
+                            // The source lane is not a move, and null is a release outside the
+                            // row - over the header, or past either end of the lanes.
+                            if (target != null && target != dragged.status) {
+                                onMove(dragged.id, target)
+                            }
+                        }
+                    },
+                    onCancel = { dragState.cancel() },
+                )
+
+                // While a card is held near an edge the row keeps moving under the finger.
+                // Without it a lane that is off-screen can never be a target on a phone, which
+                // is precisely the move asked for: In Progress to Done.
+                LaunchedEffect(dragState.isDragging) {
+                    if (!dragState.isDragging) return@LaunchedEffect
+                    while (true) {
+                        withFrameNanos { }
+                        if (!dragState.isDragging) break
+                        val pointer = dragState.pointer
+                        val row = viewport
+                        if (row.width <= 0f) continue
+                        val dx = when {
+                            pointer.x < row.left + edgePx -> -scrollStepPx
+                            pointer.x > row.right - edgePx -> scrollStepPx
+                            else -> 0f
+                        }
+                        if (dx != 0f) {
+                            val consumed = scrollState.scrollBy(dx)
+                            if (consumed != 0f) dragState.retarget(laneAt(pointer))
+                        }
+                    }
+                }
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
-                        .testTag(ProjectBoardColumnsTag),
-                    verticalAlignment = Alignment.Top,
+                        .clipToBounds()
+                        .onGloballyPositioned { viewport = it.boundsInRoot() },
                 ) {
-                    // The gutter is a *spacer in the content*, not a padding on this row, and the
-                    // difference is the whole of the bug this replaced. Padding here would shrink
-                    // the scroll viewport, so the viewport - rather than the content - would stop
-                    // 16dp short of an edge and a lane arriving from the right would slide up to a
-                    // strip of bare canvas and stop there. A spacer is part of the content, so it
-                    // scrolls away with the lanes, the viewport stays the full width of the screen,
-                    // and lane 0 still rests with air at the left, which is what a `LazyRow`'s
-                    // `contentPadding` would have given.
-                    LaneRowSpacer(ttSpacing.xxl)
-                    projection.columns.forEachIndexed { index, column ->
-                        if (index > 0) LaneRowSpacer(ttSpacing.md)
-                        BoardColumnView(
-                            column = column,
-                            onSelect = { onSelect(it.id) },
-                            onCopy = onCopy,
-                            onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
-                            modifier = Modifier,
-                            assigneeName = { item ->
-                                item.assigneeID?.let { assigneeNames[it] }
-                            },
-                            // Resolved by the model against the project's whole item list rather
-                            // than against `projection.items`, because a blocker is frequently not
-                            // on this board — see ProjectBoardModel.blockedByKeys.
-                            blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
-                            cardTrailing = { item ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
+                            .testTag(ProjectBoardColumnsTag),
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        // The gutter is a *spacer in the content*, not a padding on this row, and the
+                        // difference is the whole of the bug this replaced. Padding here would shrink
+                        // the scroll viewport, so the viewport - rather than the content - would stop
+                        // 16dp short of an edge and a lane arriving from the right would slide up to a
+                        // strip of bare canvas and stop there. A spacer is part of the content, so it
+                        // scrolls away with the lanes, the viewport stays the full width of the screen,
+                        // and lane 0 still rests with air at the left, which is what a `LazyRow`'s
+                        // `contentPadding` would have given.
+                        LaneRowSpacer(ttSpacing.xxl)
+                        projection.columns.forEachIndexed { index, column ->
+                            if (index > 0) LaneRowSpacer(ttSpacing.md)
+                            BoardColumnView(
+                                column = column,
+                                onSelect = { onSelect(it.id) },
+                                onCopy = onCopy,
+                                onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
+                                modifier = Modifier,
+                                assigneeName = { item ->
+                                    item.assigneeID?.let { assigneeNames[it] }
+                                },
+                                // Resolved by the model against the project's whole item list rather
+                                // than against `projection.items`, because a blocker is frequently not
+                                // on this board — see ProjectBoardModel.blockedByKeys.
+                                blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
+                                cardTrailing = { item ->
+                                    BoardCardActions(
+                                        item = item,
+                                        movingItemID = movingItemID,
+                                        showMoveActions = showMoveActions,
+                                        onFileAway = onFileAway,
+                                        onMove = onMove,
+                                    )
+                                },
+                                drag = drag,
+                                isDropTarget = dragState.target == column.status,
+                            )
+                        }
+                        // The far end gets a gutter too, because it is the only end that can be scrolled
+                        // *away*: without it the last lane would rest flush against the right edge with
+                        // the row unable to reach any position that gave it air. The near end's gutter
+                        // is the one above - same width, and not because the ends are symmetric.
+                        LaneRowSpacer(ttSpacing.xxl)
+                    }
+
+                    // The lifted card. A second composition of the card rather than the original
+                    // moved by a graphics layer: the original sits inside two scrolls (the lane's
+                    // vertical and the row's horizontal), and either would clip it the moment it
+                    // left its own lane.
+                    val dragged = dragState.item
+                    if (dragged != null && dragState.cardSize.width > 0) {
+                        val ghostTopLeft = dragState.pointer - viewport.topLeft - dragState.grab
+                        WorkItemCard(
+                            item = dragged,
+                            onClick = {},
+                            onCopy = {},
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(ghostTopLeft.x.roundToInt(), ghostTopLeft.y.roundToInt())
+                                }
+                                .width(with(density) { dragState.cardSize.width.toDp() })
+                                .graphicsLayer {
+                                    scaleX = 1.02f
+                                    scaleY = 1.02f
+                                    shadowElevation = 24.dp.toPx()
+                                    shape = RoundedCornerShape(ttRadius.surface)
+                                    clip = false
+                                },
+                            trailing = {
                                 BoardCardActions(
-                                    item = item,
+                                    item = dragged,
                                     movingItemID = movingItemID,
                                     showMoveActions = showMoveActions,
                                     onFileAway = onFileAway,
                                     onMove = onMove,
                                 )
                             },
+                            assigneeName = dragged.assigneeID?.let { assigneeNames[it] },
+                            blockedByKeys = blockedByKeys[dragged.id].orEmpty(),
                         )
                     }
-                    // The far end gets a gutter too, because it is the only end that can be scrolled
-                    // *away*: without it the last lane would rest flush against the right edge with
-                    // the row unable to reach any position that gave it air. The near end's gutter
-                    // is the one above - same width, and not because the ends are symmetric.
-                    LaneRowSpacer(ttSpacing.xxl)
                 }
             }
         }
+    }
+}
+
+/**
+ * The card in the air: where it was grabbed, where the finger is, and the lane underneath it.
+ *
+ * Root coordinates rather than lane-local ones, because the ghost is drawn outside both the
+ * lane's vertical scroll and the row's horizontal one; root is the only space the pointer and
+ * the card it came from share. [end] clears before returning, so a dropped card cannot leave a
+ * ghost behind if the caller reacts to the move by reloading the board.
+ */
+private class BoardDragState {
+    var item by mutableStateOf<WorkItem?>(null)
+        private set
+    var pointer by mutableStateOf(Offset.Zero)
+        private set
+    var grab by mutableStateOf(Offset.Zero)
+        private set
+    var cardSize by mutableStateOf(IntSize.Zero)
+        private set
+    var target by mutableStateOf<WorkItemStatus?>(null)
+        private set
+
+    val isDragging: Boolean get() = item != null
+
+    fun start(item: WorkItem, bounds: Rect, grabAt: Offset) {
+        this.item = item
+        grab = grabAt
+        cardSize = IntSize(bounds.width.toInt(), bounds.height.toInt())
+        pointer = bounds.topLeft + grabAt
+        target = null
+    }
+
+    fun move(delta: Offset) {
+        if (item == null) return
+        pointer += delta
+    }
+
+    /** Ignored when no card lifted, so a refused press cannot highlight a lane. */
+    fun retarget(status: WorkItemStatus?) {
+        if (item != null) target = status
+    }
+
+    fun end(): Pair<WorkItem, WorkItemStatus?>? {
+        val dragged = item ?: return null
+        val at = target
+        clear()
+        return dragged to at
+    }
+
+    fun cancel() = clear()
+
+    private fun clear() {
+        item = null
+        pointer = Offset.Zero
+        grab = Offset.Zero
+        cardSize = IntSize.Zero
+        target = null
     }
 }
 
