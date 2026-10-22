@@ -10,6 +10,10 @@ import androidx.compose.ui.test.performClick
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomTagID
+import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.Test
@@ -85,6 +89,18 @@ object WorkItemCardScenarios {
         // something the card can fail.
         onNodeWithText("Amir").assertIsDisplayed()
         onNodeWithText(TWO_PART_ASSIGNEE).assertDoesNotExist()
+    }
+
+    /** The tag strip: icons only, and a deleted tag's stale id draws nothing. */
+    val showsTagsAsIconsWithoutTheirNames: suspend ComposeUiTest.() -> Unit = {
+        val tag = ProjectTag(name = "Bug", color = TagColor.Red, icon = TagIcon.Bug)
+        // The second id has no catalog entry, exactly as a deleted tag leaves it.
+        val item = ViewPreviewData.workItems.first().copy(tagIDs = listOf(tag.id, randomTagID()))
+
+        cardShowing(item, projectTags = listOf(tag))
+
+        onNested(WorkItemTagChipTag(tag)).assertIsDisplayed()
+        onNodeWithText("Bug").assertDoesNotExist()
     }
 
     /** An unassigned task gets no assignee row at all - not an empty one. */
@@ -191,10 +207,20 @@ object WorkItemCardScenarios {
 }
 
 @OptIn(ExperimentalTestApi::class)
-internal fun ComposeUiTest.cardShowing(item: WorkItem, assigneeName: String? = null) {
+internal fun ComposeUiTest.cardShowing(
+    item: WorkItem,
+    assigneeName: String? = null,
+    projectTags: List<ProjectTag> = emptyList(),
+) {
     setContent {
         Themed {
-            WorkItemCard(item = item, assigneeName = assigneeName, onClick = {}, onCopy = {})
+            WorkItemCard(
+                item = item,
+                assigneeName = assigneeName,
+                projectTags = projectTags,
+                onClick = {},
+                onCopy = {},
+            )
         }
     }
 }

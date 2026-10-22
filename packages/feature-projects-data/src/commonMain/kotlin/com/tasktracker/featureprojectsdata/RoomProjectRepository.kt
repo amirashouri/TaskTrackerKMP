@@ -8,6 +8,7 @@ import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.SystemDateProvider
+import com.tasktracker.core.TagID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.parseAttachmentID
@@ -39,6 +40,7 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
 import com.tasktracker.domain.WorkItemStatus
@@ -688,6 +690,7 @@ class RoomProjectRepository(
         now: Instant,
         blockedByIDs: List<WorkItemID>,
         recurrence: Recurrence?,
+        tagIDs: List<TagID>,
     ): WorkItem {
         val normalisedTitle = WorkItemRules.normaliseTitle(title)
         val normalisedDetails = WorkItemRules.normaliseDetails(details)
@@ -711,6 +714,7 @@ class RoomProjectRepository(
                 recurrence = recurrence,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs.filter { it != freshID }.distinct(),
+                tagIDs = tagIDs.distinct().take(TagRules.MAX_PER_ITEM),
                 sprintID = sprintID,
                 rank = topRankIn(projectID, status),
                 createdAt = now,
@@ -768,6 +772,7 @@ class RoomProjectRepository(
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
         recurrence: Patch<Recurrence?>,
+        tagIDs: Patch<List<TagID>>,
     ): WorkItem {
         val normalisedTitle = title?.let { WorkItemRules.normaliseTitle(it) }
         val normalisedDetails = details?.let { WorkItemRules.normaliseDetails(it) }
@@ -788,6 +793,8 @@ class RoomProjectRepository(
             if (blockedByIDs is Patch.Of) item.blockedByIDs =
                 blockedByIDs.value.filter { it != id }.distinct()
             if (recurrence is Patch.Of) item.recurrence = recurrence.value
+            if (tagIDs is Patch.Of) item.tagIDs =
+                tagIDs.value.distinct().take(TagRules.MAX_PER_ITEM)
             item.updatedAt = now
 
             database.workItemDao().update(item.toRecord())

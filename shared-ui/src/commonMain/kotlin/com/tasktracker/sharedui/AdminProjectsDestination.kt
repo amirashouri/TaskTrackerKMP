@@ -20,6 +20,7 @@ import com.tasktracker.featureprojectspresentation.AdminProjectsScreen
 import com.tasktracker.featureprojectspresentation.NewProjectForm
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectEditorScreen
+import com.tasktracker.featureprojectspresentation.ProjectTagsSection
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.User
@@ -262,6 +263,16 @@ private fun AdminProjectEditor(
         onCancel = onClose,
         errorMessage = model.errorMessage,
         isBusy = model.isSaving,
+        // Only the admin editor gets the catalog composer; the member editor passes no slot at
+        // all. See ProjectEditorScreen's `tagsSection`.
+        tagsSection = {
+            ProjectTagsSection(
+                tags = model.tags,
+                onAdd = model::addTag,
+                onRemove = model::removeTag,
+                isBusy = model.isSaving,
+            )
+        },
     )
 }
 

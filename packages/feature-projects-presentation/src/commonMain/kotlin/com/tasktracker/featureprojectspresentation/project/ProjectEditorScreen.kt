@@ -84,6 +84,16 @@ fun ProjectEditorScreen(
     modifier: Modifier = Modifier,
     errorMessage: String? = null,
     isBusy: Boolean = false,
+    /**
+     * An optional section between the fields and the actions.
+     *
+     * A slot rather than tag parameters because the shared screen serves two editors with
+     * different rights: the member's offline editor has no tag management at all, while the
+     * admin's adds it. A slot keeps the tag UI in its own file and keeps this screen from
+     * growing a `canManageTags` flag that the member editor would have to pass `false` to
+     * forever. `null` — the default — renders exactly the screen that existed before tags.
+     */
+    tagsSection: (@Composable () -> Unit)? = null,
 ) {
     val saveEnabled = canSave && !isBusy
 
@@ -140,6 +150,7 @@ fun ProjectEditorScreen(
             imeAction = ImeAction.Done,
             onImeAction = { if (saveEnabled) onSave() },
         )
+        tagsSection?.invoke()
         if (errorMessage != null) {
             ttText(
                 text = errorMessage,

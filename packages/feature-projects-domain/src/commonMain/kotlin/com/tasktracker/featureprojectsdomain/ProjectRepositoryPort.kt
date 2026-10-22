@@ -4,6 +4,7 @@ import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Attachment
@@ -292,6 +293,12 @@ interface ProjectRepositoryPort {
         blockedByIDs: List<WorkItemID> = emptyList(),
         /** The repeat rule, or `null` for a one-off. Last for the same reason as [blockedByIDs]. */
         recurrence: Recurrence? = null,
+        /**
+         * The project tags the item carries, capped by `TagRules.MAX_PER_ITEM`. Last and
+         * defaulted for the same reason as [blockedByIDs]; ids the project no longer defines
+         * are harmless and are dropped by the renderer that resolves them.
+         */
+        tagIDs: List<TagID> = emptyList(),
     ): WorkItem
 
     /**
@@ -320,6 +327,11 @@ interface ProjectRepositoryPort {
          * "stop repeating" is a real instruction, not an absence of one. Last, as above.
          */
         recurrence: Patch<Recurrence?> = Patch.Unmentioned,
+        /**
+         * The item's tags as a [Patch], because an emptied selection is a real instruction:
+         * "no tags" is different from "this editor did not show the picker". Last, as above.
+         */
+        tagIDs: Patch<List<TagID>> = Patch.Unmentioned,
     ): WorkItem
 
     /**

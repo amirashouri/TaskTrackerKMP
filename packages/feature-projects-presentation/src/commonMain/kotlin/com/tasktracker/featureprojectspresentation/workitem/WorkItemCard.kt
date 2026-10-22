@@ -34,6 +34,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
@@ -105,6 +106,15 @@ fun WorkItemCard(
      * dependencies the same height it was before this feature existed.
      */
     blockedByKeys: List<WorkItemKey> = emptyList(),
+    /**
+     * The project's tag catalog, resolved by the host.
+     *
+     * The card resolves its own [WorkItem.tagIDs] against it, so a pulled item costs one
+     * lookup per chip and an admin's rename/recolour reaches every card without rewriting
+     * the item. Empty — a project with no tags — draws nothing, the same "no row, no gap"
+     * shape [blockedByKeys] uses.
+     */
+    projectTags: List<ProjectTag> = emptyList(),
 ) {
     Column(
         modifier = modifier
@@ -156,6 +166,14 @@ fun WorkItemCard(
         // it was redundant with the callee's guard, and the mutation check that established this
         // (deleting it left every scenario green) is why the comment claims the weaker thing.
         WorkItemCardDependencies(blockerKeys = blockedByKeys)
+        // The tag strip. Above the due/action row rather than beside it: five chips plus a
+        // date and an action do not fit one 300dp line, and the row's job is to end the card
+        // on what you can do. Composed unconditionally for the same reason as the
+        // dependency row — the callee returns early on an empty list, so it adds no gap.
+        WorkItemTagIcons(
+            tags = projectTags.resolveFor(item.tagIDs),
+            modifier = Modifier.fillMaxWidth(),
+        )
         // The due date and the card's actions, on one row: the date at the leading edge, the
         // card's own copy verb, then whatever the surface put in the action slot, so the
         // surface's action stays in the bottom corner whether or not the task has a date.

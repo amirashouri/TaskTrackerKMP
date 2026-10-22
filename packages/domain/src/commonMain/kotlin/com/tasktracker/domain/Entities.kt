@@ -5,6 +5,7 @@ import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.StatusChangeID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
@@ -13,10 +14,12 @@ import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomWorkItemID
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonNames
 import kotlin.time.Instant
 
 /**
@@ -175,6 +178,102 @@ enum class Priority {
 }
 
 /**
+ * The curated colour a project tag is drawn in.
+ *
+ * A closed vocabulary rather than a hex string: the colour is presentation, and a raw
+ * value would let a tag pick a shade that fails contrast on one of the two appearances.
+ * The wire value is stable — it is what a client stores and the server round-trips — and
+ * the design system owns the actual tints.
+ */
+@Serializable
+enum class TagColor {
+    @SerialName("red") Red,
+    @SerialName("orange") Orange,
+    @SerialName("amber") Amber,
+    @SerialName("green") Green,
+    @SerialName("teal") Teal,
+    @SerialName("blue") Blue,
+    @SerialName("indigo") Indigo,
+    @SerialName("purple") Purple,
+    @SerialName("pink") Pink,
+    @SerialName("gray") Gray,
+    ;
+
+    /** The stable value on the wire. */
+    val wireValue: String
+        get() = name.lowercase()
+
+    companion object {
+        /** Parses a [wireValue], or returns `null`. */
+        fun fromWireValue(raw: String): TagColor? = entries.firstOrNull { it.wireValue == raw }
+    }
+}
+
+/**
+ * The curated glyph a project tag is drawn with.
+ *
+ * Same reasoning as [TagColor]: a closed set keeps every tag legible at 12dp and lets the
+ * design system draw the glyphs itself instead of depending on `material-icons-extended`.
+ */
+@Serializable
+enum class TagIcon {
+    @SerialName("bug") Bug,
+    @SerialName("mobile") Mobile,
+    @SerialName("sparkle") Sparkle,
+    @SerialName("bolt") Bolt,
+    @SerialName("star") Star,
+    @SerialName("flag") Flag,
+    @SerialName("book") Book,
+    @SerialName("bell") Bell,
+    ;
+
+    /** The stable value on the wire. */
+    val wireValue: String
+        get() = name.lowercase()
+
+    companion object {
+        /** Parses a [wireValue], or returns `null`. */
+        fun fromWireValue(raw: String): TagIcon? = entries.firstOrNull { it.wireValue == raw }
+    }
+}
+
+/**
+ * One admin-defined tag on a project: a name for the editor, plus the colour and icon the
+ * board and backlog draw.
+ *
+ * Tags live on [Project.tags] rather than in their own synced entity. A tag is project
+ * configuration — the same shape as the key prefix — and a work item references it by id,
+ * so the project row already carries everything a member needs to render one. Creating a
+ * tag is therefore an ordinary project edit, and deleting one leaves stale ids on items,
+ * which every reader drops when it cannot resolve them.
+ */
+@Serializable
+data class ProjectTag(
+    val id: TagID = randomTagID(),
+    var name: String,
+    var color: TagColor = TagColor.Blue,
+    var icon: TagIcon = TagIcon.Bug,
+)
+
+/** The rules a tag and its assignment share, stated once. */
+object TagRules {
+    /** The most tags one work item may carry. */
+    const val MAX_PER_ITEM: Int = 5
+
+    /** The most tags one project may define. */
+    const val MAX_PER_PROJECT: Int = 24
+
+    /** The longest a tag's name may be, in characters. */
+    const val MAX_NAME_LENGTH: Int = 24
+
+    /** Trimmed, capped, and never blank when the caller checked [isNameValid] first. */
+    fun normaliseName(raw: String): String = raw.trim().take(MAX_NAME_LENGTH)
+
+    /** Whether [raw] leaves a name behind once it is normalised. */
+    fun isNameValid(raw: String): Boolean = normaliseName(raw).isNotEmpty()
+}
+
+/**
  * A project: a key prefix, a name, and the work items filed under it.
  *
  * Mutable for the fields the editor writes, with [id] and [createdAt] `val` because
@@ -188,7 +287,15 @@ data class Project(
     var keyPrefix: String,
     var name: String,
     var details: String = "",
+    /**
+     * The project's admin-defined tag catalog, in the order the admin created them.
+     *
+     * Admin-owned and read by members: only the admin project editor writes it, while
+     * every editor offers it and every card resolves against it.
+     */
+    var tags: List<ProjectTag> = emptyList(),
     /** Stable member identifiers assigned to this project. */
+    @JsonNames("memberIds") // The admin API's Go `json` tag spells the run of capitals this way.
     var memberIDs: List<UserID> = emptyList(),
     /**
      * Archived projects keep their history and their work items but leave the default
@@ -498,6 +605,18 @@ data class WorkItem(
      */
     var blockedByIDs: List<WorkItemID> = emptyList(),
     /**
+     * The project tags this item carries, at most [TagRules.MAX_PER_ITEM].
+     *
+     * References by id: the tag's name, colour and icon are project configuration and can
+     * change (or disappear) without rewriting every item. An id the project no longer
+     * defines is ignored by every reader, so deleting a tag is safe.
+     *
+     * Normalised here as well as in the editor and the repository, because this is the one
+     * place a decoded payload also passes through: a server that sends six ids, or the same
+     * id twice, still produces a valid item.
+     */
+    var tagIDs: List<TagID> = emptyList(),
+    /**
      * The sprint this item has been pulled into, or `null` for "in the backlog".
      *
      * `null` is the state almost every item starts in and is not a temporary one — the
@@ -540,6 +659,13 @@ data class WorkItem(
         // across the two reads.
         val points = storyPoints
         if (points != null && points < 0) storyPoints = 0
+
+        // A decoded payload is not screened by the editor, so the cap and the duplicate
+        // rule are restated where every instance is built. `>=` first, then the distinct
+        // pass, because most items carry none and should not allocate for the answer.
+        if (tagIDs.size > TagRules.MAX_PER_ITEM || tagIDs.distinct().size != tagIDs.size) {
+            tagIDs = tagIDs.distinct().take(TagRules.MAX_PER_ITEM)
+        }
     }
 
     /**

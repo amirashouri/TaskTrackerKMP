@@ -67,6 +67,7 @@ class RecordCompletenessTest {
             keyPrefix = "TT",
             name = "Task Tracker",
             details = "Everything, in one place.",
+            tags = "[{\"id\":\"77777777-7777-4777-8777-777777777777\",\"name\":\"Bug\",\"color\":\"red\",\"icon\":\"bug\"},{\"id\":\"88888888-8888-4888-8888-888888888888\",\"name\":\"Mobile\",\"color\":\"blue\",\"icon\":\"mobile\"}]",
             isArchived = true,
             nextItemNumber = 42,
             createdAt = Moments.start,
@@ -98,6 +99,7 @@ class RecordCompletenessTest {
             sprintID = "33333333-3333-4333-8333-333333333333",
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            tagIDs = "77777777-7777-4777-8777-777777777777,88888888-8888-4888-8888-888888888888",
             recurrenceRaw = "weekly:3",
             recurrenceUntil = Moments.muchLater,
         )
@@ -181,6 +183,7 @@ class RecordCompletenessTest {
             keyPrefix = "TT",
             name = "Task Tracker",
             details = "Everything, in one place.",
+            tags = "[{\"id\":\"77777777-7777-4777-8777-777777777777\",\"name\":\"Bug\",\"color\":\"red\",\"icon\":\"bug\"},{\"id\":\"88888888-8888-4888-8888-888888888888\",\"name\":\"Mobile\",\"color\":\"blue\",\"icon\":\"mobile\"}]",
             isArchived = true,
             nextItemNumber = 42,
             createdAt = Moments.start,
@@ -203,6 +206,9 @@ class RecordCompletenessTest {
             keyPrefix = "ZZ",
             name = "Renamed",
             details = "New notes.",
+            // The catalog is admin configuration and travels with the project payload, so a
+            // pull replaces it wholesale — including removing a tag the admin deleted.
+            tags = "[{\"id\":\"77777777-7777-4777-8777-777777777777\",\"name\":\"Bug\",\"color\":\"red\",\"icon\":\"bug\"},{\"id\":\"88888888-8888-4888-8888-888888888888\",\"name\":\"Mobile\",\"color\":\"blue\",\"icon\":\"mobile\"}]",
             isArchived = false,
             nextItemNumber = 99,
             createdAt = stored.createdAt,
@@ -268,6 +274,7 @@ class RecordCompletenessTest {
             // do: a device that has been offline has to learn which tasks now gate this one.
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            tagIDs = "77777777-7777-4777-8777-777777777777,88888888-8888-4888-8888-888888888888",
             // A pulled value for the same reason: a device has to learn that a card became
             // recurring — or stopped being — including its absence.
             recurrenceRaw = "weekly:3",
@@ -353,6 +360,7 @@ class RecordCompletenessTest {
             keyPrefix = "TT",
             name = "Task Tracker",
             details = "Everything, in one place.",
+            tags = "[{\"id\":\"77777777-7777-4777-8777-777777777777\",\"name\":\"Bug\",\"color\":\"red\",\"icon\":\"bug\"},{\"id\":\"88888888-8888-4888-8888-888888888888\",\"name\":\"Mobile\",\"color\":\"blue\",\"icon\":\"mobile\"}]",
             isArchived = true,
             nextItemNumber = 42,
             createdAt = Moments.start,
@@ -382,6 +390,7 @@ class RecordCompletenessTest {
             sprintID = "33333333-3333-4333-8333-333333333333",
             blockedByIDs =
                 "44444444-4444-4444-8444-444444444444,55555555-5555-4555-8555-555555555555",
+            tagIDs = "77777777-7777-4777-8777-777777777777,88888888-8888-4888-8888-888888888888",
             recurrenceRaw = "weekly:3",
             recurrenceUntil = Moments.muchLater,
         )

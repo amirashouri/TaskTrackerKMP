@@ -6,6 +6,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.core.UserID
@@ -563,6 +564,91 @@ class RoomProjectRepositoryTest {
     }
 
     // MARK: Editing work items
+
+    @Test
+    fun aCreatedWorkItemKeepsItsTagsInOrderAndCapsThemAtFive() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val ids = List(7) { randomTagID() }
+
+        val item = harness.repository.createWorkItem(
+            projectID = project.id,
+            title = "Tagged",
+            details = "",
+            status = WorkItemStatus.Todo,
+            priority = Priority.Medium,
+            assigneeID = null,
+            dueDate = null,
+            tagIDs = ids + ids.first(),
+            now = Moments.start,
+        )
+
+        assertEquals(ids.take(5), item.tagIDs, "the store enforces the cap as well as the use case")
+        assertEquals(ids.take(5), harness.repository.workItem(item.id)?.tagIDs)
+    }
+
+    @Test
+    fun anUnmentionedTagPatchLeavesTheSelectionAlone() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val ids = listOf(randomTagID(), randomTagID())
+        val item = harness.repository.createWorkItem(
+            projectID = project.id,
+            title = "Tagged",
+            details = "",
+            status = WorkItemStatus.Todo,
+            priority = Priority.Medium,
+            assigneeID = null,
+            dueDate = null,
+            tagIDs = ids,
+            now = Moments.start,
+        )
+
+        val renamed = harness.repository.updateWorkItem(
+            id = item.id,
+            title = "Renamed",
+            details = null,
+            priority = null,
+            assigneeID = Patch.Unmentioned,
+            dueDate = Patch.Unmentioned,
+            storyPoints = Patch.Unmentioned,
+            now = Moments.later,
+        )
+
+        assertEquals(ids, renamed.tagIDs)
+    }
+
+    @Test
+    fun anEmptyTagPatchClearsTheSelection() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val item = harness.repository.createWorkItem(
+            projectID = project.id,
+            title = "Tagged",
+            details = "",
+            status = WorkItemStatus.Todo,
+            priority = Priority.Medium,
+            assigneeID = null,
+            dueDate = null,
+            tagIDs = listOf(randomTagID()),
+            now = Moments.start,
+        )
+
+        val cleared = harness.repository.updateWorkItem(
+            id = item.id,
+            title = null,
+            details = null,
+            priority = null,
+            assigneeID = Patch.Unmentioned,
+            dueDate = Patch.Unmentioned,
+            storyPoints = Patch.Unmentioned,
+            tagIDs = Patch.Of(emptyList()),
+            now = Moments.later,
+        )
+
+        assertEquals(emptyList(), cleared.tagIDs)
+        assertEquals(emptyList(), harness.repository.workItem(item.id)?.tagIDs)
+    }
 
     @Test
     fun anUnmentionedFieldIsLeftAloneRatherThanCleared() = runTest {

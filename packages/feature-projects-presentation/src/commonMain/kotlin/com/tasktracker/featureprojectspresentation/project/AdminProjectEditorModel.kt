@@ -5,6 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.TagID
+import com.tasktracker.core.randomTagID
+import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
+import com.tasktracker.domain.TagRules
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import kotlin.coroutines.cancellation.CancellationException
@@ -43,6 +49,7 @@ class AdminProjectEditorModel(
     private var seeded: AdminProject? = null
     private var originalName: String = ""
     private var originalDetails: String = ""
+    private var originalTags: List<ProjectTag> = emptyList()
 
     /** Whether the seed read is in flight, so the screen can tell "loading" from "gone". */
     var isLoading: Boolean by mutableStateOf(true)
@@ -74,9 +81,21 @@ class AdminProjectEditorModel(
     var details: String by mutableStateOf("")
         private set
 
+    /**
+     * The project's tag catalog as the editor holds it: the admin-owned set every member's
+     * picker offers and every card resolves against.
+     *
+     * A list, not a database of its own — see [ProjectTag]. The editor is the only writer;
+     * members receive it on the project row and only ever refer to an id.
+     */
+    var tags: List<ProjectTag> by mutableStateOf(emptyList())
+        private set
+
     /** Whether the draft differs from what the server sent. */
     val hasChanges: Boolean
-        get() = name.trim() != originalName || details.trim() != originalDetails
+        get() = name.trim() != originalName ||
+            details.trim() != originalDetails ||
+            tags != originalTags
 
     /** Whether save is available: something changed, and a name to save it under. */
     val canSave: Boolean
@@ -102,8 +121,10 @@ class AdminProjectEditorModel(
             name = found.project.name
             keyPrefix = found.project.keyPrefix
             details = found.project.details
+            tags = found.project.tags.map { it.copy() }
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
+            originalTags = found.project.tags.map { it.copy() }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: AppError) {
@@ -126,6 +147,28 @@ class AdminProjectEditorModel(
     }
 
     /**
+     * Adds an admin-defined tag, or answers `false` when the draft refuses it.
+     *
+     * Refused for a blank name, a name already in the catalog (case-insensitively — two
+     * "Bug" chips are indistinguishable at 12dp, which is worse than a duplicate-key error
+     * nobody sees), and the per-project cap. The composer shows the refusal inline, so this
+     * is a validation answer rather than a silent drop.
+     */
+    fun addTag(name: String, color: TagColor, icon: TagIcon): Boolean {
+        if (!TagRules.isNameValid(name)) return false
+        if (tags.size >= TagRules.MAX_PER_PROJECT) return false
+        val normalised = TagRules.normaliseName(name)
+        if (tags.any { it.name.equals(normalised, ignoreCase = true) }) return false
+        tags = tags + ProjectTag(id = randomTagID(), name = normalised, color = color, icon = icon)
+        return true
+    }
+
+    /** Removes a tag from the catalog. Items that referenced it keep a stale id, which readers drop. */
+    fun removeTag(id: TagID) {
+        tags = tags.filterNot { it.id == id }
+    }
+
+    /**
      * Saves through the admin API, carrying the version this editor read the row at.
      *
      * Returns whether the save happened, so the caller navigates on success and stays put on
@@ -140,7 +183,12 @@ class AdminProjectEditorModel(
         try {
             val saved = reporting {
                 port.updateProject(
-                    current.project.copy(name = name.trim(), details = details.trim()),
+                    current.project.copy(
+                        name = name.trim(),
+                        details = details.trim(),
+                        tags = tags.map { it.copy(name = TagRules.normaliseName(it.name)) }
+                            .filter { it.name.isNotEmpty() },
+                    ),
                     current.version,
                 )
             } ?: return false
@@ -150,8 +198,10 @@ class AdminProjectEditorModel(
             seeded = saved
             name = saved.project.name
             details = saved.project.details
+            tags = saved.project.tags.map { it.copy() }
             originalName = saved.project.name.trim()
             originalDetails = saved.project.details.trim()
+            originalTags = saved.project.tags.map { it.copy() }
             return true
         } finally {
             isSaving = false

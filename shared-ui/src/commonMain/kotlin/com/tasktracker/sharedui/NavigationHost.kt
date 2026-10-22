@@ -1705,6 +1705,14 @@ private fun WorkItemEditorDestination(
     // Separate from the transport on purpose: opening a file this device attached is a cache
     // read, so a graph with no server still opens its own attachments.
     val opener = projectEnvironment?.opener
+    // The project itself, read for two jobs the draft cannot do itself: 1.6 scopes the assignee
+    // picker to this project's members, and the tag picker needs the admin-owned catalog. Read
+    // before the model because the model takes the catalog to drop a deleted tag's stale id.
+    // `null` until it answers, which the model treats as "catalog unknown" rather than "no
+    // tags" — see WorkItemEditorModel's `availableTags`.
+    val currentProject by produceState<Project?>(initialValue = null, projectID, repository) {
+        value = runCatching { repository.project(projectID) }.getOrNull()
+    }
     val model = remember(
         projectID,
         workItemID,
@@ -1715,6 +1723,7 @@ private fun WorkItemEditorDestination(
         currentUserID,
         blobTransport,
         opener,
+        currentProject,
     ) {
         WorkItemEditorModel(
             projectID,
@@ -1726,6 +1735,7 @@ private fun WorkItemEditorDestination(
             currentUserID = currentUserID,
             blobTransport = blobTransport,
             opener = opener,
+            availableTags = currentProject?.tags,
         )
     }
 
@@ -1753,15 +1763,6 @@ private fun WorkItemEditorDestination(
         repository,
     ) {
         value = runCatching { repository.workItems(projectID) }.getOrDefault(emptyList())
-    }
-
-    // The project itself, read for the same reason the sprint editor reads it: 1.6 scopes the
-    // assignee picker to this project's members, and only the host holds both the project and
-    // the directory. `null` until it answers, which `assignableMembersFor` treats as
-    // "unscoped" — so the picker shows everyone for a frame and narrows, rather than showing
-    // nobody and widening.
-    val currentProject by produceState<Project?>(initialValue = null, projectID, repository) {
-        value = runCatching { repository.project(projectID) }.getOrNull()
     }
 
     // Resolved here rather than on the model: the model is a draft and must not re-read the
@@ -1912,6 +1913,9 @@ private fun WorkItemEditorDestination(
         // save", and Remove drops one before Save files the rest.
         pendingAttachments = model.stagedAttachments,
         onRemovePending = model::removeStagedAttachment,
+        projectTags = currentProject?.tags.orEmpty(),
+        selectedTagIDs = model.tagIDs,
+        onTagToggled = model::toggleTag,
         isAttaching = model.isAttaching,
         onAttachClick = {
             // The picker belongs to the environment, not the screen: the graph owns the

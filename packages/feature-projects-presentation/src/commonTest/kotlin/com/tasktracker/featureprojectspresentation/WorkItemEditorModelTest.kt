@@ -4,8 +4,10 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomAttachmentID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AttachFile
@@ -493,6 +495,112 @@ class WorkItemEditorModelTest {
         model.addBlockedBy(listOf(blocker.id))
 
         assertTrue(model.hasChanges)
+    }
+
+    // MARK: Tags
+
+    @Test
+    fun `the tag picker refuses a sixth selection and an id the catalog does not define`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val catalog = List(6) { ProjectTag(name = "Tag $it") }
+        val model = WorkItemEditorModel(
+            project.id,
+            null,
+            repository,
+            TestDateProvider(),
+            availableTags = catalog,
+        )
+        model.onTitleChanged("Tagged")
+
+        catalog.take(5).forEach { model.toggleTag(it.id) }
+
+        assertEquals(catalog.take(5).map { it.id }, model.tagIDs)
+        model.toggleTag(catalog.last().id)
+        assertEquals(5, model.tagIDs.size, "the cap is a refusal, not a silent drop")
+        model.toggleTag(randomTagID())
+        assertEquals(5, model.tagIDs.size, "a tag the project does not define is not assignable")
+
+        model.toggleTag(catalog.first().id)
+        assertEquals(catalog.drop(1).take(4).map { it.id }, model.tagIDs, "a tap on a selected tag clears it")
+    }
+
+    @Test
+    fun `a deleted tag id is dropped from the draft when the catalog is known`() = runTest {
+        // The reader drops what it cannot resolve; the editor has to drop it too, or an item
+        // carrying a stale id shows "5 of 5" with no visible chips and cannot take a new tag.
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val live = ProjectTag(name = "Bug")
+        val deleted = ProjectTag(name = "Gone")
+        val item = testWorkItem(projectID = project.id, title = "Tagged", tagIDs = listOf(live.id, deleted.id))
+        repository.seed(item)
+
+        val model = editing(item, repository, availableTags = listOf(live))
+
+        assertEquals(listOf(live.id), model.tagIDs)
+        assertFalse(model.hasChanges, "filtering a stale id is not an edit the user made")
+        assertNotNull(model.save())
+        assertEquals(listOf(live.id), repository.workItem(item.id)?.tagIDs)
+    }
+
+    @Test
+    fun `an unknown catalog leaves the tags untouched rather than wiping them`() = runTest {
+        // `null` is "the project read failed", not "this project has no tags". Treating the two
+        // the same would strip every tag from an item the moment the catalog read was slow.
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val ids = listOf(randomTagID(), randomTagID())
+        val item = testWorkItem(projectID = project.id, title = "Tagged", tagIDs = ids)
+        repository.seed(item)
+
+        val model = editing(item, repository, availableTags = null)
+
+        assertEquals(ids, model.tagIDs)
+        assertFalse(model.hasChanges)
+    }
+
+    @Test
+    fun `a tag edit counts as a change`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val tag = ProjectTag(name = "Bug")
+        val item = testWorkItem(projectID = project.id)
+        repository.seed(item)
+        val model = editing(item, repository, availableTags = listOf(tag))
+        assertFalse(model.hasChanges)
+
+        model.toggleTag(tag.id)
+
+        assertTrue(model.hasChanges)
+    }
+
+    @Test
+    fun `saving carries the tag selection to the store`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = ProjectTag(name = "Bug")
+        val second = ProjectTag(name = "Book")
+        val model = WorkItemEditorModel(
+            project.id,
+            null,
+            repository,
+            TestDateProvider(),
+            availableTags = listOf(first, second),
+        )
+        model.onTitleChanged("Tagged")
+        model.toggleTag(first.id)
+        model.toggleTag(second.id)
+
+        assertNotNull(model.save())
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals(listOf(first.id, second.id), stored.tagIDs)
     }
 
     // MARK: Recurrence
@@ -1232,6 +1340,7 @@ class WorkItemEditorModelTest {
         repository: FakeProjectRepository = FakeProjectRepository(),
         transport: FakeAttachmentBlobTransport? = null,
         opener: FakeAttachmentOpener? = null,
+        availableTags: List<ProjectTag>? = null,
     ) = WorkItemEditorModel(
         item.projectID,
         item,
@@ -1239,6 +1348,7 @@ class WorkItemEditorModelTest {
         TestDateProvider(),
         blobTransport = transport,
         opener = opener,
+        availableTags = availableTags,
     )
 
     private suspend fun seededItem(): Pair<FakeProjectRepository, com.tasktracker.domain.WorkItem> {

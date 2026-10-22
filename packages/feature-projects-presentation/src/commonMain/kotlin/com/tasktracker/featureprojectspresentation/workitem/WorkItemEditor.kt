@@ -25,6 +25,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
@@ -48,6 +49,7 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Comment
 import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -138,6 +140,12 @@ fun WorkItemEditorScreen(
     onRemoveAttachment: (AttachmentID) -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
+    projectTags: List<ProjectTag> = emptyList(),
+    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
+    selectedTagIDs: List<TagID> = emptyList(),
+    /** Toggles one tag in the draft. */
+    onTagToggled: (TagID) -> Unit = {},
 ) {
     WorkItemEditorForm(
         title = title,
@@ -171,6 +179,9 @@ fun WorkItemEditorScreen(
         onSave = onSave,
         onCancel = onCancel,
         onDismissError = onDismissError,
+        projectTags = projectTags,
+        selectedTagIDs = selectedTagIDs,
+        onTagToggled = onTagToggled,
         modifier = modifier
             .fillMaxSize()
             .padding(ttSpacing.screenGutterLarge)
@@ -277,6 +288,12 @@ fun WorkItemEditorSheet(
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
+    /** See [ProjectsEditorFullScreen.projectTags]. */
+    projectTags: List<ProjectTag> = emptyList(),
+    /** See [ProjectsEditorFullScreen.selectedTagIDs]. */
+    selectedTagIDs: List<TagID> = emptyList(),
+    /** See [ProjectsEditorFullScreen.onTagToggled]. */
+    onTagToggled: (TagID) -> Unit = {},
 ) {
     // The editor is now always full-screen. We keep the deprecated parameters
     // for binary compatibility with NavigationHost.
@@ -340,6 +357,9 @@ fun WorkItemEditorSheet(
         attachmentOpening = attachmentOpening,
         pendingAttachments = pendingAttachments,
         onRemovePending = onRemovePending,
+        projectTags = projectTags,
+        selectedTagIDs = selectedTagIDs,
+        onTagToggled = onTagToggled,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         modifier = modifier
@@ -444,6 +464,12 @@ private fun ProjectsEditorFullScreen(
     pendingAttachments: List<PickedFile> = emptyList(),
     /** See [AttachmentList.onRemovePending]. */
     onRemovePending: (Int) -> Unit = {},
+    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
+    projectTags: List<ProjectTag> = emptyList(),
+    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
+    selectedTagIDs: List<TagID> = emptyList(),
+    /** Toggles one tag in the draft. */
+    onTagToggled: (TagID) -> Unit = {},
 ) {
     // Measured so the scroll range can reserve the room the action slab covers. It starts at
     // zero and settles on the first layout, mirroring how the shell publishes its tab-bar
@@ -571,6 +597,11 @@ private fun ProjectsEditorFullScreen(
                 onAssigneeChanged = onAssigneeChanged,
                 searchMembers = searchMembers,
                 resolveSelected = resolveSelected,
+            )
+            WorkItemTagPicker(
+                tags = projectTags,
+                selectedIDs = selectedTagIDs,
+                onToggle = onTagToggled,
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -745,6 +776,12 @@ private fun WorkItemEditorForm(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
+    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
+    projectTags: List<ProjectTag> = emptyList(),
+    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
+    selectedTagIDs: List<TagID> = emptyList(),
+    /** Toggles one tag in the draft. */
+    onTagToggled: (TagID) -> Unit = {},
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -838,6 +875,11 @@ private fun WorkItemEditorForm(
         WorkItemAssigneeRow(
             assigneeID = assigneeID,
             onAssigneeChanged = onAssigneeChanged,
+        )
+        WorkItemTagPicker(
+            tags = projectTags,
+            selectedIDs = selectedTagIDs,
+            onToggle = onTagToggled,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),

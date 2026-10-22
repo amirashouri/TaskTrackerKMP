@@ -652,4 +652,45 @@
       here would create a second source of truth that no module is able to consume,
       and the copy that drifted would be the one a view picked up.
     -->
+
+    <!--
+      Project tags. A tag is a colour plus an icon plus a name; the name is shown
+      only where there is room for words (the editor's picker and the admin catalog),
+      while cards and backlog rows draw the icon alone.
+    -->
+    <string name="work_item_tags_label">Tags</string>
+    <string name="work_item_tags_count">%1$d of %2$d</string>
+    <string name="work_item_tags_limit">Deselect a tag to choose another.</string>
+
+    <string name="admin_project_tags_title">Tags</string>
+    <string name="admin_project_tags_body">Members can put up to five of these on a task. Only an administrator can create or remove them.</string>
+    <string name="admin_project_tags_empty">No tags yet. Add the first one below.</string>
+    <string name="admin_project_tags_name">Tag name</string>
+    <string name="admin_project_tags_color">Colour</string>
+    <string name="admin_project_tags_icon">Icon</string>
+    <string name="admin_project_tags_add">Add tag</string>
+    <string name="admin_project_tags_remove">Remove %1$s</string>
+    <string name="admin_project_tags_name_required">Give the tag a name.</string>
+    <string name="admin_project_tags_duplicate">A tag with that name already exists.</string>
+    <string name="admin_project_tags_max">This project already has the maximum number of tags.</string>
+
+    <string name="tag_color_red">Red</string>
+    <string name="tag_color_orange">Orange</string>
+    <string name="tag_color_amber">Amber</string>
+    <string name="tag_color_green">Green</string>
+    <string name="tag_color_teal">Teal</string>
+    <string name="tag_color_blue">Blue</string>
+    <string name="tag_color_indigo">Indigo</string>
+    <string name="tag_color_purple">Purple</string>
+    <string name="tag_color_pink">Pink</string>
+    <string name="tag_color_gray">Gray</string>
+
+    <string name="tag_icon_bug">Bug</string>
+    <string name="tag_icon_mobile">Mobile</string>
+    <string name="tag_icon_sparkle">Sparkle</string>
+    <string name="tag_icon_bolt">Bolt</string>
+    <string name="tag_icon_star">Star</string>
+    <string name="tag_icon_flag">Flag</string>
+    <string name="tag_icon_book">Book</string>
+    <string name="tag_icon_bell">Bell</string>
 </resources>

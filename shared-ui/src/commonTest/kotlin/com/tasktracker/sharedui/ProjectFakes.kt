@@ -5,6 +5,7 @@ import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomAttachmentID
@@ -376,6 +377,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: List<WorkItemID>,
         recurrence: Recurrence?,
+        tagIDs: List<TagID>,
     ): WorkItem = unused("createWorkItem")
 
     override suspend fun updateWorkItem(
@@ -389,6 +391,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
         recurrence: Patch<Recurrence?>,
+        tagIDs: Patch<List<TagID>>,
     ): WorkItem = unused("updateWorkItem")
 
     override suspend fun deleteWorkItem(id: WorkItemID): Unit = unused("deleteWorkItem")
