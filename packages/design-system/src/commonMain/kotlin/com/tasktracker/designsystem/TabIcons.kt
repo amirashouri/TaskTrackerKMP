@@ -361,6 +361,25 @@ object ttActionIcons {
     }
 
     /**
+     * A clipboard: an outlined board with a solid clip across its top edge.
+     *
+     * The verb is "copy this to the clipboard", so the glyph is the clipboard rather than the
+     * two overlapping sheets that usually stand for it. Two sheets would be two contours
+     * overlapping, and this file fills even-odd — an overlap is a hole, so a pair of sheets
+     * drawn the obvious way fills as a solid square with a notch. The board here is a single
+     * outline, and the clip is solid above it.
+     *
+     * The clip's lower band (y 6..7) lands inside the board's top stroke, which cancels that
+     * band by parity. That is deliberate: it reads as the clip sitting in a slot cut into the
+     * board's edge, which is the silhouette a clipboard has. Moving the clip clear of the
+     * stroke would leave it floating above the board instead.
+     */
+    val copy: ImageVector = icon("Copy") {
+        outlinedRoundRect(4.5f, 6.0f, 19.5f, 20.0f, radius = 2.0f, stroke = 1.8f)
+        solidRoundRect(9.0f, 3.0f, 15.0f, 7.0f, radius = 1.0f)
+    }
+
+    /**
      * A chevron pointing down, for a control that opens something.
      *
      * One contour, walked as the upper edge out to the right and the lower edge back, rather than
@@ -543,7 +562,7 @@ object ttActionIcons {
     }
 
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, chevronDown, expand, collapse, sort, person, link)
+    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, copy, chevronDown, expand, collapse, sort, person, link)
 }
 
 /**

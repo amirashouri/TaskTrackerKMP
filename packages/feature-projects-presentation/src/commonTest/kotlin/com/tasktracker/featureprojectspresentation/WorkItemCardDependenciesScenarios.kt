@@ -239,6 +239,7 @@ private fun ComposeUiTest.cardShowingDependencies(
             WorkItemCard(
                 item = item,
                 onClick = {},
+                onCopy = {},
                 blockedByKeys = blockerKeys,
             )
         }

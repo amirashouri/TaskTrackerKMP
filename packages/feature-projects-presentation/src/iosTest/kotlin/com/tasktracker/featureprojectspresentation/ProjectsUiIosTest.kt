@@ -197,6 +197,17 @@ class ProjectsUiIosTest {
     fun tappingACardSelectsItsTask() = runComposeUiTest(block = WorkItemCardScenarios.tappingACardSelectsItsTask)
 
     @Test
+    fun showsTheCopyControl() = runComposeUiTest(block = WorkItemCardScenarios.showsTheCopyControl)
+
+    @Test
+    fun copyingACardHandsTheTitleAndDetailsToTheHost() =
+        runComposeUiTest(block = WorkItemCardScenarios.copyingACardHandsTheTitleAndDetailsToTheHost)
+
+    @Test
+    fun copyingACardConfirmsItOnTheBoard() =
+        runComposeUiTest(block = BoardCopyScenarios.copyingACardConfirmsItOnTheBoard)
+
+    @Test
     fun aRowWithNoOpenerIsNotPressable() = runComposeUiTest(block = AttachmentRowScenarios.aRowWithNoOpenerIsNotPressable)
 
     @Test

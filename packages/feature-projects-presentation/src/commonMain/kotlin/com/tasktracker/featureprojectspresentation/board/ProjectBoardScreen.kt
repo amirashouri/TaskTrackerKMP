@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.TargetedFlingBehavior
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,17 +16,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.ProjectID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
@@ -37,6 +46,7 @@ import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
@@ -50,6 +60,8 @@ import com.tasktracker.resources.board_kanban
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
+import com.tasktracker.resources.work_item_copied
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -150,149 +162,200 @@ fun ProjectBoardScreen(
      */
     canAddTask: Boolean = true,
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // Vertically only. A horizontal gutter here became a *gap in the middle of the
-            // page* once the row could scroll: the viewport ended short of each edge, so
-            // a lane arriving from the right slid under a strip of empty canvas and stopped
-            // there. The gutter belongs to the content that is inset from the edge, and the
-            // row is not that - see [LaneRowSpacer].
-            // Top only, and for the same reason the horizontal gutter is a `LaneRowSpacer` rather than
-            // padding: padding on this Column shrinks the *lanes' viewport*, so the lanes stop
-            // 32dp short of the bottom of the screen and no card can ever reach the edge, the
-            // notch area, or the tab bar's glass. The clearance that keeps the last card clear of
-            // the glass is inside the lane's scroll instead - see `BoardColumnView`'s
-            // `padding(bottom = …)`.
-            .padding(top = ttSpacing.screenGutterLarge)
-            .testTag(ProjectBoardScreenTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-    ) {
-        // The header exists if *either* half of it has something to say, which is why this is
-        // not an `onOpenSwitcher?.let`. The stack reports who is on the board, and that is a fact
-        // about the board rather than about the switcher: a host that wires no switcher - a
-        // preview, a screenshot, a keyboard-only surface - would otherwise lose the one part of
-        // the header it had anything to say with.
-        val assignees = boardAssigneeNames(projection.items, assigneeNames)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalGutter()
-                .testTag(ProjectBoardHeaderTag),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                onOpenSwitcher?.let { openSwitcher ->
-                    ProjectSwitcherButton(
-                        project = projection.project,
-                        onClick = openSwitcher,
-                        projects = projects,
-                        onSelectProject = onSelectProject,
-                        // 24.1: the header's spare width belongs to the sprint/Kanban title, so the
-                        // pill keeps just the monogram and chevron; the dropdown still lists names.
-                        showName = false,
-                    )
-                }
-                if (assignees.isNotEmpty()) {
-                    AssigneeStack(
-                        names = assignees,
-                        modifier = Modifier.testTag(ProjectBoardAssigneesTag),
-                    )
-                }
-                // 24.2: the leftover header width names the board. A running sprint is the board's
-                // identity while it runs, and "Kanban" is the identity when there is none - the
-                // same word a new task lands on. It fills and ellipsises rather than capping,
-                // because unlike the switcher this is the title the empty space exists for.
-                ttText(
-                    text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
-                    style = ttTypography.titleSmall,
-                    color = ttLabel(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
-                )
-            }
-            ttGlassIconButton(
-                image = ttActionIcons.person,
-                contentDescription = stringResource(Res.string.board_my_tasks),
-                onClick = onToggleMyTasks,
-                tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
-                modifier = Modifier.testTag(ProjectBoardMyTasksTag),
-            )
-        }
-        errorMessage?.let { message ->
-            ttBanner(
-                message = message,
-                onDismiss = onDismissError,
-                modifier = Modifier.fillMaxWidth().horizontalGutter(),
-            )
-        }
-        if (projection.project == null && !isLoading) {
-            ProjectsEmptyState(
-                title = stringResource(Res.string.board_no_project_title),
-                body = stringResource(Res.string.board_no_project_body),
-                modifier = Modifier.horizontalGutter(),
-            )
-        } else {
-            val scrollState = rememberScrollState()
-            val laneCount = projection.columns.size
-            val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
+    // Both halves of the copy confirmation: the write itself, and a count that re-keys the
+    // timer so a second copy restarts the toast rather than leaving the first one's clock
+    // running. The count is not shown; it only exists to be a `LaunchedEffect` key.
+    @Suppress("DEPRECATION") // See copyToClipboard for why the deprecated half is used.
+    val clipboard = LocalClipboardManager.current
+    var copies by remember { mutableIntStateOf(0) }
+    LaunchedEffect(copies) {
+        if (copies == 0) return@LaunchedEffect
+        delay(COPIED_TOAST_MILLIS)
+        copies = 0
+    }
 
+    // A Box so the toast can float over the lanes instead of taking a row from the column.
+    // Inserting it into the column would shift every lane up while it is visible, which is
+    // the layout jump a confirmation is not allowed to cause.
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // Vertically only. A horizontal gutter here became a *gap in the middle of the
+                // page* once the row could scroll: the viewport ended short of each edge, so
+                // a lane arriving from the right slid under a strip of empty canvas and stopped
+                // there. The gutter belongs to the content that is inset from the edge, and the
+                // row is not that - see [LaneRowSpacer].
+                // Top only, and for the same reason the horizontal gutter is a `LaneRowSpacer` rather than
+                // padding: padding on this Column shrinks the *lanes' viewport*, so the lanes stop
+                // 32dp short of the bottom of the screen and no card can ever reach the edge, the
+                // notch area, or the tab bar's glass. The clearance that keeps the last card clear of
+                // the glass is inside the lane's scroll instead - see `BoardColumnView`'s
+                // `padding(bottom = …)`.
+                .padding(top = ttSpacing.screenGutterLarge)
+                .testTag(ProjectBoardScreenTag),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+        ) {
+            // The header exists if *either* half of it has something to say, which is why this is
+            // not an `onOpenSwitcher?.let`. The stack reports who is on the board, and that is a fact
+            // about the board rather than about the switcher: a host that wires no switcher - a
+            // preview, a screenshot, a keyboard-only surface - would otherwise lose the one part of
+            // the header it had anything to say with.
+            val assignees = boardAssigneeNames(projection.items, assigneeNames)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
-                    .testTag(ProjectBoardColumnsTag),
-                verticalAlignment = Alignment.Top,
+                    .horizontalGutter()
+                    .testTag(ProjectBoardHeaderTag),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                // The gutter is a *spacer in the content*, not a padding on this row, and the
-                // difference is the whole of the bug this replaced. Padding here would shrink
-                // the scroll viewport, so the viewport - rather than the content - would stop
-                // 16dp short of an edge and a lane arriving from the right would slide up to a
-                // strip of bare canvas and stop there. A spacer is part of the content, so it
-                // scrolls away with the lanes, the viewport stays the full width of the screen,
-                // and lane 0 still rests with air at the left, which is what a `LazyRow`'s
-                // `contentPadding` would have given.
-                LaneRowSpacer(ttSpacing.xxl)
-                projection.columns.forEachIndexed { index, column ->
-                    if (index > 0) LaneRowSpacer(ttSpacing.md)
-                    BoardColumnView(
-                        column = column,
-                        onSelect = { onSelect(it.id) },
-                        onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
-                        modifier = Modifier,
-                        assigneeName = { item ->
-                            item.assigneeID?.let { assigneeNames[it] }
-                        },
-                        // Resolved by the model against the project's whole item list rather
-                        // than against `projection.items`, because a blocker is frequently not
-                        // on this board — see ProjectBoardModel.blockedByKeys.
-                        blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
-                        cardTrailing = { item ->
-                            BoardCardActions(
-                                item = item,
-                                movingItemID = movingItemID,
-                                showMoveActions = showMoveActions,
-                                onFileAway = onFileAway,
-                                onMove = onMove,
-                            )
-                        },
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    onOpenSwitcher?.let { openSwitcher ->
+                        ProjectSwitcherButton(
+                            project = projection.project,
+                            onClick = openSwitcher,
+                            projects = projects,
+                            onSelectProject = onSelectProject,
+                            // 24.1: the header's spare width belongs to the sprint/Kanban title, so the
+                            // pill keeps just the monogram and chevron; the dropdown still lists names.
+                            showName = false,
+                        )
+                    }
+                    if (assignees.isNotEmpty()) {
+                        AssigneeStack(
+                            names = assignees,
+                            modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                        )
+                    }
+                    // 24.2: the leftover header width names the board. A running sprint is the board's
+                    // identity while it runs, and "Kanban" is the identity when there is none - the
+                    // same word a new task lands on. It fills and ellipsises rather than capping,
+                    // because unlike the switcher this is the title the empty space exists for.
+                    ttText(
+                        text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
+                        style = ttTypography.titleSmall,
+                        color = ttLabel(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
                     )
                 }
-                // The far end gets a gutter too, because it is the only end that can be scrolled
-                // *away*: without it the last lane would rest flush against the right edge with
-                // the row unable to reach any position that gave it air. The near end's gutter
-                // is the one above - same width, and not because the ends are symmetric.
-                LaneRowSpacer(ttSpacing.xxl)
+                ttGlassIconButton(
+                    image = ttActionIcons.person,
+                    contentDescription = stringResource(Res.string.board_my_tasks),
+                    onClick = onToggleMyTasks,
+                    tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                    modifier = Modifier.testTag(ProjectBoardMyTasksTag),
+                )
+            }
+            errorMessage?.let { message ->
+                ttBanner(
+                    message = message,
+                    onDismiss = onDismissError,
+                    modifier = Modifier.fillMaxWidth().horizontalGutter(),
+                )
+            }
+            if (projection.project == null && !isLoading) {
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.board_no_project_title),
+                    body = stringResource(Res.string.board_no_project_body),
+                    modifier = Modifier.horizontalGutter(),
+                )
+            } else {
+                val scrollState = rememberScrollState()
+                val laneCount = projection.columns.size
+                val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
+                        .testTag(ProjectBoardColumnsTag),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    // The gutter is a *spacer in the content*, not a padding on this row, and the
+                    // difference is the whole of the bug this replaced. Padding here would shrink
+                    // the scroll viewport, so the viewport - rather than the content - would stop
+                    // 16dp short of an edge and a lane arriving from the right would slide up to a
+                    // strip of bare canvas and stop there. A spacer is part of the content, so it
+                    // scrolls away with the lanes, the viewport stays the full width of the screen,
+                    // and lane 0 still rests with air at the left, which is what a `LazyRow`'s
+                    // `contentPadding` would have given.
+                    LaneRowSpacer(ttSpacing.xxl)
+                    projection.columns.forEachIndexed { index, column ->
+                        if (index > 0) LaneRowSpacer(ttSpacing.md)
+                        BoardColumnView(
+                            column = column,
+                            onSelect = { onSelect(it.id) },
+                            onCopy = { text ->
+                                copyToClipboard(clipboard, text)
+                                copies++
+                            },
+                            onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
+                            modifier = Modifier,
+                            assigneeName = { item ->
+                                item.assigneeID?.let { assigneeNames[it] }
+                            },
+                            // Resolved by the model against the project's whole item list rather
+                            // than against `projection.items`, because a blocker is frequently not
+                            // on this board — see ProjectBoardModel.blockedByKeys.
+                            blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
+                            cardTrailing = { item ->
+                                BoardCardActions(
+                                    item = item,
+                                    movingItemID = movingItemID,
+                                    showMoveActions = showMoveActions,
+                                    onFileAway = onFileAway,
+                                    onMove = onMove,
+                                )
+                            },
+                        )
+                    }
+                    // The far end gets a gutter too, because it is the only end that can be scrolled
+                    // *away*: without it the last lane would rest flush against the right edge with
+                    // the row unable to reach any position that gave it air. The near end's gutter
+                    // is the one above - same width, and not because the ends are symmetric.
+                    LaneRowSpacer(ttSpacing.xxl)
+                }
             }
         }
+
+        if (copies > 0) {
+            ttToast(
+                message = stringResource(Res.string.work_item_copied),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = ttSpacing.xxl)
+                    // Clear of the tab bar, so the glass bar cannot cover the confirmation.
+                    .padding(bottom = LocalTabBarScrollUnderInset.current + ttSpacing.xxl),
+            )
+        }
     }
+}
+
+/**
+ * Writes plain text to the platform clipboard.
+ *
+ * `ClipboardManager` is the **deprecated** half of Compose's clipboard API, and it is used
+ * deliberately. Its replacement, `Clipboard`, takes a `ClipEntry`, and in Compose
+ * Multiplatform 1.12.1 `ClipEntry` has no common constructor: the iOS builder is
+ * `@ExperimentalComposeUiApi` and every platform's constructor is `internal`. Writing through
+ * the deprecated interface is therefore the only way to copy a string from `commonMain`
+ * without an `expect`/`actual` seam and three platform implementations for one call.
+ *
+ * Isolated here rather than annotated at the call site so the suppression is one line and the
+ * reason sits next to it. When `ClipEntry` gains a common constructor, this function is the
+ * only place that has to change.
+ */
+@Suppress("DEPRECATION")
+private fun copyToClipboard(clipboard: ClipboardManager, text: String) {
+    clipboard.setText(AnnotatedString(text))
 }
 
 /**
@@ -520,3 +583,15 @@ fun BoardMoveTag(item: WorkItem, status: WorkItemStatus): String =
 // Compose's own `MinFlingVelocityDp`, which is `internal` to foundation. `val`, not `const
 // val`: `Dp` is a value class, so `const val` is not allowed.
 private val MIN_FLANGE_VELOCITY_DP = 400.dp
+
+/**
+ * How long the copy confirmation stays up.
+ *
+ * Two seconds is long enough to read four words and short enough that it is gone before the
+ * next card is picked up. The timer lives with the board rather than in `ttToast` because the
+ * board is what knows a copy happened; see the toast's own docs for why timing is the caller's.
+ *
+ * `internal` so the scenario that waits it out can hold the same number the screen uses, rather
+ * than a second copy of it.
+ */
+internal const val COPIED_TOAST_MILLIS = 2_000L

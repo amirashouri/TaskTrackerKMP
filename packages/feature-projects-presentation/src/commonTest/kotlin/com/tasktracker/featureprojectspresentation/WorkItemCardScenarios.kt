@@ -133,12 +133,60 @@ object WorkItemCardScenarios {
 
         setContent {
             Themed {
-                WorkItemCard(item = item, onClick = { selected = item })
+                WorkItemCard(item = item, onClick = { selected = item }, onCopy = {})
             }
         }
         onNodeWithTag(WorkItemCardTag(item)).performClick()
 
         assertEquals(item, selected)
+    }
+
+    /** Every card offers the copy control, including one with no assignee and no due date. */
+    val showsTheCopyControl: suspend ComposeUiTest.() -> Unit = {
+        val item = ViewPreviewData.workItems.first { it.dueDate == null && it.assigneeID == null }
+
+        cardShowing(item)
+
+        onNested(WorkItemCardCopyTag).assertIsDisplayed()
+    }
+
+    /**
+     * Copying hands the host the title and the details, and does not also select the card.
+     *
+     * The expected payload is restated as a literal rather than produced by [clipboardText]:
+     * asking the function under test what it should have handed over means a card that copied
+     * the wrong text still passes, because both sides move together.
+     *
+     * Both halves are one scenario because they are one gesture. A copy control that also
+     * opened the card would still hand the right string over, and only asserting both at once
+     * holds the whole of what tapping it is supposed to do.
+     */
+    val copyingACardHandsTheTitleAndDetailsToTheHost: suspend ComposeUiTest.() -> Unit = {
+        val item = ViewPreviewData.workItems.first { it.details.isNotBlank() }
+        var copied: String? = null
+        var selected: WorkItem? = null
+
+        setContent {
+            Themed {
+                WorkItemCard(
+                    item = item,
+                    onClick = { selected = item },
+                    onCopy = { copied = it },
+                )
+            }
+        }
+        onNested(WorkItemCardCopyTag).performClick()
+
+        assertEquals(
+            "${item.title}\n\n${item.details.trim()}",
+            copied,
+            "a copy should be the title, then a blank line, then the details",
+        )
+        assertEquals(
+            null,
+            selected,
+            "tapping the copy control must not also open the card it copied",
+        )
     }
 }
 
@@ -146,7 +194,7 @@ object WorkItemCardScenarios {
 internal fun ComposeUiTest.cardShowing(item: WorkItem, assigneeName: String? = null) {
     setContent {
         Themed {
-            WorkItemCard(item = item, assigneeName = assigneeName, onClick = {})
+            WorkItemCard(item = item, assigneeName = assigneeName, onClick = {}, onCopy = {})
         }
     }
 }
@@ -259,6 +307,28 @@ class WorkItemCardRulesTest {
     fun anAssigneeWithNoSpaceInItIsShownWhole() {
         assertEquals("amir@example.com", assigneeFirstName("amir@example.com"), "an address has no first name to keep")
         assertEquals("Platform", assigneeFirstName("Platform"), "a team is left as it was written")
+    }
+
+    @Test
+    fun aCopyIsTheTitleThenTheDetails() {
+        val item = ViewPreviewData.workItems.first { it.details.isNotBlank() }
+
+        assertEquals(
+            "${item.title}\n\n${item.details}",
+            clipboardText(item),
+            "a blank line keeps the title a heading when the paste lands in a markdown renderer",
+        )
+    }
+
+    @Test
+    fun aTaskWithNoDetailsCopiesAsItsTitleAlone() {
+        val item = ViewPreviewData.workItems.first().copy(details = "   ")
+
+        assertEquals(
+            item.title,
+            clipboardText(item),
+            "whitespace details must not become a title followed by blank lines",
+        )
     }
 
     @Test
