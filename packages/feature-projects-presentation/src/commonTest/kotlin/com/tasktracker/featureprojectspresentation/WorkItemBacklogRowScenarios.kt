@@ -3,7 +3,12 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.tasktracker.core.randomTagID
+import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.assertEquals
@@ -30,6 +35,19 @@ object WorkItemBacklogRowScenarios {
         rowShowing(item = item, onCopy = {})
 
         onNested(BacklogCopyTag(item)).assertIsDisplayed()
+    }
+
+    /** The tag strip draws icons alone, on the same row shape as the board card. */
+    val showsTagsAsIconsWithoutTheirNames: suspend ComposeUiTest.() -> Unit = {
+        val tag = ProjectTag(name = "Bug", color = TagColor.Red, icon = TagIcon.Bug)
+        val item = ViewPreviewData.workItems
+            .first { it.status == WorkItemStatus.Backlog }
+            .copy(tagIDs = listOf(tag.id, randomTagID()))
+
+        rowShowing(item = item, onCopy = {}, projectTags = listOf(tag))
+
+        onNested(WorkItemTagChipTag(tag)).assertIsDisplayed()
+        onNodeWithText("Bug").assertDoesNotExist()
     }
 
     /**
@@ -88,6 +106,7 @@ private fun ComposeUiTest.rowShowing(
     item: WorkItem,
     onCopy: ((String) -> Unit)?,
     onOpen: (() -> Unit)? = null,
+    projectTags: List<ProjectTag> = emptyList(),
 ) {
     setContent {
         Themed {
@@ -97,6 +116,7 @@ private fun ComposeUiTest.rowShowing(
                 onFileAway = {},
                 onOpen = onOpen,
                 onCopy = onCopy,
+                projectTags = projectTags,
             )
         }
     }

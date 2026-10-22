@@ -36,6 +36,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -128,6 +129,11 @@ fun BoardColumnView(
      * [WorkItemCard.blockedByKeys].
      */
     blockedByKeys: (WorkItem) -> List<WorkItemKey> = { emptyList() },
+    /**
+     * The project's tag catalog, handed to every card in this lane. Defaults to none for the
+     * same reason as [blockedByKeys]; a host without tags renders what it did before.
+     */
+    projectTags: List<ProjectTag> = emptyList(),
     /**
      * Hands a card's copy text to the host, which owns the clipboard and the confirmation.
      *
@@ -268,6 +274,7 @@ fun BoardColumnView(
                         trailing = { cardTrailing(item) },
                         assigneeName = assigneeName(item),
                         blockedByKeys = blockedByKeys(item),
+                        projectTags = projectTags,
                     )
                 }
             }

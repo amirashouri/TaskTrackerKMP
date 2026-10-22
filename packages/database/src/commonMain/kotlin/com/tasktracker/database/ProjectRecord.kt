@@ -39,6 +39,15 @@ data class ProjectRecord(
     val keyPrefix: String,
     val name: String,
     val details: String,
+    /**
+     * The project's tag catalog, as a JSON array of `ProjectTag` objects.
+     *
+     * A JSON document rather than a table because the catalog is read as a whole, is
+     * small (a few dozen entries at most), and has no query of its own — exactly the
+     * shape [WorkItemRecord.blockedByIDs] avoids by being a comma-separated list.
+     * Empty is the empty string, so an old row and a new project read the same way.
+     */
+    @ColumnInfo(defaultValue = "''") val tags: String = "",
     /** Comma-separated stable UUIDs; the migration default leaves existing projects unassigned. */
     @ColumnInfo(defaultValue = "''") val memberIDs: String = "",
     val isArchived: Boolean,

@@ -395,6 +395,7 @@ fun ProjectBoardScreen(
                                 // than against `projection.items`, because a blocker is frequently not
                                 // on this board — see ProjectBoardModel.blockedByKeys.
                                 blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
+                                projectTags = projection.project?.tags.orEmpty(),
                                 cardTrailing = { item ->
                                     BoardCardActions(
                                         item = item,
@@ -449,6 +450,7 @@ fun ProjectBoardScreen(
                             },
                             assigneeName = dragged.assigneeID?.let { assigneeNames[it] },
                             blockedByKeys = blockedByKeys[dragged.id].orEmpty(),
+                            projectTags = projection.project?.tags.orEmpty(),
                         )
                     }
                 }

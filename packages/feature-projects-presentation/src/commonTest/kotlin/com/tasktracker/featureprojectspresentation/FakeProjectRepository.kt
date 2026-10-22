@@ -5,6 +5,7 @@ import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
@@ -445,6 +446,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: List<WorkItemID>,
         recurrence: Recurrence?,
+        tagIDs: List<TagID>,
     ): WorkItem = writing({ ProjectChange(ProjectChange.Kind.WorkItems, projectID) }) {
         failIfSet()
         createFailure?.let { throw it }
@@ -464,6 +466,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             recurrence = recurrence,
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs,
+            tagIDs = tagIDs,
             sprintID = sprintID,
             createdAt = now,
             updatedAt = now,
@@ -486,6 +489,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
         recurrence: Patch<Recurrence?>,
+        tagIDs: Patch<List<TagID>>,
     ): WorkItem = writing({
         ProjectChange(ProjectChange.Kind.WorkItems, storedItems.first { it.id == id }.projectID)
     }) {
@@ -512,6 +516,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
         when (recurrence) {
             is Patch.Of -> existing.recurrence = recurrence.value
+            Patch.Unmentioned -> Unit
+        }
+        when (tagIDs) {
+            is Patch.Of -> existing.tagIDs = tagIDs.value
             Patch.Unmentioned -> Unit
         }
         existing.updatedAt = now
@@ -857,6 +865,7 @@ fun testWorkItem(
     sprintID: SprintID? = null,
     blockedByIDs: List<WorkItemID> = emptyList(),
     recurrence: Recurrence? = null,
+    tagIDs: List<TagID> = emptyList(),
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -871,6 +880,7 @@ fun testWorkItem(
     sprintID = sprintID,
     blockedByIDs = blockedByIDs,
     recurrence = recurrence,
+    tagIDs = tagIDs,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,

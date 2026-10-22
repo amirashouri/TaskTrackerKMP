@@ -278,6 +278,7 @@ private fun BacklogSectionList(
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
                     onCopy = onCopy,
+                    projectTags = projection.project?.tags.orEmpty(),
                 )
             }
         }
@@ -323,6 +324,7 @@ private fun KanbanSectionList(
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
                     onCopy = onCopy,
+                    projectTags = projection.project?.tags.orEmpty(),
                 )
             }
         }
@@ -367,6 +369,7 @@ private fun ArchivedSectionList(
                     onOpen = { onSelect(item.id) },
                     onUnarchive = { onUnarchive(item.id) },
                     onCopy = onCopy,
+                    projectTags = projection.project?.tags.orEmpty(),
                 )
             }
         }

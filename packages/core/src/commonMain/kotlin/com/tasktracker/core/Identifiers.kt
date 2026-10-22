@@ -95,6 +95,21 @@ value class NotificationID(val rawValue: Uuid) {
 }
 
 /**
+ * One project-defined tag.
+ *
+ * Project-scoped and carried on the project's catalog rather than in an entity of its
+ * own: a tag is configuration (a name, a colour and an icon), and a work item needs
+ * only its id. See `Project.tags` and `WorkItem.tagIDs`.
+ */
+@Serializable
+@JvmInline
+value class TagID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
+/**
  * A stable, human-readable key in the Jira style (`TT-142`), derived server-side
  * and cached locally so a work item rendered offline still shows a sensible key.
  *
@@ -132,6 +147,9 @@ fun randomAttachmentID(): AttachmentID = AttachmentID(Uuid.random())
 /** Generates a fresh identifier. */
 fun randomNotificationID(): NotificationID = NotificationID(Uuid.random())
 
+/** Generates a fresh identifier. */
+fun randomTagID(): TagID = TagID(Uuid.random())
+
 /**
  * Parses an identifier from its wire string, or returns `null` if malformed.
  *
@@ -167,3 +185,6 @@ fun parseAttachmentID(raw: String): AttachmentID? =
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseNotificationID(raw: String): NotificationID? =
     runCatching { NotificationID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseTagID(raw: String): TagID? = runCatching { TagID(Uuid.parse(raw)) }.getOrNull()

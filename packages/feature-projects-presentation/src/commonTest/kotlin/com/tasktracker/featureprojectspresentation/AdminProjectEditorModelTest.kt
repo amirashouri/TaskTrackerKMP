@@ -3,8 +3,13 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
+import com.tasktracker.domain.TagRules
 import com.tasktracker.featureprojectsdomain.AdminProject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -137,6 +142,66 @@ class AdminProjectEditorModelTest {
         assertFalse(model.save())
         assertEquals(AppError.Conflict("project").message, model.errorMessage)
         assertFalse(model.isSaving)
+    }
+
+    @Test
+    fun `adding a tag marks the editor dirty and the save carries the catalog`() = runTest {
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        assertFalse(model.hasChanges)
+
+        assertTrue(model.addTag("  Bug  ", TagColor.Red, TagIcon.Bug))
+
+        assertTrue(model.hasChanges, "a catalog edit is a reason to enable Save")
+        val tag = model.tags.single()
+        assertEquals("Bug", tag.name, "the name is normalised as it enters the draft")
+        assertEquals(TagColor.Red, tag.color)
+        assertEquals(TagIcon.Bug, tag.icon)
+
+        assertTrue(model.save())
+        assertEquals(listOf(tag), port.updateCalls.single().first.tags)
+    }
+
+    @Test
+    fun `the tag composer refuses a blank name a duplicate and a full catalog`() = runTest {
+        val model = AdminProjectEditorModel(id, port())
+        model.load()
+
+        assertFalse(model.addTag("   ", TagColor.Red, TagIcon.Bug), "a blank tag is not a tag")
+        assertTrue(model.addTag("Bug", TagColor.Red, TagIcon.Bug))
+        assertFalse(
+            model.addTag("bug", TagColor.Blue, TagIcon.Bell),
+            "case-insensitive: two Bug chips are indistinguishable at 12dp",
+        )
+        repeat(TagRules.MAX_PER_PROJECT - 1) { index ->
+            assertTrue(model.addTag("Tag $index", TagColor.Blue, TagIcon.Book))
+        }
+        assertFalse(model.addTag("One too many", TagColor.Gray, TagIcon.Star))
+        assertEquals(TagRules.MAX_PER_PROJECT, model.tags.size)
+    }
+
+    @Test
+    fun `removing a tag marks the editor dirty and the save carries the removal`() = runTest {
+        val seeded = project().apply {
+            tags = listOf(
+                ProjectTag(randomTagID(), "Bug", TagColor.Red, TagIcon.Bug),
+                ProjectTag(randomTagID(), "Mobile", TagColor.Blue, TagIcon.Mobile),
+            )
+        }
+        val port = RecordingAdminProjectsPort(
+            projectByID = mapOf(id to AdminProject(seeded, "v1")),
+            updateResult = { updated, _ -> AdminProject(updated, "v2") },
+        )
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+
+        model.removeTag(seeded.tags.first().id)
+
+        assertTrue(model.hasChanges)
+        assertTrue(model.save())
+        val sent = port.updateCalls.single().first
+        assertEquals(listOf("Mobile"), sent.tags.map { it.name })
     }
 
     private companion object {

@@ -6,6 +6,7 @@ import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Attachment
@@ -15,6 +16,7 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
 import com.tasktracker.domain.WorkItemStatus
@@ -233,12 +235,16 @@ class SaveWorkItem(
         blockedByIDs: List<WorkItemID> = emptyList(),
         initialSprintID: SprintID? = null,
         recurrence: Recurrence? = null,
+        tagIDs: List<TagID> = emptyList(),
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
         // A task cannot wait on itself, and duplicates are one blocker stated twice.
         // Sanitised here so every caller gets the same rule rather than each screening it.
         val blockers = blockedByIDs.filter { it != id }.distinct()
+        // The cap is a domain rule; the editor also refuses a sixth selection so the
+        // tap has a visible answer, but the payload must not depend on the UI having done it.
+        val tags = tagIDs.distinct().take(TagRules.MAX_PER_ITEM)
 
         if (id == null) {
             val created = repository.createWorkItem(
@@ -253,6 +259,7 @@ class SaveWorkItem(
                 blockedByIDs = blockers,
                 sprintID = initialSprintID,
                 recurrence = recurrence,
+                tagIDs = tags,
                 now = dateProvider.now(),
             )
             return WorkItemSaveOutcome.Created(created.id)
@@ -277,6 +284,8 @@ class SaveWorkItem(
             // Same reasoning as the assignee above: the editor is the truth, so clearing
             // a repeat rule has to reach the store as a clear, not as silence.
             recurrence = Patch.Of(recurrence),
+            // And the same for tags: emptying the selection is an edit the store must hear.
+            tagIDs = Patch.Of(tags),
             now = dateProvider.now(),
         )
 
@@ -388,6 +397,9 @@ class ExpandRecurrence(
             storyPoints = current.storyPoints,
             blockedByIDs = current.blockedByIDs,
             recurrence = rule,
+            // The next occurrence keeps the series' tags; a tag is a property of the work
+            // being repeated, not of one occurrence.
+            tagIDs = current.tagIDs,
             now = dateProvider.now(),
         )
     }

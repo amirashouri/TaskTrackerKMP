@@ -5,6 +5,7 @@ import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.MentionRules
 import com.tasktracker.domain.Priority
@@ -449,6 +450,48 @@ class ProjectUseCasesTest {
             repository.moveCallCount(),
             "an unchanged status must not re-rank anything",
         )
+    }
+
+    @Test
+    fun `tags are capped at five unique ids on create`() = runTest {
+        // The picker refuses a sixth tap, but the payload must not depend on the UI having
+        // done it: a paste, a sync, or a second surface can all hand in more.
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val save = SaveWorkItem(repository, TestDateProvider(now))
+        val ids = List(7) { randomTagID() }
+
+        val outcome = save(
+            projectID = project.id,
+            title = "Tagged",
+            status = WorkItemStatus.Todo,
+            tagIDs = ids + ids.first(),
+        )
+
+        val created = assertIs<WorkItemSaveOutcome.Created>(outcome)
+        val stored = assertNotNull(repository.workItem(created.workItemID))
+        assertEquals(ids.take(5), stored.tagIDs, "first five, in order, with the repeat dropped")
+    }
+
+    @Test
+    fun `clearing every tag reaches the store as a clear`() = runTest {
+        // An edit the user made must not read as silence: `Patch.Unmentioned` would leave the
+        // removed tags on the row, which looks like the editor ignoring the tap.
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val item = repository.seedWorkItem(projectID = project.id, status = WorkItemStatus.Todo)
+        item.tagIDs = listOf(randomTagID(), randomTagID())
+        val save = SaveWorkItem(repository, TestDateProvider(now))
+
+        save(
+            id = item.id,
+            projectID = project.id,
+            title = item.title,
+            status = item.status,
+            tagIDs = emptyList(),
+        )
+
+        assertEquals(emptyList(), repository.workItem(item.id)?.tagIDs)
     }
 
     @Test

@@ -9,13 +9,16 @@ import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AddComment
@@ -109,6 +112,15 @@ class WorkItemEditorModel(
      * feature has refused at every other step.
      */
     opener: AttachmentOpener? = null,
+    /**
+     * The project's tag catalog, or `null` when this caller could not resolve it.
+     *
+     * `null` and empty are different answers and the difference is lossy if collapsed: an
+     * empty list is a project whose admin defined no tags, so an item's stale ids should be
+     * dropped; `null` is "the project read failed", where filtering would silently strip
+     * every tag the item has. The destination passes the catalog it already loaded.
+     */
+    private val availableTags: List<ProjectTag>? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -518,7 +530,13 @@ class WorkItemEditorModel(
         refusedIDs = refusedIDs - id
     }
 
-    private val original: Draft? = existing?.let { Draft.of(it) }
+    private val original: Draft? = existing?.let { item ->
+        val draft = Draft.of(item)
+        // Filtered the same way [tagIDs] is, so dropping an id whose tag the admin deleted is
+        // not counted as an edit the user made. Without this the form opens with a change
+        // already pending on every item that still references a removed tag.
+        draft.copy(tagIDs = draft.tagIDs.retainedIn(availableTags))
+    }
 
     /** The title. Raw text as typed; `WorkItemRules` trims and refuses on save. */
     var title: String by mutableStateOf(existing?.title.orEmpty())
@@ -582,6 +600,19 @@ class WorkItemEditorModel(
     var blockedByIDs: List<WorkItemID> by mutableStateOf(existing?.blockedByIDs.orEmpty())
         private set
 
+    /**
+     * The project tags this item carries, in the order the picker added them.
+     *
+     * Seeded from the item and filtered against the project's catalog when one was loaded:
+     * an id whose tag the admin has since deleted is not a selection this editor can show,
+     * and keeping it would re-save a reference the user cannot see. If the catalog could not
+     * be loaded ([availableTags] is `null`), the ids are kept untouched — see the constructor.
+     */
+    var tagIDs: List<TagID> by mutableStateOf(
+        existing?.tagIDs.orEmpty().retainedIn(availableTags).distinct().take(TagRules.MAX_PER_ITEM),
+    )
+        private set
+
     /** The id and key of the task once a save has succeeded. */
     var savedWorkItemID: WorkItemID? by mutableStateOf(existing?.id)
         private set
@@ -640,6 +671,7 @@ class WorkItemEditorModel(
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
                 recurrence = recurrence,
+                tagIDs = tagIDs,
             )
             return original == null || current != original
         }
@@ -710,6 +742,24 @@ class WorkItemEditorModel(
     }
 
     /**
+     * Toggles one project tag.
+     *
+     * The cap is refused here rather than silently dropped so the picker can disable the
+     * remaining options at five: a tap that does nothing is worse than a control that says
+     * why. A tag the loaded catalog does not define is not offered by the picker and is
+     * refused here too, so the two cannot disagree about what is assignable.
+     */
+    fun toggleTag(id: TagID) {
+        if (id in tagIDs) {
+            tagIDs = tagIDs.filterNot { it == id }
+            return
+        }
+        if (tagIDs.size >= TagRules.MAX_PER_ITEM) return
+        if (availableTags != null && availableTags.none { it.id == id }) return
+        tagIDs = tagIDs + id
+    }
+
+    /**
      * Saves, creating or updating as appropriate, and returns the outcome.
      *
      * `null` when the save did not happen, so a caller can stay on the editor. The key is
@@ -732,6 +782,7 @@ class WorkItemEditorModel(
                 blockedByIDs = blockedByIDs,
                 initialSprintID = if (savedWorkItemID == null) initialSprintID else null,
                 recurrence = recurrence,
+                tagIDs = tagIDs,
             )
         } ?: return null
 
@@ -809,6 +860,7 @@ class WorkItemEditorModel(
         val storyPoints: Int?,
         val blockedByIDs: List<WorkItemID>,
         val recurrence: Recurrence?,
+        val tagIDs: List<TagID>,
     ) {
         companion object {
             fun of(item: WorkItem) = Draft(
@@ -821,7 +873,18 @@ class WorkItemEditorModel(
                 storyPoints = item.storyPoints,
                 blockedByIDs = item.blockedByIDs.toList(),
                 recurrence = item.recurrence,
+                tagIDs = item.tagIDs.toList(),
             )
         }
     }
 }
+
+/**
+ * These ids minus any the project no longer defines, or all of them when the catalog could
+ * not be loaded.
+ *
+ * `null` is "the project read failed", not "this project has no tags" — treating the two the
+ * same would strip every tag from an item the moment the catalog read was slow.
+ */
+private fun List<TagID>.retainedIn(catalog: List<ProjectTag>?): List<TagID> =
+    catalog?.let { tags -> filter { id -> tags.any { it.id == id } } } ?: this

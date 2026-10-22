@@ -5,12 +5,14 @@ import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.UserID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
+import com.tasktracker.core.parseTagID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.database.CachedSession
@@ -20,8 +22,11 @@ import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.network.HttpClient
@@ -220,6 +225,23 @@ internal fun aProject(
     keyPrefix: String = "TT",
     name: String = "Task Tracker",
     details: String = "Everything, in one place.",
+    // Non-empty for the same reason [aWorkItem]'s blockers are: the column holds `""` for no
+    // tags, so a fixture with none would let a mapping that drops the column round-trip
+    // against itself. Two tags also prove the order survives the JSON document.
+    tags: List<ProjectTag> = listOf(
+        ProjectTag(
+            id = parseTagID("77777777-7777-4777-8777-777777777777")!!,
+            name = "Bug",
+            color = TagColor.Red,
+            icon = TagIcon.Bug,
+        ),
+        ProjectTag(
+            id = parseTagID("88888888-8888-4888-8888-888888888888")!!,
+            name = "Mobile",
+            color = TagColor.Blue,
+            icon = TagIcon.Mobile,
+        ),
+    ),
     isArchived: Boolean = true,
     nextItemNumber: Int = 42,
     createdAt: Instant = Moments.start,
@@ -229,6 +251,7 @@ internal fun aProject(
     keyPrefix = keyPrefix,
     name = name,
     details = details,
+    tags = tags,
     isArchived = isArchived,
     nextItemNumber = nextItemNumber,
     createdAt = createdAt,
@@ -271,6 +294,13 @@ internal fun aWorkItem(
         parseWorkItemID("44444444-4444-4444-8444-444444444444")!!,
         parseWorkItemID("55555555-5555-4555-8555-555555555555")!!,
     ),
+    // Non-default for the reason the blocker fixture is: the column is `null` for no tags, so
+    // a fixture without any would let an omitted column match. The ids need not resolve here —
+    // this layer only stores what the project's catalog will later be asked about.
+    tagIDs: List<TagID> = listOf(
+        parseTagID("77777777-7777-4777-8777-777777777777")!!,
+        parseTagID("88888888-8888-4888-8888-888888888888")!!,
+    ),
     // Non-default, and carrying a non-null `until`, for the same reason the three above
     // are: both new columns encode `null` for the absent state, so a fixture with no
     // recurrence would let an `expected` record omit them and match a mapping that
@@ -295,6 +325,7 @@ internal fun aWorkItem(
     storyPoints = storyPoints,
     sprintID = sprintID,
     blockedByIDs = blockedByIDs,
+    tagIDs = tagIDs,
 )
 
 /** As [aProject], for a sprint. */

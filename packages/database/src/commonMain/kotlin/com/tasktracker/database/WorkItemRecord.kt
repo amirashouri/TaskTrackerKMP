@@ -93,6 +93,14 @@ data class WorkItemRecord(
      */
     val blockedByIDs: String? = null,
     /**
+     * The project tags this item carries, as comma-separated UUID strings, or `null` for
+     * none — the same encoding and the same "no blank check" rule as [blockedByIDs].
+     *
+     * Only ids: the tag's name, colour and icon live on the project, so an admin
+     * renaming or recolouring a tag does not rewrite every item that uses it.
+     */
+    val tagIDs: String? = null,
+    /**
      * The item's repeat rule, in [com.tasktracker.domain.Recurrence]'s wire form —
      * `daily`, `weekly:3`, `monthly:15`, `yearly:6-15` — or `null` for a one-off.
      *

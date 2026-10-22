@@ -11,6 +11,7 @@ import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.network.Endpoint
 import com.tasktracker.network.HttpClient
 import com.tasktracker.network.HttpMethod
@@ -114,6 +115,8 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val keyPrefix: String,
         val name: String,
         val details: String,
+        /** Admin-owned tag catalog; defaulted so a server that predates tags still decodes. */
+        val tags: List<ProjectTag> = emptyList(),
         val memberIds: List<String>,
         val isArchived: Boolean,
         val nextItemNumber: Int,
@@ -128,6 +131,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         keyPrefix = keyPrefix,
         name = name,
         details = details,
+        tags = tags,
         memberIDs = memberIds.mapNotNull { parseUserIDOrNull(it) },
         isArchived = isArchived,
         nextItemNumber = nextItemNumber,
@@ -162,6 +166,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val keyPrefix: String,
         val name: String,
         val details: String,
+        val tags: List<ProjectTag> = emptyList(),
         val memberIds: List<String>,
         val isArchived: Boolean,
         val nextItemNumber: Int,
@@ -178,6 +183,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         keyPrefix = project.keyPrefix,
         name = project.name,
         details = project.details,
+        tags = project.tags,
         memberIds = project.memberIDs.map { it.stringValue },
         isArchived = project.isArchived,
         nextItemNumber = project.nextItemNumber,

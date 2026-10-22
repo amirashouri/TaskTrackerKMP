@@ -165,6 +165,10 @@ class ProjectsUiIosTest {
         runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTheCopyControl)
 
     @Test
+    fun backlogRowShowsTagsAsIconsWithoutTheirNames() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTagsAsIconsWithoutTheirNames)
+
+    @Test
     fun copyingABacklogRowHandsTheTitleAndDetailsToTheHost() =
         runComposeUiTest(block = WorkItemBacklogRowScenarios.copyingARowHandsTheTitleAndDetailsToTheHost)
 
@@ -239,6 +243,10 @@ class ProjectsUiIosTest {
 
     @Test
     fun showsTheCopyControl() = runComposeUiTest(block = WorkItemCardScenarios.showsTheCopyControl)
+
+    @Test
+    fun showsTagsAsIconsWithoutTheirNames() =
+        runComposeUiTest(block = WorkItemCardScenarios.showsTagsAsIconsWithoutTheirNames)
 
     @Test
     fun copyingACardHandsTheTitleAndDetailsToTheHost() =

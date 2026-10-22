@@ -1,5 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
+import com.tasktracker.core.JSONCoding
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseAttachmentID
@@ -7,6 +9,7 @@ import com.tasktracker.core.parseCommentID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseStatusChangeID
+import com.tasktracker.core.parseTagID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.database.AttachmentRecord
@@ -19,12 +22,14 @@ import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemOrderingKey
 import com.tasktracker.domain.WorkItemStatus
+import kotlinx.serialization.builtins.ListSerializer
 import kotlin.time.Instant
 
 /**
@@ -73,12 +78,38 @@ internal fun Project.toRecord(): ProjectRecord = ProjectRecord(
     keyPrefix = keyPrefix,
     name = name,
     details = details,
+    tags = tags.toTagColumn(),
     memberIDs = memberIDs.joinToString(",") { it.stringValue },
     isArchived = isArchived,
     nextItemNumber = nextItemNumber,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
+
+/**
+ * The project's tag catalog as the JSON document [ProjectRecord.tags] stores.
+ *
+ * Empty is the empty string rather than `"[]"`, so a row written before this column existed
+ * and a project with no tags are the same value — the same "no blank check" rule
+ * [List<WorkItemID>.toBlockedByColumn] uses.
+ */
+internal fun List<ProjectTag>.toTagColumn(): String =
+    if (isEmpty()) "" else JSONCoding.json.encodeToString(ListSerializer(ProjectTag.serializer()), this)
+
+/**
+ * Decodes [ProjectRecord.tags], dropping a document this build cannot read.
+ *
+ * An unreadable catalog reads as empty, which is the only loss a reader can absorb: the
+ * project still opens, its items still render, and the admin editor can replace the
+ * catalog on the next save. Throwing here would cost the whole project row.
+ */
+internal fun String.toTags(): List<ProjectTag> =
+    if (isEmpty()) {
+        emptyList()
+    } else {
+        runCatching { JSONCoding.json.decodeFromString(ListSerializer(ProjectTag.serializer()), this) }
+            .getOrDefault(emptyList())
+    }
 
 /**
  * A copy of this row carrying the state in [value], without touching [ProjectRecord.id] or
@@ -111,6 +142,7 @@ internal fun ProjectRecord.apply(value: Project): ProjectRecord = copy(
     keyPrefix = value.keyPrefix,
     name = value.name,
     details = value.details,
+    tags = value.tags.toTagColumn(),
     memberIDs = value.memberIDs.joinToString(",") { it.stringValue },
     isArchived = value.isArchived,
     updatedAt = value.updatedAt,
@@ -133,6 +165,7 @@ internal val ProjectRecord.domainValue: Project?
             keyPrefix = keyPrefix,
             name = name,
             details = details,
+            tags = tags.toTags(),
             memberIDs = memberIDs.split(',').mapNotNull(::parseUserID),
             isArchived = isArchived,
             nextItemNumber = nextItemNumber,
@@ -171,6 +204,24 @@ internal fun List<WorkItemID>.toBlockedByColumn(): String? =
  */
 internal fun String?.toBlockedByIDs(): List<WorkItemID> =
     this?.split(',')?.mapNotNull { runCatching { WorkItemID(it) }.getOrNull() }.orEmpty()
+
+/**
+ * Encodes a tag list for [WorkItemRecord.tagIDs], in the same comma-separated shape as
+ * [toBlockedByColumn]. Tags are capped by [com.tasktracker.domain.TagRules.MAX_PER_ITEM]
+ * in the domain, so no truncation is repeated here.
+ */
+internal fun List<TagID>.toTagIDColumn(): String? =
+    if (isEmpty()) null else joinToString(",") { it.stringValue }
+
+/**
+ * Decodes [WorkItemRecord.tagIDs], dropping ids this build cannot parse.
+ *
+ * Drop rather than fail for the same reason an unreadable blocker id is dropped: one corrupt
+ * id costs one chip, where a thrown decode costs the whole card. An id the *project* no
+ * longer defines is dropped later, by the renderer that resolves it.
+ */
+internal fun String?.toTagIDs(): List<TagID> =
+    this?.split(',')?.mapNotNull(::parseTagID).orEmpty()
 
 /**
  * Encodes a repeat rule for [WorkItemRecord.recurrenceRaw], or `null` for a one-off.
@@ -242,6 +293,7 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         // a value its caller goes on to re-save.
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
+        tagIDs = reconciled.tagIDs.toTagIDColumn(),
         recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
         recurrenceUntil = reconciled.recurrence?.until,
         sprintID = reconciled.sprintID?.stringValue,
@@ -279,6 +331,7 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         resolvedAt = reconciled.resolvedAt,
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
+        tagIDs = reconciled.tagIDs.toTagIDColumn(),
         // A pulled value like any other: a device has to be able to *learn* that a
         // card was made recurring, or that one stopped being — including its absence.
         recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
@@ -332,6 +385,7 @@ internal val WorkItemRecord.domainValue: WorkItem?
             resolvedAt = resolvedAt,
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs.toBlockedByIDs(),
+            tagIDs = tagIDs.toTagIDs(),
             recurrence = recurrenceRaw.toRecurrence(recurrenceUntil),
             sprintID = parsedSprint,
         )

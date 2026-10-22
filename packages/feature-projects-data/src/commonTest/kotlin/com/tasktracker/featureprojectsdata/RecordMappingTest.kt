@@ -67,6 +67,18 @@ class RecordMappingTest {
     }
 
     @Test
+    fun aProjectWithAnUnreadableTagCatalogStillReadsItsOtherColumns() {
+        // A corrupt tag document costs the catalog, not the project: the card list and every
+        // item still open, and the admin can replace the catalog on the next save. Throwing
+        // here would make one bad tag row hide an entire project.
+        val record = aProject().toRecord().copy(tags = "{not json")
+
+        val project = assertNotNull(record.domainValue)
+        assertEquals(emptyList(), project.tags)
+        assertEquals("Task Tracker", project.name)
+    }
+
+    @Test
     fun aProjectWithAnUnreadableIdIsDroppedRatherThanInvented() {
         // The original read `ProjectID(stringValue:) ?? ProjectID()`, so a corrupt id produced
         // a *new, real* project: unreachable by any delete, unmatched by any sync, and
@@ -150,6 +162,24 @@ class RecordMappingTest {
         assertEquals(7, record.rank)
         assertEquals(Moments.start, record.createdAt)
         assertEquals(Moments.later, record.updatedAt)
+        assertEquals(
+            "77777777-7777-4777-8777-777777777777,88888888-8888-4888-8888-888888888888",
+            record.tagIDs,
+        )
+    }
+
+    @Test
+    fun aWorkItemDropsTagIdsItCannotParseRatherThanTheCard() {
+        // One corrupt id costs one chip, which the renderer would drop anyway; throwing here
+        // would cost the whole task. An id the project no longer defines survives *this* layer
+        // and is dropped by the view that resolves it, which is why the two are separate.
+        val record = aWorkItem().toRecord().copy(tagIDs = "not-a-tag,77777777-7777-4777-8777-777777777777")
+
+        val item = assertNotNull(record.domainValue)
+        assertEquals(
+            listOf("77777777-7777-4777-8777-777777777777"),
+            item.tagIDs.map { it.stringValue },
+        )
     }
 
     @Test

@@ -30,6 +30,7 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
@@ -115,6 +116,14 @@ fun WorkItemBacklogRow(
      * draws no copy control there rather than a press that silently does nothing.
      */
     onCopy: ((String) -> Unit)? = null,
+    /**
+     * The project's tag catalog, resolved by the host.
+     *
+     * The row resolves its own [WorkItem.tagIDs] against it, so the icons follow a rename or
+     * recolour an administrator makes without rewriting the item. Empty draws nothing, which
+     * is the same shape [onCopy]'s null uses: no row, no gap.
+     */
+    projectTags: List<ProjectTag> = emptyList(),
 ) {
     Column(
         modifier = modifier
@@ -159,6 +168,9 @@ fun WorkItemBacklogRow(
                 color = ttLabelSecondary(),
             )
         }
+        // The tag strip, leading-aligned above the actions: the icons are a property of the
+        // task, and the row's last line stays reserved for what you can do with it.
+        WorkItemTagIcons(tags = projectTags.resolveFor(item.tagIDs))
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),

@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
+import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomWorkItemID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Recurrence
@@ -102,6 +103,19 @@ class ExpandRecurrenceTest {
             repository.workItem(finished.id)?.dueDate,
             "the finished instance's due date must not slide",
         )
+    }
+
+    @Test
+    fun theNextInstanceKeepsTheSeriesTags() = runTest {
+        // A tag is a property of the work being repeated, not of one occurrence. Dropping it
+        // would make every weekly chore silently lose its labels after the first run.
+        val (repository, expand, projectID) = harness()
+        val finished = repository.seedItem(projectID, Recurrence.Daily(), dueDate = anchor)
+        finished.tagIDs = listOf(randomTagID(), randomTagID())
+
+        val next = assertNotNull(expand(finished.id, utc))
+
+        assertEquals(finished.tagIDs, next.tagIDs)
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.core.TagID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
@@ -470,6 +471,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: List<WorkItemID>,
         recurrence: Recurrence?,
+        tagIDs: List<TagID>,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -489,6 +491,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 recurrence = recurrence,
                 storyPoints = storyPoints,
                 blockedByIDs = blockedByIDs,
+                tagIDs = tagIDs,
                 sprintID = sprintID,
                 rank = itemCounter,
                 createdAt = now,
@@ -526,6 +529,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         now: Instant,
         blockedByIDs: Patch<List<WorkItemID>>,
         recurrence: Patch<Recurrence?>,
+        tagIDs: Patch<List<TagID>>,
     ): WorkItem {
         throwIfFailing()
         return lock.withLock {
@@ -557,6 +561,10 @@ class FakeProjectRepository : ProjectRepositoryPort {
             when (recurrence) {
                 is Patch.Unmentioned -> Unit
                 is Patch.Of -> item.recurrence = recurrence.value
+            }
+            when (tagIDs) {
+                is Patch.Unmentioned -> Unit
+                is Patch.Of -> item.tagIDs = tagIDs.value
             }
             item.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
