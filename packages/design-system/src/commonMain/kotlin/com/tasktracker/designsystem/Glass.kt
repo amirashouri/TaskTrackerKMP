@@ -870,7 +870,7 @@ fun <Option> ttLensPlacement(
     var previousX by remember { mutableStateOf(lensX) }
     var previousTime by remember { mutableStateOf(0L) }
 
-    val currentTime = System.nanoTime()
+    val currentTime = currentNanoTime()
     val dtSeconds = if (previousTime > 0) (currentTime - previousTime) / 1_000_000_000.0 else 0.0
     val deltaX = lensX.value - previousX.value
     val currentVelocityX = if (dtSeconds > 0) (deltaX / dtSeconds).dp else 0.dp
