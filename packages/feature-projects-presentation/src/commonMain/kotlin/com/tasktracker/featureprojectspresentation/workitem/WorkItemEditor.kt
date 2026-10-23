@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.TagID
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
@@ -678,7 +680,7 @@ private fun ProjectsEditorFullScreen(
             Spacer(Modifier.height(40.dp))
         }
 
-        // The form's actions, pinned rather than last: on a phone the details, comments and
+// The form's actions, pinned rather than last: on a phone the details, comments and
         // attachments push Save several screens down, and a save that has to be found is a
         // draft the user abandons. The slab floats over the scroll and the scroll reserves its
         // measured height, so nothing ends up permanently behind it.
@@ -690,6 +692,9 @@ private fun ProjectsEditorFullScreen(
                 // the bar is drawn after this screen, so sharing the band would hide Save.
                 .padding(bottom = tabBarInset + ttSpacing.md)
                 .ttGlassCard()
+                // Block touches from passing through to the scrollable form behind
+                .background(Color.Transparent)
+                .pointerInput(Unit) { /* consume touches */ }
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
