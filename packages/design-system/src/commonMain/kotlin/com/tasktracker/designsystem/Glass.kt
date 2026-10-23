@@ -1249,17 +1249,17 @@ fun ttGlassButton(
     )
 
     // Touch target expansion: ensure minimum 48dp touch target per accessibility guidelines.
-    // The clickable is applied to the outer box (full size), while the visual button
-    // (with padding and glass) is centered inside. This makes edges clickable.
-    val minTouchTarget = 48.dp
+    // The clickable is applied to the outer box which wraps the visual button.
+    // Padding on the outer box expands the clickable area beyond the visual button.
+    val touchTargetPadding = 12.dp // expands clickable area by 24dp each dimension
 
-    // Outer box: clickable with expanded touch target (minimum 48dp)
+    // Outer box: clickable with expanded touch target via padding
     Box(
         modifier = modifier
             .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
             .scale(scale)
-            // Expand touch target to minimum 48dp by ensuring the clickable area is at least 48dp
-            .size(minTouchTarget)
+            // Expand touch target by adding padding around the visual button
+            .padding(touchTargetPadding)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
