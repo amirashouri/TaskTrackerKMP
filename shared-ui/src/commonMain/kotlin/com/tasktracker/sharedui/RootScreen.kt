@@ -1,6 +1,9 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -235,7 +238,12 @@ fun RootScreen(
 
     val themeScheme by preferences.themeScheme.collectAsState()
     val accentPalette by preferences.accentPalette.collectAsState()
-    val glassIntensity by preferences.glassIntensity.collectAsState()
+    val rawGlassIntensity by preferences.glassIntensity.collectAsState()
+    val glassIntensity by animateFloatAsState(
+        targetValue = rawGlassIntensity,
+        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow),
+        label = "glassIntensitySpring",
+    )
     val isDark = ttIsDarkTheme(themeScheme)
     SystemBarAppearance(isDark)
 
