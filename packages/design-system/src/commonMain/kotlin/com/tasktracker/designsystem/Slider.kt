@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,6 +58,13 @@ import kotlin.math.roundToInt
  * holding it in a plain parameter will not. The slider knows the last value it emitted, so it
  * says so.
  *
+ * ## Haptic feedback at milestones
+ *
+ * When [hapticMilestones] is non-empty (default: 25%, 50%, 75%), the slider fires a light
+ * haptic tick each time the thumb crosses a milestone during a drag. The haptic fires on the
+ * *crossing* — not on every frame at the milestone — so a slow drag across 50% fires once.
+ * The final commit also fires if it crosses a milestone not already hit during the drag.
+ *
  * ## Why the semantics are not optional
  *
  * The accessibility contract is written onto the node rather than left to the visual: a slider
@@ -71,20 +79,42 @@ fun ttSlider(
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (Float) -> Unit,
     modifier: Modifier = Modifier,
+    hapticMilestones: List<Float> = listOf(0.25f, 0.5f, 0.75f),
 ) {
     var trackWidthPx by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val haptics = HapticFeedback()
 
     fun fractionAt(xPx: Float): Float =
         if (trackWidthPx > 0) (xPx / trackWidthPx).coerceIn(0f, 1f) else value
 
+    // Track which milestones have been crossed during the current gesture
+    var crossedMilestones by remember { mutableStateOf(mutableSetOf<Float>()) }
+
+    fun checkAndFireHaptic(newValue: Float, oldValue: Float) {
+        if (hapticMilestones.isNotEmpty()) {
+            val sortedMilestones = hapticMilestones.sorted()
+            for (milestone in sortedMilestones) {
+                if (milestone !in crossedMilestones) {
+                    val crossed = if (newValue > oldValue) {
+                        // Dragging forward: crossed if newValue >= milestone and old value < milestone
+                        newValue >= milestone && oldValue < milestone
+                    } else {
+                        // Dragging backward: crossed if newValue <= milestone and old value > milestone
+                        newValue <= milestone && oldValue > milestone
+                    }
+                    if (crossed) {
+                        crossedMilestones.add(milestone)
+                        haptics.tick()
+                    }
+                }
+            }
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // The touch target is this box's height, and it borrows `iconButtonSize` rather
-            // than introducing a number: that is the 44dp the icon buttons already use, and one
-            // platform minimum should exist once in this package. It is a taller box *around* a
-            // shorter track — padding would have moved the track instead of growing the target.
             .height(ttSpacing.iconButtonSize)
             .onSizeChanged { trackWidthPx = it.width }
             .semantics {
@@ -100,16 +130,13 @@ fun ttSlider(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var lastEmitted = fractionAt(down.position.x)
-                    // Set on the press, not on the drag, and this is the reason the gesture is
-                    // written out rather than delegated to `detectHorizontalDragGestures`: that
-                    // helper's `onDragStart` fires only once the touch slop has been exceeded,
-                    // so a *tap* on the track would do nothing at all. Every native slider
-                    // answers a tap by throwing the thumb to that point, and a slider that
-                    // needs a drag to respond is the omission that makes a hand-rolled one feel
-                    // broken. A tap is also a finished interaction, so it commits immediately.
+                    crossedMilestones.clear()
+                    // Check if initial tap crosses a milestone
+                    checkAndFireHaptic(lastEmitted, value)
                     onValueChange(lastEmitted)
                     down.consume()
 
+                    var previousEmitted = lastEmitted
                     try {
                         var pointer = down.id
                         while (true) {
@@ -122,17 +149,14 @@ fun ttSlider(
                             if (change.positionChanged()) {
                                 change.consume()
                                 lastEmitted = fractionAt(change.position.x)
+                                checkAndFireHaptic(lastEmitted, previousEmitted)
+                                previousEmitted = lastEmitted
                                 onValueChange(lastEmitted)
                             }
                         }
                     } finally {
-                        // The one and only commit for this gesture, which is why it is in a
-                        // `finally` rather than on the pointer-up branch: a gesture the system
-                        // cancels has still moved the thumb, and dropping the change would leave
-                        // the app disagreeing with the control the user just touched. Having it
-                        // here also means exactly one call — the earlier version committed from
-                        // the press, the up branch *and* here, which is three writes for one
-                        // drag and was caught by counting them rather than by reading a value.
+                        // Fire haptic for any milestone crossed by the final value but not during drag
+                        checkAndFireHaptic(lastEmitted, previousEmitted)
                         onValueChangeFinished(lastEmitted)
                     }
                 }

@@ -59,7 +59,7 @@ This section covers refinements to the Liquid Glass design system in `:packages:
 | --- | --- | --- | --- | --- | --- |
 | 7.1 | Complete | P1 | Vestigial hairline at 0% intensity (Reduce Transparency) | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.1 |
 | 7.2 | Complete | P1 | Spring-based interpolation for glass intensity value | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.2 |
-| 7.3 | Pending | P1 | Haptic feedback on glass intensity slider | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.3 |
+| 7.3 | Complete | P1 | Haptic feedback on glass intensity slider | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.3 |
 | 7.4 | Pending | P2 | Per-component glass thickness tokens (thin/standard/thick) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.4 |
 | 7.5 | Pending | P2 | Subsurface scattering horizontal gradient on tall cards | 7.4 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.5 |
 | 7.6 | Pending | P3 | Chromatic aberration at rim (subtle prism effect) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.6 |
