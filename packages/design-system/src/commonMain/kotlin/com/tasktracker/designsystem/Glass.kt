@@ -1248,18 +1248,22 @@ fun ttGlassButton(
         label = "ttGlassButton press",
     )
 
-    // Touch target expansion: ensure minimum 48dp touch target per accessibility guidelines.
-    // The clickable is applied to the outer box which wraps the visual button.
-    // Padding on the outer box expands the clickable area beyond the visual button.
-    val touchTargetPadding = 12.dp // expands clickable area by 24dp each dimension
-
-    // Outer box: clickable with expanded touch target via padding
+    // Visual button with glass surface, internal padding
     Box(
         modifier = modifier
             .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
             .scale(scale)
-            // Expand touch target by adding padding around the visual button
-            .padding(touchTargetPadding)
+            .ttGlassSurface(
+                shape = CircleShape,
+                tint = resolvedTint,
+                thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
+            )
+            // Rule 1 again, and the reason the padding is *inside* the glass: applied after
+            // the material it would enlarge the row without enlarging the control.
+            .padding(
+                vertical = ttSpacing.buttonPaddingV,
+                horizontal = ttSpacing.buttonPaddingH,
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -1269,22 +1273,6 @@ fun ttGlassButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        // Visual button with glass surface and internal padding
-        Box(
-            modifier = Modifier
-                .ttGlassSurface(
-                    shape = CircleShape,
-                    tint = resolvedTint,
-                    thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
-                )
-                // Rule 1 again, and the reason the padding is *inside* the glass: applied after
-                // the material it would enlarge the row without enlarging the control.
-                .padding(
-                    vertical = ttSpacing.buttonPaddingV,
-                    horizontal = ttSpacing.buttonPaddingH,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
             // Both children stay composed and cross-fade, so the button does not change width as
             // the label becomes a spinner. Removing the label from the tree instead would make the
             // button collapse to the spinner and then spring back — a layout jump on every press.
@@ -1303,8 +1291,7 @@ fun ttGlassButton(
             if (loading) {
                 Box(modifier = Modifier.alpha(1f - if (loading) 0f else 1f)) {
                     ttSpinner(color = content)
-                }
-            }
+}
         }
     }
 }
