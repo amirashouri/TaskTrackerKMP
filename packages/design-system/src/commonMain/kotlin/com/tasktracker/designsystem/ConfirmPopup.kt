@@ -8,12 +8,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import org.jetbrains.compose.resources.stringResource
@@ -75,47 +78,53 @@ fun ConfirmPopup(
     val shape = RoundedCornerShape(ttRadius.surface)
 
     Box(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            // Block touches from passing through to underlying content
+            .background(Color.Transparent, RoundedCornerShape(0.dp))
+            .pointerInput(Unit) {
+                // Consume all pointer events to prevent click-through
+            },
         contentAlignment = Alignment.Center,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .ttGlassSurface(
-                shape = shape,
-                base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
-            )
-            .padding(ttSpacing.formStack)
-            .testTag(tag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-    ) {
-        ttText(
-            text = title,
-            style = ttTypography.titleSmall,
-            color = ttLabel(),
-        )
-        ttText(
-            text = body,
-            style = ttTypography.callout,
-            color = ttLabelSecondary(),
-            textAlign = TextAlign.Start,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+                    shape = shape,
+                    base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
+                )
+                .padding(ttSpacing.formStack)
+                .testTag(tag),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            ttGlassButton(
-                label = cancelLabel,
-                onClick = onCancel,
-                modifier = Modifier.testTag(TTConfirmPopupCancelTag),
+            ttText(
+                text = title,
+                style = ttTypography.titleSmall,
+                color = ttLabel(),
             )
-            ttGlassButton(
-                label = confirmLabel,
-                onClick = onConfirm,
-                modifier = Modifier.testTag(TTConfirmPopupConfirmTag),
-                style = confirmStyle,
-        )
+            ttText(
+                text = body,
+                style = ttTypography.callout,
+                color = ttLabelSecondary(),
+                textAlign = TextAlign.Start,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            ) {
+                ttGlassButton(
+                    label = cancelLabel,
+                    onClick = onCancel,
+                    modifier = Modifier.testTag(TTConfirmPopupCancelTag),
+                )
+                ttGlassButton(
+                    label = confirmLabel,
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag(TTConfirmPopupConfirmTag),
+                    style = confirmStyle,
+                )
+            }
         }
     }
-}
 }
