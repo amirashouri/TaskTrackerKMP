@@ -78,10 +78,11 @@ uses a new `hasUnsavedChanges` that compares against the values the editor opene
 - **Done:** models, guards, wiring, strings, and structural tests on JVM, iOS, and the
   Android host; `scripts/check.sh full` green after regenerating the baseline. The
   pre-existing `shared-ui` failures were the `Spacer(modifier…)` typo above, not this
-  feature; fixing it was required for a green full run.
-- **Pending:** branch, commit, push, and PR to `main`.
-- **Next step:** `git switch -c feat/editor-discard-confirmation`, commit, then `gh pr create
-  --base main`.
+  feature; fixing it was required for a green full run. Branch
+  `feat/editor-discard-confirmation` is pushed and PR #66 is open against `main`.
+- **Pending:** review and merge PR #66; set this spec to `done` in the final branch update
+  before merge.
+- **Next step:** review the PR diff and merge if clean.
 - **Gotchas:** `ConfirmPopup` is a `Box(fillMaxSize)` overlay, not a platform dialog, so its
   parent must be a `Box`; that is why `ProjectEditorScreen` gained a wrapper. The preview-only
   `WorkItemEditorScreen` / `WorkItemEditorForm` still have no guard — they do not reach a
