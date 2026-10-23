@@ -34,6 +34,29 @@ class ProjectEditorModelTest {
         assertFalse(model.canSave)
     }
 
+    /**
+     * An empty create form is clean, so Cancel closes it without a discard prompt.
+     *
+     * The prompt reads this flag, and an untouched form that claimed a change would ask the
+     * user to confirm losing nothing on every accidental Cancel.
+     */
+    @Test
+    fun `an untouched new form has nothing to discard`() = runTest {
+        val model = ProjectEditorModel(null, FakeProjectRepository(), TestDateProvider())
+
+        assertFalse(model.hasChanges)
+    }
+
+    /** A picked member is work the create form would lose, so it counts as a change. */
+    @Test
+    fun `a member picked on a new form counts as a change`() = runTest {
+        val model = ProjectEditorModel(null, FakeProjectRepository(), TestDateProvider())
+
+        model.onMemberIDsChanged(listOf(testUserID))
+
+        assertTrue(model.hasChanges)
+    }
+
     @Test
     fun `a new project derives its prefix from the name`() = runTest {
         val model = ProjectEditorModel(null, FakeProjectRepository(), TestDateProvider())

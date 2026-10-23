@@ -85,6 +85,20 @@ class AdminProjectCreateModel(
     val canSave: Boolean
         get() = name.isNotBlank() && keyPrefix.isNotBlank()
 
+    /**
+     * Whether the draft holds anything the admin typed or picked.
+     *
+     * The create form starts empty, so this is also its unsaved-changes test: an untouched
+     * form must close on Cancel without a discard prompt, while a name, notes or a member
+     * selection is work that would be thrown away. [clearDraft] runs after a successful
+     * create, so the next form starts clean.
+     */
+    val hasChanges: Boolean
+        get() = name.isNotBlank() ||
+            keyPrefix.isNotBlank() ||
+            details.isNotBlank() ||
+            memberIDs.isNotEmpty()
+
     /** Opens the phone's create sheet. */
     fun openAddForm() {
         dismissError()

@@ -538,6 +538,27 @@ class WorkItemEditorModel(
         draft.copy(tagIDs = draft.tagIDs.retainedIn(availableTags))
     }
 
+    /**
+     * The draft a pristine create starts from.
+     *
+     * [original] is `null` for a create, which is why [hasChanges] answers "changed" there -
+     * a create always writes something. [hasUnsavedChanges] needs the opposite question, so
+     * it compares against the values the editor opens with instead: a blank form is clean,
+     * even when the route seeded a board lane through [initialStatus].
+     */
+    private val createBaseline: Draft = Draft(
+        title = "",
+        details = "",
+        status = initialStatus ?: WorkItemStatus.Backlog,
+        priority = Priority.Medium,
+        assigneeID = null,
+        dueDate = null,
+        storyPoints = null,
+        blockedByIDs = emptyList(),
+        recurrence = null,
+        tagIDs = emptyList(),
+    )
+
     /** The title. Raw text as typed; `WorkItemRules` trims and refuses on save. */
     var title: String by mutableStateOf(existing?.title.orEmpty())
         private set
@@ -661,20 +682,44 @@ class WorkItemEditorModel(
      */
     val hasChanges: Boolean
         get() {
-            val current = Draft(
-                title = title.trim(),
-                details = details.trim(),
-                status = status,
-                priority = priority,
-                assigneeID = assigneeID,
-                dueDate = dueDate,
-                storyPoints = storyPoints,
-                blockedByIDs = blockedByIDs,
-                recurrence = recurrence,
-                tagIDs = tagIDs,
-            )
+            val current = currentDraft()
             return original == null || current != original
         }
+
+    /**
+     * Whether closing the editor would throw away work.
+     *
+     * The question the Cancel button asks, and deliberately not [hasChanges]: that one is
+     * `true` for every create, including an untouched one, because a create always writes a
+     * record. Prompting there would teach the user to dismiss the prompt without reading it.
+     * A create is dirty only once it differs from the values it opened with - a typed title
+     * or notes, a chosen status, priority, assignee, due date, repeat rule, tag, story
+     * points, or a staged attachment waiting for the save that mints the item's id.
+     *
+     * [storyPoints] is parsed from [storyPointsText], so invalid text parses to `null` and
+     * would look untouched. The text itself is checked as well: it is still something the
+     * user typed and would still disappear.
+     */
+    val hasUnsavedChanges: Boolean
+        get() {
+            if (currentDraft() != (original ?: createBaseline)) return true
+            val pointsTextIsWork = storyPointsText.isNotBlank() && storyPoints == null
+            return pointsTextIsWork || stagedAttachments.isNotEmpty()
+        }
+
+    /** The draft's comparable state, in the shape [Draft] compares and the editor holds. */
+    private fun currentDraft() = Draft(
+        title = title.trim(),
+        details = details.trim(),
+        status = status,
+        priority = priority,
+        assigneeID = assigneeID,
+        dueDate = dueDate,
+        storyPoints = storyPoints,
+        blockedByIDs = blockedByIDs,
+        recurrence = recurrence,
+        tagIDs = tagIDs,
+    )
 
     /** Whether save is available. A task needs a title; everything else has a default. */
     val canSave: Boolean get() = title.isNotBlank()

@@ -205,6 +205,7 @@ fun AdminProjectsDestination(
                 }
             },
             onCancel = create::closeAddForm,
+            hasUnsavedChanges = create.hasChanges,
             visible = create.isAddFormOpen,
             onDismissRequest = create::closeAddForm,
             isBusy = create.isCreating,
@@ -261,6 +262,7 @@ private fun AdminProjectEditor(
         onDetailsChanged = model::onDetailsChanged,
         onSave = { scope.launch { if (model.save()) onClose() } },
         onCancel = onClose,
+        hasUnsavedChanges = model.hasChanges,
         errorMessage = model.errorMessage,
         isBusy = model.isSaving,
         // Only the admin editor gets the catalog composer; the member editor passes no slot at

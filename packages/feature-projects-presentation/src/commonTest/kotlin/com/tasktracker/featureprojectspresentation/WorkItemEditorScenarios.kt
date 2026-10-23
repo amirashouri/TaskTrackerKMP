@@ -13,6 +13,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.tasktracker.designsystem.TTConfirmPopupCancelTag
+import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.Comment
@@ -153,6 +155,56 @@ object WorkItemEditorScenarios {
     }
 
     /**
+     * Cancel on an untouched editor closes it without asking.
+     *
+     * `hasUnsavedChanges = false` is the host's answer for a pristine create or an unchanged
+     * edit. A prompt here would be the app asking the user to confirm losing nothing - and on
+     * a create that is every Cancel.
+     */
+    val cancellingACleanEditorClosesIt: suspend ComposeUiTest.() -> Unit = {
+        var cancels = 0
+        setContent {
+            editorSheet(hasUnsavedChanges = false, onCancel = { cancels += 1 })
+        }
+
+        onNodeWithTag(WorkItemCancelTag).performClick()
+
+        assertEquals(1, cancels, "a clean editor asked before closing and then did not close")
+        onNodeWithTag(WorkItemEditorDiscardTag).assertDoesNotExist()
+    }
+
+    /**
+     * Cancel on a dirty editor asks, and dismissing the prompt keeps the draft.
+     *
+     * The assertion that the editor's own action is still on screen after dismissing matters:
+     * a popup that closed the editor on its own Cancel would satisfy a check of `cancels`
+     * alone.
+     */
+    val cancellingADirtyEditorAsksBeforeDiscarding: suspend ComposeUiTest.() -> Unit = {
+        var cancels = 0
+        setContent {
+            editorSheet(hasUnsavedChanges = true, onCancel = { cancels += 1 })
+        }
+
+        onNodeWithTag(WorkItemCancelTag).performClick()
+
+        onNodeWithTag(WorkItemEditorDiscardTag).assertIsDisplayed()
+        assertEquals(0, cancels, "the first tap on Cancel discarded the draft without asking")
+
+        onNodeWithTag(TTConfirmPopupCancelTag).performClick()
+
+        onNodeWithTag(WorkItemEditorDiscardTag).assertDoesNotExist()
+        // The editor's own action is still on screen: dismissing the prompt did not close it.
+        onNodeWithTag(WorkItemCancelTag).assertIsDisplayed()
+        assertEquals(0, cancels, "dismissing the prompt closed the editor")
+
+        onNodeWithTag(WorkItemCancelTag).performClick()
+        onNodeWithTag(TTConfirmPopupConfirmTag).performClick()
+
+        assertEquals(1, cancels, "confirming the discard did not close the editor")
+    }
+
+    /**
      * The create editor, with the title as real state the way the host wires it.
      *
      * Every other field is a fixed value: this scenario is about the draft reaching the
@@ -168,6 +220,8 @@ object WorkItemEditorScenarios {
         projectTags: List<ProjectTag> = emptyList(),
         isAdmin: Boolean = false,
         onManageTags: (() -> Unit)? = null,
+        hasUnsavedChanges: Boolean = false,
+        onCancel: () -> Unit = {},
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -201,8 +255,9 @@ object WorkItemEditorScenarios {
                 onRecurrenceChanged = {},
                 onFileAway = {},
                 onSave = {},
-                onCancel = {},
+                onCancel = onCancel,
                 onDismissError = {},
+                hasUnsavedChanges = hasUnsavedChanges,
                 comments = comments,
                 projectTags = projectTags,
                 isAdmin = isAdmin,

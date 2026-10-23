@@ -200,6 +200,7 @@ fun ProjectsHost(
                     }
                 },
                 onCancel = { isProjectEditorOpen = false },
+                hasUnsavedChanges = editor.hasChanges,
                 visible = isProjectEditorOpen,
                 onDismissRequest = { isProjectEditorOpen = false },
                 onDismissed = {

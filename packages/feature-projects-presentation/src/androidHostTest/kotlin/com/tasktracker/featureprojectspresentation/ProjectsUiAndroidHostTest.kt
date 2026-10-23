@@ -12,7 +12,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The seven project-presentation scenario suites - card content rules, board column
+ * The project-presentation scenario suites - card content rules, board column
  * behaviour, the board's lane row geometry, the archive round trip, the projects list,
  * the sprint detail card, and the sprint editor sheet - on the Android host, under Robolectric.
  *
@@ -23,8 +23,8 @@ import org.robolectric.annotation.GraphicsMode
  * host's own file beside it. Every assertion lives in the scenario objects in `commonTest`;
  * these files are only entry points, which is why they are near-identical.
  *
- * The 50 entry points below are generated from the `val`s declared on those seven
- * objects, so a new scenario cannot be written and then quietly not run.
+ * Each entry point below is generated from a `val` declared on one of those objects, so a new
+ * scenario cannot be written and then quietly not run.
  *
  * ## Robolectric, or nothing runs at all
  *
@@ -341,6 +341,30 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun anAdminCanOpenTheProjectEditorFromAnEmptyTagSection() =
         runComposeUiTest(block = WorkItemEditorScenarios.anAdminCanOpenTheProjectEditorFromAnEmptyTagSection)
+
+    @Test
+    fun cancellingACleanProjectEditorClosesIt() =
+        runComposeUiTest(block = ProjectEditorScenarios.cancellingACleanEditorClosesIt)
+
+    @Test
+    fun cancellingADirtyProjectEditorAsks() =
+        runComposeUiTest(block = ProjectEditorScenarios.cancellingADirtyEditorAsksBeforeDiscarding)
+
+    @Test
+    fun cancellingACleanProjectSheetClosesIt() =
+        runComposeUiTest(block = ProjectEditorScenarios.cancellingACleanProjectSheetClosesIt)
+
+    @Test
+    fun cancellingADirtyProjectSheetAsks() =
+        runComposeUiTest(block = ProjectEditorScenarios.cancellingADirtyProjectSheetAsksBeforeDiscarding)
+
+    @Test
+    fun cancellingACleanWorkItemEditorClosesIt() =
+        runComposeUiTest(block = WorkItemEditorScenarios.cancellingACleanEditorClosesIt)
+
+    @Test
+    fun cancellingADirtyWorkItemEditorAsks() =
+        runComposeUiTest(block = WorkItemEditorScenarios.cancellingADirtyEditorAsksBeforeDiscarding)
 
     @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)

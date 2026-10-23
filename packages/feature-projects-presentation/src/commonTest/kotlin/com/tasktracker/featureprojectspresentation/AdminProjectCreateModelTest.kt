@@ -116,6 +116,26 @@ class AdminProjectCreateModelTest {
         )
     }
 
+    /**
+     * The create form's unsaved-changes test: a blank form is clean, any picked or typed value
+     * is work, and a successful create returns the draft to clean for the next form.
+     *
+     * The phone's sheet and the wide window's pane share this flag, so a stale `true` after a
+     * create would make the next Cancel ask about a draft that no longer exists.
+     */
+    @Test
+    fun `an untouched create form is clean and a member pick is a change`() = runTest {
+        val model = AdminProjectCreateModel(RecordingAdminProjectsPort(created = storedProject()))
+        assertFalse(model.hasChanges, "a blank create form must close without a discard prompt")
+
+        model.onMemberIDsChanged(listOf(memberID))
+        assertTrue(model.hasChanges, "a picked member is a value the dismissed form would lose")
+
+        model.onNameChanged("Gemini")
+        assertTrue(model.create())
+        assertFalse(model.hasChanges, "the create emptied the draft, so the next form starts clean")
+    }
+
     @Test
     fun `a create the server refuses keeps the draft and reports the error`() = runTest {
         val port = RecordingAdminProjectsPort(createFailure = AppError.Conflict("project"))
