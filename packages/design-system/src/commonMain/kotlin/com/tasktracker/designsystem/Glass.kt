@@ -537,6 +537,7 @@ fun Modifier.ttGlassSurface(
     val canvas = ttCanvas()
     val intensity = LocalGlassIntensity.current
     val rim = ttGlassHairline()
+    val isDark = LocalThemeScheme.current == ThemeScheme.Dark
 
     // Two different washes, because there are two different things being modelled. Without a
     // base the fill *is* the glass, so it runs from the tint at the top to a calmer version of
@@ -634,6 +635,33 @@ fun Modifier.ttGlassSurface(
                     endY = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() },
                 ),
             )
+
+            // Chromatic aberration: subtle prism effect at the refractive edge.
+            // Only in dark mode (where rim is a highlight) and only when border exists.
+            // Drawn just inside the top edge to avoid rounded-corner clipping.
+            if (isDark && borderWidth > 0.dp && base == null) {
+                val strokePx = with(density) { borderWidth.toPx() }
+                val y = strokePx // Just inside the top edge, below the rounded corner clip
+                val alpha = rim.alpha * 0.4f
+                drawLine(
+                    color = Color.Red.copy(alpha = alpha),
+                    start = Offset(0f, y),
+                    end = Offset(size.width, y),
+                    strokeWidth = strokePx,
+                )
+                drawLine(
+                    color = Color.Green.copy(alpha = alpha * 1.5f),
+                    start = Offset(0f, y + strokePx * 0.5f),
+                    end = Offset(size.width, y + strokePx * 0.5f),
+                    strokeWidth = strokePx,
+                )
+                drawLine(
+                    color = Color.Blue.copy(alpha = alpha),
+                    start = Offset(0f, y + strokePx),
+                    end = Offset(size.width, y + strokePx),
+                    strokeWidth = strokePx,
+                )
+            }
         }
         // The rim. It is not `ttSeparator`, because a separator is a
         // *structural* divider and this is an edge: the point of a rim is that the
