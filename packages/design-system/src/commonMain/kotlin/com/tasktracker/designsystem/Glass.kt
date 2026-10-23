@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
@@ -725,14 +726,21 @@ fun Modifier.ttGlassLens(
     shape: Shape,
     washAlpha: Float = ttGlass.TAB_LENS_ALPHA,
     rimAlpha: Float = ttGlass.TAB_LENS_RIM_ALPHA,
+    velocityX: Dp = 0.dp,
 ): Modifier {
     val intensity = LocalGlassIntensity.current
+    val density = LocalDensity.current
+    // Motion blur threshold: 500 dp/s triggers blur, max radius 8dp
+    val velocityThreshold = 500.dp
+    val maxBlurRadius = 8.dp
+    val speed = kotlin.math.abs(velocityX.value)
+    val blurRadius: Float = if (speed > velocityThreshold.value) {
+        ((speed - velocityThreshold.value) * 0.01f).coerceIn(0f, maxBlurRadius.value)
+    } else 0f
+    val blurPx = with(density) { Dp(blurRadius).toPx() }
     return this
         .clip(shape)
         .drawBehind {
-            // `endY` spelled out for the reason documented on `ttGlassSurface`: an unbounded
-            // `Brush.verticalGradient` collapses onto its last stop, and this element's height
-            // is not known when the brush is built.
             val lensAlpha = washAlpha * intensity.coerceIn(0f, 1f)
             drawRect(
                 brush = Brush.verticalGradient(
@@ -744,6 +752,25 @@ fun Modifier.ttGlassLens(
                     endY = size.height,
                 ),
             )
+            // Motion blur simulation: when moving fast, draw a semi-transparent trail
+            if (blurRadius > 0f) {
+                val trailAlpha = (blurRadius / maxBlurRadius.value * 0.15f).coerceIn(0f, 0.15f)
+                val direction = if (velocityX.value > 0) 1f else -1f
+                val trailWidth = (blurPx * 2f).coerceIn(0f, size.width * 0.5f)
+                val trailX = if (velocityX.value > 0) -trailWidth else 0f
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = trailAlpha),
+                            Color.White.copy(alpha = 0f),
+                        ),
+                        startX = 0f,
+                        endX = trailWidth,
+                    ),
+                    topLeft = Offset(trailX, 0f),
+                    size = Size(trailWidth, size.height),
+                )
+            }
         }
         .border(
             width = ttGlass.hairlineWidth,
@@ -827,40 +854,45 @@ fun <Option> ttLensPlacement(
     // there fails to resolve. The values are the same (damping 0.7, stiffness MediumLow),
     // which is the point: this is the one spring the app uses for a selection that moves.
     val lensSpring: AnimationSpec<Dp> = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
-    val lensX by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.left ?: 0).toDp() },
-        animationSpec = lensSpring,
-        label = "lensX",
-    )
-    val lensY by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.top ?: 0).toDp() },
-        animationSpec = lensSpring,
-        label = "lensY",
-    )
-    val lensWidth by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.width ?: 0).toDp() },
-        animationSpec = lensSpring,
-        label = "lensWidth",
-    )
-    val lensHeight by animateDpAsState(
-        targetValue = with(density) { (selectedBounds?.height ?: 0).toDp() },
-        animationSpec = lensSpring,
-        label = "lensHeight",
-    )
-    return LensPlacement(lensX, lensY, lensWidth, lensHeight)
+
+    val targetX = with(density) { (selectedBounds?.left ?: 0).toDp() }
+    val targetY = with(density) { (selectedBounds?.top ?: 0).toDp() }
+    val targetWidth = with(density) { (selectedBounds?.width ?: 0).toDp() }
+    val targetHeight = with(density) { (selectedBounds?.height ?: 0).toDp() }
+
+    val lensX by animateDpAsState(targetValue = targetX, animationSpec = lensSpring, label = "lensX")
+    val lensY by animateDpAsState(targetValue = targetY, animationSpec = lensSpring, label = "lensY")
+    val lensWidth by animateDpAsState(targetValue = targetWidth, animationSpec = lensSpring, label = "lensWidth")
+    val lensHeight by animateDpAsState(targetValue = targetHeight, animationSpec = lensSpring, label = "lensHeight")
+
+    // Track velocity for motion blur: (current - previous) / dt in dp/s
+    // Use mutable state to track previous position and time for velocity calculation
+    var previousX by remember { mutableStateOf(lensX) }
+    var previousTime by remember { mutableStateOf(0L) }
+
+    val currentTime = System.nanoTime()
+    val dtSeconds = if (previousTime > 0) (currentTime - previousTime) / 1_000_000_000.0 else 0.0
+    val deltaX = lensX.value - previousX.value
+    val currentVelocityX = if (dtSeconds > 0) (deltaX / dtSeconds).dp else 0.dp
+    previousX = lensX
+    previousTime = currentTime
+
+    return LensPlacement(lensX, lensY, lensWidth, lensHeight, currentVelocityX)
 }
 
 /**
- * The four animated dimensions of a traveling lens.
+ * The four animated dimensions of a traveling lens, plus velocity for motion blur.
  *
  * A data class rather than four separate return values so a caller writes one destructuring
  * and cannot update one without the other — the four have to move together or the lens distorts.
+ * Velocity is in dp/s for horizontal travel (x-axis).
  */
 data class LensPlacement(
     val x: Dp,
     val y: Dp,
     val width: Dp,
     val height: Dp,
+    val velocityX: Dp = 0.dp,
 )
 
 /**
@@ -918,7 +950,7 @@ fun <Option> TTGlassSegmentedPicker(
     // [ttLensPlacement], which is the one copy of this spring and this arithmetic; the
     // segmented picker, the flow picker, and the accent palette picker all travel the same
     // way and were inline in two of them before this existed.
-    val (lensX, lensY, lensWidth, lensHeight) = ttLensPlacement(positions, selection, density)
+    val (lensX, lensY, lensWidth, lensHeight, velocityX) = ttLensPlacement(positions, selection, density)
 
     val lensShape = RoundedCornerShape(ttRadius.control)
 
@@ -972,7 +1004,7 @@ fun <Option> TTGlassSegmentedPicker(
                 modifier = Modifier
                     .size(lensWidth, lensHeight)
                     .offset(x = lensX, y = lensY)
-                    .ttGlassLens(lensShape),
+                    .ttGlassLens(lensShape, velocityX = velocityX),
             )
         }
     }
@@ -1000,7 +1032,7 @@ val density = LocalDensity.current
     val positions = remember { mutableStateMapOf<Option, IntRect>() }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val selectedBounds = positions[selection]
-    val (lensX, lensY, lensWidth, lensHeight) = ttLensPlacement(positions, selection, density)
+    val (lensX, lensY, lensWidth, lensHeight, velocityX) = ttLensPlacement(positions, selection, density)
 
     Box(
         modifier = modifier
@@ -1019,7 +1051,7 @@ val density = LocalDensity.current
                 modifier = Modifier
                     .offset(x = lensX, y = lensY)
                     .size(lensWidth, lensHeight)
-                    .ttGlassLens(CircleShape),
+                    .ttGlassLens(CircleShape, velocityX = velocityX),
             )
         }
 
