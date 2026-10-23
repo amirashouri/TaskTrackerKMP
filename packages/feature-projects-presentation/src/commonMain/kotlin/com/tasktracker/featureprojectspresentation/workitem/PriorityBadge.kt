@@ -31,6 +31,8 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectspresentation.statusLabel
 
 /**
  * A task's urgency, as a tinted pill.
@@ -155,3 +157,86 @@ private val BADGE_DOT: Dp = 5.dp
 private const val CRITICAL_FILL_ALPHA = 0.18f
 private const val HIGH_FILL_ALPHA = 0.14f
 private const val RESTING_FILL_ALPHA = 0.08f
+
+
+/**
+ * A work item's workflow status, as a tinted pill matching [PriorityBadge] styling.
+ *
+ * Only shown for items on the board (Kanban section) — backlog items are triaged, not
+ * worked, and closed items are already resolved. The badge uses the same low-alpha wash
+ * and hairline rim as [PriorityBadge], with a solid dot for the two terminal states
+ * [WorkItemStatus.isComplete] and [WorkItemStatus.isTerminal && !isComplete] (Done/Closed).
+ */
+@Composable
+fun WorkItemStatusBadge(
+    status: WorkItemStatus,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(ttRadius.row)
+
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(statusFill(status))
+            .border(ttSeparatorWidth, statusRim(status), shape)
+            .padding(horizontal = ttSpacing.sm, vertical = BADGE_PADDING_V)
+            .testTag(WorkItemStatusBadgeTag(status)),
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatusDot(filled = status.isTerminal)
+        ttText(
+            text = statusLabel(status),
+            style = ttTypography.captionSmall,
+            color = ttLabel(),
+        )
+    }
+}
+
+/** The wash behind the pill. Low alpha on purpose - matches PriorityBadge. */
+@Composable
+private fun statusFill(status: WorkItemStatus): Color = when (status) {
+    WorkItemStatus.Backlog -> ttLabelSecondary().copy(alpha = RESTING_FILL_ALPHA)
+    WorkItemStatus.Todo -> ttAccent().copy(alpha = HIGH_FILL_ALPHA)
+    WorkItemStatus.InProgress -> ttAccent().copy(alpha = HIGH_FILL_ALPHA)
+    WorkItemStatus.InReview -> ttAccent().copy(alpha = HIGH_FILL_ALPHA)
+    WorkItemStatus.Done -> ttError().copy(alpha = CRITICAL_FILL_ALPHA)
+    WorkItemStatus.Closed -> ttLabelSecondary().copy(alpha = RESTING_FILL_ALPHA)
+}
+
+/** The hairline rim. Active workflow states take the accent; terminal/backlog take separator. */
+@Composable
+private fun statusRim(status: WorkItemStatus): Color = when (status) {
+    WorkItemStatus.Backlog -> ttSeparator()
+    WorkItemStatus.Todo -> ttAccent()
+    WorkItemStatus.InProgress -> ttAccent()
+    WorkItemStatus.InReview -> ttAccent()
+    WorkItemStatus.Done -> ttError()
+    WorkItemStatus.Closed -> ttSeparator()
+}
+
+/**
+ * The dot that makes terminal states distinguishable without reading the text.
+ *
+ * Solid for Done/Closed (terminal), hollow for active workflow states - the same
+ * redundant channel the fill weight carries, expressed as a shape.
+ */
+@Composable
+private fun StatusDot(
+    filled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val shape = CircleShape
+    Box(
+        modifier = modifier
+            .size(BADGE_DOT)
+            .clip(shape)
+            .background(if (filled) ttLabel() else Color.Transparent)
+            .border(ttSeparatorWidth, ttLabelSecondary(), shape),
+    )
+}
+
+/** Tag for testing, suffixed with the status wire value. */
+fun WorkItemStatusBadgeTag(status: WorkItemStatus): String = "${WorkItemStatusBadgeTagPrefix}.${status.wireValue}"
+
+const val WorkItemStatusBadgeTagPrefix = "workItem.statusBadge"

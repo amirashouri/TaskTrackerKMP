@@ -325,6 +325,7 @@ private fun KanbanSectionList(
                     onOpen = { onSelect(item.id) },
                     onCopy = onCopy,
                     projectTags = projection.project?.tags.orEmpty(),
+                    showStatusBadge = true,
                 )
             }
         }
