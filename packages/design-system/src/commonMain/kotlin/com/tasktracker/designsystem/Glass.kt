@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.util.lerp as lerpFloat
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.DeviceMotion
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -1246,25 +1248,20 @@ fun ttGlassButton(
         label = "ttGlassButton press",
     )
 
+    // Touch target expansion: ensure minimum 48dp touch target per accessibility guidelines.
+    // The clickable is applied to the outer box (full size), while the visual button
+    // (with padding and glass) is centered inside. This makes edges clickable.
+    val minTouchTarget = 48.dp
+
+    // Outer box: clickable with expanded touch target (minimum 48dp)
     Box(
         modifier = modifier
             .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
             .scale(scale)
-            .ttGlassSurface(
-                shape = CircleShape,
-                tint = resolvedTint,
-                thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
-            )
-            // Rule 1 again, and the reason the padding is *inside* the glass: applied after
-            // the material it would enlarge the row without enlarging the control.
-            .padding(
-                vertical = ttSpacing.buttonPaddingV,
-                horizontal = ttSpacing.buttonPaddingH,
-            )
+            // Expand touch target to minimum 48dp by ensuring the clickable area is at least 48dp
+            .size(minTouchTarget)
             .clickable(
                 interactionSource = interactionSource,
-                // The press response *is* the scale, so the default ripple would stack a
-                // second reaction under a control that already shrinks.
                 indication = null,
                 enabled = interactive,
                 role = Role.Button,
@@ -1272,24 +1269,41 @@ fun ttGlassButton(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        // Both children stay composed and cross-fade, so the button does not change width as
-        // the label becomes a spinner. Removing the label from the tree instead would make the
-        // button collapse to the spinner and then spring back — a layout jump on every press.
+        // Visual button with glass surface and internal padding
         Box(
             modifier = Modifier
-                .alpha(if (loading) 0f else 1f)
-                .semantics { contentDescription = label },
+                .ttGlassSurface(
+                    shape = CircleShape,
+                    tint = resolvedTint,
+                    thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
+                )
+                // Rule 1 again, and the reason the padding is *inside* the glass: applied after
+                // the material it would enlarge the row without enlarging the control.
+                .padding(
+                    vertical = ttSpacing.buttonPaddingV,
+                    horizontal = ttSpacing.buttonPaddingH,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            ttText(
-                text = label,
-                style = ttTypography.button,
-                color = content,
-                textAlign = TextAlign.Center,
-            )
-        }
-        if (loading) {
-            Box(modifier = Modifier.alpha(1f - if (loading) 0f else 1f)) {
-                ttSpinner(color = content)
+            // Both children stay composed and cross-fade, so the button does not change width as
+            // the label becomes a spinner. Removing the label from the tree instead would make the
+            // button collapse to the spinner and then spring back — a layout jump on every press.
+            Box(
+                modifier = Modifier
+                    .alpha(if (loading) 0f else 1f)
+                    .semantics { contentDescription = label },
+            ) {
+                ttText(
+                    text = label,
+                    style = ttTypography.button,
+                    color = content,
+                    textAlign = TextAlign.Center,
+                )
+            }
+            if (loading) {
+                Box(modifier = Modifier.alpha(1f - if (loading) 0f else 1f)) {
+                    ttSpinner(color = content)
+                }
             }
         }
     }
@@ -1313,6 +1327,9 @@ fun ttGlassAddButton(
         modifier = modifier
             .size(ttSpacing.floatingActionSize)
             .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
+            // Block touches from passing through to underlying content
+            .background(Color.Transparent)
+            .pointerInput(Unit) { /* consume touches */ }
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
@@ -1349,6 +1366,9 @@ fun ttGlassIconButton(
             .size(ttSpacing.iconButtonSize)
             .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
             .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
+            // Block touches from passing through to underlying content
+            .background(Color.Transparent)
+            .pointerInput(Unit) { /* consume touches */ }
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
