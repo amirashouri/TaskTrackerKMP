@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -27,6 +30,7 @@ import com.tasktracker.core.TagID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
@@ -55,8 +59,10 @@ import com.tasktracker.featureprojectsdomain.PickedFile
 import com.tasktracker.domain.Attachment
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
-
+import com.tasktracker.resources.common_discard
 import com.tasktracker.resources.common_save
+import com.tasktracker.resources.editor_discard_body
+import com.tasktracker.resources.editor_discard_title
 import com.tasktracker.resources.work_item_archive
 import com.tasktracker.resources.work_item_back
 import com.tasktracker.resources.work_item_details_label
@@ -236,6 +242,8 @@ fun WorkItemEditorSheet(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
+    /** See [WorkItemEditorModel.hasUnsavedChanges]; Cancel asks first only when this is true. */
+    hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
@@ -334,6 +342,7 @@ fun WorkItemEditorSheet(
         onSave = onSave,
         onCancel = onCancel,
         onDismissError = onDismissError,
+        hasUnsavedChanges = hasUnsavedChanges,
         onBack = onBack,
         blockers = blockers,
         onOpenBlocker = onOpenBlocker,
@@ -414,6 +423,8 @@ private fun ProjectsEditorFullScreen(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
+    /** See [WorkItemEditorSheet.hasUnsavedChanges]. */
+    hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     /** See [WorkItemEditorForm.onBack]. */
     onBack: (() -> Unit)? = null,
@@ -480,6 +491,10 @@ private fun ProjectsEditorFullScreen(
     onManageTags: (() -> Unit)? = null,
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
+
+    // Cancel's guard: this surface owns the button, so the prompt travels with the screen
+    // rather than being re-wired by every host that hands it a model.
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -657,7 +672,10 @@ private fun ProjectsEditorFullScreen(
                 pendingAttachments = pendingAttachments,
                 onRemovePending = onRemovePending,
             )
-            Spacer(modifier.height(40.dp))
+            // `Modifier`, not the screen's `modifier` parameter: the parameter carries the
+            // shell's test tag and fill, and a Spacer wearing both becomes a second node
+            // under the editor's tag (and forces the scroll content to the viewport).
+            Spacer(Modifier.height(40.dp))
         }
 
         // The form's actions, pinned rather than last: on a phone the details, comments and
@@ -686,7 +704,11 @@ private fun ProjectsEditorFullScreen(
             }
             ttGlassButton(
                 label = stringResource(Res.string.common_cancel),
-                onClick = onCancel,
+                onClick = {
+                    // Save and File Away leave without asking: they are what the draft was for.
+                    // Cancel is the one that destroys it, and only a draft with work in it asks.
+                    if (hasUnsavedChanges) showDiscardConfirmation = true else onCancel()
+                },
                 modifier = Modifier.testTag(WorkItemCancelTag),
             )
             ttGlassButton(
@@ -698,6 +720,22 @@ private fun ProjectsEditorFullScreen(
                 } else {
                     TTGlassButtonStyle()
                 },
+            )
+        }
+
+        if (showDiscardConfirmation) {
+            ConfirmPopup(
+                title = stringResource(Res.string.editor_discard_title),
+                body = stringResource(Res.string.editor_discard_body),
+                cancelLabel = stringResource(Res.string.common_cancel),
+                confirmLabel = stringResource(Res.string.common_discard),
+                onCancel = { showDiscardConfirmation = false },
+                onConfirm = {
+                    showDiscardConfirmation = false
+                    onCancel()
+                },
+                confirmTint = ttError(),
+                tag = WorkItemEditorDiscardTag,
             )
         }
     }
@@ -1031,6 +1069,7 @@ private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light
         onSave = {},
         onCancel = {},
         onDismissError = {},
+        hasUnsavedChanges = false,
     )
 }
 
@@ -1045,5 +1084,6 @@ const val WorkItemDueToggleTag = "workItem.editor.dueToggle"
 const val WorkItemFileAwayTag = "workItem.editor.fileAway"
 const val WorkItemSaveTag = "workItem.editor.save"
 const val WorkItemCancelTag = "workItem.editor.cancel"
+const val WorkItemEditorDiscardTag = "workItem.editor.discard"
 
 private const val DETAILS_MIN_LINES = 3

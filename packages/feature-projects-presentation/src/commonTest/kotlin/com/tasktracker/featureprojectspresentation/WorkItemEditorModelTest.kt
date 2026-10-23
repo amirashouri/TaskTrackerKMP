@@ -73,6 +73,71 @@ class WorkItemEditorModelTest {
     }
 
     /**
+     * A pristine create is clean, so Cancel closes it without asking.
+     *
+     * [WorkItemEditorModel.hasChanges] answers `true` for every create because a create always
+     * writes a record. The discard guard needs the other question, or every new item would
+     * prompt - including one opened from a board lane, which seeds a non-default status before
+     * the user has touched anything.
+     */
+    @Test
+    fun `an untouched new item has nothing to discard`() = runTest {
+        assertFalse(newItem().hasUnsavedChanges)
+
+        val seeded = WorkItemEditorModel(
+            testProject().id,
+            null,
+            FakeProjectRepository(),
+            TestDateProvider(),
+            WorkItemStatus.InProgress,
+        )
+        assertFalse(
+            seeded.hasUnsavedChanges,
+            "the board lane seeded the status; it is not work the user did",
+        )
+    }
+
+    /** Typing into a create is work, and clearing it back to the start is clean again. */
+    @Test
+    fun `a typed title is work to discard and clearing it is not`() = runTest {
+        val model = newItem()
+
+        model.onTitleChanged("Write the spec")
+        assertTrue(model.hasUnsavedChanges)
+
+        model.onTitleChanged("")
+        assertFalse(model.hasUnsavedChanges)
+    }
+
+    /**
+     * A staged attachment is held only until Save mints the item's id, so dismissing the
+     * create would drop a pick the user watched land in the list.
+     */
+    @Test
+    fun `a staged attachment is work to discard`() = runTest {
+        val model = newItem()
+
+        model.stageAttachment(
+            PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1, 2)),
+        )
+
+        assertTrue(model.hasUnsavedChanges)
+    }
+
+    /**
+     * Invalid points text parses to `null`, the same value a blank field holds, so a draft that
+     * only compared parsed values would look untouched and Cancel would drop the typed text.
+     */
+    @Test
+    fun `unparsed story points text is still work to discard`() = runTest {
+        val model = newItem()
+
+        model.onStoryPointsChanged("five")
+
+        assertTrue(model.hasUnsavedChanges)
+    }
+
+    /**
      * The key the project issues is read back rather than composed locally.
      *
      * A key is `prefix-number`, and the number depends on what the project has already
@@ -168,6 +233,16 @@ class WorkItemEditorModelTest {
         model.onTitleChanged("Ship it properly")
 
         assertTrue(model.hasChanges)
+    }
+
+    /** The edit path's discard answer is [WorkItemEditorModel.hasChanges]: no prompt until edited. */
+    @Test
+    fun `an untouched edit has nothing to discard`() = runTest {
+        val model = editing(testWorkItem(projectID = testProject().id, title = "Ship it"))
+        assertFalse(model.hasUnsavedChanges)
+
+        model.onTitleChanged("Ship it properly")
+        assertTrue(model.hasUnsavedChanges)
     }
 
     @Test

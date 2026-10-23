@@ -1,10 +1,22 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.tasktracker.core.UserID
+import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.TTBottomSheetScaffold
+import com.tasktracker.designsystem.ttError
 import com.tasktracker.featureteamsdomain.User
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.common_cancel
+import com.tasktracker.resources.common_discard
+import com.tasktracker.resources.editor_discard_body
+import com.tasktracker.resources.editor_discard_title
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * [NewProjectForm] as the board opens it: a sheet over the board, which is still there underneath
@@ -33,6 +45,13 @@ fun NewProjectSheet(
     onDetailsChanged: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    /**
+     * Whether closing now would throw away work.
+     *
+     * Cancel and the sheet's scrim dismissal share the guard: both end the draft, and a
+     * prompt on one but not the other would let the accidental tap through.
+     */
+    hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
     visible: Boolean = true,
@@ -49,9 +68,21 @@ fun NewProjectSheet(
     },
     errorMessage: String? = null,
 ) {
+    // The action to run once the user confirms the discard, if a dismissal has been interrupted.
+    // Kept as the action rather than a boolean so the pill matches how it was closed: Cancel and
+    // the scrim are the same content loss but not the same callback. Keyed on `visible` so a
+    // prompt interrupted by some other close cannot greet the next time the sheet opens.
+    var pendingDiscard by remember(visible) { mutableStateOf<(() -> Unit)?>(null) }
+
+    val guardDismiss: (() -> Unit) -> Unit = { action ->
+        if (hasUnsavedChanges) pendingDiscard = action else action()
+    }
+
     TTBottomSheetScaffold(
         visible = visible,
-        onDismissRequest = onDismissRequest,
+        // The scrim tap is the other way out of this sheet. Guarding only the Cancel button
+        // would leave a second route to lose the draft without a question.
+        onDismissRequest = { guardDismiss(onDismissRequest) },
         modifier = modifier,
         onDismissed = onDismissed,
     ) {
@@ -64,7 +95,7 @@ fun NewProjectSheet(
             onKeyPrefixChanged = onKeyPrefixChanged,
             onDetailsChanged = onDetailsChanged,
             onSave = onSave,
-            onDismiss = onCancel,
+            onDismiss = { guardDismiss(onCancel) },
             isBusy = isBusy,
             isCreating = isCreating,
             selectedMemberIDs = selectedMemberIDs,
@@ -74,4 +105,27 @@ fun NewProjectSheet(
             errorMessage = errorMessage,
         )
     }
+
+    // Draws over the sheet, which stays composed behind it. A `visible = false` sheet is on its
+    // way out, so a confirmation over it would be a prompt about a draft that is already gone.
+    if (visible) {
+        pendingDiscard?.let { discard ->
+            ConfirmPopup(
+                title = stringResource(Res.string.editor_discard_title),
+                body = stringResource(Res.string.editor_discard_body),
+                cancelLabel = stringResource(Res.string.common_cancel),
+                confirmLabel = stringResource(Res.string.common_discard),
+                onCancel = { pendingDiscard = null },
+                onConfirm = {
+                    pendingDiscard = null
+                    discard()
+                },
+                confirmTint = ttError(),
+                tag = NewProjectDiscardTag,
+            )
+        }
+    }
 }
+
+/** The discard prompt drawn over the project sheet. */
+const val NewProjectDiscardTag = "projects.newForm.discard"

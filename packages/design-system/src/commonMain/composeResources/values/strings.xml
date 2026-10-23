@@ -103,7 +103,15 @@
     <string name="common_back">Back</string>
     <string name="common_cancel">Cancel</string>
     <string name="common_delete">Delete</string>
+    <string name="common_discard">Discard</string>
     <string name="common_save">Save</string>
+
+    <!--
+      The guard in front of Cancel on an editor. Shared by the project form and the work item
+      editor, so it says "changes" rather than naming either surface's fields.
+    -->
+    <string name="editor_discard_title">Discard changes?</string>
+    <string name="editor_discard_body">Your changes have not been saved. Leaving now will discard them.</string>
 
     <!--
       The date field. Three words of chrome and then the calendar's own vocabulary.

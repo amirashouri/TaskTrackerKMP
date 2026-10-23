@@ -88,7 +88,10 @@ class ProjectEditorModel(
      */
     val hasChanges: Boolean
         get() = if (isCreating) {
-            name.isNotBlank() || keyPrefix.isNotBlank() || details.isNotBlank()
+            name.isNotBlank() ||
+                keyPrefix.isNotBlank() ||
+                details.isNotBlank() ||
+                memberIDs != originalMemberIDs
         } else {
             name.trim() != originalName || details.trim() != originalDetails || memberIDs != originalMemberIDs
         }

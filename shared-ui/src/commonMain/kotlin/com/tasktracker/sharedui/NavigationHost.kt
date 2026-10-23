@@ -1907,6 +1907,7 @@ private fun WorkItemEditorDestination(
         onCancel = {
             onDismiss()
         },
+        hasUnsavedChanges = model.hasUnsavedChanges,
         onDismissError = model::dismissError,
         // Blocker/dependency management
         blockers = blockers,
