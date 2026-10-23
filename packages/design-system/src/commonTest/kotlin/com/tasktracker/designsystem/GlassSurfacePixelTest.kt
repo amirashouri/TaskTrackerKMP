@@ -24,8 +24,10 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.round
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -258,6 +260,45 @@ class GlassSurfacePixelTest {
         )
     }
 
+    /**
+     * Wide card (400x150) subsurface scattering: center of top edge brighter than corners.
+     *
+     * The horizontal radial gradient simulates light entering the top edge and scattering
+     * toward the sides. Center should be ≥ 2 channels brighter than corners.
+     */
+    @Test
+    fun `wide card has subtle center brightening from subsurface scattering`() {
+        assumeHostRasterisesText()
+        val reading = requireNotNull(measureWideCardScatter(ThemeScheme.Light)) { NO_READING }
+        println(
+            "wide card light: center ${reading.center.hex()}, corner ${reading.corner.hex()}, " +
+                "delta ${reading.channelDelta} channels",
+        )
+        assertTrue(
+            reading.channelDelta >= MIN_SCATTER_DELTA,
+            "light appearance: wide card center ${reading.center.hex()} is only " +
+                "${reading.channelDelta} channels brighter than corner ${reading.corner.hex()}, " +
+                "below ${MIN_SCATTER_DELTA} — subsurface scattering not visible",
+        )
+    }
+
+    /** Same assertion in dark. */
+    @Test
+    fun `wide card has subtle center brightening from subsurface scattering in dark`() {
+        assumeHostRasterisesText()
+        val reading = requireNotNull(measureWideCardScatter(ThemeScheme.Dark)) { NO_READING }
+        println(
+            "wide card dark: center ${reading.center.hex()}, corner ${reading.corner.hex()}, " +
+                "delta ${reading.channelDelta} channels",
+        )
+        assertTrue(
+            reading.channelDelta >= MIN_SCATTER_DELTA,
+            "dark appearance: wide card center ${reading.center.hex()} is only " +
+                "${reading.channelDelta} channels brighter than corner ${reading.corner.hex()}, " +
+                "below ${MIN_SCATTER_DELTA} — subsurface scattering not visible",
+        )
+    }
+
     // --- measurement ------------------------------------------------------------------------------
 
     private class FillReading(
@@ -408,6 +449,83 @@ class GlassSurfacePixelTest {
      */
     private fun measureRim(scheme: ThemeScheme): RimReading? = measureRimAtIntensity(scheme, 1f)
 
+    /**
+     * Measures the subsurface scattering on a wide card (400x150).
+     *
+     * Renders a wide card and samples the top edge at center (x = width/2) and corner
+     * (x = width/8). The subsurface scattering gradient should make the center
+     * brighter than the corners.
+     */
+    private fun measureWideCardScatter(scheme: ThemeScheme): ScatterReading? {
+        var frame: PixelMap? = null
+        var bounds: DpRect? = null
+        var scale = 1f
+
+        rasterising {
+            setContent {
+                ttTheme(scheme) {
+                    CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
+                        Box(Modifier.fillMaxSize().background(ttCanvas())) {
+                            wideCard()
+                        }
+                    }
+                }
+            }
+            waitForIdle()
+            frame = onRoot().captureToImage().toPixelMap()
+            val root = onRoot().getBoundsInRoot()
+            scale = frame!!.width.toFloat() / max(root.right.value, 1f)
+            bounds = onNodeWithTag(WIDE_CARD_TAG).getBoundsInRoot()
+        }
+
+        val pixels = frame ?: return null
+        val box = bounds ?: return null
+
+        val boxWidthPx = (box.width.value * scale).toInt()
+        val boxLeftPx = (box.left.value * scale).toInt()
+        val topPx = (box.top.value * scale).toInt()
+
+        // Sample at center (x = width/2) and corner (x = width/8 from left)
+        val centerX = boxLeftPx + boxWidthPx / 2
+        val cornerX = boxLeftPx + boxWidthPx / 8
+        val y = topPx + 2 // A few rows down from top edge
+
+        val center = pixels[centerX.coerceIn(0, pixels.width - 1), y.coerceIn(0, pixels.height - 1)]
+        val corner = pixels[cornerX.coerceIn(0, pixels.width - 1), y.coerceIn(0, pixels.height - 1)]
+
+val centerColor = Color(center.red, center.green, center.blue, 1f)
+        val cornerColor = Color(corner.red, corner.green, corner.blue, 1f)
+
+        // Channel difference (max of R, G, B deltas)
+        val delta = max(
+            max(
+                abs(channel(centerColor.red) - channel(cornerColor.red)),
+                abs(channel(centerColor.green) - channel(cornerColor.green)),
+            ),
+            abs(channel(centerColor.blue) - channel(cornerColor.blue)),
+        )
+
+        return ScatterReading(centerColor, cornerColor, delta)
+    }
+
+    @Composable
+    private fun wideCard() {
+        Box(
+            Modifier
+                .testTag(WIDE_CARD_TAG)
+                .size(400.dp, 150.dp) // Aspect ratio > 2:1 (400/150 = 2.67)
+                .ttGlassSurface(
+                    shape = RoundedCornerShape(ttRadius.surface),
+                ),
+        )
+    }
+
+    private data class ScatterReading(
+        val center: Color,
+        val corner: Color,
+        val channelDelta: Int,
+    )
+
     @Composable
     private fun glassCard(borderWidth: Dp) {
         Box(
@@ -445,6 +563,15 @@ class GlassSurfacePixelTest {
         const val VESTIGIAL_RIM_MINIMUM = 1.0
 
         /**
+         * Minimum channel difference between center and corner of wide card top edge.
+         *
+         * The subsurface scattering gradient (alpha 0.025 at center) should produce a
+         * measurable brightening. 2 channels is well above noise floor (1) and well below
+         * what a full highlight would produce (~20).
+         */
+        const val MIN_SCATTER_DELTA = 2
+
+        /**
          * The density the rim is measured at.
          *
          * 3, because at the host's own density of 1 a 0.5dp stroke is half a pixel and is not
@@ -469,5 +596,10 @@ class GlassSurfacePixelTest {
                 "the pixel read returned nothing and the test would otherwise pass unmeasured"
 
         const val CARD_TAG = "glass.pixel.card"
+        const val WIDE_CARD_TAG = "glass.pixel.wideCard"
+
+        const val CHANNEL_SCALE = 255f
+
+        fun channel(value: Float): Int = round(value * CHANNEL_SCALE).toInt()
     }
 }

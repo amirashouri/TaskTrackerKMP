@@ -61,7 +61,7 @@ This section covers refinements to the Liquid Glass design system in `:packages:
 | 7.2 | Complete | P1 | Spring-based interpolation for glass intensity value | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.2 |
 | 7.3 | Complete | P1 | Haptic feedback on glass intensity slider | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.3 |
 | 7.4 | Complete | P2 | Per-component glass thickness tokens (thin/standard/thick) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.4 |
-| 7.5 | Pending | P2 | Subsurface scattering horizontal gradient on tall cards | 7.4 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.5 |
+| 7.5 | Complete | P2 | Subsurface scattering horizontal gradient on wide cards | 7.4 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.5 |
 | 7.6 | Pending | P3 | Chromatic aberration at rim (subtle prism effect) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.6 |
 | 7.7 | Pending | P3 | Motion blur on fast lens travel (segmented picker, tab bar) | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.7 |
 | 7.8 | Pending | P3 | Accelerometer-driven specular parallax (platform seam) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.8 |

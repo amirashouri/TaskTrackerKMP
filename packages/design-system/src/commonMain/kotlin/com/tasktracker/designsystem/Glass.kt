@@ -592,6 +592,27 @@ fun Modifier.ttGlassSurface(
                     endY = size.height,
                 ),
             )
+
+            // Subsurface scattering on wide cards: light enters the top edge and scatters
+            // toward the sides, creating a subtle center-to-edge brightening.
+            // Only on unbased surfaces (where base == null) and wide aspect ratio (> 2:1).
+            if (base == null && size.width > 2f * size.height) {
+                val radius = size.width * 0.6f
+                val centerX = size.width / 2f
+                val centerY = 0f
+                val scatterAlpha = 0.025f // ≤ 0.03 at center, 0 at edges
+                drawRect(
+                    brush = Brush.radialGradient(
+                        center = Offset(centerX, centerY),
+                        radius = radius,
+                        colors = listOf(
+                            Color.White.copy(alpha = scatterAlpha),
+                            Color.Transparent,
+                        ),
+                    ),
+                )
+            }
+
             // The rim highlight, drawn over the fill and under the border. See
             // [ttGlass.SPECULAR_ALPHA] for why this exists at all and why it is this low: it
             // is the one part of the look that is not a port of the original, and the original
