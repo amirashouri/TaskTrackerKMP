@@ -29,6 +29,7 @@ archive and create a spec before implementation.
 | 6 — Server connection | Active | Pending items below |
 | Admin member/project management | Complete | See the archived CLI plan; CLI-1–CLI-16 landed |
 | Test harness cleanup | In progress | [`TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md) |
+| 7 — Liquid Glass refinements | Active | Pending items below |
 
 ## Active feature backlog
 
@@ -49,6 +50,23 @@ archive and create a spec before implementation.
 | 3.3 | Pending | P3 | File attachments | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 3.3 |
 | 3.4 | Pending | P3 | Dark-mode auto-schedule | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 3.4 |
 | 3.5 | Pending | P3 | Keyboard shortcuts / quick capture | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 3.5 |
+
+## Liquid Glass refinements (Area 7)
+
+This section covers refinements to the Liquid Glass design system in `:packages:design-system`. Each task is a focused improvement that preserves existing pixel tests and the intensity slider contract.
+
+| Task | State | Priority | Intent | Depends on | Execution details |
+| --- | --- | --- | --- | --- | --- |
+| 7.1 | Complete | P1 | Vestigial hairline at 0% intensity (Reduce Transparency) | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.1 |
+| 7.2 | Pending | P1 | Spring-based interpolation for glass intensity value | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.2 |
+| 7.3 | Pending | P1 | Haptic feedback on glass intensity slider | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.3 |
+| 7.4 | Pending | P2 | Per-component glass thickness tokens (thin/standard/thick) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.4 |
+| 7.5 | Pending | P2 | Subsurface scattering horizontal gradient on tall cards | 7.4 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.5 |
+| 7.6 | Pending | P3 | Chromatic aberration at rim (subtle prism effect) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.6 |
+| 7.7 | Pending | P3 | Motion blur on fast lens travel (segmented picker, tab bar) | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.7 |
+| 7.8 | Pending | P3 | Accelerometer-driven specular parallax (platform seam) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.8 |
+
+The intended order is 7.1 → 7.2 → 7.3 → 7.4 → 7.5. Tasks 7.6–7.8 are independent polish items.
 
 ## Active server-connection work
 

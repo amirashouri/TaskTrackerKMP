@@ -1479,6 +1479,196 @@ second pane), and D7's "a model beside the screen" is why `CLI-12` changed no sc
 
 ---
 
+## 7. Liquid Glass Refinements
+
+The Liquid Glass design system in `:packages:design-system` (tokens in `Glass.kt`, `GlassIntensity.kt`, and components using `Modifier.ttGlassSurface` / `Modifier.ttGlassLens`) is the visual foundation of the app. These tasks refine it toward iOS 26's Liquid Glass behavior while preserving the existing pixel-test gates (`GlassSurfacePixelTest`, `GlassIntensityRenderTest`, `GlassFillRampTest`, `GlassFillContrastTest`).
+
+### 7.1 Vestigial Hairline at 0% Intensity (Reduce Transparency)
+**Priority:** P1 · **Module:** `packages:design-system` · **Files:** `GlassIntensity.kt`, `Glass.kt`, `GlassSurfacePixelTest.kt`
+
+**Problem:** At `glassIntensity = 0f` (Reduce Transparency), the hairline/rim fades to alpha 0 along with the fill. This makes card boundaries vanish — a user with Reduce Transparency enabled loses the visual separation between cards and the canvas.
+
+**Solution:** Keep a **vestigial hairline** at 0% intensity: 0.5dp at 0.05 alpha (white in dark, black in light) so component edges remain perceptible without reintroducing glassiness.
+
+**Implementation:**
+1. In `GlassIntensity.kt`, modify `ttGlassHairline()` to not scale to 0 at intensity 0:
+   ```kotlin
+   val scaled = LocalGlassIntensity.current.coerceIn(0f, 1f)
+   val vestigial = if (scaled == 0f) 0.05f else 1f  // or use a smoothstep
+   val finalAlpha = (isDark ? ttGlass.HAIRLINE_ALPHA : ttGlass.LIGHT_HAIRLINE_ALPHA) * scaled * vestigial
+   ```
+   Better: use a smoothstep so there's no discontinuity — e.g., `lerp(0.05f, 1f, scaled)` for the hairline scale factor.
+
+2. Update `GlassSurfacePixelTest.kt` to assert the vestigial hairline exists at intensity 0 (new test case or extend existing rim tests).
+
+**Validation:** `scripts/check.sh full` — both hosts must pass; `GlassSurfacePixelTest` assertions for intensity 0 must show rim contrast ≥ 1.0:1 (visible edge).
+
+---
+
+### 7.2 Spring-Based Interpolation for Glass Intensity Value
+**Priority:** P1 · **Module:** `shared-ui` / `packages:design-system` · **Files:** `ShellPreferences.kt`, `GlassIntensity.kt`
+
+**Problem:** The glass intensity slider updates `LocalGlassIntensity` linearly via `lerp`. The intensity value itself should animate with a spring when changed (via slider commit, settings restore, or system appearance change) so the transition feels physical rather than instant.
+
+**Solution:** Wrap the intensity `StateFlow` in a spring-animated `Float` at the composition boundary.
+
+**Implementation:**
+1. In `ShellPreferences.kt`, change `glassIntensity` from `StateFlow<Float>` to expose a raw value, and add a `companion` function or extension that produces a spring-animated version for composition:
+   ```kotlin
+   // In ShellPreferences or a new GlassIntensityAnimator.kt
+   @Composable
+   fun rememberSpringIntensity(base: Float): Float {
+       return animateFloatAsState(base, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow)).value
+   }
+   ```
+2. In `RootScreen.kt` (or wherever `LocalGlassIntensity` is provided), apply the spring:
+   ```kotlin
+   val rawIntensity = shellPrefs.glassIntensity.collectAsStateWithLifecycle().value
+   val springIntensity = rememberSpringIntensity(rawIntensity)
+   CompositionLocalProvider(LocalGlassIntensity provides springIntensity) { ... }
+   ```
+
+**Validation:** Manual verification — drag slider, release, observe spring settle. No pixel test changes needed (the settled value is identical).
+
+---
+
+### 7.3 Haptic Feedback on Glass Intensity Slider
+**Priority:** P1 · **Module:** `packages:feature-settings-presentation` · **Files:** `GlassIntensityRow.kt`, `ttSlider` (design-system)
+
+**Problem:** The glass intensity slider provides no tactile feedback. On iOS, sliders tick at discrete intervals; on Android, haptic feedback can be triggered at milestones.
+
+**Solution:** Add light haptic ticks at 25%, 50%, 75% of the slider travel.
+
+**Implementation:**
+1. In `packages:design-system`, extend `ttSlider` (or create `ttSliderWithHaptics`) to accept optional `hapticMilestones: List<Float> = listOf(0.25f, 0.5f, 0.75f)` and a platform haptic callback.
+2. In `GlassIntensityRow.kt`, pass the milestones and wire the platform haptic seam (`expect/actual` `HapticFeedback` with `performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)` on Android, `UIImpactFeedbackGenerator(style: .light)` on iOS).
+3. Fire haptic only on *value change crossing a milestone*, not on every frame.
+
+**Validation:** Manual test on device — feel ticks at quarter points. Unit test for milestone detection logic.
+
+---
+
+### 7.4 Per-Component Glass Thickness Tokens
+**Priority:** P2 · **Module:** `packages:design-system` · **Files:** `Glass.kt`, `Spacing.kt` (or new `GlassThickness.kt`), component usages
+
+**Problem:** All glass surfaces use `FILL_ALPHA = 0.55f`. There's no visual hierarchy — a modal sheet, a card, and an inline chip all have the same apparent glass thickness.
+
+**Solution:** Introduce three thickness levels as design tokens:
+- **Thin** (0.45 alpha) — inline elements: chips, badges, `TTGlassFlowPicker` chips
+- **Standard** (0.55 alpha) — cards, `ttGlassCard`, `TTGlassSegmentedPicker` slab
+- **Thick** (0.65 alpha) — modal sheets (`BottomSheetScaffold`), full-screen overlays
+
+**Implementation:**
+1. Add `object ttGlassThickness` in `Glass.kt` or new file:
+   ```kotlin
+   object ttGlassThickness {
+       const val THIN_FILL_ALPHA = 0.45f
+       const val STANDARD_FILL_ALPHA = 0.55f  // = existing FILL_ALPHA
+       const val THICK_FILL_ALPHA = 0.65f
+   }
+   ```
+2. Update `ttGlassSurface` to accept `thickness: GlassThickness = STANDARD` parameter (enum or sealed class).
+3. Update all call sites:
+   - `ttGlassCard` → `STANDARD` (default, no change)
+   - `TTGlassSegmentedPicker` slab → `STANDARD`
+   - `TTGlassFlowPicker` slab → `STANDARD`, but chips inside → `THIN`
+   - `BottomSheetScaffold` sheet → `THICK`
+   - Any inline badges/chips → `THIN`
+
+**Validation:** `scripts/check.sh full` — all pixel tests pass. Visual review: hierarchy is perceptible (modal > card > chip).
+
+---
+
+### 7.5 Subsurface Scattering Horizontal Gradient on Tall Cards
+**Priority:** P2 · **Module:** `packages:design-system` · **Files:** `Glass.kt` (`ttGlassSurface` drawBehind)
+
+**Problem:** The current fill ramp is purely vertical (`Brush.verticalGradient`). Real liquid glass shows subtle horizontal variation on wide surfaces — light enters the top edge, scatters, and exits the sides, creating a barely perceptible center-to-edge brightening.
+
+**Solution:** On surfaces where `width > 2 * height`, add a subtle horizontal gradient component (ellipse/radial) blended with the vertical ramp.
+
+**Implementation:**
+1. In `ttGlassSurface`, detect aspect ratio: `val isWide = size.width > 2 * size.height`
+2. If wide, composite a radial gradient centered at top-center, fading toward edges:
+   ```kotlin
+   val radial = Brush.radialGradient(
+       center = Offset(size.width/2f, 0f),
+       radius = size.width * 0.6f,
+       colors = listOf(Color.White.copy(alpha = 0.03f), Color.Transparent),
+   )
+   // Blend with vertical ramp using drawRect with PorterDuff.Mode.PLUS or similar
+   ```
+3. Keep the effect subtle — alpha ≤ 0.03 at center, 0 at edges.
+
+**Validation:** Pixel test — render a wide card (400x150) and verify center is measurably brighter than edges (channel difference > 2/255). Existing tall-card tests unchanged.
+
+---
+
+### 7.6 Chromatic Aberration at Rim
+**Priority:** P3 · **Module:** `packages:design-system` · **Files:** `Glass.kt` (rim drawing in `ttGlassSurface`)
+
+**Problem:** The rim is monochrome (white/black). iOS 26's glass shows slight chromatic separation at the refractive edge — a subtle prism effect.
+
+**Solution:** Draw the rim as three offset hairlines (R, G, B channels) with 0.5–1px horizontal offset.
+
+**Implementation:**
+1. In `ttGlassSurface` rim drawing, replace single gradient border with three borders:
+   - Red channel: offset -0.5px, alpha = rimAlpha * 0.33
+   - Green channel: offset 0, alpha = rimAlpha * 0.34
+   - Blue channel: offset +0.5px, alpha = rimAlpha * 0.33
+2. Use `drawOutline` with translated shapes or three `border` modifiers with `offset(x = ...)`.
+3. Only apply in dark mode (where rim is white/highlight); in light mode the shadow rim stays monochrome.
+
+**Validation:** `scripts/check.sh full` — pixel tests updated to expect the chromatic split. Visual: subtle rainbow at edge on dark glass.
+
+---
+
+### 7.7 Motion Blur on Fast Lens Travel
+**Priority:** P3 · **Module:** `packages:design-system` / `packages:shared-ui` · **Files:** `Glass.kt` (`ttGlassLens`), `TabBar.kt`, `TTGlassSegmentedPicker`
+
+**Problem:** The selection lens in `TTGlassSegmentedPicker`, `TTGlassFlowPicker`, and `TTGlassTabBar` animates position/size with a spring. On fast swipes, it snaps without motion blur, reading as a UI highlight rather than liquid material.
+
+**Solution:** When lens velocity exceeds a threshold, apply a directional blur along the travel vector.
+
+**Implementation:**
+1. In `ttLensPlacement`, compute velocity: `val velocity = (current - previous) / dt` (or use `animateDpAsState`'s internal velocity if exposed).
+2. In `ttGlassLens`, accept optional `velocity: Dp` parameter.
+3. If `|velocity| > THRESHOLD` (e.g., 500 dp/s), apply `Modifier.graphicsLayer { renderEffect = BlurMaskFilter.makeBlur(Blur.Normal, radius = min(|velocity| * 0.01, 8f)) }` — directional blur is harder; start with isotropic blur on fast movement.
+4. Alternatively, draw a stretched ellipse trailing the lens during fast travel.
+
+**Validation:** Manual — fast swipe tab bar / segmented picker, observe motion blur. No pixel test changes (blur is transient).
+
+---
+
+### 7.8 Accelerometer-Driven Specular Parallax
+**Priority:** P3 · **Module:** `packages:design-system` (new platform seam) · **Files:** New `expect/actual` `DeviceMotion`, `Glass.kt` (specular highlight)
+
+**Problem:** The specular highlight (`SPECULAR_ALPHA = 0.12f`, 3dp band at top) is static. iOS 26's glass catches light dynamically as the device tilts.
+
+**Solution:** Add an `expect/actual` platform seam for device tilt (roll/pitch), and shift the specular band horizontally based on roll.
+
+**Implementation:**
+1. New module or in `design-system`: `expect class DeviceMotion { val roll: Float; val pitch: Float }` with `jvm` (returns 0), `androidMain` (SensorManager TYPE_ROTATION_VECTOR), `iosMain` (CMMotionManager).
+2. In `ttGlassSurface`, read `DeviceMotion.current.roll` and offset the specular gradient `startX`/`endX`:
+   ```kotlin
+   val roll = LocalDeviceMotion.current.roll  // -1..1
+   val specularOffset = roll * size.width * 0.15f
+   // Draw specular gradient from (specularOffset, 0) to (specularOffset, SPECULAR_HEIGHT)
+   ```
+3. Clamp offset so highlight stays on surface.
+
+**Validation:** Manual on device — tilt phone, watch specular shift. JVM test host returns 0 (no motion). Pixel tests: disable motion for tests or mock 0 roll.
+
+---
+
+### Implementation Notes
+
+- **Order:** 7.1 → 7.2 → 7.3 are quick wins (low risk, no pixel test rewrites). 7.4 is the foundation for 7.5. 7.6–7.8 are independent polish.
+- **Pixel Tests:** Every task that changes rendered output must update `GlassSurfacePixelTest`, `GlassIntensityRenderTest`, or add new render tests. Follow the mutation-check ritual in `AGENTS.md`.
+- **ACK Required:** Tasks 7.4+ touch multiple components across modules — requires ACK per `AGENTS.md` (cross-module changes).
+- **Spec Creation:** Before implementing any task, create a spec in `specs/7.x-<slug>.md` from `specs/_template.md`.
+
+---
+
 ## Test harness cleanup
 
 The client test-harness cleanup has its own plan: [`docs/TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md).

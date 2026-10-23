@@ -219,6 +219,45 @@ class GlassSurfacePixelTest {
         )
     }
 
+    /**
+     * At intensity 0 (Reduce Transparency), a vestigial hairline remains so card boundaries
+     * stay perceptible. The hairline alpha is 5% of full (smoothstep from 0.05 to 1.0).
+     * Contrast should be ≥ 1.0:1 — a visible edge, not a WCAG threshold.
+     */
+    @Test
+    fun `the vestigial hairline is visible at zero intensity in light`() {
+        assumeHostRasterisesText()
+        val reading = requireNotNull(measureRimAtIntensity(ThemeScheme.Light, 0f)) { NO_READING }
+        println(
+            "light vestigial rim ${reading.rim.hex()} over opaque fill ${reading.fill.hex()}, " +
+                "${reading.ratio.ratioText()}:1 over ${reading.bandRows} device rows",
+        )
+        assertTrue(
+            reading.ratio >= VESTIGIAL_RIM_MINIMUM,
+            "light appearance at 0% intensity: the vestigial hairline rendered " +
+                "${reading.rim.hex()} against the opaque fill ${reading.fill.hex()}, " +
+                "which is ${reading.ratio.ratioText()}:1 - below ${VESTIGIAL_RIM_MINIMUM}:1. " +
+                "The vestigial rim (5% of full alpha) must remain perceptible as a card edge.",
+        )
+    }
+
+    /** Same assertion in dark. */
+    @Test
+    fun `the vestigial hairline is visible at zero intensity in dark`() {
+        assumeHostRasterisesText()
+        val reading = requireNotNull(measureRimAtIntensity(ThemeScheme.Dark, 0f)) { NO_READING }
+        println(
+            "dark vestigial rim ${reading.rim.hex()} over opaque fill ${reading.fill.hex()}, " +
+                "${reading.ratio.ratioText()}:1 over ${reading.bandRows} device rows",
+        )
+        assertTrue(
+            reading.ratio >= VESTIGIAL_RIM_MINIMUM,
+            "dark appearance at 0% intensity: the vestigial hairline rendered " +
+                "${reading.rim.hex()} against the opaque fill ${reading.fill.hex()}, " +
+                "which is ${reading.ratio.ratioText()}:1 - below ${VESTIGIAL_RIM_MINIMUM}:1.",
+        )
+    }
+
     // --- measurement ------------------------------------------------------------------------------
 
     private class FillReading(
@@ -290,15 +329,11 @@ class GlassSurfacePixelTest {
     }
 
     /**
-     * The rim, found by differencing a bordered frame against a borderless one.
+     * The rim at a specific intensity, found by differencing a bordered frame against a borderless one.
      *
-     * See the class doc for why these are two frames and not two cards, and for why the rim
-     * needs a density override to exist at all. A null return means the two frames agreed
-     * everywhere along the edge, which means the measurement is broken rather than that the
-     * rim is invisible — and the caller turns that into a hard failure through [NO_READING]
-     * rather than letting the test pass unmeasured.
+     * See `measureRim` for the full rationale. This overload allows testing at intensity 0.
      */
-    private fun measureRim(scheme: ThemeScheme): RimReading? {
+    private fun measureRimAtIntensity(scheme: ThemeScheme, intensity: Float): RimReading? {
         var bordered: PixelMap? = null
         var plain: PixelMap? = null
         var bounds: DpRect? = null
@@ -307,7 +342,7 @@ class GlassSurfacePixelTest {
         for (borderWidth in listOf(ttGlass.hairlineWidth, 0.dp)) {
             rasterising {
                 setContent {
-                    ttTheme(scheme) {
+                    ttTheme(scheme, glassIntensity = intensity) {
                         CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
                             Box(Modifier.fillMaxSize().background(ttCanvas())) {
                                 glassCard(borderWidth)
@@ -368,6 +403,11 @@ class GlassSurfacePixelTest {
         return RimReading(rim, fill, bandRows, contrastRatio(rim, fill))
     }
 
+    /**
+     * The original `measureRim` delegates to the intensity-parameterized version at full intensity.
+     */
+    private fun measureRim(scheme: ThemeScheme): RimReading? = measureRimAtIntensity(scheme, 1f)
+
     @Composable
     private fun glassCard(borderWidth: Dp) {
         Box(
@@ -394,6 +434,16 @@ class GlassSurfacePixelTest {
          * than inventing a threshold nothing was ever measured against.
          */
         const val RIM_MINIMUM = 1.5
+
+        /**
+         * Minimum contrast for the vestigial hairline at intensity 0 (Reduce Transparency).
+         *
+         * At 0% intensity the fill is opaque [ttSurface()] and the hairline is 5% of full alpha.
+         * A contrast of 1.0:1 means the rim is exactly the same colour as the fill (invisible).
+         * ≥ 1.0:1 ensures the edge is perceptible as a boundary. This is not a WCAG threshold —
+         * it's a visibility floor for Reduce Transparency mode.
+         */
+        const val VESTIGIAL_RIM_MINIMUM = 1.0
 
         /**
          * The density the rim is measured at.

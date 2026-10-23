@@ -55,7 +55,7 @@ fun ttGlassLensAlpha(): Float = ttGlass.LENS_ALPHA * LocalGlassIntensity.current
 
 /**
  * The rim at [intensity]: [ttGlass.HAIRLINE_ALPHA] of white at full intensity in dark,
- * [ttGlass.LIGHT_HAIRLINE_ALPHA] of black in light, nothing at zero.
+ * [ttGlass.LIGHT_HAIRLINE_ALPHA] of black in light, vestigial at zero.
  *
  * The hairline is not decoration and it is not a border — it is what makes a surface read as
  * *raised* (see [ttGlassSurface]). In dark that job is done by being lighter than what
@@ -63,17 +63,23 @@ fun ttGlassLensAlpha(): Float = ttGlass.LENS_ALPHA * LocalGlassIntensity.current
  * fill already composites to about #C2CBD7, so a white rim over it measures 1.07:1 and even
  * a fully opaque white line only 1.64:1 (both rendered, `GlassSurfacePixelTest`). The light
  * rim therefore comes from the other direction — a shadow, darker than its fill — and reads
- * as the same raised edge from underneath. Both branches fade with the slider because on an
- * opaque fill the job is already done by the fill's own edge, and a rim kept at `0f` would
- * draw an edge over a surface that has stopped being a lens.
+ * as the same raised edge from underneath.
+ *
+ * At intensity 0 (Reduce Transparency) the fill is opaque and the hairline's *raised* job
+ * is done by the fill's own edge — but a vestigial hairline (5% of full) is kept so that
+ * card boundaries remain perceptible without reintroducing glassiness. The scale factor
+ * uses a smoothstep (lerp from 0.05 to 1.0) so there is no discontinuity at the bottom
+ * of the slider travel.
  */
 @Composable
 internal fun ttGlassHairline(): Color {
-    val scaled = LocalGlassIntensity.current.coerceIn(0f, 1f)
+    val intensity = LocalGlassIntensity.current.coerceIn(0f, 1f)
+    // Smoothstep from 0.05 (vestigial) to 1.0 (full) — no hard edge at 0.
+    val hairlineScale = lerp(0.05f, 1f, intensity)
     return if (ttIsDarkTheme()) {
-        Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA * scaled)
+        Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA * hairlineScale)
     } else {
-        Color.Black.copy(alpha = ttGlass.LIGHT_HAIRLINE_ALPHA * scaled)
+        Color.Black.copy(alpha = ttGlass.LIGHT_HAIRLINE_ALPHA * hairlineScale)
     }
 }
 
