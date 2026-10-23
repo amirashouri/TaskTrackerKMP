@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.util.lerp as lerpFloat
+import com.tasktracker.designsystem.DeviceMotion
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -539,6 +540,8 @@ fun Modifier.ttGlassSurface(
     val intensity = LocalGlassIntensity.current
     val rim = ttGlassHairline()
     val isDark = LocalThemeScheme.current == ThemeScheme.Dark
+    val deviceMotion = DeviceMotion()
+    val roll = deviceMotion.roll()
 
     // Two different washes, because there are two different things being modelled. Without a
     // base the fill *is* the glass, so it runs from the tint at the top to a calmer version of
@@ -626,15 +629,22 @@ fun Modifier.ttGlassSurface(
             // Fixed in dp rather than a fraction of the surface (see [ttGlass.SPECULAR_HEIGHT_DP]):
             // a fraction grows with the card, and on a 240dp card the band reached 14dp — past
             // the point where a rim highlight stops being a rim and starts being a second fill.
+            //
+            // Specular parallax: shift horizontally based on device roll (-1..1).
+            // Max offset = 15% of width, so at max tilt the highlight moves 15% across the surface.
+            val specularOffset = roll * size.width * 0.15f
+            val specularHeight = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() }
             drawRect(
-                brush = Brush.verticalGradient(
+                brush = Brush.linearGradient(
                     colors = listOf(
                         Color.White.copy(alpha = ttGlass.SPECULAR_ALPHA),
                         Color.White.copy(alpha = 0f),
                     ),
-                    startY = 0f,
-                    endY = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() },
+                    start = Offset(specularOffset, 0f),
+                    end = Offset(specularOffset, specularHeight),
                 ),
+                topLeft = Offset(0f, 0f),
+                size = Size(size.width, specularHeight),
             )
 
             // Chromatic aberration: subtle prism effect at the refractive edge.

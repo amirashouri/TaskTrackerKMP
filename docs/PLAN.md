@@ -64,7 +64,7 @@ This section covers refinements to the Liquid Glass design system in `:packages:
 | 7.5 | Complete | P2 | Subsurface scattering horizontal gradient on wide cards | 7.4 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.5 |
 | 7.6 | Complete | P3 | Chromatic aberration at rim (subtle prism effect) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.6 |
 | 7.7 | Complete | P3 | Motion blur on fast lens travel (segmented picker, tab bar) | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.7 |
-| 7.8 | Pending | P3 | Accelerometer-driven specular parallax (platform seam) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.8 |
+| 7.8 | Complete | P3 | Accelerometer-driven specular parallax (platform seam) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.8 |
 
 The intended order is 7.1 → 7.2 → 7.3 → 7.4 → 7.5. Tasks 7.6–7.8 are independent polish items.
 
