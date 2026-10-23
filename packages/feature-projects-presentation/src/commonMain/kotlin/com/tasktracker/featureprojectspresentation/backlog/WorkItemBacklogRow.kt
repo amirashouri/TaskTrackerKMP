@@ -30,6 +30,8 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureprojectspresentation.WorkItemStatusBadge
+import com.tasktracker.featureprojectspresentation.statusLabel
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -124,6 +126,14 @@ fun WorkItemBacklogRow(
      * is the same shape [onCopy]'s null uses: no row, no gap.
      */
     projectTags: List<ProjectTag> = emptyList(),
+    /**
+     * Whether to show the workflow status badge.
+     *
+     * Only the Kanban section sets this to true — backlog items are triaged (not worked),
+     * and archived items are already resolved. Defaults to false so existing callers
+     * (Backlog, Archived, Sprint) do not render it.
+     */
+    showStatusBadge: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -160,6 +170,9 @@ fun WorkItemBacklogRow(
                 )
             }
             PriorityBadge(priority = item.priority)
+            if (showStatusBadge) {
+                WorkItemStatusBadge(status = item.status)
+            }
         }
         item.dueDate?.let { due ->
             ttText(
