@@ -191,6 +191,7 @@ fun TTBottomSheetScaffold(
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
                     .ttGlassSurface(
                         shape = RoundedCornerShape(ttRadius.surface),
+                        thickness = ttGlass.GlassThickness.THICK,
                         base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
                     )
                     .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xxl),

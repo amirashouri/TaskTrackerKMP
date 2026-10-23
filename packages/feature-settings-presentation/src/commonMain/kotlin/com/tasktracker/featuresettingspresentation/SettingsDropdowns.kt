@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
+import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSelectionWash
@@ -68,7 +69,7 @@ internal fun SettingsDropdownColumn(content: @Composable () -> Unit) {
             .width(ThemeDropdownWidth)
             .ttGlassSurface(
                 shape = RoundedCornerShape(ttRadius.control),
-                fillAlpha = 0.81f,
+                thickness = ttGlass.GlassThickness.THICK,
             )
             .padding(vertical = ttSpacing.xs),
         content = { content() },

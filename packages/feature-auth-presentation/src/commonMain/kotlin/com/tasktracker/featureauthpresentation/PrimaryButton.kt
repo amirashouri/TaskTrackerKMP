@@ -89,13 +89,6 @@ fun PrimaryButton(
             .ttGlassSurface(
                 shape = shape,
                 tint = ttAccent(),
-                fillAlpha = PRIMARY_FILL_ALPHA,
-                // The solid fill the original drew underneath its glass lens. Without it this
-                // control is a 62%-alpha accent over a near-white canvas, which composites to
-                // `#F6F7F8` and leaves the white `ttOnAccent` label at 1.07:1 — measured on a
-                // device, where it read as a white-on-white slab with a white band across the
-                // top. A translucent fill cannot carry an opaque label; this one has to be
-                // solid. The lens, the radius and the hairline are all still there.
                 base = ttAccent(),
             )
             // The padding is inside the material, so the control's touch target is the

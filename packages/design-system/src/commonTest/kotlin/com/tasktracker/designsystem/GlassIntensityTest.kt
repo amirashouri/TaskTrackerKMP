@@ -42,7 +42,7 @@ class GlassIntensityTest {
             tint = null,
             canvas = CANVAS,
             accent = ACCENT,
-            fillAlpha = 1f,
+            thickness = ttGlass.GlassThickness.STANDARD,
             intensity = 1f,
             reducedSurface = REDUCED,
         )
@@ -68,7 +68,7 @@ class GlassIntensityTest {
     @Test
     fun `a caller tint keeps its own floor at full intensity`() {
         val tint = ACCENT.copy(alpha = ttGlass.TINT_ALPHA)
-        val stops = ttGlass.fillRamp(tint, CANVAS, ACCENT, fillAlpha = 1f, intensity = 1f, reducedSurface = REDUCED)
+        val stops = ttGlass.fillRamp(tint, CANVAS, ACCENT, thickness = ttGlass.GlassThickness.STANDARD, intensity = 1f, reducedSurface = REDUCED)
         assertEquals(
             channel(ttGlass.TINT_ALPHA),
             channel(stops.first().alpha),
@@ -92,7 +92,7 @@ class GlassIntensityTest {
                 tint = tint,
                 canvas = CANVAS,
                 accent = ACCENT,
-                fillAlpha = 1f,
+                thickness = ttGlass.GlassThickness.STANDARD,
                 intensity = 0f,
                 reducedSurface = REDUCED,
             )
@@ -132,7 +132,7 @@ class GlassIntensityTest {
             tint = null,
             canvas = CANVAS,
             accent = ACCENT,
-            fillAlpha = 1f,
+            thickness = ttGlass.GlassThickness.STANDARD,
             intensity = 0f,
             reducedSurface = REDUCED,
         )
@@ -170,7 +170,7 @@ class GlassIntensityTest {
             tint = null,
             canvas = CANVAS,
             accent = ACCENT,
-            fillAlpha = 1f,
+            thickness = ttGlass.GlassThickness.STANDARD,
             intensity = fifth,
             reducedSurface = REDUCED,
         ).first()
@@ -200,7 +200,7 @@ class GlassIntensityTest {
         var last = 0f
         var step = 0f
         while (step <= 1f) {
-            val alpha = ttGlass.fillRamp(null, CANVAS, ACCENT, 1f, intensity = step, reducedSurface = REDUCED).first().alpha
+            val alpha = ttGlass.fillRamp(null, CANVAS, ACCENT, ttGlass.GlassThickness.STANDARD, intensity = step, reducedSurface = REDUCED).first().alpha
             assertTrue(
                 alpha <= previous + ONE_CHANNEL,
                 "at intensity $step the alpha is $alpha, which is above the previous step's " +
@@ -233,8 +233,8 @@ class GlassIntensityTest {
      */
     @Test
     fun `an out of range intensity is clamped and not extrapolated`() {
-        val below = ttGlass.fillRamp(null, CANVAS, ACCENT, 1f, intensity = -3f, reducedSurface = REDUCED).first().alpha
-        val above = ttGlass.fillRamp(null, CANVAS, ACCENT, 1f, intensity = 7f, reducedSurface = REDUCED).first().alpha
+        val below = ttGlass.fillRamp(null, CANVAS, ACCENT, ttGlass.GlassThickness.STANDARD, intensity = -3f, reducedSurface = REDUCED).first().alpha
+        val above = ttGlass.fillRamp(null, CANVAS, ACCENT, ttGlass.GlassThickness.STANDARD, intensity = 7f, reducedSurface = REDUCED).first().alpha
         assertEquals(
             255,
             channel(below),
@@ -258,7 +258,7 @@ class GlassIntensityTest {
     @Test
     fun `the ramp fades by the measured amount at full intensity`() {
         val tint = ACCENT.copy(alpha = ttGlass.TINT_ALPHA)
-        val stops = ttGlass.fillRamp(tint, CANVAS, ACCENT, fillAlpha = 1f, intensity = 1f, reducedSurface = REDUCED)
+        val stops = ttGlass.fillRamp(tint, CANVAS, ACCENT, thickness = ttGlass.GlassThickness.STANDARD, intensity = 1f, reducedSurface = REDUCED)
         val expectedBottom = lerp(tint, CANVAS, ttGlass.FILL_FADE).copy(alpha = tint.alpha)
         assertEquals(
             channel(expectedBottom.red),

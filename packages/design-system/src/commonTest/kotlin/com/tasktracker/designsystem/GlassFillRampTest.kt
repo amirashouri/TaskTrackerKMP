@@ -53,16 +53,16 @@ class GlassFillRampTest {
     @Test
     fun `the fill's bottom edge is not the page`() {
         for (appearance in appearances) {
-            for (fillAlpha in fillAlphas) {
+            for (thickness in thicknesses) {
                 for (tint in tints) {
-                    val stops = ttGlass.fillRamp(tint, appearance.canvas, appearance.accent, fillAlpha, reducedSurface = appearance.surface)
+                    val stops = ttGlass.fillRamp(tint, appearance.canvas, appearance.accent, thickness, reducedSurface = appearance.surface)
                     val bottom = over(appearance.canvas, stops.last(), stops.last().alpha)
                     val separation = minChannelSeparation(bottom, appearance.canvas)
                     assertTrue(
                         separation >= MIN_EDGE_SEPARATION,
                         "a glass fill on the ${appearance.name} canvas with tint " +
-                            "${tint?.let(::describe) ?: "none"} at fillAlpha " +
-                            "$fillAlpha composites its bottom edge " +
+                            "${tint?.let(::describe) ?: "none"} at thickness " +
+                            "$thickness composites its bottom edge " +
                             "to ${describe(bottom)}, which is only $separation away from the " +
                             "${describe(appearance.canvas)} page — the surface has no edge and " +
                             "reads as a white shadow. ttGlass.FILL_FADE is ${ttGlass.FILL_FADE}; " +
@@ -82,9 +82,9 @@ class GlassFillRampTest {
      */
     @Test
     fun `the fill holds one alpha from its top edge to its bottom`() {
-        for (fillAlpha in fillAlphas) {
+        for (thickness in thicknesses) {
             for (tint in tints) {
-                val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, fillAlpha, reducedSurface = LIGHT_SURFACE)
+                val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, thickness, reducedSurface = LIGHT_SURFACE)
                 assertEquals(
                     stops.first().alpha,
                     stops.last().alpha,
@@ -108,7 +108,7 @@ class GlassFillRampTest {
     @Test
     fun `the fill is lit at the top and calmer at the bottom`() {
         for (appearance in appearances) {
-            val stops = ttGlass.fillRamp(null, appearance.canvas, appearance.accent, FILL_ALPHA_RESTING, reducedSurface = appearance.surface)
+            val stops = ttGlass.fillRamp(null, appearance.canvas, appearance.accent, ttGlass.GlassThickness.STANDARD, reducedSurface = appearance.surface)
             val top = stops.first()
             val bottom = stops.last()
             val topDistance = minChannelSeparation(top, appearance.canvas)
@@ -138,7 +138,7 @@ class GlassFillRampTest {
     @Test
     fun `a caller's tint is used at its own alpha`() {
         val tint = TaskTrackerAccent.Light.copy(alpha = ttGlass.TINT_ALPHA)
-        val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, FILL_ALPHA_RESTING, reducedSurface = LIGHT_SURFACE)
+        val stops = ttGlass.fillRamp(tint, CANVAS_LIGHT, TaskTrackerAccent.Light, ttGlass.GlassThickness.STANDARD, reducedSurface = LIGHT_SURFACE)
 
         assertEquals(
             channel(ttGlass.TINT_ALPHA),
@@ -163,7 +163,7 @@ class GlassFillRampTest {
             tint = TaskTrackerAccent.Light,
             canvas = CANVAS_LIGHT,
             accent = TaskTrackerAccent.Light,
-            fillAlpha = ttGlass.PROMINENT_TINT_ALPHA / ttGlass.FILL_ALPHA,
+            thickness = ttGlass.GlassThickness.THICK,
             reducedSurface = LIGHT_SURFACE,
         )
 
@@ -235,15 +235,13 @@ class GlassFillRampTest {
         TaskTrackerAccent.Light.copy(alpha = ttGlass.TINT_ALPHA),
     )
 
-    /** The resting default, and the ratio `ttGlassButton` passes for a prominent control. */
-    private val fillAlphas = listOf(
-        FILL_ALPHA_RESTING,
-        ttGlass.PROMINENT_TINT_ALPHA / ttGlass.FILL_ALPHA,
+    /** The resting default (STANDARD), and the prominent control (THICK). */
+    private val thicknesses = listOf(
+        ttGlass.GlassThickness.STANDARD,
+        ttGlass.GlassThickness.THICK,
     )
 
     private companion object {
-        const val FILL_ALPHA_RESTING = 1f
-
         const val CHANNEL_SCALE = 255f
 
         /** The app's own neutral, which is where a glass fill arrives at zero intensity. */

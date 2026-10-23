@@ -117,16 +117,13 @@ object ttGlass {
      */
     const val TINT_ALPHA: Float = 0.22f
 
-    /**
+/**
      * A prominent glass control's tint, from the original's `tint.opacity(0.85)`.
      *
      * High enough to read at a glance, and still not opaque, so the backdrop still shows
      * through and the control still belongs to the same family as the ones around it.
      */
     const val PROMINENT_TINT_ALPHA: Float = 0.85f
-
-    /** The fill's own alpha, before any tint: glass over *something* is never opaque. */
-    const val FILL_ALPHA: Float = 0.55f
 
     /**
      * How far the fill's **hue** travels from the tint toward the canvas by the bottom edge.
@@ -195,6 +192,28 @@ object ttGlass {
 
     /** Press scale, from `TTGlassButtonStyle`'s `scaleEffect(0.95)`. */
     const val PRESSED_SCALE: Float = 0.95f
+
+    /**
+     * Glass thickness levels — controls the base fill alpha before intensity scaling.
+     *
+     * Three levels create visual hierarchy:
+     * - THIN (0.45): inline elements (chips, badges) — subtle glass
+     * - STANDARD (0.55): cards, segmented picker, flow picker slab — default glass
+     * - THICK (0.65): modal sheets, full-screen overlays — prominent glass
+     *
+     * The actual rendered alpha is `thickness.baseAlpha * intensityScale` where
+     * `intensityScale` comes from `LocalGlassIntensity` (1.0 = full glass, 0.0 = opaque).
+     * At intensity 0 all thicknesses converge to opaque; at intensity 1 they separate.
+     */
+    sealed class GlassThickness(val baseAlpha: Float) {
+        object THIN : GlassThickness(0.45f)
+        object STANDARD : GlassThickness(0.55f)
+        object THICK : GlassThickness(0.65f)
+    }
+
+    /** @deprecated Use [GlassThickness.STANDARD.baseAlpha] instead. */
+    @Deprecated("Use GlassThickness.STANDARD.baseAlpha", ReplaceWith("ttGlass.GlassThickness.STANDARD.baseAlpha"))
+    const val FILL_ALPHA: Float = 0.55f
 
     /**
      * How far a disabled control is dimmed, from `.opacity(isEnabled ? 1 : 0.4)`.
@@ -413,11 +432,9 @@ object ttGlass {
      * [tint] is the caller's colour and `null` means "no tint", in which case [accent] stands
      * in — the same resolution the composable does, kept here so the arithmetic under test is
      * the arithmetic that ships. A caller's tint carries its own alpha and that alpha is the
-     * floor; with no tint the floor is [FILL_ALPHA].
+     * floor; with no tint the floor is [thickness.baseAlpha].
      *
-     * [fillAlpha] scales that floor, which is how [PROMINENT_TINT_ALPHA] is reached without a
-     * second code path: the ratio is passed in and the product is clamped, so the stops are
-     * legal colours even when the caller asks for more than the floor can carry.
+     * [thickness] is the glass thickness level, which provides the base alpha.
      *
      * [intensity] is the user's glass setting, and it is a parameter rather than a
      * `compositionLocalOf` read *inside* here for one reason: this function is pure, and the
@@ -437,7 +454,7 @@ object ttGlass {
         tint: Color?,
         canvas: Color,
         accent: Color,
-        fillAlpha: Float,
+        thickness: GlassThickness = GlassThickness.STANDARD,
         intensity: Float = 1f,
         reducedSurface: Color,
     ): List<Color> {
@@ -455,7 +472,9 @@ object ttGlass {
         // thing it must not be. Measured: that version rendered #90a1b6 where the accent is
         // #34537a. Interpolating the finished alpha reaches a true opaque 1.0 and still puts
         // intensity 1 exactly on the arithmetic above, to the bit.
-        val shipped = ((tint?.alpha ?: FILL_ALPHA) * fillAlpha).coerceIn(0f, 1f)
+        // The floor is the tint's own alpha (if provided) or the thickness's base alpha.
+        // We do NOT multiply by thickness.baseAlpha again — the thickness IS the floor.
+        val shipped = (tint?.alpha ?: thickness.baseAlpha).coerceIn(0f, 1f)
         val i = intensity.coerceIn(0f, 1f)
         val alpha = lerpFloat(1f, shipped, i)
         // The colour crosses over as well, and this is the second half of what Reduce
@@ -495,6 +514,9 @@ object ttGlass {
  * tint strong enough to swallow the text behind it is the same class of bug as an accent
  * too light for its canvas.
  *
+ * [thickness] controls the base fill alpha (THIN=0.45, STANDARD=0.55, THICK=0.65).
+ * The actual rendered alpha is scaled by [LocalGlassIntensity] (1.0 = full glass, 0.0 = opaque).
+ *
  * [base] is the escape hatch for a control that has to carry a label it cannot afford to lose
  * against. A translucent fill *cannot* do that: see [PrimaryButton], where the tint is a
  * 62%-alpha accent over a near-white canvas and the result lands at 1.07:1 against a white
@@ -507,7 +529,7 @@ object ttGlass {
 fun Modifier.ttGlassSurface(
     shape: Shape,
     tint: Color? = null,
-    fillAlpha: Float = ttGlass.FILL_ALPHA,
+    thickness: ttGlass.GlassThickness = ttGlass.GlassThickness.STANDARD,
     borderWidth: Dp = ttGlass.hairlineWidth,
     base: Color? = null,
 ): Modifier {
@@ -521,14 +543,14 @@ fun Modifier.ttGlassSurface(
     // itself at the bottom — lit where the light is, and never so far toward the page that the
     // surface disappears into it. With a base the glass is a lens *over* something solid, so it
     // is white fading to nothing and the base shows through underneath, which is the original's
-    // arrangement. In the second case `fillAlpha` does not apply, because the tint's job is done
+    // arrangement. In the second case thickness does not apply, because the tint's job is done
     // by the base.
     val wash = if (base == null) {
         ttGlass.fillRamp(
             tint = tint,
             canvas = canvas,
             accent = accent,
-            fillAlpha = fillAlpha,
+            thickness = thickness,
             intensity = intensity,
             // Where the fill arrives as transparency is reduced: the app's neutral, not the
             // accent. Resolved here rather than inside `fillRamp` so that stays a pure function
@@ -799,12 +821,15 @@ data class LensPlacement(
  * `ttGlassCard(tint: tint, cornerRadius: 14)`. The default here is [ttRadius.surface] (16)
  * to match the original's signature default; the card on the board passes
  * [ttRadius.control] explicitly, exactly as the original did.
+ *
+ * Uses STANDARD thickness by default for card-level glass.
  */
 @Composable
 fun Modifier.ttGlassCard(
     tint: Color? = null,
     cornerRadius: Dp = ttRadius.surface,
-): Modifier = ttGlassSurface(shape = RoundedCornerShape(cornerRadius), tint = tint)
+    thickness: ttGlass.GlassThickness = ttGlass.GlassThickness.STANDARD,
+): Modifier = ttGlassSurface(shape = RoundedCornerShape(cornerRadius), tint = tint, thickness = thickness)
 
 /**
  * A segmented control as one glass slab with a highlighted selection.
@@ -857,6 +882,7 @@ fun <Option> TTGlassSegmentedPicker(
             .ttGlassSurface(
                 shape = lensShape,
                 tint = tint,
+                thickness = ttGlass.GlassThickness.STANDARD,
                 borderWidth = ttGlass.hairlineWidth,
             )
             .padding(ttSpacing.hairlineInset)
@@ -933,6 +959,7 @@ val density = LocalDensity.current
             .ttGlassSurface(
                 shape = RoundedCornerShape(ttRadius.surface),
                 tint = tint,
+                thickness = ttGlass.GlassThickness.STANDARD,
                 borderWidth = ttGlass.hairlineWidth,
             )
             .padding(ttSpacing.sm)
@@ -1135,7 +1162,7 @@ fun ttGlassButton(
             .ttGlassSurface(
                 shape = CircleShape,
                 tint = resolvedTint,
-                fillAlpha = if (style.prominent) ttGlass.PROMINENT_TINT_ALPHA / ttGlass.FILL_ALPHA else 1f,
+                thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
             )
             // Rule 1 again, and the reason the padding is *inside* the glass: applied after
             // the material it would enlarge the row without enlarging the control.
