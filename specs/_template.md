@@ -27,7 +27,7 @@ checks these, not good intentions.
 
 ## Validation
 
-- Run: `scripts/check.sh <scope>`
+- Run: `scripts/check.sh quick`
 - Counts: <how `test-baseline.json` should move — which host(s), and why>. Regenerate with
   `scripts/test-baseline.py`; `scripts/check-baseline.sh` must pass.
 - Pixel-reading tests go through the `test-reviewer` subagent before the PR.

@@ -2098,6 +2098,7 @@ private fun SettingsDestination(
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
 ) {
+    val layoutClass = LocalShellLayoutClass.current
     val model = remember(port) { SettingsModel(port) }
     DisposableEffect(model) {
         model.observe(scope)
@@ -2191,6 +2192,7 @@ private fun SettingsDestination(
         onSaveServerAddress = { scope.launch { model.saveServerAddress() } },
         onResetServerAddress = { scope.launch { model.resetServerAddress() } },
         onDismissServerAddress = { model.dismissServerAddressEditor() },
+        isWide = layoutClass.isWide,
     )
 }
 

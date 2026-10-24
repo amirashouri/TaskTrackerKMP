@@ -91,10 +91,7 @@ burns tokens through endless cosmetic iterations.
 ## The command that decides whether you are done
 
 ```bash
-scripts/check.sh quick shared-ui 'com.tasktracker.sharedui.*Sidebar*'
-                          # iteration only: one module, filtered, no baseline
-scripts/check.sh          # gate: JVM + architecture checks + baseline + summary
-scripts/check.sh full     # all three hosts; required for UI / expect-actual work
+scripts/check.sh quick
 ```
 
 `quick` is the only scope that is not a gate: it keeps the result XML so Gradle can skip

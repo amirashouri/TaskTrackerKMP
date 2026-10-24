@@ -1,11 +1,16 @@
 package com.tasktracker.featuresettingspresentation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -14,10 +19,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttBanner
@@ -188,309 +195,333 @@ fun SettingsScreen(
     onSaveServerAddress: () -> Unit = {},
     onResetServerAddress: () -> Unit = {},
     onDismissServerAddress: () -> Unit = {},
+    isWide: Boolean = false,
 ) {
     // The name editor's visibility. Local rather than in the model: the draft never leaves the
     // sheet, and the model only ever sees the committed value. `false` is closed, which is the
     // state every other screen starts in.
     var nameEditorOpen by remember { mutableStateOf(false) }
 
+    val identitySection: @Composable () -> Unit = {
+        SettingsSection {
+            UserDetailsRow(
+                details = userDetails,
+                onDetailsChange = { updated ->
+                    onUserDetailsChange(updated)
+                    onUserDetailsCommit()
+                },
+                onEditName = { nameEditorOpen = true },
+                modifier = Modifier.testTag(SettingsUserDetailsTag),
+            )
+            if (userDetails.email.isNotBlank()) {
+                SettingsDivider()
+                SettingsIconRow(
+                    label = stringResource(Res.string.settings_email_label),
+                    value = userDetails.email,
+                    icon = ttSettingsIcons.account,
+                    modifier = Modifier.testTag(SettingsEmailRowTag),
+                )
+            }
+            SettingsDivider()
+            UserPositionPickerRow(
+                selected = userDetails.position,
+                onSelect = { position ->
+                    onUserDetailsChange(userDetails.copy(position = position))
+                    onUserDetailsCommit()
+                },
+                modifier = Modifier.testTag(SettingsPositionRowTag),
+            )
+            SettingsDivider()
+            UserStatusPickerRow(
+                selected = userDetails.status,
+                onSelect = { status ->
+                    onUserDetailsChange(userDetails.copy(status = status))
+                    onUserDetailsCommit()
+                },
+                modifier = Modifier.testTag(SettingsUserStatusRowTag),
+            )
+            SettingsDivider()
+            StatusTextEditor(
+                value = userDetails.statusText,
+                onValueChange = { statusText ->
+                    onUserDetailsChange(userDetails.copy(statusText = statusText))
+                },
+                onCommit = onUserDetailsCommit,
+                modifier = Modifier.testTag(SettingsStatusTextRowTag),
+            )
+        }
+    }
+
+    val adminSection: @Composable () -> Unit = {
+        if (isAdmin) {
+            SettingsSection {
+                SettingsActionRow(
+                    label = stringResource(Res.string.settings_manage_members),
+                    icon = ttSettingsIcons.account,
+                    tint = ttAccent(),
+                    onClick = onManageMembers,
+                    modifier = Modifier.testTag(SettingsManageMembersTag),
+                )
+                SettingsDivider()
+                SettingsActionRow(
+                    label = stringResource(Res.string.settings_manage_projects),
+                    icon = ttTabIcons.projects,
+                    tint = ttAccent(),
+                    onClick = onManageProjects,
+                    modifier = Modifier.testTag(SettingsManageProjectsTag),
+                )
+            }
+        }
+    }
+
+    val appearanceSection: @Composable () -> Unit = {
+        SettingsSection {
+            ThemePickerRow(
+                selected = themeScheme,
+                onSelect = onThemeChange,
+            )
+            SettingsDivider()
+            AccentPalettePickerRow(
+                selected = accentPalette,
+                onSelect = onAccentPaletteChange,
+            )
+            SettingsDivider()
+            GlassIntensityRow(
+                intensity = glassIntensity,
+                onPreview = onGlassIntensityPreview,
+                onCommit = onGlassIntensityCommit,
+            )
+        }
+    }
+
+    val serverSection: @Composable () -> Unit = {
+        SettingsSection {
+            ServerAddressRow(
+                label = stringResource(Res.string.settings_server_label),
+                address = serverAddressLabel(serverAddress),
+                icon = ttSettingsIcons.connectivity,
+                onClick = onEditServerAddress,
+                modifier = Modifier.testTag(SettingsServerRowTag),
+            )
+            serverAddressNotice?.let { notice ->
+                SettingsDivider()
+                ttText(
+                    text = serverAddressNoticeLabel(notice),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = ttSpacing.sm)
+                        .testTag(SettingsServerNoticeTag),
+                )
+            }
+        }
+    }
+
+    val connectivitySection: @Composable () -> Unit = {
+        SettingsSection {
+            SettingsIconRow(
+                label = stringResource(Res.string.settings_status_label),
+                value = connectivityLabel(connectivity),
+                icon = ttSettingsIcons.connectivity,
+            )
+            SettingsDivider()
+        }
+    }
+
+    val syncSection: @Composable () -> Unit = {
+        SettingsSection {
+            SettingsIconRow(
+                label = stringResource(Res.string.settings_status_label),
+                value = activityLabel(activity.phase),
+                icon = ttSettingsIcons.sync,
+            )
+            activity.outstandingCount?.let { outstanding ->
+                SettingsDivider()
+                SettingsIconRow(
+                    label = stringResource(Res.string.settings_sync_waiting),
+                    value = outstanding.toString(),
+                    icon = ttSettingsIcons.sync,
+                    modifier = Modifier.testTag(SettingsWaitingRowTag),
+                )
+            }
+            activity.stuckCount?.let { stuck ->
+                SettingsDivider()
+                SettingsIconRow(
+                    label = stringResource(Res.string.settings_sync_stuck),
+                    value = stuck.toString(),
+                    icon = ttSettingsIcons.sync,
+                    valueColor = ttError(),
+                    modifier = Modifier.testTag(SettingsStuckRowTag),
+                )
+                SettingsDivider()
+                SettingsActionRow(
+                    label = stringResource(Res.string.settings_sync_retry),
+                    icon = ttSettingsIcons.sync,
+                    tint = ttAccent(),
+                    onClick = onRetryStuckChanges,
+                    enabled = !activity.isSyncing,
+                    modifier = Modifier.testTag(SettingsRetryStuckTag),
+                )
+            }
+            if (activity.failures.isNotEmpty()) {
+                SettingsDivider()
+                ttText(
+                    text = activity.failures.joinToString(separator = "\n"),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = ttSpacing.sm)
+                        .testTag(SettingsFailuresTag),
+                )
+            }
+            commandOutcome?.let { outcome ->
+                outcomeMessage(outcome)?.let { message ->
+                    SettingsDivider()
+                    ttText(
+                        text = message,
+                        style = ttTypography.footnote,
+                        color = ttError(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = ttSpacing.sm)
+                            .testTag(SettingsOutcomeTag),
+                    )
+                }
+            }
+            SettingsDivider()
+            SettingsActionRow(
+                label = stringResource(Res.string.settings_sync_now),
+                icon = ttSettingsIcons.sync,
+                tint = ttAccent(),
+                onClick = onSyncNow,
+                enabled = !activity.isSyncing,
+                modifier = Modifier.testTag(SettingsSyncNowTag),
+            )
+        }
+    }
+
+    val signOutSection: @Composable () -> Unit = {
+        SettingsSection {
+            SettingsActionRow(
+                label = stringResource(Res.string.settings_sign_out),
+                icon = ttSettingsIcons.account,
+                tint = ttError(),
+                onClick = onSignOut,
+                modifier = Modifier.testTag(SettingsSignOutTag),
+            )
+        }
+    }
+
+    val versionSection: @Composable () -> Unit = {
+        version.display?.let { displayed ->
+            SettingsSection {
+                SettingsIconRow(
+                    label = stringResource(Res.string.settings_version),
+                    value = displayed,
+                    icon = ttSettingsIcons.about,
+                    modifier = Modifier.testTag(SettingsVersionRowTag),
+                )
+            }
+        }
+    }
+
     // The list and the confirmation popup are siblings in one box, so the popup floats over
     // the list rather than scrolling with it. `modifier` lands here rather than on the
     // `LazyColumn`, which is what lets the overlay cover the whole screen instead of only the
     // list's viewport — the same shape `SprintDetailScreen` uses for its own confirmation.
     Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                // Top only: bottom padding here would shrink the *list's viewport*, and the sign-out row
-                // would then never reach the screen's bottom edge — which is the bound the scroll is
-                // supposed to have. Its clearance from the glass is `contentPadding`, below.
-                .padding(horizontal = ttSpacing.xxl)
-                .padding(top = ttSpacing.xl)
-                .testTag(SettingsScreenTag),
-            // Scroll range under the floating tab bar, not viewport inset — see
-            // `LocalTabBarScrollUnderInset`. This is the list whose last row is the sign-out button,
-            // so an inset that is a few dp short is a sign-out button parked under the glass. The
-            // `ttSpacing.xl` is clearance rather than decoration: it is the same air the board gives
-            // its lanes, and without it the last row comes to rest flush against the capsule's top
-            // edge instead of above it.
-            contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        ) {
-            // Above the identity block, because it is the identity block that failed. A failed
-            // write has already been reverted, so this is a report, not an instruction the user
-            // has to answer; the dismiss is the only action.
-            profileFailure?.let {
-                item {
-                    Box(modifier = Modifier.testTag(SettingsProfileFailureTag)) {
-                        ttBanner(
-                            message = stringResource(Res.string.settings_profile_save_failed),
-                            onDismiss = onDismissProfileFailure,
-                        )
+        if (isWide) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = ttSpacing.xxl)
+                    .padding(top = ttSpacing.xl)
+                    .testTag(SettingsScreenTag),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            ) {
+                // Left Pane
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    profileFailure?.let {
+                        item {
+                            Box(modifier = Modifier.testTag(SettingsProfileFailureTag)) {
+                                ttBanner(
+                                    message = stringResource(Res.string.settings_profile_save_failed),
+                                    onDismiss = onDismissProfileFailure,
+                                )
+                            }
+                        }
+                    }
+                    item { identitySection() }
+                    if (isAdmin) {
+                        item { adminSection() }
+                    }
+                    item { serverSection() }
+                    item { connectivitySection() }
+                    item { syncSection() }
+                }
+
+                // Divider
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(ttSeparator()),
+                )
+
+                // Right Pane
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    item { appearanceSection() }
+                    item { signOutSection() }
+                    version.display?.let {
+                        item { versionSection() }
                     }
                 }
             }
-            item {
-                // First section on the page: it is the identity the rest of the screen belongs to,
-                // not a preference filed with the others. It renders even when empty — the row that
-                // reads "—" is the honest answer, whereas a section that hides itself would leave
-                // the user with no idea where their profile went. The position picker dispatches
-                // through the same callback as every other edit here; the model persists it.
-                SettingsSection {
-                    UserDetailsRow(
-                        details = userDetails,
-                        // An avatar pick is complete the moment it lands: there is no draft to
-                        // finish, so the optimistic update is followed by the write in the same
-                        // gesture. Position and presence work the same way below; only the free
-                        // text fields wait for Done or focus loss.
-                        onDetailsChange = { updated ->
-                            onUserDetailsChange(updated)
-                            onUserDetailsCommit()
-                        },
-                        onEditName = { nameEditorOpen = true },
-                        modifier = Modifier.testTag(SettingsUserDetailsTag),
-                    )
-                    // The account address, read-only and labelled as such. It is not a profile
-                    // field and has no editor: changing it needs a verification flow the app
-                    // does not have, so a row that looked editable would promise one.
-                    if (userDetails.email.isNotBlank()) {
-                        SettingsDivider()
-                        SettingsIconRow(
-                            label = stringResource(Res.string.settings_email_label),
-                            value = userDetails.email,
-                            icon = ttSettingsIcons.account,
-                            modifier = Modifier.testTag(SettingsEmailRowTag),
-                        )
-                    }
-                    SettingsDivider()
-                    UserPositionPickerRow(
-                        selected = userDetails.position,
-                        onSelect = { position ->
-                            onUserDetailsChange(userDetails.copy(position = position))
-                            onUserDetailsCommit()
-                        },
-                        modifier = Modifier.testTag(SettingsPositionRowTag),
-                    )
-                    SettingsDivider()
-                    UserStatusPickerRow(
-                        selected = userDetails.status,
-                        onSelect = { status ->
-                            onUserDetailsChange(userDetails.copy(status = status))
-                            onUserDetailsCommit()
-                        },
-                        modifier = Modifier.testTag(SettingsUserStatusRowTag),
-                    )
-                    SettingsDivider()
-                    StatusTextEditor(
-                        value = userDetails.statusText,
-                        onValueChange = { statusText ->
-                            onUserDetailsChange(userDetails.copy(statusText = statusText))
-                        },
-                        onCommit = onUserDetailsCommit,
-                        modifier = Modifier.testTag(SettingsStatusTextRowTag),
-                    )
-                }
-            }
-            // The Admin section is drawn only for an administrator. It sits high on the page
-            // because for the one person who can see it, member and project management are the
-            // highest-value destinations here — and because a row below the fold would be a row
-            // a test could not tell from an absent one.
-            if (isAdmin) {
-                item {
-                    SettingsSection {
-                        SettingsActionRow(
-                            label = stringResource(Res.string.settings_manage_members),
-                            icon = ttSettingsIcons.account,
-                            tint = ttAccent(),
-                            onClick = onManageMembers,
-                            modifier = Modifier.testTag(SettingsManageMembersTag),
-                        )
-                        SettingsDivider()
-                        SettingsActionRow(
-                            label = stringResource(Res.string.settings_manage_projects),
-                            icon = ttTabIcons.projects,
-                            tint = ttAccent(),
-                            onClick = onManageProjects,
-                            modifier = Modifier.testTag(SettingsManageProjectsTag),
-                        )
-                    }
-                }
-            }
-            item {
-                SettingsSection {
-                    ThemePickerRow(
-                        selected = themeScheme,
-                        onSelect = onThemeChange,
-                    )
-                    SettingsDivider()
-                    AccentPalettePickerRow(
-                        selected = accentPalette,
-                        onSelect = onAccentPaletteChange,
-                    )
-                    SettingsDivider()
-                    GlassIntensityRow(
-                        intensity = glassIntensity,
-                        onPreview = onGlassIntensityPreview,
-                        onCommit = onGlassIntensityCommit,
-                    )
-                }
-            }
-            // The Server section leads the connection group. Its row shows the address the
-            // running clients are bound to — the honest reading, since a save cannot take
-            // effect until the next launch — and the sheet edits the address the next launch
-            // will read. A save or reset leaves a notice here saying so, which is the whole of
-            // the restart promise surfaced where the user makes the choice.
-            item {
-                SettingsSection {
-                    ServerAddressRow(
-                        label = stringResource(Res.string.settings_server_label),
-                        address = serverAddressLabel(serverAddress),
-                        icon = ttSettingsIcons.connectivity,
-                        onClick = onEditServerAddress,
-                        modifier = Modifier.testTag(SettingsServerRowTag),
-                    )
-                    serverAddressNotice?.let { notice ->
-                        SettingsDivider()
-                        ttText(
-                            text = serverAddressNoticeLabel(notice),
-                            style = ttTypography.footnote,
-                            color = ttLabelSecondary(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = ttSpacing.sm)
-                                .testTag(SettingsServerNoticeTag),
-                        )
-                    }
-                }
-            }
-            item {
-                SettingsSection {
-                    SettingsIconRow(
-                        label = stringResource(Res.string.settings_status_label),
-                        value = connectivityLabel(connectivity),
-                        icon = ttSettingsIcons.connectivity,
-                    )
-                    SettingsDivider()
-                }
-            }
-            item {
-                SettingsSection {
-                    SettingsIconRow(
-                        label = stringResource(Res.string.settings_status_label),
-                        value = activityLabel(activity.phase),
-                        icon = ttSettingsIcons.sync,
-                    )
-                    // The queue depth is the number a user actually cares about: it is how many of
-                    // their edits are still only on this device.
-                    activity.outstandingCount?.let { outstanding ->
-                        SettingsDivider()
-                        SettingsIconRow(
-                            label = stringResource(Res.string.settings_sync_waiting),
-                            value = outstanding.toString(),
-                            icon = ttSettingsIcons.sync,
-                            modifier = Modifier.testTag(SettingsWaitingRowTag),
-                        )
-                    }
-                    // Dead rows are kept rather than dropped, so this can be non-zero, and it is
-                    // then the only sign that something is stuck.
-                    activity.stuckCount?.let { stuck ->
-                        SettingsDivider()
-                        SettingsIconRow(
-                            label = stringResource(Res.string.settings_sync_stuck),
-                            value = stuck.toString(),
-                            icon = ttSettingsIcons.sync,
-                            valueColor = ttError(),
-                            modifier = Modifier.testTag(SettingsStuckRowTag),
-                        )
-                        // The way out, and it sits here rather than beside Sync Now because it
-                        // only means anything while the row above has a number on it. Without
-                        // it that number is a dead end: a refused change is never claimed again,
-                        // so Sync Now cannot move it and the only other answer was to delete
-                        // the work and make it again.
-                        SettingsDivider()
-                        SettingsActionRow(
-                            label = stringResource(Res.string.settings_sync_retry),
-                            icon = ttSettingsIcons.sync,
-                            tint = ttAccent(),
-                            onClick = onRetryStuckChanges,
-                            // Disabled on the same rule as Sync Now, and for the same reason:
-                            // the retry ends by asking for a cycle, and that request would be
-                            // dropped. Offline is not a reason here either — putting the rows
-                            // back needs no network, and the cycle that follows says so.
-                            enabled = !activity.isSyncing,
-                            modifier = Modifier.testTag(SettingsRetryStuckTag),
-                        )
-                    }
-                    if (activity.failures.isNotEmpty()) {
-                        SettingsDivider()
-                        ttText(
-                            text = activity.failures.joinToString(separator = "\n"),
-                            style = ttTypography.footnote,
-                            color = ttLabelSecondary(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = ttSpacing.sm)
-                                .testTag(SettingsFailuresTag),
-                        )
-                    }
-                    // Only a request that could not start lands here. The button below is
-                    // deliberately *not* disabled for it: greying a control out for a reason the
-                    // user cannot see is how a dead button gets reported as a bug.
-                    commandOutcome?.let { outcome ->
-                        outcomeMessage(outcome)?.let { message ->
-                            SettingsDivider()
-                            ttText(
-                                text = message,
-                                style = ttTypography.footnote,
-                                color = ttError(),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = ttSpacing.sm)
-                                    .testTag(SettingsOutcomeTag),
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = ttSpacing.xxl)
+                    .padding(top = ttSpacing.xl)
+                    .testTag(SettingsScreenTag),
+                contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            ) {
+                profileFailure?.let {
+                    item {
+                        Box(modifier = Modifier.testTag(SettingsProfileFailureTag)) {
+                            ttBanner(
+                                message = stringResource(Res.string.settings_profile_save_failed),
+                                onDismiss = onDismissProfileFailure,
                             )
                         }
                     }
-                    SettingsDivider()
-                    SettingsActionRow(
-                        label = stringResource(Res.string.settings_sync_now),
-                        icon = ttSettingsIcons.sync,
-                        tint = ttAccent(),
-                        onClick = onSyncNow,
-                        enabled = !activity.isSyncing,
-                        modifier = Modifier.testTag(SettingsSyncNowTag),
-                        // The one state that disables it: a cycle already running, which the status
-                        // row above is already saying out loud. Offline is *not* a reason — that
-                        // tap has to be answerable, and the answer is what lands above.
-                    )
                 }
-            }
-            item {
-                SettingsSection {
-                    // Through the port, which the app backs with the session coordinator: that is
-                    // what forgets the credentials, ends the session-scoped state and routes back
-                    // to sign-in. Tearing down from here would leave the tokens behind.
-                    SettingsActionRow(
-                        label = stringResource(Res.string.settings_sign_out),
-                        icon = ttSettingsIcons.account,
-                        tint = ttError(),
-                        onClick = onSignOut,
-                        modifier = Modifier.testTag(SettingsSignOutTag),
-                    )
+                item { identitySection() }
+                if (isAdmin) {
+                    item { adminSection() }
                 }
-            }
-            // The About section hides itself entirely rather than rendering an empty one: a
-            // version row with nothing beside it is a row that says the app does not know its own
-            // version, which is only true for a build with no version keys at all.
-            version.display?.let { displayed ->
-                item {
-                    SettingsSection {
-                        SettingsIconRow(
-                            label = stringResource(Res.string.settings_version),
-                            value = displayed,
-                            icon = ttSettingsIcons.about,
-                            modifier = Modifier.testTag(SettingsVersionRowTag),
-                        )
-                    }
+                item { appearanceSection() }
+                item { serverSection() }
+                item { connectivitySection() }
+                item { syncSection() }
+                item { signOutSection() }
+                version.display?.let {
+                    item { versionSection() }
                 }
             }
         }
