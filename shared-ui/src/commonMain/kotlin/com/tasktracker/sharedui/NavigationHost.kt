@@ -398,6 +398,7 @@ fun NavigationHost(
                         preferences = preferences,
                         themeScheme = themeScheme,
                         scope = scope,
+                        isWide = layoutClass.isWide,
                     )
                 }
                 val pushedPane: @Composable () -> Unit = {
@@ -695,6 +696,7 @@ private fun TabRoot(
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
+    isWide: Boolean = false,
 ) {
     when (tab) {
         AppTab.Projects -> ProjectsHost(
@@ -702,6 +704,7 @@ private fun TabRoot(
             environment = environment,
             currentUserID = preferences.currentUserID,
             currentUserName = preferences.currentUserName,
+            isWide = isWide,
         )
 
         AppTab.Board -> ProjectScopedTabScreen(
