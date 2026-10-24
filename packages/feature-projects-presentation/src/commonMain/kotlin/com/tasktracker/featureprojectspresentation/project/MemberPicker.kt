@@ -232,7 +232,7 @@ internal fun MemberPicker(
                         // At least the field's width so the menu lines up with it, and the
                         // switcher's 240dp scroll cap so a long directory cannot grow a
                         // menu taller than the sheet it floats over.
-                        .widthIn(min = with(density) { anchorWidthPx.toDp() })
+                        .widthIn(min = with(density) { anchorWidthPx.toDp() }, max = 280.dp)
                         .heightIn(max = MEMBER_PICKER_MENU_MAX_HEIGHT)
                         .verticalScroll(rememberScrollState())
                         .ttGlassSurface(
