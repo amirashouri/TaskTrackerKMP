@@ -130,12 +130,13 @@ object ttGlass {
     const val PROMINENT_TINT_ALPHA: Float = 0.85f
 
     /**
-     * How far the fill's **hue** travels from the tint toward the canvas by the bottom edge.
-     *
-     * The original's grammar is "lit at the top, sitting over the page at the bottom". The
-     * first port expressed that by fading the fill's **alpha** to nothing — the top stop was
-     * the tint at [FILL_ALPHA] and the bottom stop was the canvas at a third of an alpha —
-     * and that is not that grammar, it is the material deleting itself. A canvas-coloured
+ * How far the fill's **hue** travels from the tint toward the canvas by the bottom edge.
+ *
+ * The original's grammar is "lit at the top, sitting over the page at the bottom". The
+ * first port expressed that by fading the fill's **alpha** to nothing — the top stop was
+ * the tint at [FILL_ALPHA] and the bottom stop was the canvas at a third of an alpha
+ * —
+ * and that is not that grammar, it is the material deleting itself. A canvas-coloured
      * stop composites to *exactly* the page wherever it sits on it, so the last rows of every
      * card and every glass button were the page. Measured off an emulator at the centre of a
      * project card: `(195,204,216)` at the top edge, ramping all the way to `(251,251,252)`
@@ -150,6 +151,10 @@ object ttGlass {
      * [GlassFillRampTest] holds both halves, because this is arithmetic no colour token can
      * see — `AccentContrastTest` was green the whole time the fill was vanishing.
      */
+    /** @deprecated Use [GlassThickness.STANDARD.baseAlpha] instead. */
+    @Deprecated("Use GlassThickness.STANDARD.baseAlpha", ReplaceWith("ttGlass.GlassThickness.STANDARD.baseAlpha"))
+    val FILL_ALPHA: Float = GlassThickness.STANDARD.baseAlpha
+
     const val FILL_FADE: Float = 0.4f
 
     /**
@@ -209,15 +214,23 @@ object ttGlass {
      * `intensityScale` comes from `LocalGlassIntensity` (1.0 = full glass, 0.0 = opaque).
      * At intensity 0 all thicknesses converge to opaque; at intensity 1 they separate.
      */
-    sealed class GlassThickness(val baseAlpha: Float) {
-        object THIN : GlassThickness(0.45f)
-        object STANDARD : GlassThickness(0.55f)
-        object THICK : GlassThickness(0.65f)
-    }
-
-    /** @deprecated Use [GlassThickness.STANDARD.baseAlpha] instead. */
-    @Deprecated("Use GlassThickness.STANDARD.baseAlpha", ReplaceWith("ttGlass.GlassThickness.STANDARD.baseAlpha"))
-    const val FILL_ALPHA: Float = 0.55f
+/**
+ * Glass thickness levels — controls the base fill alpha before intensity scaling.
+ *
+ * Three levels create visual hierarchy:
+ * - THIN (0.45): inline elements (chips, badges) — subtle glass
+ * - STANDARD (0.55): cards, segmented picker, flow picker slab — default glass
+ * - THICK (0.65): modal sheets, full-screen overlays — prominent glass
+ *
+ * The actual rendered alpha is `thickness.baseAlpha * intensityScale` where
+ * `intensityScale` comes from `LocalGlassIntensity` (1.0 = full glass, 0.0 = opaque).
+ * At intensity 0 all thicknesses converge to opaque; at intensity 1 they separate.
+ */
+sealed class GlassThickness(val baseAlpha: Float) {
+    object THIN : GlassThickness(0.45f)
+    object STANDARD : GlassThickness(0.55f)
+    object THICK : GlassThickness(0.65f)
+}
 
     /**
      * How far a disabled control is dimmed, from `.opacity(isEnabled ? 1 : 0.4)`.
@@ -266,6 +279,7 @@ object ttGlass {
      * involved. [LENS_ALPHA]'s doc explains the first: this lens sits *under a text label*, in
      * accent, and every increment of white here spends that label's contrast margin. [HAIRLINE_ALPHA]
      * is the second: the lens is stacked on a fill that is already [FILL_ALPHA] of white, so
+     * (NOTE: [FILL_ALPHA] is deprecated and now equals [GlassThickness.STANDARD.baseAlpha].)
      * the two wash together and the tab bar ends up markedly lighter than any other glass in
      * the app. At 0.14 the lens is a hint, and that is the job: see [TAB_LENS_RIM_ALPHA] for
      * what is actually meant to make it visible.
@@ -320,9 +334,11 @@ object ttGlass {
     /**
      * The lens over a *solid, saturated* fill: the theme swatch's glass sheen.
      *
-     * More than three times [TAB_LENS_ALPHA], and the reason is the backdrop. The tab lens is
+     * More than three times [TAB_LENS_ALPHA], and the reason is the backdrop.The tab lens is
      * a hint because it sits on a fill that is already [FILL_ALPHA] of white and *under an
-     * accent label* whose contrast margin the wash spends. A palette swatch has neither: it is
+     * accent label whose contrast margin the wash spends.
+     *
+     * NOTE: [FILL_ALPHA] is deprecated and now equals [GlassThickness.STANDARD.baseAlpha]. A palette swatch has neither: it is
      * a flat, fully saturated fill, and the lens is the only thing on it, so the wash has to
      * carry the whole "this is glass" reading rather than confirm one. At [TAB_LENS_ALPHA] the
      * selected swatch measured only a 1.15:1 top-to-bottom lift — a sheen a person cannot see,
@@ -362,6 +378,7 @@ object ttGlass {
      * flat translucent card is the band of light it catches along its top edge. The fill
      * ramp already does "lit at the top, calmer at the bottom" but only as a **colour**
      * ramp — the top stop is the tint at [FILL_ALPHA], with no separate bright band, and
+     * (NOTE: [FILL_ALPHA] is deprecated and now equals [GlassThickness.STANDARD.baseAlpha].)
      * without this every surface in the app is a tinted slab.
      *
      * This is the one addition above the original's grammar that is not a port of it,
@@ -471,7 +488,9 @@ object ttGlass {
         // *then* cross-faded — which is the order that matters. Fading the floor and letting
         // [fillAlpha] multiply the result looks equivalent and is not: `ttGlassSurface` defaults
         // [fillAlpha] to [FILL_ALPHA], so an untinted surface's shipped alpha is
-        // `FILL_ALPHA * FILL_ALPHA` = 0.3025, and fading its floor toward 1 and then multiplying
+        // `FILL_ALPHA * FILL_ALPHA` = 0.3025
+        // NOTE: [FILL_ALPHA] is deprecated and now equals [GlassThickness.STANDARD.baseAlpha].
+        // Fading its floor toward 1 and then multiplying
         // by 0.55 again left the bottom of the slider at 0.55 — translucent, which is the one
         // thing it must not be. Measured: that version rendered #90a1b6 where the accent is
         // #34537a. Interpolating the finished alpha reaches a true opaque 1.0 and still puts

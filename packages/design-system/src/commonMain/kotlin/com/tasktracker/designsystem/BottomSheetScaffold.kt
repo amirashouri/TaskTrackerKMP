@@ -53,7 +53,8 @@ import androidx.compose.ui.unit.IntOffset
  * The surface here is a lens *over* a solid base — `ttSurface()` at `1f - LENS_ALPHA` — and
  * that base is what stops the page showing through a modal form. A sheet that calls
  * [ttGlassSurface] with no `base` instead gets the fill ramp: shipped alpha
- * `FILL_ALPHA * FILL_ALPHA` = 0.3025, tinted toward the accent. That is a translucent,
+ * `FILL_ALPHA * FILL_ALPHA` = 0.3025 (NOTE: [ttGlass.FILL_ALPHA] is deprecated and now equals
+ * [ttGlass.GlassThickness.STANDARD.baseAlpha]), tinted toward the accent. That is a translucent,
  * accent-coloured panel, which is the correct vocabulary for a chip sitting on a background
  * and the wrong one for something the user has committed to reading and tapping.
  *

@@ -496,6 +496,10 @@ private fun ProjectsEditorFullScreen(
     // rather than being re-wired by every host that hands it a model.
     var showDiscardConfirmation by remember { mutableStateOf(false) }
 
+    // NOTE: the old expand/collapse sheet seam is gone — the editor is always full-screen
+    // now. Keep `ProjectsEditorFullScreen` as the one body both surfaces share, because the
+    // only thing that changed between them was the frame around the form.
+
     Box(
         modifier = modifier
             .fillMaxSize()

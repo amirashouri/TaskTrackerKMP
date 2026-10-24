@@ -31,11 +31,11 @@ val LocalGlassIntensity = compositionLocalOf { 1f }
  * `0f` is modelled as opaque rather than as "no glass at all". A surface with no fill is
  * not reduced transparency, it is a hole in the page.
  *
- * At `1f` it is exactly [ttGlass.FILL_ALPHA], so the top of the slider is the arrangement
- * every existing measurement was taken at.
+ * At `1f` it is exactly [ttGlass.GlassThickness.STANDARD.baseAlpha], so the top of the
+ * slider is the arrangement every existing measurement was taken at.
  */
 internal fun glassFillAlpha(intensity: Float): Float =
-    lerp(1f, ttGlass.FILL_ALPHA, intensity.coerceIn(0f, 1f))
+    lerp(1f, ttGlass.GlassThickness.STANDARD.baseAlpha, intensity.coerceIn(0f, 1f))
 
 /**
  * The lens wash over something solid, at [intensity].

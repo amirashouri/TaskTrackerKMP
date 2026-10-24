@@ -91,6 +91,17 @@ The intended order is 8.1 → 8.2 → (8.3 if the mid-width rail still reads as 
 
 ## Active feature backlog
 
+### 9.1 — Remove the deprecated WorkItemEditor expand/collapse parameters
+- status: done
+- files: `packages/feature-projects-presentation/.../WorkItemEditor.kt`; spec at
+  `specs/9.1-remove-workitemeditor-expand-collapse-deprecation.md`
+
+### 9.2 — Remove the deprecated Glass fill-alpha helper
+- status: done
+- files: `packages/design-system/.../Glass.kt`, `packages/design-system/.../GlassIntensity.kt`;
+  spec at `specs/9.2-remove-deprecated-glass-fill-alpha.md`
+
+
 | Task | State | Priority | Intent | Depends on | Execution details |
 | --- | --- | --- | --- | --- | --- |
 | 1.7 | Pending | P3 | Role-based project permissions | None | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 1.7 |

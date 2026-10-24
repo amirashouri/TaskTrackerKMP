@@ -12,6 +12,15 @@ they already own, and all standalone completed specs already list `status: done`
 
 ## Items still in progress or pending
 
+### 9.1 — Remove the deprecated WorkItemEditor expand/collapse parameters
+- status: done
+- file: `specs/9.1-remove-workitemeditor-expand-collapse-deprecation.md`
+
+### 9.2 — Remove the deprecated Glass fill-alpha helper
+- status: done
+- file: `specs/9.2-remove-deprecated-glass-fill-alpha.md`
+
+
 | Task / Spec | State | Where to read it |
 | --- | --- | --- |
 | 8.1 — wide shell leading chrome | pending | `specs/8.1-wide-shell-sidebar.md`, `docs/PLAN.md` |
