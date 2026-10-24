@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextDecoration
@@ -184,7 +186,11 @@ private fun ArchivedItemRow(
         modifier = modifier
             .fillMaxWidth()
             .ttGlassCard()
-            .clickable(onClick = onSelect)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onSelect,
+            )
             .padding(ttSpacing.xl)
             .testTag(ArchivedItemTag(item)),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),

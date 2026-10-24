@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -306,7 +307,12 @@ private fun PickerRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onClick)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                role = Role.Button,
+                onClick = onClick,
+            )
             .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md),
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,

@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -106,7 +107,11 @@ fun WorkItemDependencyPickerSheet(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(ttRadius.row))
                                 .ttGlassCard()
-                                .clickable(onClick = { onToggle(item.id) })
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = { onToggle(item.id) },
+                                )
                                 .semantics { selected = isSelected }
                                 .padding(ttSpacing.xl)
                                 .testTag(WorkItemDependsPickerRowTag(item)),

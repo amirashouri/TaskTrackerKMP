@@ -1,6 +1,7 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -57,7 +58,11 @@ internal fun UserPositionPickerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .clickable(role = Role.Button) { expanded = !expanded },
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    role = Role.Button,
+                ) { expanded = !expanded },
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {

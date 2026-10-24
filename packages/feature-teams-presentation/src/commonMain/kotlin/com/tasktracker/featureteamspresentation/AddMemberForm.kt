@@ -1,6 +1,7 @@
 package com.tasktracker.featureteamspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -308,7 +309,11 @@ private fun PositionPicker(
                 .fillMaxWidth()
                 .heightIn(min = MIN_TOUCH_TARGET)
                 .testTag(AddMemberPositionRowTag)
-                .clickable(role = Role.Button) { expanded = !expanded },
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    role = Role.Button,
+                ) { expanded = !expanded },
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {

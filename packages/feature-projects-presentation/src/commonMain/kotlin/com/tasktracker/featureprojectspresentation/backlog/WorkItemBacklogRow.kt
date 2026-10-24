@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -142,7 +144,12 @@ fun WorkItemBacklogRow(
             .ttGlassCard()
             // Disabled, not inert: a locked sprint's row has no `onOpen`, and a press that
             // ripples and does nothing reads as a broken app rather than a locked one.
-            .clickable(enabled = onOpen != null && !isBusy, onClick = onOpen ?: {})
+            .clickable(
+                enabled = onOpen != null && !isBusy,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onOpen ?: {},
+            )
             .padding(ttSpacing.xl)
             .testTag(WorkItemBacklogRowTag(item)),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),

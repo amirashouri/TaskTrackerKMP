@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,7 +93,11 @@ internal fun UserDetailsRow(
         Box(
             modifier = Modifier
                 .clip(CircleShape)
-                .clickable(role = Role.Button) { avatarPickerOpen = !avatarPickerOpen }
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { MutableInteractionSource() },
+                    role = Role.Button,
+                ) { avatarPickerOpen = !avatarPickerOpen }
                 .testTag(SettingsAvatarTag),
             contentAlignment = Alignment.Center,
         ) {

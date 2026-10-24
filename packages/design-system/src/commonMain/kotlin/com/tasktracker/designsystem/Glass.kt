@@ -1111,7 +1111,12 @@ private fun FlowPickerChip(
         modifier = Modifier
             .clip(CircleShape)
             .onGloballyPositioned(onPositioned)
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                role = Role.Tab,
+                onClick = onClick,
+            )
             .padding(vertical = ttSpacing.xs, horizontal = ttSpacing.sm)
             .semantics {
                 contentDescription = label
@@ -1148,7 +1153,12 @@ private fun Segment(
                     horizontal = if (compact) ttSpacing.sm else ttSpacing.controlPaddingH,
                 ),
             )
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                role = Role.Tab,
+                onClick = onClick,
+            )
             .semantics { selected = isSelected },
         contentAlignment = Alignment.Center,
     ) {
