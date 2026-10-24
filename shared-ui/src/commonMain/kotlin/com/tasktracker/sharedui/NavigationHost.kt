@@ -219,7 +219,7 @@ fun NavigationHost(
     // the back handler needs in order to fall through to a plain pop rather than queue a
     // second dismissal behind the first one's delay.
     fun dismissEditor(editorRoute: AppRoute.WorkItemEditor): Boolean {
-        if (layoutClass == ShellLayoutClass.Expanded) {
+        if (layoutClass.isWide) {
             val currentPath = router.path(tab)
             if (currentPath.lastOrNull() == editorRoute) {
                 router.setPath(currentPath.dropLast(1), tab)
@@ -258,20 +258,23 @@ fun NavigationHost(
     // that bit: a sheet's action row sat on the bar and clicking Create dismissed the form
     // instead of submitting it, which is why the sheet reads this inset too.
     val tabBarInset = remember { mutableStateOf(0.dp) }
-    // The rail's own width, published for the same reason `tabBarInset` is published and by the
-    // same mechanism — see the overlay note above for what the inset buys back.
+    // The leading chrome's own width, published for the same reason `tabBarInset` is published
+    // and by the same mechanism — see the overlay note above for what the inset buys back.
     //
-    // It is measured rather than known because a rail is as wide as its widest caption, and a
-    // caption is a typography measurement rather than a token. There is no number to put here,
-    // which is the same finding that kept a rail-width token out of the design system.
+    // It is measured rather than known because the rail is as wide as its widest caption, and a
+    // caption is a typography measurement rather than a token. The sidebar has a known width, and
+    // is still measured through this same state rather than padded by its constant: one
+    // mechanism for "how much room does the leading chrome take" means the two chromes cannot
+    // disagree with the content box, and a reviewer changing the panel's width cannot leave a
+    // hardcoded number behind.
     //
     // `Compact` must never read a non-zero value, and this used to be left to the fact that only
-    // the expanded arm writes it. That holds on a launch that starts narrow and fails on a
-    // resize: dragging a wide window under the threshold removes the rail from the composition
-    // without a remeasure, so `onSizeChanged` never fires again, nothing zeroes the measurement,
-    // and the whole page keeps a leading gap. The consumer below therefore reads this *only*
-    // under `Expanded` rather than trusting the write to have been undone.
-    val railInset = remember { mutableStateOf(0.dp) }
+    // a wide arm writes it. That holds on a launch that starts narrow and fails on a resize:
+    // dragging a wide window under the threshold removes the rail from the composition without a
+    // remeasure, so `onSizeChanged` never fires again, nothing zeroes the measurement, and the
+    // whole page keeps a leading gap. The consumer below therefore reads this *only* under a wide
+    // class rather than trusting the write to have been undone.
+    val leadingChromeInset = remember { mutableStateOf(0.dp) }
     // Read here rather than inside the `onSizeChanged` lambda, which is not a composable scope.
     val tabBarDensity = LocalDensity.current
     // `BackHandler` needs a `NavigationEventDispatcherOwner` in this composition
@@ -291,7 +294,7 @@ fun NavigationHost(
         // that is not drawn — the same stale-inset leak as the rail's, on the other axis. `0.dp`
         // is the same "there is no bar" answer the local's own default gives, now derived from the
         // layout class instead of asserted by the expanded arm never writing the measurement.
-        LocalTabBarScrollUnderInset provides if (layoutClass == ShellLayoutClass.Expanded) {
+        LocalTabBarScrollUnderInset provides if (layoutClass.isWide) {
             0.dp
         } else {
             tabBarInset.value
@@ -300,7 +303,7 @@ fun NavigationHost(
         // under `Compact`, a centred window under `Expanded`. Derived here from the one read
         // above, so the sheets cannot disagree with the chrome about which layout the shell
         // is in — the local is the only channel that reaches design-system from down here.
-        LocalSheetPresentation provides if (layoutClass == ShellLayoutClass.Expanded) {
+        LocalSheetPresentation provides if (layoutClass.isWide) {
             SheetPresentation.Window
         } else {
             SheetPresentation.BottomSheet
@@ -319,7 +322,7 @@ fun NavigationHost(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        start = if (layoutClass == ShellLayoutClass.Expanded) railInset.value else 0.dp,
+                        start = if (layoutClass.isWide) leadingChromeInset.value else 0.dp,
                     ),
             ) {
                 val path = navigation.pathFor(tab)
@@ -348,7 +351,7 @@ fun NavigationHost(
                 // only route and `backgroundPushed` is null while one is open. The pane branch
                 // below therefore has to be read before the `backgroundPushed == null` arm.
                 val backlogEditorInPane = if (
-                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Backlog
+                    layoutClass.isWide && tab == AppTab.Backlog
                 ) {
                     pushed as? AppRoute.WorkItemEditor
                 } else {
@@ -503,7 +506,7 @@ fun NavigationHost(
                     // the *list* in the right pane: the same screen on both sides. The right pane
                     // is the detail only when the stack actually holds a detail route; otherwise
                     // nothing is selected and the pane says so.
-                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Sprints ->
+                    layoutClass.isWide && tab == AppTab.Sprints ->
                         SprintTwoPanes(
                             listPane = tabRoot,
                             detailPane = if (backgroundPushed is AppRoute.SprintDetail) {
@@ -513,7 +516,7 @@ fun NavigationHost(
                             },
                         )
 
-                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
+                    layoutClass.isWide && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminMembers ->
                         if (memberAdminPort == null) {
                             AdminMembersPlaceholder()
@@ -526,7 +529,7 @@ fun NavigationHost(
                             )
                         }
 
-                    layoutClass == ShellLayoutClass.Expanded && tab == AppTab.Settings &&
+                    layoutClass.isWide && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminProjects ->
                         if (adminProjectsPort == null) {
                             AdminTwoPanes(
@@ -590,7 +593,7 @@ fun NavigationHost(
                             // dismissal drops the route (see `dismissEditor`), the node leaves
                             // the composition at once, and a window's close has no travel to
                             // finish either.
-                            val isWindow = layoutClass == ShellLayoutClass.Expanded
+                            val isWindow = layoutClass.isWide
                             AnimatedVisibility(
                                 visibleState = transitionState,
                                 enter = if (isWindow) {
@@ -630,11 +633,15 @@ fun NavigationHost(
             // asked of the width the shell was offered — never of the platform. See
             // `ShellLayoutClass` for why `isDesktopApp` is the wrong source for that answer.
             //
-            // The load-bearing half of this branch is not the `when` but what the expanded arm does
-            // *not* do: it never composes the bar, so nothing below it is told to keep room for
-            // one — the provider above hands `0.dp` under this class rather than the last bar's
-            // measurement, which is what it used to hand a window that had just been widened.
-            // `TTBottomSheetScaffold` reads the same local and gets the same answer.
+            // The load-bearing half of this branch is not the `when` but what the wide arms do
+            // *not* do: neither composes the bar, so nothing below it is told to keep room for
+            // one — the provider above hands `0.dp` under any wide class rather than the last
+            // bar's measurement, which is what it used to hand a window that had just been
+            // widened. `TTBottomSheetScaffold` reads the same local and gets the same answer.
+            //
+            // The two wide arms differ only in which leading chrome they draw; both publish their
+            // width through the same `leadingChromeInset`, because the content box's question is
+            // "how much room did the leading chrome take", not "which chrome was it".
             //
             // The bar's own `WindowInsets.ime` guard and its `navigationBarsPadding()` are left
             // exactly as they are rather than made conditional. They are already correct at zero
@@ -657,7 +664,17 @@ fun NavigationHost(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { size: IntSize ->
-                            railInset.value = with(tabBarDensity) { size.width.toDp() }
+                            leadingChromeInset.value = with(tabBarDensity) { size.width.toDp() }
+                        },
+                )
+
+                ShellLayoutClass.Sidebar -> NavigationSidebar(
+                    selected = tab,
+                    onSelect = router::selectTab,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .onSizeChanged { size: IntSize ->
+                            leadingChromeInset.value = with(tabBarDensity) { size.width.toDp() }
                         },
                 )
             }
@@ -2273,9 +2290,9 @@ private fun TabBar(
  * ## Why the tag is on the wrapper
  *
  * The same call [TabBar] makes about its own tag: the wrapper carries the edge inset, and a tag
- * below it would measure the inset rather than the rail. `railInset` is read from *this* node's
- * size, so the two have to agree about what is being measured — the rail and the room it takes,
- * edge inset included, because that is the space the content has to start after.
+ * below it would measure the inset rather than the rail. `leadingChromeInset` is read from *this*
+ * node's size, so the two have to agree about what is being measured — the rail and the room it
+ * takes, edge inset included, because that is the space the content has to start after.
  */
 @Composable
 private fun NavigationRail(
@@ -2323,7 +2340,7 @@ private class LoadedWorkItem(val item: WorkItem?)
 
 /** One tab's label. Exhaustive over [AppTab], so a sixth tab is a compile error here. */
 @Composable
-private fun tabTitle(tab: AppTab): String = when (tab) {
+internal fun tabTitle(tab: AppTab): String = when (tab) {
     AppTab.Projects -> stringResource(Res.string.tab_projects)
     AppTab.Board -> stringResource(Res.string.tab_board)
     AppTab.Backlog -> stringResource(Res.string.tab_backlog)

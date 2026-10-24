@@ -178,6 +178,26 @@ abstract class TaskTrackerAppScenarios {
     fun exactlyOneRailDestinationIsMarkedSelected() =
         runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
 
+    @Test
+    fun aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar() =
+        runComposeUiTest(block = ShellScenarios.aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar)
+
+    @Test
+    fun theSidebarIsALeadingColumnRatherThanAStretchedOne() =
+        runComposeUiTest(block = ShellScenarios.theSidebarIsALeadingColumnRatherThanAStretchedOne)
+
+    @Test
+    fun resizingSidebarToRailAndBackShedsBothInsets() =
+        runComposeUiTest(block = ShellScenarios.resizingSidebarToRailAndBackShedsBothInsets)
+
+    @Test
+    fun exactlyOneSidebarDestinationIsMarkedSelected() =
+        runComposeUiTest(block = ShellScenarios.exactlyOneSidebarDestinationIsMarkedSelected)
+
+    @Test
+    fun everySidebarDestinationIsNamedAndCarriesTheTabRole() =
+        runComposeUiTest(block = ShellScenarios.everySidebarDestinationIsNamedAndCarriesTheTabRole)
+
 
     @Test
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)

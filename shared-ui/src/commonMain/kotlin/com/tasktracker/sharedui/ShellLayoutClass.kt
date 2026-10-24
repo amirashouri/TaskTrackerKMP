@@ -20,17 +20,24 @@ import androidx.compose.ui.unit.dp
  * So this is derived from the width, and every host produces the same answer for the same
  * window. Nothing anywhere branches on the platform to decide a layout.
  *
- * ## Two classes, not three, and the middle one is rejected rather than overlooked
+ * ## Three classes, and the third is not Material's medium class
  *
  * Material's split puts a medium class at 600dp, and 600dp is where a side rail starts to fit.
- * It is left out deliberately. Between 600 and [ShellExpandedMinimumWidth] a rail plus a single
- * pane costs horizontal room and gains nothing, because the second pane that would spend that
- * room is the thing this class is gating. A third class would also mean "which chrome" and "how
- * many panes" became two answers to one question — the exact shape [RootScreen] rejects for the
- * session root, where two answers is how a sign-out is applied to the tree and not to the
- * navigation.
+ * It is still left out deliberately. Between 600 and [ShellExpandedMinimumWidth] a rail plus a
+ * single pane costs horizontal room and gains nothing, because the second pane that would spend
+ * that room is the thing this class is gating. A third class at 600 would also mean "which
+ * chrome" and "how many panes" became two answers to one question — the exact shape
+ * [RootScreen] rejects for the session root, where two answers is how a sign-out is applied to
+ * the tree and not to the navigation.
  *
- * ## Why the threshold is 840dp
+ * [Sidebar] is the *other* end of the ladder, and it is a different argument. At
+ * [ShellSidebarMinimumWidth] there is room for a 280dp panel beside a second pane that is still
+ * as wide as the narrowest genuine list-detail pair, so the panel can carry labels and a project
+ * switcher instead of five glyphs. It is not a "medium" step between phone and tablet; it is the
+ * same wide layout with more room to spend, which is why it changes only the *leading chrome* and
+ * nothing about how many panes exist. See [isWide].
+ *
+ * ## Why the first threshold is 840dp
  *
  * It is the width at which the narrowest genuine list-detail pair in this app fits side by side
  * without either pane going below a readable measure: a rail, a list at its natural width, and a
@@ -47,25 +54,49 @@ enum class ShellLayoutClass {
 
     /** Room for a side rail and a second pane. */
     Expanded,
+
+    /** Room for a labelled sidebar and a second pane. See [ShellSidebarMinimumWidth]. */
+    Sidebar,
     ;
+
+    /**
+     * Whether this class draws leading chrome — a rail or a sidebar — rather than a bottom bar.
+     *
+     * ## A property because the alternative is nine comparisons that can each be forgotten
+     *
+     * Before this existed, every consumer asked `layoutClass == ShellLayoutClass.Expanded`.
+     * Adding a class made each of those a silent bug **only at widths no scenario used**: the
+     * editor's exit, the sheet's presentation, the Sprints two-pane arrangement and the leading
+     * inset all key off this question. A comparison answers "is this exactly the class I was
+     * written against"; the consumers were always asking "is this a wide shell". Writing the
+     * question down once is what lets a future class be added in one place.
+     *
+     * `!= Compact` rather than `== Expanded || == Sidebar`, so a new class is assumed wide until
+     * somebody deliberately classifies it. Every class at or above [ShellExpandedMinimumWidth] is
+     * wide by construction, and [Compact] is the only narrow one.
+     */
+    val isWide: Boolean get() = this != Compact
 
     companion object {
         /**
          * The class a width resolves to.
          *
-         * `>=` rather than `>`, so [ShellExpandedMinimumWidth] is the *first* expanded width
-         * rather than the last compact one. The boundary is asserted from both sides, including
-         * a fractional width below it, because `>=` and `>` differ by exactly one value and a
-         * test that only ever tries round numbers cannot tell them apart.
+         * `>=` rather than `>`, so each threshold is the *first* width in its class rather than
+         * the last width of the previous one. The boundaries are asserted from both sides,
+         * including a fractional width below each, because `>=` and `>` differ by exactly one
+         * value and a test that only ever tries round numbers cannot tell them apart.
          *
-         * `Dp.Infinity` answers [Expanded], and it is not a defensive branch. A
+         * `Dp.Infinity` answers [Sidebar], and it is not a defensive branch. A
          * `BoxWithConstraints` inside a scrolling or otherwise unbounded parent genuinely
-         * reports an infinite `maxWidth`, and `Infinity >= 840.dp` is already true — so the
-         * branch is really "do not special-case infinity into the compact layout", which is
-         * what an `isFinite` guard added later would do by accident.
+         * reports an infinite `maxWidth`, and `Infinity >= …` is already true — so the branch is
+         * really "do not special-case infinity into the compact layout", which is what an
+         * `isFinite` guard added later would do by accident.
          */
-        fun forWidth(width: Dp): ShellLayoutClass =
-            if (width >= ShellExpandedMinimumWidth) Expanded else Compact
+        fun forWidth(width: Dp): ShellLayoutClass = when {
+            width >= ShellSidebarMinimumWidth -> Sidebar
+            width >= ShellExpandedMinimumWidth -> Expanded
+            else -> Compact
+        }
     }
 }
 
@@ -79,6 +110,30 @@ enum class ShellLayoutClass {
  * nothing, because there is only ever going to be one shell.
  */
 val ShellExpandedMinimumWidth: Dp = 840.dp
+
+/**
+ * The width of the wide shell's sidebar.
+ *
+ * 280dp, because that is the narrowest panel that can show a project name beside its glyph
+ * without truncating the seeded names at [com.tasktracker.designsystem.ttTypography]'s body
+ * size. It is a *shell* number rather than a design-system token for the same reason
+ * [ShellExpandedMinimumWidth] is one: nothing is painted from it, no screen reads it, and there
+ * is only ever going to be one shell. The design system owns the panel's surface and spacing;
+ * the caller owns how much room the panel takes, exactly as the rail's width is owned by its
+ * captions rather than by a token.
+ */
+val ShellSidebarWidth: Dp = 280.dp
+
+/**
+ * The narrowest width that gets the sidebar instead of the rail.
+ *
+ * The expression is the rule: a 280dp sidebar must leave at least [ShellExpandedMinimumWidth] of
+ * content, or the second pane it sits beside stops being the list-detail pair the 840dp
+ * threshold was chosen for. Written as arithmetic rather than as `1120.dp` so the two decisions
+ * cannot drift apart when either input moves; the boundary itself is pinned in
+ * `ShellLayoutClassTest`, where a change shows up as a deliberate edit.
+ */
+val ShellSidebarMinimumWidth: Dp = ShellExpandedMinimumWidth + ShellSidebarWidth
 
 /**
  * The class the shell is currently laid out at, for anything below it that needs to know.
