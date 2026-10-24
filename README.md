@@ -154,11 +154,13 @@ bumped to 1 because macOS rejects a bundle version whose first number is 0, so
 scripts/check.sh
 ```
 
-It compiles the Android app, checks the architecture graph, and runs the JVM tests by
-default. `scripts/check.sh full` runs the complete matrix — JVM, iOS simulator and
-Android under Robolectric; `scripts/check.sh graph` runs only the architecture checks
-and the Android compile, and `jvm`, `ios`, `android` and `lint` scope a single host or
-task. `docs/TESTING.md` is the authoritative command and host reference;
+It runs the JVM tests and the architecture checks by default. `scripts/check.sh full`
+runs the complete matrix — JVM, iOS simulator and Android under Robolectric;
+`scripts/check.sh graph` adds the architecture checks and the Android compile, and
+`jvm`, `ios`, `android` and `lint` scope a single host or task. While editing, use
+`scripts/check.sh quick <module> [filter…]`: one module, `--tests` filters, no baseline
+check, and results kept so unchanged tests are skipped. It is an iteration aid, not a
+gate. `docs/TESTING.md` is the authoritative command and host reference;
 `test-baseline.json` holds the generated totals and `test-known-failures.json` the
 named allowlist.
 

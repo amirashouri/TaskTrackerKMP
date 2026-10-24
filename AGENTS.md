@@ -91,9 +91,15 @@ burns tokens through endless cosmetic iterations.
 ## The command that decides whether you are done
 
 ```bash
-scripts/check.sh          # fast: JVM + graph + baseline + summary
+scripts/check.sh quick shared-ui 'com.tasktracker.sharedui.*Sidebar*'
+                          # iteration only: one module, filtered, no baseline
+scripts/check.sh          # gate: JVM + architecture checks + baseline + summary
 scripts/check.sh full     # all three hosts; required for UI / expect-actual work
 ```
+
+`quick` is the only scope that is not a gate: it keeps the result XML so Gradle can skip
+unchanged tests and it skips the baseline check, because a filtered run cannot match
+whole-host totals. Never use a filtered run as the pre-push gate.
 
 The script exports the JDK, runs Gradle with `--continue`, and treats only
 failures named in `test-known-failures.json` as acceptable. Policy:

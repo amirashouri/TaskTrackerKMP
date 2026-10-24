@@ -671,6 +671,10 @@ fun NavigationHost(
                 ShellLayoutClass.Sidebar -> NavigationSidebar(
                     selected = tab,
                     onSelect = router::selectTab,
+                    coroutineScope = scope,
+                    repository = environment.repository,
+                    activeProjectID = navigation.activeProjectID,
+                    onOpenProject = { id -> router.openProject(id, AppTab.Board) },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { size: IntSize ->

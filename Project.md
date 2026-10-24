@@ -25,7 +25,9 @@ Without it the build dies immediately with `Unable to locate a Java Runtime`. Th
 ## The command that decides whether you are done
 
 ```bash
-scripts/check.sh          # fast: JVM + graph + baseline + summary
+scripts/check.sh quick shared-ui 'com.tasktracker.sharedui.*Sidebar*'
+                          # iteration only: one module, filtered, no baseline
+scripts/check.sh          # gate: JVM + architecture checks + baseline + summary
 scripts/check.sh full     # all three hosts + baseline; required for UI work
 ```
 

@@ -9,21 +9,33 @@ rollout that will make the allowlist empty.
 
 | Command | What it runs | When |
 | --- | --- | --- |
-| `scripts/check.sh` | JVM tests, architecture graph, Android compile, baseline, summary | The fast inner loop; the default |
-| `scripts/check.sh fast <module>` | JVM tests for one module (for example `packages:core`) | While iterating on one module |
+| `scripts/check.sh` | JVM tests, architecture checks, baseline, summary | The gate before pushing; the default |
+| `scripts/check.sh quick <module> [filter…]` | JVM tests for one module, filtered with `--tests`; result XML kept; no baseline or summary | While editing a file or a scenario — **not** a gate |
+| `scripts/check.sh fast <module>` | JVM tests for one module (for example `packages:core`); still a gate | While iterating on one module whose whole suite is affordable |
 | `scripts/check.sh full` | JVM + iOS simulator + Android host + graph + baseline + summary | Before a PR; required for UI, `expect`/`actual`, and cross-platform changes |
 | `scripts/check.sh jvm` | JVM tests only | Targeted JVM run |
 | `scripts/check.sh ios` | iOS simulator tests only | Targeted iOS run |
 | `scripts/check.sh android` | Android host tests only | Targeted Robolectric run |
-| `scripts/check.sh graph` | `verifyArchitectureGraph`, `verifyModuleImports`, Android compile | Dependency changes |
+| `scripts/check.sh graph` | `verifyArchitectureGraph`, `verifyModuleImports`, Android compile | Dependency changes, and before pushing a change to the build scripts |
 | `scripts/check.sh lint` | `:androidApp:lintDebug` | Manifest / Android lint changes |
 | `scripts/check.sh docs` | Nothing | Docs-only changes |
 
-Every run uses Gradle `--continue`, removes the selected hosts’ old result directories
-first, prints one compact failure summary, then runs `scripts/check-baseline.sh` for the
-hosts that actually ran. The command exits green when every failure is named in
-`test-known-failures.json`; a new failure, a stale allowlist entry, a changed total, or a
-missing host result exits red.
+Every **gate** run uses Gradle `--continue`, removes the selected hosts’ old result
+directories first, prints one compact failure summary, then runs
+`scripts/check-baseline.sh` for the hosts that actually ran. The command exits green when
+every failure is named in `test-known-failures.json`; a new failure, a stale allowlist
+entry, a changed total, or a missing host result exits red.
+
+`quick` is the one exception, and it is not a gate. It keeps the previous result XML —
+pruning the directory makes Gradle’s test task out of date, so every gate re-executes the
+whole suite instead of reporting `UP-TO-DATE` — and it skips the summary and baseline
+steps, both of which measure whole-host totals and would report every test the filter
+did not run as missing. Use it while iterating, then run `fast` or `full` before pushing.
+
+The default scope is JVM plus the two architecture checks. The Android compile
+(`:androidApp:compileDebugKotlin`, Room/KSP plus resources) is the heaviest non-test task
+in the build and lives in `graph` and `full` instead: a dependency change is already the
+thing `graph` is for, and `full` needs the Android host anyway.
 
 ## Hosts
 

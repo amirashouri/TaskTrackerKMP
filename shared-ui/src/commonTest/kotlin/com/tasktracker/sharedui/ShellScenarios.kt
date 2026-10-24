@@ -9,6 +9,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -75,6 +77,7 @@ import com.tasktracker.featureteamspresentation.MembersListTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
@@ -237,6 +240,7 @@ object ShellScenarios {
         splashHold: Long = 0L,
         width: Dp? = PHONE_WIDTH,
         widthState: MutableState<Dp>? = null,
+        density: Density = Density(1f),
         deepLinks: DeepLinkSource = DeepLinkSource(),
         navigationEventOwner: NavigationEventDispatcherOwner? = null,
         memberAdminPort: MemberAdminPort? = null,
@@ -272,20 +276,29 @@ object ShellScenarios {
             // width that only ever changes outside the composition is a width the shell never
             // sees.
             val shellWidth = widthState?.value ?: width
+            // The density override is what makes a *dp* width larger than the virtual display's
+            // pixel width expressible. The display is 1024x768 px, so a 1280dp shell is clamped
+            // to 1024dp at the default density and the sidebar class (>= 1120dp) can never be
+            // composed. At 0.75 the display is 1365x1024dp, the requested width fits, and every
+            // measurement the scenarios take is still in dp — a 16dp edge inset is 12px there
+            // and reads back as 16dp. Scenarios that do not ask for a wider-than-1024dp shell
+            // keep the default, so nothing else changes shape.
             val app: @Composable () -> Unit = {
-                if (shellWidth == null) {
-                    TaskTrackerApp(
-                        resolver,
-                        splashMinimumHoldMillis = splashHold,
-                        deepLinks = deepLinks,
-                    )
-                } else {
-                    Box(modifier = Modifier.width(shellWidth)) {
+                CompositionLocalProvider(LocalDensity provides density) {
+                    if (shellWidth == null) {
                         TaskTrackerApp(
                             resolver,
                             splashMinimumHoldMillis = splashHold,
                             deepLinks = deepLinks,
                         )
+                    } else {
+                        Box(modifier = Modifier.width(shellWidth)) {
+                            TaskTrackerApp(
+                                resolver,
+                                splashMinimumHoldMillis = splashHold,
+                                deepLinks = deepLinks,
+                            )
+                        }
                     }
                 }
             }
@@ -1831,6 +1844,17 @@ object ShellScenarios {
     private val SIDEBAR_WIDTH = 1280.dp
 
     /**
+     * The density a sidebar scenario composes at, so 1280dp fits inside the 1024px display.
+     *
+     * The sidebar class starts at [ShellSidebarMinimumWidth] (1120dp) and the test display is
+     * 1024x768 *pixels*, so at density 1 the shell is clamped to 1024dp and every sidebar
+     * scenario fails on a node that was never composed. 0.75 turns the display into
+     * 1365x1024dp without changing any layout, because every length in this app is in dp and
+     * every assertion here is read back in dp.
+     */
+    private val SIDEBAR_DENSITY = Density(0.75f)
+
+    /**
      * A phone draws the bar and no rail.
      *
      * The compact path is the one that had to stay unchanged, so it is asserted directly rather
@@ -2099,7 +2123,10 @@ object ShellScenarios {
      */
     val shrinkingTheWindowPastTheThresholdShedsTheRailInset: suspend ComposeUiTest.() -> Unit = shrink@{
         val width = mutableStateOf(DESKTOP_WIDTH)
-        setUpShell(session = ScriptedSession(restored = signedIn()), widthState = width)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            widthState = width,
+        )
         waitForIdle()
 
         if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@shrink
@@ -2212,7 +2239,11 @@ object ShellScenarios {
      * sidebar exists to replace.
      */
     val aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar: suspend ComposeUiTest.() -> Unit = sidebar@{
-        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
         waitForIdle()
 
         if (desktopWidthIsExpressible(SIDEBAR_WIDTH)) {
@@ -2237,15 +2268,13 @@ object ShellScenarios {
     }
 
     /**
-     * The sidebar is a leading column that wraps its destinations, not a stretched or
-     * bottom-anchored one.
+     * The sidebar is a leading column, and its destinations are one top-aligned stack.
      *
-     * Three separate assertions because the failure has three shapes, and each is the transpose
-     * of a defect [TTGlassTabBar] already records for the other axis. A sidebar that filled the
-     * window's height would give five destinations a fifth of a tall column each (the "768pt-tall
-     * wrapper with the tabs parked dead centre" in the bar's KDoc, rotated). A sidebar that
-     * spanned the window's width would be the bar again. A sidebar anchored to the bottom edge
-     * would be a bar stood on end.
+     * Three separate assertions because the failure has three shapes. A sidebar that spanned the
+     * window's width would be the bar again. A sidebar anchored to the bottom edge would be a bar
+     * stood on end. And a sidebar whose *destinations* were bottom-anchored would be 8.1's first
+     * 8.2 pass: the project list took the flexible height, so the five primary destinations were
+     * pinned to the panel's floor and separated from the list by however much space it left.
      *
      * The leading-edge inset is read from [ttSpacing.tabBarEdgeInset] rather than written as a
      * number, because the shell owns that inset and a copy of it in this file is a second thing
@@ -2253,7 +2282,11 @@ object ShellScenarios {
      * edge inset it does not own.
      */
     val theSidebarIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = sidebar@{
-        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
         waitForIdle()
 
         if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
@@ -2309,103 +2342,81 @@ object ShellScenarios {
                 "than a floating surface",
         )
 
-        // Its destinations share the height equally, which is what the selection wash's segment is
-        // derived from: `maxHeight / destinations.size`. Cells that did not divide it evenly would
-        // put the wash in the wrong place on a tall window, and this is the composed half of a
-        // rule the pure geometry test cannot see — that test supplies the height, so it cannot tell
-        // whether the component supplies the right one.
+        // Its destinations are one top-aligned stack, not a band pinned to the panel's floor.
         //
-        // The band's leading half-point is the sidebar's own vertical glass padding, which is inside
-        // the tagged box but outside the cells.
-        val firstCell = onNodeWithTag(
-            SidebarButtonTag(AppTab.Projects),
-            useUnmergedTree = true,
-        ).getBoundsInRoot()
-        val cellHeight = firstCell.bottom.value - firstCell.top.value
+        // This is the shape 8.2 settled on after review, and the measurement that separates it
+        // from the rejected one is the distance between the project context and the rows that act
+        // on it. The old arrangement put the list on a weight, so a short list left several
+        // hundred dp of empty glass between the list and Board; here the stack is adjacent and
+        // the empty glass ends up below the last row.
+        val projectsRow = onNodeWithTag(SidebarButtonTag(AppTab.Projects)).getBoundsInRoot()
+        val boardRow = onNodeWithTag(SidebarButtonTag(AppTab.Board)).getBoundsInRoot()
+        val backlogRow = onNodeWithTag(SidebarButtonTag(AppTab.Backlog)).getBoundsInRoot()
+        val sprintsRow = onNodeWithTag(SidebarButtonTag(AppTab.Sprints)).getBoundsInRoot()
+        val settingsRow = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot()
+
+        assertTrue(
+            projectsRow.top.value < boardRow.top.value &&
+                boardRow.top.value < backlogRow.top.value &&
+                backlogRow.top.value < sprintsRow.top.value &&
+                sprintsRow.top.value < settingsRow.top.value,
+            "the destinations run Projects ${projectsRow.top.value}, Board ${boardRow.top.value}, " +
+                "Backlog ${backlogRow.top.value}, Sprints ${sprintsRow.top.value}, Settings " +
+                "${settingsRow.top.value}dp from the top, so they are not in the scope order the " +
+                "panel is built on (index, the active project's views, app-level)",
+        )
+        val listToViews = boardRow.top.value - projectsRow.bottom.value
+        assertTrue(
+            listToViews < SIDEBAR_STACK_MAX_GAP,
+            "Board sits ${listToViews}dp below the Projects row in a ${sidebarHeight}dp panel. " +
+                "The project list is the only flexible child and it wraps when short, so the " +
+                "rows that act on it follow immediately; hundreds of dp here is the " +
+                "bottom-anchored arrangement this layout replaced, where a weight on the list " +
+                "pushed the primary destinations to the panel's floor",
+        )
         assertEquals(
-            cellHeight * PHONE_TAB_COUNT,
-            sidebarHeight - ttSpacing.hairlineInset.value * 2,
-            cellHeight * QUARTER,
-            "the sidebar's ${sidebarHeight}dp should be $PHONE_TAB_COUNT destinations of $cellHeight dp " +
-                "plus ${ttSpacing.hairlineInset.value * 2}dp of its own vertical padding. Cells " +
-                "that do not share the height equally put the wash's segment — the sidebar's height " +
-                "divided by the destination count — in the wrong place",
+            projectsRow.left.value,
+            settingsRow.left.value,
+            ONE_POINT,
+            "the index row starts at ${projectsRow.left.value}dp and Settings at " +
+                "${settingsRow.left.value}dp, so the two unscoped destinations do not share an " +
+                "edge and the indent is not the thing that marks the scoped group",
+        )
+        val indent = boardRow.left.value - projectsRow.left.value
+        assertTrue(
+            indent >= ttSpacing.lg.value - ONE_POINT &&
+                sprintsRow.left.value - projectsRow.left.value >= ttSpacing.lg.value - ONE_POINT,
+            "Board and Sprints start ${indent}dp inside the index row, so the indent is not " +
+                "marking them as the active project's children. The indent is the nesting " +
+                "signal; without it the three views read as peers of Projects and Settings",
+        )
+        val emptyGlass = sidebar.bottom.value - settingsRow.bottom.value
+        val settingsHeight = settingsRow.bottom.value - settingsRow.top.value
+        assertTrue(
+            emptyGlass > settingsHeight,
+            "Settings ends ${emptyGlass}dp above the panel's bottom edge, less than one row " +
+                "(${settingsHeight}dp): the last destination is pinned to the floor rather than " +
+                "closing the stack, which puts the empty glass back between two groups",
         )
 
-        // The selection wash marks its cell and never overruns it.
+        // Every destination is exactly one node.
         //
-        // This is the assertion that would have caught the overhang. A sidebar segment is a fifth of
-        // the sidebar's height, so at 736dp the cells are 146dp and the wash's 10% stretch takes it
-        // from 140dp to 154dp. Its *top* edge still landed on the right destination, which is the
-        // edge a bounds check is most likely to look at, and its bottom edge crossed into the next
-        // cell — a selection indicator visibly bigger than the thing it indicated. The wash is
-        // clamped to its segment for that reason, and this is what holds the clamp.
-        val wash = onNodeWithTag(SidebarTag).getBoundsInRoot()
-        val landingCell = onNodeWithTag(
-            SidebarButtonTag(AppTab.Projects),
-            useUnmergedTree = true,
-        ).getBoundsInRoot()
-        val washHeightMeasured = wash.bottom.value - wash.top.value
-        val cellHeightMeasured = landingCell.bottom.value - landingCell.top.value
-        assertTrue(
-            washHeightMeasured <= cellHeightMeasured,
-            "the wash is ${washHeightMeasured}dp tall over a ${cellHeightMeasured}dp cell, so it " +
-                "is taller than the destination it is marking and crosses into the next one. Its " +
-                "top edge sits at ${wash.top.value} against the cell's ${landingCell.top.value}, " +
-                "which is why this reads as correct until you look at the bottom edge",
-        )
-        assertTrue(
-            wash.top.value >= landingCell.top.value - ONE_POINT &&
-                wash.bottom.value <= landingCell.bottom.value + ONE_POINT,
-            "the wash occupies ${wash.top.value}..${wash.bottom.value}dp and its cell " +
-                "${landingCell.top.value}..${landingCell.bottom.value}dp, so it is not contained " +
-                "by the destination it is marking",
-        )
-
-        // Every glyph on one axis. The cells are as wide as their own captions and the captions
-        // differ — "Board" is far narrower than "Projects" — so this is the property that says
-        // they are *centred* on the column's centre line rather than each hugging the leading
-        // edge, which drew "Board" visibly outboard of "Projects".
-        //
-        // Measured spread across the five destinations is **0.5dp**, which is the caption widths'
-        // own sub-pixel rounding rather than a real offset. Before the column was centred the same
-        // measurement spread the destinations across the sidebar's full width — tens of dp, because
-        // each glyph sat at its own caption's position instead of on a shared axis.
-        val centres = AppTab.entries.map { tab ->
-            onNodeWithTag(SidebarButtonTag(tab), useUnmergedTree = true)
-                .getBoundsInRoot()
-                .let { (it.left.value + it.right.value) / 2f }
+        // The count half is the original claim: a row that stopped composing is invisible to the
+        // selection scenarios, which only look at the selected one. The "exactly one" half is the
+        // defect 8.1's draft shipped — a "Projects" heading, the project list and the Projects
+        // destination row all carried `SidebarButtonTag(AppTab.Projects)`, so every tap-by-name
+        // query matched three nodes.
+        AppTab.entries.forEach { tab ->
+            assertEquals(
+                1,
+                onAllNodesWithTag(SidebarButtonTag(tab)).fetchSemanticsNodes().size,
+                "the ${tab.wireValue} destination should be one node in the sidebar, and " +
+                    "SidebarButtonTag names " +
+                    "${onAllNodesWithTag(SidebarButtonTag(tab)).fetchSemanticsNodes().size}. A " +
+                    "destination that stopped composing is invisible to the selection " +
+                    "scenarios, and a tag shared with a heading breaks every tap-by-name scenario",
+            )
         }
-        val spread = centres.max() - centres.min()
-        assertTrue(
-            spread <= ONE_POINT,
-            "the destinations' centre lines run ${centres.min()}..${centres.max()} — a spread of " +
-                "${spread}dp: ${centres.joinToString { "${it}" }}. Every glyph and caption is " +
-                "centred on the column's centre line, so a caption wider than its neighbours " +
-                "must not drag its glyph outboard of theirs. A point is sub-pixel rounding; the " +
-                "defect this guards was tens of points wide",
-        )
-        assertTrue(
-            sidebarHeight > 0f && sidebarHeight < shellHeight,
-            "the sidebar measured ${sidebarHeight}dp in a ${shellHeight}dp shell, so it is either empty " +
-                "or filling the window outright. It should fill the window less one edge inset " +
-                "at each end",
-        )
-
-        // It carries every destination, not only the selected ones. `selectedSidebarDestinations`
-        // filters on `selected`, so a cell that stopped composing would leave that list reading
-        // `listOf(AppTab.Projects)` and the selection scenario would pass over a sidebar with one
-        // destination on it. The bar has `fiveTabsFitAtPhoneWidth` for this; the sidebar needed the
-        // equivalent and did not have one.
-        assertEquals(
-            PHONE_TAB_COUNT,
-            AppTab.entries.count {
-                onAllNodesWithTag(SidebarButtonTag(it)).fetchSemanticsNodes().isNotEmpty()
-            },
-            "the sidebar should carry all $PHONE_TAB_COUNT destinations, one " +
-                "SidebarButtonTag each. A cell that stopped composing is invisible to the " +
-                "selection scenarios, which only ever look at the selected one",
-        )
 
         // And the content starts *beside* it rather than running underneath. Read on a real
         // screen rather than on the content box, because the box carrying the padding is
@@ -2429,6 +2440,375 @@ object ShellScenarios {
     }
 
     /**
+     * The sidebar lists projects in the picker's order, most recently updated first.
+     *
+     * The fixture is chosen so alphabetical order and updated-descending disagree: Zenith was
+     * touched most recently and Apollo is first alphabetically. A list sorted by name, or one
+     * that keeps insertion order, puts Apollo on top and fails here — so this is the assertion
+     * that separates "the model's order" from "an order that happens to look plausible".
+     */
+    val theSidebarListsProjectsInTheSwitchersOrder: suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(
+            name = "Apollo",
+            keyPrefix = "AP",
+            updatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+        )
+        val zenith = shellTestProject(
+            name = "Zenith",
+            keyPrefix = "ZE",
+            updatedAt = Instant.parse("2026-03-04T00:00:00Z"),
+        )
+        projects.seed(apollo)
+        projects.seed(zenith)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        val first = onNodeWithTag(SidebarProjectTag(zenith.id)).getBoundsInRoot()
+        val second = onNodeWithTag(SidebarProjectTag(apollo.id)).getBoundsInRoot()
+        assertTrue(
+            first.top.value < second.top.value,
+            "Zenith (updated 2026-03-04) sits at ${first.top.value}dp and Apollo (updated " +
+                "2026-01-02) at ${second.top.value}dp, so the sidebar is not listing projects in " +
+                "`ProjectPickerModel`'s own order — updated descending, then name. The fixture " +
+                "puts the alphabetical first second, which is what separates this from a list " +
+                "sorted by name",
+        )
+
+        // Each row names the project twice: name and key prefix. The prefix is the identifier
+        // the rest of the app prints on every work item (`AP-12`), and in a 280dp panel it is
+        // what tells two similarly named projects apart. The repeated glyph the first pass drew
+        // carried neither.
+        onNodeWithTag(SidebarProjectTag(zenith.id)).assert(hasText("ZE", substring = true))
+        onNodeWithTag(SidebarProjectTag(apollo.id)).assert(hasText("AP", substring = true))
+    }
+
+    /**
+     * Tapping a project row makes it the active project and lands on Board.
+     *
+     * The row's `selected` property and the destination's selection are asserted together, for
+     * the reason the rail's selection scenario gives: "a board appeared" is satisfied by a tab
+     * that never moved, and a highlight alone is satisfied by a stale id the tap wrote nowhere.
+     * Before the tap nothing is selected, so a highlight that is born on the first row is also a
+     * failure here rather than a passing coincidence.
+     */
+    val tappingASidebarProjectOpensItOnBoard: suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(
+            name = "Apollo",
+            keyPrefix = "AP",
+            updatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+        )
+        val zenith = shellTestProject(
+            name = "Zenith",
+            keyPrefix = "ZE",
+            updatedAt = Instant.parse("2026-03-04T00:00:00Z"),
+        )
+        projects.seed(apollo)
+        projects.seed(zenith)
+        val candidates = listOf(apollo.id, zenith.id)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        assertEquals(
+            emptyList(),
+            selectedSidebarProjects(candidates),
+            "no project has been opened yet, so no sidebar row should claim to be the active one",
+        )
+
+        onNodeWithTag(SidebarProjectTag(zenith.id)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(zenith.id),
+            selectedSidebarProjects(candidates),
+            "after tapping Zenith its sidebar row is not the active one, so the highlight is not " +
+                "reading `router.state.activeProjectID`",
+        )
+        assertEquals(
+            listOf(AppTab.Board),
+            selectedSidebarDestinations(),
+            "tapping a project row should land on Board, and the sidebar's selected destination " +
+                "is " + selectedSidebarDestinations() + " instead of the Board row",
+        )
+    }
+
+    /**
+     * A project tapped while Settings is selected still lands on Board.
+     *
+     * This is why the tap is `openProject(id, AppTab.Board)` rather than the default overload:
+     * the router rejects Settings outright inside `openProject`, so the default leaves the
+     * project switched and the tab where it was — a switcher that silently does nothing on one
+     * tab. Settings is also the tab that proves the sidebar is a project switcher rather than
+     * part of the scoped views.
+     */
+    val switchingProjectFromSettingsLandsOnBoard: suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(
+            name = "Apollo",
+            keyPrefix = "AP",
+            updatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+        )
+        val zenith = shellTestProject(
+            name = "Zenith",
+            keyPrefix = "ZE",
+            updatedAt = Instant.parse("2026-03-04T00:00:00Z"),
+        )
+        projects.seed(apollo)
+        projects.seed(zenith)
+        val candidates = listOf(apollo.id, zenith.id)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        onNodeWithTag(SidebarProjectTag(apollo.id)).performClick()
+        waitForIdle()
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        assertEquals(
+            listOf(AppTab.Settings),
+            selectedSidebarDestinations(),
+            "the scenario needs Settings to be the current destination before it taps a project",
+        )
+
+        onNodeWithTag(SidebarProjectTag(zenith.id)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(AppTab.Board),
+            selectedSidebarDestinations(),
+            "the project changed while Settings was selected and the tab stayed on Settings, so " +
+                "the tap used the default `openProject` — which the router rejects on Settings — " +
+                "instead of naming Board",
+        )
+        assertEquals(
+            listOf(zenith.id),
+            selectedSidebarProjects(candidates),
+            "Zenith is on Board but its sidebar row is not marked as the active project",
+        )
+    }
+
+    /**
+     * A full switcher scrolls inside the panel and the destinations do not move.
+     *
+     * Forty projects is the case a `weight` on the list is for: without it the list measures
+     * its content unbounded and pushes Settings and the views off the panel. Forty rather than
+     * twenty because the sidebar scenarios compose at [SIDEBAR_DENSITY], which gives a taller
+     * display in dp — twenty rows fit there, and a scroll action that scrolls nothing would
+     * assert nothing. The destinations' bounds are captured before and after scrolling to the
+     * last row, so a list that grew the panel, or a stack that re-flowed, fails as loudly as
+     * one that overflowed.
+     */
+    val theSidebarKeepsItsDestinationsWhenTheProjectListScrolls:
+        suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        val seeded = (1..40).map { index ->
+            shellTestProject(
+                name = "Project ${index.toString().padStart(2, '0')}",
+                keyPrefix = "P${index.toString().padStart(2, '0')}",
+                updatedAt = Instant.fromEpochSeconds(1_760_000_000L + index * 86_400L),
+            )
+        }
+        seeded.forEach { projects.seed(it) }
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        val boardBefore = onNodeWithTag(SidebarButtonTag(AppTab.Board)).getBoundsInRoot()
+        val settingsBefore = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot()
+
+        // The last index is the oldest project — the list is ordered updated-descending, so the
+        // final row is the one that started the list.
+        val oldest = seeded.first()
+        onNodeWithTag(SidebarProjectListTag).performScrollToIndex(seeded.lastIndex)
+        waitForIdle()
+
+        onNodeWithTag(SidebarProjectTag(oldest.id)).assertIsDisplayed()
+
+        val boardAfter = onNodeWithTag(SidebarButtonTag(AppTab.Board)).getBoundsInRoot()
+        val settingsAfter = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot()
+        assertEquals(
+            boardBefore.top.value,
+            boardAfter.top.value,
+            ONE_POINT,
+            "Board moved from ${boardBefore.top.value}dp to ${boardAfter.top.value}dp when the " +
+                "project list was scrolled, so the list is pushing the destinations around " +
+                "instead of scrolling inside its own box",
+        )
+        assertEquals(
+            settingsBefore.top.value,
+            settingsAfter.top.value,
+            ONE_POINT,
+            "Settings moved from ${settingsBefore.top.value}dp to ${settingsAfter.top.value}dp " +
+                "when the project list was scrolled, so the panel is growing with its content " +
+                "rather than keeping the list as the only flexible child",
+        )
+    }
+
+    /**
+     * An empty switcher renders no rows and still carries every destination.
+     *
+     * The fixture is an *archived* project rather than a repository with nothing in it, and that
+     * is not a shortcut: the Projects list seeds a sample project on its first read when the store
+     * is empty, so a genuinely empty repository stops being empty before the sidebar can be
+     * observed. An archived project is excluded from the picker (`ProjectPickerModel` reads
+     * `includeArchived = false`) and it makes `seedSampleDataIfNeeded` a no-op, which is the only
+     * shape in which "no projects in the switcher" is reachable at all.
+     *
+     * No placeholder and no empty-state copy: the chrome should not explain the absence of data.
+     */
+    val anEmptySidebarSwitcherStillCarriesEveryDestination:
+        suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        projects.seed(
+            shellTestProject(name = "Filed Away", keyPrefix = "FA", isArchived = true),
+        )
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        assertEquals(
+            0,
+            onAllNodesWithTag(SidebarProjectListTag).fetchSemanticsNodes().size,
+            "the sidebar composed a project list for a repository whose only project is " +
+                "archived, so the switcher is not reading the picker's non-archived list",
+        )
+        AppTab.entries.forEach { tab ->
+            onNodeWithTag(SidebarButtonTag(tab)).assertExists(
+                "the ${tab.wireValue} destination is missing from a sidebar with no projects. " +
+                    "The switcher being empty must not cost the five destinations, and nothing " +
+                    "should stand in for the missing rows",
+            )
+        }
+    }
+
+    /**
+     * The sidebar's active row follows a project opened from the Projects list.
+     *
+     * This is the assertion that fails if a second "which project" state is introduced: the
+     * project is chosen in the list on the Projects tab, not in the sidebar, and the sidebar has
+     * to move without being told. The destination is asserted with it so a stale highlight and a
+     * board that never opened stay different failures.
+     */
+    val theSidebarFollowsAProjectChosenFromTheProjectsList:
+        suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(
+            name = "Apollo",
+            keyPrefix = "AP",
+            updatedAt = Instant.parse("2026-01-02T00:00:00Z"),
+        )
+        val viking = shellTestProject(
+            name = "Viking",
+            keyPrefix = "VI",
+            updatedAt = Instant.parse("2026-03-04T00:00:00Z"),
+        )
+        projects.seed(apollo)
+        projects.seed(viking)
+        val candidates = listOf(apollo.id, viking.id)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        onNodeWithTag(ProjectRowTag(ProjectSummary(viking, itemCount = 0))).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(viking.id),
+            selectedSidebarProjects(candidates),
+            "Viking was opened from the Projects list and the sidebar still marks " +
+                "${selectedSidebarProjects(candidates)} as the active project, so the sidebar " +
+                "keeps a \"which project\" answer of its own instead of reading route state. " +
+                "A second source for that answer drifts the first time a project is opened " +
+                "anywhere but here",
+        )
+        assertEquals(
+            listOf(AppTab.Board),
+            selectedSidebarDestinations(),
+            "a project opened from the Projects list should land on Board, and the sidebar's " +
+                "selected destination is " + selectedSidebarDestinations() + " instead",
+        )
+    }
+
+    /**
+     * A project created in the shell appears in the sidebar without a relaunch.
+     *
+     * The sidebar observes `ProjectChange`; a switcher that reads once on composition passes
+     * every static scenario and fails only after a write, which is exactly the defect this
+     * guards. The id is read back from the store because the create form returns nothing to its
+     * caller, and the row is then found by that id — searching by the name would also match the
+     * Projects list behind the sheet.
+     */
+    val creatingAProjectShowsItInTheSidebarWithoutARelaunch:
+        suspend ComposeUiTest.() -> Unit = sidebar@{
+        val projects = FakeProjectRepository()
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(NewProjectFormTag).assertExists(
+            "the New Project sheet did not open at ${SIDEBAR_WIDTH.value}dp, so this scenario " +
+                "cannot reach the write it is about",
+        )
+        onNodeWithTag("name").performTextInput("Gemini")
+        onNodeWithTag(NewProjectCreateTag).performClick()
+        waitForIdle()
+
+        val created = projects.projects(includeArchived = false).first { it.name == "Gemini" }
+        onNodeWithTag(SidebarProjectTag(created.id)).assertExists(
+            "\"Gemini\" is in the store but the sidebar has no row for it: the switcher is " +
+                "not observing `ProjectChange`, so it only shows writes that happened before " +
+                "the shell composed",
+        )
+    }
+
+    /**
      * Shrinking the window past the sidebar threshold sheds the sidebar's inset, and growing
      * back to the sidebar threshold drops the rail's inset.
      *
@@ -2444,14 +2824,22 @@ object ShellScenarios {
      * The measurement is the projects list's leading edge, for the reason
      * [theSidebarIsALeadingColumnRatherThanAStretchedOne] gives: the box carrying the inset is
      * anonymous, so a node inside it is the only thing that can show whether the inset reached the
-     * pixels. Under `Compact` that edge should sit on the shell's own leading edge.
+     * pixels. After the shrink that edge must sit on the *rail's* trailing edge, not on the shell's
+     * leading edge: at [DESKTOP_WIDTH] the shell draws the rail, so content beside it is correct,
+     * and what would be a defect is the sidebar's 280dp band still being applied. Comparing
+     * against the rail's own measured edge is what separates the two; this scenario used to assert
+     * the shell's edge, which no rail-width shell can satisfy.
      *
      * The ordering is chosen so both crossings are exercised on one composition, because a
      * rail/sidebar that leaves the composition is never remeasured to zero.
      */
     val resizingSidebarToRailAndBackShedsBothInsets: suspend ComposeUiTest.() -> Unit = resize@{
         val width = mutableStateOf(SIDEBAR_WIDTH)
-        setUpShell(session = ScriptedSession(restored = signedIn()), widthState = width)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            widthState = width,
+            density = SIDEBAR_DENSITY,
+        )
         waitForIdle()
 
         if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@resize
@@ -2479,18 +2867,18 @@ object ShellScenarios {
                 "${SIDEBAR_WIDTH.value}dp",
         )
 
-        val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        val rail = onNodeWithTag(NavigationRailTag).getBoundsInRoot()
         val list = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
         assertEquals(
-            shell.left.value,
+            rail.right.value,
             list.left.value,
             ONE_POINT,
             "after shrinking to ${DESKTOP_WIDTH.value}dp the projects list starts at " +
-                "${list.left.value}dp while the shell starts at ${shell.left.value}dp — a " +
-                "${list.left.value - shell.left.value}dp gap down the leading edge. The sidebar's " +
+                "${list.left.value}dp while the rail ends at ${rail.right.value}dp — a " +
+                "${list.left.value - rail.right.value}dp gap down the leading edge. The sidebar's " +
                 "inset was measured at ${SIDEBAR_WIDTH.value}dp and is still being applied after " +
-                "the sidebar is gone, because a sidebar leaves the composition without being " +
-                "remeasured to zero",
+                "the sidebar is gone, because a chrome that leaves the composition is never " +
+                "remeasured to zero; the rail's own measurement should have replaced it",
         )
 
         // Second crossing: Rail → Sidebar
@@ -2531,7 +2919,11 @@ object ShellScenarios {
      * lit the wrong single destination.
      */
     val exactlyOneSidebarDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = sidebar@{
-        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
         waitForIdle()
 
         if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
@@ -2557,6 +2949,19 @@ object ShellScenarios {
             "after tapping Settings on the sidebar the selection did not follow the route, so the " +
                 "sidebar's wash and its `selected` property are both describing a stale destination",
         )
+
+        // And the index row is a destination, not the inert heading 8.1's draft put above the
+        // list. It was plain text with the destination's own tag and the destination's own
+        // selected ink, which is a control that looks live and does nothing; tapping it has to
+        // land on the list for that not to be the shape again.
+        onNodeWithTag(SidebarButtonTag(AppTab.Projects)).performClick()
+        waitForIdle()
+        assertEquals(
+            listOf(AppTab.Projects),
+            selectedSidebarDestinations(),
+            "the Projects row in the sidebar did not take the selection back to the projects " +
+                "index, so it is decorative chrome rather than a destination",
+        )
     }
 
     /**
@@ -2570,7 +2975,11 @@ object ShellScenarios {
      * string resource would leave a tab with no name *at all*.
      */
     val everySidebarDestinationIsNamedAndCarriesTheTabRole: suspend ComposeUiTest.() -> Unit = sidebar@{
-        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
         waitForIdle()
 
         if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
@@ -2639,6 +3048,17 @@ object ShellScenarios {
      * single destination is off by eighty per cent, so the band cannot hide the failure it is for.
      */
     private const val QUARTER = 0.25f
+
+    /**
+     * How far the active project's views may sit below the project list and still be one stack,
+     * in dp.
+     *
+     * With an empty list the gap is the explicit `ttSpacing.sm` spacer plus the column's own
+     * `ttSpacing.xxs` rhythm; with a full list it is the same. The rejected bottom-anchored
+     * layout left the better part of the panel's height between them, so 100dp separates "one
+     * stack" from "two groups" by an order of magnitude rather than by a rounding argument.
+     */
+    private const val SIDEBAR_STACK_MAX_GAP = 100f
 
     /**
      * A point of slack, in dp, for measurements comparing two laid-out nodes.
@@ -3970,6 +4390,22 @@ object ShellScenarios {
                     hasTestTag(SidebarButtonTag(tab)) and isSelected(),
                 ).fetchSemanticsNodes().isNotEmpty()
             }
+
+    /**
+     * Which project rows the semantics tree is currently claiming as the active one.
+     *
+     * The candidates are passed in rather than read from the store, for the reason
+     * [selectedSidebarDestinations] takes no argument but reads the enum: the tag carries the
+     * project id, so there is no way to ask for "all project rows" without already knowing them.
+     * Every id in the fixture is asked about, so a second row claiming to be active fails as
+     * loudly as none.
+     */
+    private fun ComposeUiTest.selectedSidebarProjects(candidates: List<ProjectID>): List<ProjectID> =
+        candidates.filter { id ->
+            onAllNodes(
+                hasTestTag(SidebarProjectTag(id)) and isSelected(),
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
 
 
     /**

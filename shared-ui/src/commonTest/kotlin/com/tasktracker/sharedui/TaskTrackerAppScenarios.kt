@@ -198,6 +198,42 @@ abstract class TaskTrackerAppScenarios {
     fun everySidebarDestinationIsNamedAndCarriesTheTabRole() =
         runComposeUiTest(block = ShellScenarios.everySidebarDestinationIsNamedAndCarriesTheTabRole)
 
+    @Test
+    fun theSidebarListsProjectsInTheSwitchersOrder() =
+        runComposeUiTest(block = ShellScenarios.theSidebarListsProjectsInTheSwitchersOrder)
+
+    @Test
+    fun tappingASidebarProjectOpensItOnBoard() =
+        runComposeUiTest(block = ShellScenarios.tappingASidebarProjectOpensItOnBoard)
+
+    @Test
+    fun switchingProjectFromSettingsLandsOnBoard() =
+        runComposeUiTest(block = ShellScenarios.switchingProjectFromSettingsLandsOnBoard)
+
+    @Test
+    fun theSidebarKeepsItsDestinationsWhenTheProjectListScrolls() =
+        runComposeUiTest(
+            block = ShellScenarios.theSidebarKeepsItsDestinationsWhenTheProjectListScrolls,
+        )
+
+    @Test
+    fun anEmptySidebarSwitcherStillCarriesEveryDestination() =
+        runComposeUiTest(
+            block = ShellScenarios.anEmptySidebarSwitcherStillCarriesEveryDestination,
+        )
+
+    @Test
+    fun theSidebarFollowsAProjectChosenFromTheProjectsList() =
+        runComposeUiTest(
+            block = ShellScenarios.theSidebarFollowsAProjectChosenFromTheProjectsList,
+        )
+
+    @Test
+    fun creatingAProjectShowsItInTheSidebarWithoutARelaunch() =
+        runComposeUiTest(
+            block = ShellScenarios.creatingAProjectShowsItInTheSidebarWithoutARelaunch,
+        )
+
 
     @Test
     fun aSprintOpensAndALinkLandsOnIt() = runComposeUiTest(block = ShellScenarios.aSprintOpensAndALinkLandsOnIt)

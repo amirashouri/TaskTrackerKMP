@@ -7,9 +7,11 @@
 # script is the contract: the docs describe scopes, this file says what they run.
 #
 # Usage:
-#   scripts/check.sh                    # fast default: JVM + graph + baseline
+#   scripts/check.sh                    # gate: JVM + architecture + baseline
 #   scripts/check.sh fast               # same as the default
-#   scripts/check.sh fast packages:core # JVM tests for one module
+#   scripts/check.sh fast packages:core # JVM tests for one module (still a gate)
+#   scripts/check.sh quick shared-ui 'com.tasktracker.sharedui.*Sidebar*'
+#                                       # one module, filtered, iteration only
 #   scripts/check.sh full               # all three hosts + graph + baseline
 #   scripts/check.sh all                # alias for full
 #   scripts/check.sh jvm                # jvmTest only
@@ -22,6 +24,10 @@
 # A red test result is only a failure when the test is not in
 # test-known-failures.json. `check-baseline.sh` makes that distinction; this script
 # returns green for an allowlisted failure and red for a new one.
+#
+# `quick` is the one scope that is not a gate: it keeps the previous result XML (so
+# Gradle can skip unchanged tests), applies `--tests` filters, and skips the baseline
+# and known-failure steps. Use it while editing; run `fast` before pushing.
 set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
@@ -38,15 +44,33 @@ if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
   export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configuration-cache=true"
 fi
 
-GRAPH_TASKS=(
+# The two cheap checks every gate can afford. They read the build scripts, not the
+# code, so they are minutes cheaper than an Android compile and still catch the
+# mistakes that no test can see: a new dependency edge, a module import that crosses
+# a layer boundary.
+ARCH_TASKS=(
   verifyArchitectureGraph
   verifyModuleImports
+)
+
+# Room's KSP pass and Android resource compilation. The heaviest non-test task in the
+# build, and the reason `fast` used to take as long as it did; it belongs in `graph`
+# (where a dependency change is already the thing being checked) and in `full`.
+ANDROID_COMPILE_TASKS=(
   :androidApp:compileDebugKotlin
+)
+
+GRAPH_TASKS=(
+  "${ARCH_TASKS[@]}"
+  "${ANDROID_COMPILE_TASKS[@]}"
 )
 
 scope="${1:-default}"
 hosts=""
 tasks=()
+# Gates prune stale XML; `quick` keeps it so Gradle can report up-to-date. See the
+# deletion below for why pruning exists and why it must not run on every edit.
+prune_results=1
 
 module_task() {
   case "$1" in
@@ -64,8 +88,26 @@ case "$scope" in
         tasks+=("$(module_task "$module")")
       done
     else
-      tasks=(jvmTest "${GRAPH_TASKS[@]}")
+      tasks=(jvmTest "${ARCH_TASKS[@]}")
     fi
+    ;;
+  quick)
+    if [ "$#" -lt 2 ]; then
+      echo "quick needs a module: scripts/check.sh quick <module> [test-filter...]" >&2
+      exit 2
+    fi
+    tasks=("$(module_task "$2")")
+    shift 2
+    # Every remaining argument becomes a `--tests` filter. Repeated filters are a
+    # union in Gradle, so one invocation can cover, for example, both new scenarios
+    # and the class they live in.
+    for pattern in "$@"; do
+      tasks+=(--tests "$pattern")
+    done
+    # Iteration only: no known-failure summary and no baseline, because both measure
+    # whole-host totals and a filtered run would report every unrun test as missing.
+    hosts=""
+    prune_results=0
     ;;
   full|all)
     hosts="jvmTest,iosSimulatorArm64Test,testAndroidHostTest"
@@ -100,7 +142,7 @@ case "$scope" in
     ;;
   *)
     echo "unknown scope: '$scope'" >&2
-    echo "use: default|fast|full|all|jvm|ios|android|graph|lint|docs" >&2
+    echo "use: default|fast|quick <module> [filter...]|full|all|jvm|ios|android|graph|lint|docs" >&2
     exit 2
     ;;
 esac
@@ -108,7 +150,12 @@ esac
 # A result is evidence only when it came from this run. Removing the old XML also
 # makes a deleted test class disappear from the baseline instead of surviving as a
 # stale file that still compares equal.
-if [ -n "$hosts" ]; then
+#
+# This is a *gate* step, and deliberately not an every-edit step: deleting the output
+# makes Gradle's test task out of date, so the next `check.sh` re-runs the whole suite
+# instead of reporting UP-TO-DATE. `quick` skips it and gives up the freshness
+# guarantee in exchange for a run that finishes in seconds.
+if [ "$prune_results" -eq 1 ] && [ -n "$hosts" ]; then
   IFS=',' read -r -a host_array <<< "$hosts"
   for host in "${host_array[@]}"; do
     find . -type d -path "*/build/test-results/$host" -prune -exec rm -rf {} + 2>/dev/null || true
@@ -118,6 +165,12 @@ fi
 
 log="$(mktemp -t tasktracker-check.XXXXXX)"
 trap 'rm -f "$log"' EXIT
+
+if [ "$scope" = "quick" ]; then
+  echo "==> quick: iteration only — no baseline check, no known-failure summary."
+  echo "    The results directory is kept so unchanged tests can be skipped."
+  echo "    Gate before pushing: scripts/check.sh fast"
+fi
 
 echo "==> ./gradlew --continue ${tasks[*]}"
 gradle_status=0
