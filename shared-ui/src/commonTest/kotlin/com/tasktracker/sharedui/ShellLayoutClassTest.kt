@@ -4,6 +4,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -79,10 +80,43 @@ class ShellLayoutClassTest {
         )
     }
 
-    /** A real desktop window, which is the case the whole section exists for. */
+    /** A wide desktop window below the sidebar threshold, which must keep the rail. */
     @Test
     fun `a typical desktop window is expanded`() {
-        assertEquals(ShellLayoutClass.Expanded, ShellLayoutClass.forWidth(1280.dp))
+        assertEquals(ShellLayoutClass.Expanded, ShellLayoutClass.forWidth(1000.dp))
+    }
+
+    /**
+     * The last rail width, one point below the sidebar threshold.
+     *
+     * 1000dp is the width every existing wide scenario uses, and it must keep resolving to the
+     * rail; this is the guard that makes adding the sidebar a one-class change for the tests that
+     * already existed.
+     */
+    @Test
+    fun `a width just below the sidebar threshold is expanded`() {
+        assertEquals(ShellLayoutClass.Expanded, ShellLayoutClass.forWidth(1119.dp))
+    }
+
+    /** Half a point below the sidebar threshold, which pins `>=` against `>` there too. */
+    @Test
+    fun `a fractional width just below the sidebar threshold is expanded`() {
+        assertEquals(ShellLayoutClass.Expanded, ShellLayoutClass.forWidth(1119.5.dp))
+    }
+
+    /** The sidebar threshold itself is already a sidebar, which is the other half of that pin. */
+    @Test
+    fun `the sidebar threshold itself is a sidebar`() {
+        assertEquals(
+            ShellLayoutClass.Sidebar,
+            ShellLayoutClass.forWidth(ShellSidebarMinimumWidth),
+        )
+    }
+
+    /** The Desktop app's default window, and the case the sidebar exists for. */
+    @Test
+    fun `a very wide desktop window is a sidebar`() {
+        assertEquals(ShellLayoutClass.Sidebar, ShellLayoutClass.forWidth(1280.dp))
     }
 
     /**
@@ -98,7 +132,7 @@ class ShellLayoutClassTest {
     }
 
     /**
-     * An unbounded parent is expanded, and this is not a defensive branch.
+     * An unbounded width is the sidebar, and this is not a defensive branch.
      *
      * `BoxWithConstraints` reports `Dp.Infinity` for `maxWidth` inside a scrolling or otherwise
      * unbounded parent, so this is a value the app can really produce. The assertion exists to
@@ -107,39 +141,74 @@ class ShellLayoutClassTest {
      * scrollable.
      */
     @Test
-    fun `an unbounded width is expanded`() {
-        assertEquals(ShellLayoutClass.Expanded, ShellLayoutClass.forWidth(Dp.Infinity))
+    fun `an unbounded width is a sidebar`() {
+        assertEquals(ShellLayoutClass.Sidebar, ShellLayoutClass.forWidth(Dp.Infinity))
     }
 
     /**
-     * Widening never takes a screen back to the phone layout.
+     * Widening never returns to a narrower layout.
      *
      * A sweep rather than a sample, because the failure this catches is not a wrong constant:
      * it is an implementation with more than one condition in it — a floor as well as a ceiling,
      * an upper bound that forgets to be inclusive — which passes every single-point assertion
-     * above while being wrong somewhere in between. `first` is found and then every width above
-     * it is checked, so the test names the width where monotonicity actually broke rather than
-     * reporting a boolean.
+     * above while being wrong somewhere in between. The rank is compared rather than a single
+     * "is expanded" boolean, so a width that steps *back* from `Sidebar` to `Expanded` is caught
+     * as loudly as one that falls to `Compact`. The message names the width where it broke rather
+     * than reporting a boolean.
      */
     @Test
-    fun `widening never returns to the compact layout`() {
-        var firstExpanded: Dp? = null
+    fun `widening never returns to a narrower layout`() {
+        var previous: Pair<Dp, ShellLayoutClass>? = null
         for (points in 0..2400) {
             val width = points.dp
             val resolved = ShellLayoutClass.forWidth(width)
-            if (resolved == ShellLayoutClass.Expanded) {
-                if (firstExpanded == null) firstExpanded = width
-            } else {
+            previous?.let { (previousWidth, previousClass) ->
                 assertTrue(
-                    firstExpanded == null,
-                    "width $width resolved to Compact after $firstExpanded had resolved to Expanded",
+                    resolved.rank() >= previousClass.rank(),
+                    "width $width resolved to $resolved after $previousWidth resolved to " +
+                        "$previousClass, so widening moved the shell backwards",
                 )
             }
+            previous = width to resolved
         }
-        assertTrue(
-            firstExpanded != null,
-            "no width up to 2400dp resolved to Expanded, so the wide layout is unreachable",
+        assertEquals(
+            ShellLayoutClass.Sidebar,
+            ShellLayoutClass.forWidth(2400.dp),
+            "the sidebar is unreachable within the swept range",
         )
+    }
+
+    /**
+     * The sidebar boundary is the expanded minimum plus the sidebar's own width.
+     *
+     * An expression, not a copied `1120.dp`: the sidebar is only safe where the content it
+     * leaves behind is still the narrowest genuine list-detail pair, so moving either input has
+     * to move the boundary. A literal here would let a wider panel starve the pane it sits
+     * beside while both numbers kept passing their own tests.
+     */
+    @Test
+    fun `the sidebar threshold is the expanded minimum plus the sidebar width`() {
+        assertEquals(ShellExpandedMinimumWidth + ShellSidebarWidth, ShellSidebarMinimumWidth)
+    }
+
+    /** The panel's width, held to its value for the reason the threshold is. */
+    @Test
+    fun `the sidebar width is pinned to the value it was chosen at`() {
+        assertEquals(280.dp, ShellSidebarWidth)
+    }
+
+    /**
+     * The one question every consumer actually asks, answered for every class.
+     *
+     * These are the three answers the nine old `== Expanded` comparisons were reaching for. The
+     * assertion is exhaustive over the enum on purpose: a fourth class must decide, rather than
+     * inheriting an answer by default.
+     */
+    @Test
+    fun `only the compact shell is not wide`() {
+        assertFalse(ShellLayoutClass.Compact.isWide, "a phone must not draw leading chrome")
+        assertTrue(ShellLayoutClass.Expanded.isWide, "the rail's shell is a wide shell")
+        assertTrue(ShellLayoutClass.Sidebar.isWide, "the sidebar's shell is a wide shell")
     }
 
     /**
@@ -154,4 +223,18 @@ class ShellLayoutClassTest {
     fun `the threshold is pinned to the value it was chosen at`() {
         assertEquals(840.dp, ShellExpandedMinimumWidth)
     }
+}
+
+/**
+ * The width order of the three classes, for the monotonicity sweep only.
+ *
+ * Local to the test rather than a property on the enum: nothing in production orders the classes,
+ * and an `ordinal`-like surface would invite a consumer that should have asked [ShellLayoutClass.isWide]
+ * instead. The `when` is exhaustive, so a fourth class is a compile error here — which is exactly
+ * what the sweep needs.
+ */
+private fun ShellLayoutClass.rank(): Int = when (this) {
+    ShellLayoutClass.Compact -> 0
+    ShellLayoutClass.Expanded -> 1
+    ShellLayoutClass.Sidebar -> 2
 }

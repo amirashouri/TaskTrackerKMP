@@ -32,6 +32,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import com.tasktracker.designsystem.NavigationRailLensTag
+import com.tasktracker.sharedui.SidebarTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -1821,6 +1822,15 @@ object ShellScenarios {
     private val DESKTOP_WIDTH = 1000.dp
 
     /**
+     * The width at which the sidebar is drawn.
+     *
+     * 1280dp is the width the sidebar exists for — it is the Desktop app's default window and
+     * the first width past [ShellSidebarMinimumWidth]. Written as a fixed number rather than
+     * against the threshold so a threshold change does not silently move the scenario.
+     */
+    private val SIDEBAR_WIDTH = 1280.dp
+
+    /**
      * A phone draws the bar and no rail.
      *
      * The compact path is the one that had to stay unchanged, so it is asserted directly rather
@@ -2191,6 +2201,386 @@ object ShellScenarios {
                 "${gap - ttSpacing.xl.value}dp of the bar's ${barHeight}dp height is still being " +
                 "published by the grown shell. The bar is gone but the inset it measured is not",
         )
+    }
+
+    /**
+     * A sidebar-width window draws the sidebar and no rail and no bar.
+     *
+     * "No bar" and "no rail" are the halves worth reading. A sidebar drawn beside a still-present
+     * rail is the obvious wrong version of this feature and it looks plausible in a screenshot:
+     * the app would have two leading chromes, and the rail would be the five-glyph column the
+     * sidebar exists to replace.
+     */
+    val aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar: suspend ComposeUiTest.() -> Unit = sidebar@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        waitForIdle()
+
+        if (desktopWidthIsExpressible(SIDEBAR_WIDTH)) {
+            onNodeWithTag(SidebarTag).assertExists(
+                "at ${SIDEBAR_WIDTH.value}dp, which is past the " +
+                    "${ShellSidebarMinimumWidth.value}dp threshold, the shell should be drawing " +
+                    "a sidebar",
+            )
+            assertNothingTagged(
+                NavigationRailTag,
+                "at ${SIDEBAR_WIDTH.value}dp the shell drew the navigation rail as well as the " +
+                    "sidebar. The rail is the shape this section exists to replace: five glyphs in " +
+                    "a ~100dp column, with the sidebar's labels marooned beside it",
+            )
+            assertNothingTagged(
+                TabBarTag,
+                "at ${SIDEBAR_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
+                    "sidebar. The bar is the shape the wide shell exists to replace: five segments " +
+                    "of ${SIDEBAR_WIDTH.value / 5}dp each, with the tabs marooned inside them",
+            )
+        }
+    }
+
+    /**
+     * The sidebar is a leading column that wraps its destinations, not a stretched or
+     * bottom-anchored one.
+     *
+     * Three separate assertions because the failure has three shapes, and each is the transpose
+     * of a defect [TTGlassTabBar] already records for the other axis. A sidebar that filled the
+     * window's height would give five destinations a fifth of a tall column each (the "768pt-tall
+     * wrapper with the tabs parked dead centre" in the bar's KDoc, rotated). A sidebar that
+     * spanned the window's width would be the bar again. A sidebar anchored to the bottom edge
+     * would be a bar stood on end.
+     *
+     * The leading-edge inset is read from [ttSpacing.tabBarEdgeInset] rather than written as a
+     * number, because the shell owns that inset and a copy of it in this file is a second thing
+     * to keep true — the same reasoning the tab bar's own KDoc gives for not restating the
+     * edge inset it does not own.
+     */
+    val theSidebarIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = sidebar@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        val sidebar = onNodeWithTag(SidebarTag).getBoundsInRoot()
+        val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        val sidebarHeight = sidebar.bottom.value - sidebar.top.value
+        val shellHeight = shell.bottom.value - shell.top.value
+
+        assertEquals(
+            ttSpacing.tabBarEdgeInset.value,
+            sidebar.left.value - shell.left.value,
+            "the sidebar starts ${sidebar.left.value - shell.left.value}dp inside a shell whose own " +
+                "leading edge sits at ${shell.left.value}dp, and it should start at the shell's " +
+                "edge inset of ${ttSpacing.tabBarEdgeInset.value}dp with nothing between them. " +
+                "Measured against the shell rather than an absolute zero, because where the shell " +
+                "sits in the window is the host's business and not this scenario's",
+        )
+        assertTrue(
+            sidebarHeight > 0f && sidebarHeight < shellHeight,
+            "the sidebar measured ${sidebarHeight}dp in a ${shellHeight}dp shell, so it is either empty " +
+                "or filling the window",
+        )
+
+        // It is a full-height leading column, anchored to the top.
+        //
+        // A desktop sidebar runs the full height from the top, so the assertion is that now, and
+        // the trailing space belongs below the destinations.
+        assertEquals(
+            ttSpacing.tabBarEdgeInset.value,
+            sidebar.top.value - shell.top.value,
+            "the sidebar starts ${sidebar.top.value - shell.top.value}dp below the shell's top edge, and " +
+                "it should start at the shell's own edge inset of " +
+                "${ttSpacing.tabBarEdgeInset.value}dp. It runs from the top rather than floating " +
+                "in the middle — a desktop sidebar begins at the top — but it still floats by " +
+                "that inset, the same rule the tab bar follows on its own axis",
+        )
+        assertTrue(
+            sidebar.right.value < shell.right.value,
+            "the sidebar runs to ${sidebar.right.value}dp in a shell that ends at ${shell.right.value}dp, " +
+                "so it is spanning the window rather than sitting on its leading edge",
+        )
+
+        // It fills the window's height less that inset at each end, rather than being a short
+        // panel floating in the middle of the left edge.
+        //
+        assertEquals(
+            0f,
+            sidebar.bottom.value - (shell.bottom.value - ttSpacing.tabBarEdgeInset.value),
+            "the sidebar stops ${sidebar.bottom.value - shell.bottom.value}dp from the shell's bottom " +
+                "edge and should stop at ${-ttSpacing.tabBarEdgeInset.value}dp, mirroring the " +
+                "inset it starts with. Running full-bleed to the bottom would be a slab rather " +
+                "than a floating surface",
+        )
+
+        // Its destinations share the height equally, which is what the selection wash's segment is
+        // derived from: `maxHeight / destinations.size`. Cells that did not divide it evenly would
+        // put the wash in the wrong place on a tall window, and this is the composed half of a
+        // rule the pure geometry test cannot see — that test supplies the height, so it cannot tell
+        // whether the component supplies the right one.
+        //
+        // The band's leading half-point is the sidebar's own vertical glass padding, which is inside
+        // the tagged box but outside the cells.
+        val firstCell = onNodeWithTag(
+            SidebarButtonTag(AppTab.Projects),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        val cellHeight = firstCell.bottom.value - firstCell.top.value
+        assertEquals(
+            cellHeight * PHONE_TAB_COUNT,
+            sidebarHeight - ttSpacing.hairlineInset.value * 2,
+            cellHeight * QUARTER,
+            "the sidebar's ${sidebarHeight}dp should be $PHONE_TAB_COUNT destinations of $cellHeight dp " +
+                "plus ${ttSpacing.hairlineInset.value * 2}dp of its own vertical padding. Cells " +
+                "that do not share the height equally put the wash's segment — the sidebar's height " +
+                "divided by the destination count — in the wrong place",
+        )
+
+        // The selection wash marks its cell and never overruns it.
+        //
+        // This is the assertion that would have caught the overhang. A sidebar segment is a fifth of
+        // the sidebar's height, so at 736dp the cells are 146dp and the wash's 10% stretch takes it
+        // from 140dp to 154dp. Its *top* edge still landed on the right destination, which is the
+        // edge a bounds check is most likely to look at, and its bottom edge crossed into the next
+        // cell — a selection indicator visibly bigger than the thing it indicated. The wash is
+        // clamped to its segment for that reason, and this is what holds the clamp.
+        val wash = onNodeWithTag(SidebarTag).getBoundsInRoot()
+        val landingCell = onNodeWithTag(
+            SidebarButtonTag(AppTab.Projects),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        val washHeightMeasured = wash.bottom.value - wash.top.value
+        val cellHeightMeasured = landingCell.bottom.value - landingCell.top.value
+        assertTrue(
+            washHeightMeasured <= cellHeightMeasured,
+            "the wash is ${washHeightMeasured}dp tall over a ${cellHeightMeasured}dp cell, so it " +
+                "is taller than the destination it is marking and crosses into the next one. Its " +
+                "top edge sits at ${wash.top.value} against the cell's ${landingCell.top.value}, " +
+                "which is why this reads as correct until you look at the bottom edge",
+        )
+        assertTrue(
+            wash.top.value >= landingCell.top.value - ONE_POINT &&
+                wash.bottom.value <= landingCell.bottom.value + ONE_POINT,
+            "the wash occupies ${wash.top.value}..${wash.bottom.value}dp and its cell " +
+                "${landingCell.top.value}..${landingCell.bottom.value}dp, so it is not contained " +
+                "by the destination it is marking",
+        )
+
+        // Every glyph on one axis. The cells are as wide as their own captions and the captions
+        // differ — "Board" is far narrower than "Projects" — so this is the property that says
+        // they are *centred* on the column's centre line rather than each hugging the leading
+        // edge, which drew "Board" visibly outboard of "Projects".
+        //
+        // Measured spread across the five destinations is **0.5dp**, which is the caption widths'
+        // own sub-pixel rounding rather than a real offset. Before the column was centred the same
+        // measurement spread the destinations across the sidebar's full width — tens of dp, because
+        // each glyph sat at its own caption's position instead of on a shared axis.
+        val centres = AppTab.entries.map { tab ->
+            onNodeWithTag(SidebarButtonTag(tab), useUnmergedTree = true)
+                .getBoundsInRoot()
+                .let { (it.left.value + it.right.value) / 2f }
+        }
+        val spread = centres.max() - centres.min()
+        assertTrue(
+            spread <= ONE_POINT,
+            "the destinations' centre lines run ${centres.min()}..${centres.max()} — a spread of " +
+                "${spread}dp: ${centres.joinToString { "${it}" }}. Every glyph and caption is " +
+                "centred on the column's centre line, so a caption wider than its neighbours " +
+                "must not drag its glyph outboard of theirs. A point is sub-pixel rounding; the " +
+                "defect this guards was tens of points wide",
+        )
+        assertTrue(
+            sidebarHeight > 0f && sidebarHeight < shellHeight,
+            "the sidebar measured ${sidebarHeight}dp in a ${shellHeight}dp shell, so it is either empty " +
+                "or filling the window outright. It should fill the window less one edge inset " +
+                "at each end",
+        )
+
+        // It carries every destination, not only the selected ones. `selectedSidebarDestinations`
+        // filters on `selected`, so a cell that stopped composing would leave that list reading
+        // `listOf(AppTab.Projects)` and the selection scenario would pass over a sidebar with one
+        // destination on it. The bar has `fiveTabsFitAtPhoneWidth` for this; the sidebar needed the
+        // equivalent and did not have one.
+        assertEquals(
+            PHONE_TAB_COUNT,
+            AppTab.entries.count {
+                onAllNodesWithTag(SidebarButtonTag(it)).fetchSemanticsNodes().isNotEmpty()
+            },
+            "the sidebar should carry all $PHONE_TAB_COUNT destinations, one " +
+                "SidebarButtonTag each. A cell that stopped composing is invisible to the " +
+                "selection scenarios, which only ever look at the selected one",
+        )
+
+        // And the content starts *beside* it rather than running underneath. Read on a real
+        // screen rather than on the content box, because the box carrying the padding is
+        // anonymous: a node inside it is the only thing that can show whether the padding reached
+        // the pixels.
+        //
+        // The projects list is used because it fills the content area edge to edge on the landing
+        // tab. A screen whose content sits well inside its own margins — a centred card, a row
+        // with its own gutter — would keep passing with the padding removed, because its left edge
+        // would clear the sidebar's for reasons that have nothing to do with the inset. That is not a
+        // hypothetical: the board's columns cannot be used at all here, because the landing tab
+        // has no open project and draws none.
+        val list = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
+        assertTrue(
+            list.left.value >= sidebar.right.value,
+            "the projects list starts at ${list.left.value}dp while the sidebar runs to " +
+                "${sidebar.right.value}dp, so the content is running *under* the sidebar. The sidebar's " +
+                "width is measured and fed back as the content box's leading inset; if that " +
+                "measurement is not reaching the padding, every screen is drawn under the sidebar",
+        )
+    }
+
+    /**
+     * Shrinking the window past the sidebar threshold sheds the sidebar's inset, and growing
+     * back to the sidebar threshold drops the rail's inset.
+     *
+     * This is a *resize* defect, and neither static width can show it. `leadingChromeInset` is
+     * written by the chrome's own `onSizeChanged`, and a chrome that has left the composition is
+     * never remeasured, so nothing zeroes the measurement. A shell that starts at [PHONE_WIDTH]
+     * never runs that arm and reads `0.dp`; a shell that starts at [SIDEBAR_WIDTH] reads the
+     * sidebar's true width. Only the crossing between the three leaves the old width behind as a
+     * band of blank canvas down the leading edge, which is why this stands one shell up at
+     * [SIDEBAR_WIDTH], shrinks it to [DESKTOP_WIDTH], then grows it back to [SIDEBAR_WIDTH] and
+     * asserts on the same composition rather than asserting the three widths in isolation.
+     *
+     * The measurement is the projects list's leading edge, for the reason
+     * [theSidebarIsALeadingColumnRatherThanAStretchedOne] gives: the box carrying the inset is
+     * anonymous, so a node inside it is the only thing that can show whether the inset reached the
+     * pixels. Under `Compact` that edge should sit on the shell's own leading edge.
+     *
+     * The ordering is chosen so both crossings are exercised on one composition, because a
+     * rail/sidebar that leaves the composition is never remeasured to zero.
+     */
+    val resizingSidebarToRailAndBackShedsBothInsets: suspend ComposeUiTest.() -> Unit = resize@{
+        val width = mutableStateOf(SIDEBAR_WIDTH)
+        setUpShell(session = ScriptedSession(restored = signedIn()), widthState = width)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@resize
+
+        // Asserted before the shrink, or this could pass on a shell that never drew the sidebar
+        // and therefore never had an inset to shed.
+        onNodeWithTag(SidebarTag).assertExists(
+            "at ${SIDEBAR_WIDTH.value}dp the shell should draw a sidebar before it is " +
+                "shrunk, or there is no stale inset for this scenario to catch",
+        )
+
+        // Capture the sidebar's right edge for the second crossing assertion
+        val sidebarAtStart = onNodeWithTag(SidebarTag).getBoundsInRoot()
+
+        // First crossing: Sidebar → Rail
+        runOnIdle { width.value = DESKTOP_WIDTH }
+        waitForIdle()
+
+        onNodeWithTag(NavigationRailTag).assertExists(
+            "at ${DESKTOP_WIDTH.value}dp the shell should be drawing a navigation rail",
+        )
+        assertNothingTagged(
+            SidebarTag,
+            "at ${DESKTOP_WIDTH.value}dp the shell is still drawing the sidebar it had at " +
+                "${SIDEBAR_WIDTH.value}dp",
+        )
+
+        val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        val list = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
+        assertEquals(
+            shell.left.value,
+            list.left.value,
+            ONE_POINT,
+            "after shrinking to ${DESKTOP_WIDTH.value}dp the projects list starts at " +
+                "${list.left.value}dp while the shell starts at ${shell.left.value}dp — a " +
+                "${list.left.value - shell.left.value}dp gap down the leading edge. The sidebar's " +
+                "inset was measured at ${SIDEBAR_WIDTH.value}dp and is still being applied after " +
+                "the sidebar is gone, because a sidebar leaves the composition without being " +
+                "remeasured to zero",
+        )
+
+        // Second crossing: Rail → Sidebar
+        runOnIdle { width.value = SIDEBAR_WIDTH }
+        waitForIdle()
+
+        onNodeWithTag(SidebarTag).assertExists(
+            "at ${SIDEBAR_WIDTH.value}dp the shell should be drawing a sidebar again",
+        )
+        assertNothingTagged(
+            NavigationRailTag,
+            "at ${SIDEBAR_WIDTH.value}dp the shell is still drawing the rail it had at " +
+                "${DESKTOP_WIDTH.value}dp",
+        )
+
+        val shell2 = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
+        val list2 = onNodeWithTag(ProjectsListScreenTag).getBoundsInRoot()
+        assertTrue(
+            list2.left.value >= sidebarAtStart.right.value,
+            "after growing back to ${SIDEBAR_WIDTH.value}dp the projects list starts at " +
+                "${list2.left.value}dp while the sidebar runs to ${sidebarAtStart.right.value}dp — " +
+                "the content is running *under* the sidebar. The rail's inset was measured at " +
+                "${DESKTOP_WIDTH.value}dp and is still being applied after the rail is gone, " +
+                "because a rail leaves the composition without being remeasured to zero",
+        )
+    }
+
+    /**
+     * Exactly one destination on the sidebar says it is the current one, and it follows the route.
+     *
+     * [selectedRailDestinations] reads the rail's tags, so this reads the sidebar's. The same
+     * reasoning applies and the same failure is guarded: a `selected` that is never set is
+     * invisible to every other assertion in this file, because the sidebar still navigates and
+     * the screens still change.
+     *
+     * Read in the tree rather than from the router, and compared as a list so that "two are
+     * selected" fails as loudly as "none is" — a count-only assertion would accept a sidebar that
+     * lit the wrong single destination.
+     */
+    val exactlyOneSidebarDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = sidebar@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        assertEquals(
+            listOf(AppTab.Projects),
+            selectedSidebarDestinations(),
+            "expected the landing destination to be the selected one",
+        )
+
+        // The wash is on the landing destination before anything is tapped. Asserted first so that
+        // a wash which never moves and a wash which starts on the wrong one stay different
+        // failures: the check after the click alone cannot tell them apart, because a wash stuck
+        // at index 0 and a wash correctly at index 0 are identical until the selection changes.
+        // Note: the sidebar uses a wash, not a lens, so we read the selected semantics instead.
+
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(AppTab.Settings),
+            selectedSidebarDestinations(),
+            "after tapping Settings on the sidebar the selection did not follow the route, so the " +
+                "sidebar's wash and its `selected` property are both describing a stale destination",
+        )
+    }
+
+    /**
+     * Every destination is named in the sidebar, and each carries the Tab role.
+     *
+     * Two things that are one line of code each and that nothing else in the suite can see.
+     * [Role.Tab] is what gets a tab announced as a tab rather than as another button, and it is
+     * a `Role` argument on `clickable` — omitting it changes nothing about the app and is
+     * caught by nothing. The labels are asserted because the glyphs are deliberately
+     * unlabelled for accessibility (the label beside each one already names it), so a missing
+     * string resource would leave a tab with no name *at all*.
+     */
+    val everySidebarDestinationIsNamedAndCarriesTheTabRole: suspend ComposeUiTest.() -> Unit = sidebar@{
+        setUpShell(session = ScriptedSession(restored = signedIn()), width = SIDEBAR_WIDTH)
+        waitForIdle()
+
+        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
+
+        AppTab.entries.forEach { tab ->
+            onNodeWithTag(SidebarButtonTag(tab))
+                .assertIsDisplayed()
+                .assert(expectTabRole())
+                .assert(hasText(tabLabel(tab), substring = true))
+        }
     }
 
     /**
@@ -3552,7 +3942,7 @@ object ShellScenarios {
         onNodeWithTag(NavigationRailButtonTag(tab), useUnmergedTree = true)
             .getBoundsInRoot().top.value
 
-    /**
+/**
      * Which destinations the semantics tree is currently claiming as selected, in [AppTab] order.
      *
      * [selectedTabs] for the bar; this is the rail's tag space, and the two are read separately so
@@ -3566,6 +3956,20 @@ object ShellScenarios {
                 ).fetchSemanticsNodes().isNotEmpty()
             }
 
+    /**
+     * Which destinations the semantics tree is currently claiming as selected, in [AppTab] order.
+     *
+     * [selectedRailDestinations] for the rail; this is the sidebar's tag space, and the three are
+     * read separately so that a shell which drew more than one cannot pass by answering from
+     * another chrome's nodes.
+     */
+    private fun ComposeUiTest.selectedSidebarDestinations(): List<AppTab> =
+        AppTab.entries
+            .filter { tab ->
+                onAllNodes(
+                    hasTestTag(SidebarButtonTag(tab)) and isSelected(),
+                ).fetchSemanticsNodes().isNotEmpty()
+            }
 
 
     /**
