@@ -30,6 +30,7 @@ archive and create a spec before implementation.
 | Admin member/project management | Complete | See the archived CLI plan; CLI-1–CLI-16 landed |
 | Test harness cleanup | In progress | [`TEST-HARNESS-PLAN.md`](TEST-HARNESS-PLAN.md) |
 | 7 — Liquid Glass refinements | Active | Pending items below |
+| 8 — Expanded-shell navigation | Active | Pending items below |
 
 ## Active feature backlog
 
@@ -67,6 +68,32 @@ This section covers refinements to the Liquid Glass design system in `:packages:
 | 7.8 | Complete | P3 | Accelerometer-driven specular parallax (platform seam) | 7.1 | [`PLAN-ARCHIVE.md`](PLAN-ARCHIVE.md), section 7.8 |
 
 The intended order is 7.1 → 7.2 → 7.3 → 7.4 → 7.5. Tasks 7.6–7.8 are independent polish items.
+
+## Expanded-shell navigation (Area 8)
+
+Section 5 ended with a rail for every window at or past 840dp. Measured, that rail is
+**146dp of cell per destination** in a 736dp rail and under 100dp wide — a full-height
+leading edge carrying five icons and nothing else. At a genuinely wide window the right
+chrome is a sidebar: the same five destinations with readable labels, and a project
+switcher below them, because Board, Backlog and Sprints are all scoped to one project.
+
+The boundary is derived rather than chosen. A 280dp sidebar leaves exactly
+`ShellExpandedMinimumWidth` (840dp) of content, which the layout class's own KDoc already
+calls the narrowest genuine list-detail pair. So
+`ShellSidebarMinimumWidth = 840 + 280 = 1120dp`, and the Desktop window's 1280dp default
+opens in the new class. The rail is unchanged between 840 and 1119dp; its cell density is
+8.3, a separate question with a separate PR.
+
+Nothing in this area is cross-repository: no wire format, no response field, no shared
+link contract.
+
+| Task | State | Priority | Intent | Depends on | Execution details |
+| --- | --- | --- | --- | --- | --- |
+| 8.1 | Pending | P1 | A `Sidebar` layout class and the wide shell's leading chrome | None | [`8.1-wide-shell-sidebar.md`](../specs/8.1-wide-shell-sidebar.md) |
+| 8.2 | Pending | P1 | List and switch projects in the wide sidebar | 8.1 | [`8.2-sidebar-project-switcher.md`](../specs/8.2-sidebar-project-switcher.md) |
+| 8.3 | Deferred | P3 | Rail cell density in the 840–1119dp band | 8.1, 8.2 | No spec yet — decide after 8.2 ships: fixed ~64dp cells top-aligned instead of five 146dp cells (see 8.1's risks) |
+
+The intended order is 8.1 → 8.2 → (8.3 if the mid-width rail still reads as empty).
 
 ## Active server-connection work
 
