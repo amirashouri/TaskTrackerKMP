@@ -210,6 +210,10 @@ fun WorkItemEditorScreen(
  * sheet, and nothing catches it. The only real difference between the two surfaces is what
  * surrounds the form - a full screen has the board's chrome behind it, a sheet has the board
  * itself - so that is the only thing that differs here, and both call this.
+ *
+ * NOTE: the old expand/collapse sheet seam was removed — the editor is always
+ * full-screen now. Keep `ProjectsEditorFullScreen` as the single body both surfaces
+ * share, because the only thing that changed between them was the frame around the form.
  */
 @Composable
 fun WorkItemEditorSheet(
@@ -250,10 +254,6 @@ fun WorkItemEditorSheet(
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
-    /** @deprecated The editor is now always full-screen; expand/collapse is no longer supported. */
-    expanded: Boolean = true,
-    /** @deprecated The editor is now always full-screen; expand/collapse is no longer supported. */
-    onToggleExpanded: (Boolean) -> Unit = {},
     /** See [WorkItemEditorForm.onBack]; `null` for a sheet with nothing under it. */
     onBack: (() -> Unit)? = null,
     /** See [WorkItemEditorForm.blockers]. */
@@ -307,8 +307,6 @@ fun WorkItemEditorSheet(
     /** See [ProjectsEditorFullScreen.onManageTags]. */
     onManageTags: (() -> Unit)? = null,
 ) {
-    // The editor is now always full-screen. We keep the deprecated parameters
-    // for binary compatibility with NavigationHost.
     ProjectsEditorFullScreen(
         // The draft's own title, not the header: `ProjectsEditorFullScreen` names the
         // surface itself. Passing the header string here bound the title *field* to a

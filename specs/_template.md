@@ -25,6 +25,13 @@ checks these, not good intentions.
 - [ ] <an observable property a test pins>
 - [ ] <the property still holds when the production change is reverted (Rule 1)>
 
+## Non-goal
+
+What this task must not do. Refactoring specs should name the boundary so they do not
+become catch-all cleanup.
+
+- [ ] <one explicit thing out of scope>
+
 ## Validation
 
 - Run: `scripts/check.sh quick`

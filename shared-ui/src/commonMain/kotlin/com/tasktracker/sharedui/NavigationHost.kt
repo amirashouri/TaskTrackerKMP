@@ -1885,8 +1885,6 @@ private fun WorkItemEditorDestination(
         onStatusChanged = model::onStatusChanged,
         onPriorityChanged = model::onPriorityChanged,
         onAssigneeChanged = model::onAssigneeChanged,
-        // The toggle only has an on/off shape, so the model needs an instant and the clock
-        // is the only honest source for one. `now()` is suspend, hence the launch.
         onToggleDueDate = { on ->
             scope.launch {
                 model.onDueDateChanged(if (on) dateProvider.now() else null)
