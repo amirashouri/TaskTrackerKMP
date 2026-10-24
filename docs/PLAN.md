@@ -84,7 +84,7 @@ link contract.
 | Task | State | Priority | Intent | Depends on | Execution details |
 | --- | --- | --- | --- | --- | --- |
 | 8.1 | Pending | P1 | A `Sidebar` layout class and the wide shell's leading chrome | None | [`8.1-wide-shell-sidebar.md`](../specs/8.1-wide-shell-sidebar.md) |
-| 8.2 | Pending | P1 | List and switch projects in the wide sidebar | 8.1 | [`8.2-sidebar-project-switcher.md`](../specs/8.2-sidebar-project-switcher.md) |
+| 8.2 | Done | P1 | List and switch projects in the wide sidebar | 8.1 | [`8.2-sidebar-project-switcher.md`](../specs/8.2-sidebar-project-switcher.md) |
 | 8.3 | Deferred | P3 | Rail cell density in the 840–1119dp band | 8.1, 8.2 | No spec yet — decide after 8.2 ships: fixed ~64dp cells top-aligned instead of five 146dp cells (see 8.1's risks) |
 
 The intended order is 8.1 → 8.2 → (8.3 if the mid-width rail still reads as empty).

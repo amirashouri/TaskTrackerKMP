@@ -24,7 +24,7 @@ they already own, and all standalone completed specs already list `status: done`
 | Task / Spec | State | Where to read it |
 | --- | --- | --- |
 | 8.1 — wide shell leading chrome | pending | `specs/8.1-wide-shell-sidebar.md`, `docs/PLAN.md` |
-| 8.2 — sidebar project switcher | pending | `specs/8.2-sidebar-project-switcher.md`, `docs/PLAN.md` |
+| 8.2 — sidebar project switcher | done | `specs/8.2-sidebar-project-switcher.md`, `docs/PLAN.md` |
 | 8.3 — rail cell density (mid-width band) | deferred | `docs/PLAN.md` only, no spec yet |
 | 1.7 — role-based project permissions | pending | `docs/PLAN.md`, `docs/PLAN-ARCHIVE.md` §1.7 |
 | 1.8 — activity feed / project timeline | pending | `docs/PLAN.md`, `docs/PLAN-ARCHIVE.md` §1.8 |
