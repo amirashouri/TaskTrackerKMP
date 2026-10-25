@@ -117,7 +117,9 @@ fun PrimaryButton(
             text = label,
             visible = !isLoading,
         )
-        ttSpinner(color = ttOnAccent)
+        SpinnerContent(
+            visible = isLoading,
+        )
     }
 }
 
@@ -156,6 +158,15 @@ private fun LabelContent(text: String, visible: Boolean) {
     ttText(
         text = text,
         style = ttTypography.headline,
+        color = ttOnAccent,
+        modifier = Modifier.alpha(if (visible) 1f else 0f),
+    )
+}
+
+/** The in-flight indicator, shown only while a request is in flight. */
+@Composable
+private fun SpinnerContent(visible: Boolean) {
+    ttSpinner(
         color = ttOnAccent,
         modifier = Modifier.alpha(if (visible) 1f else 0f),
     )

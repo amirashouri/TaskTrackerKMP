@@ -13,6 +13,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -22,7 +24,6 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.hasTestTag
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
@@ -35,7 +36,6 @@ import com.tasktracker.featuresettingsdomain.SyncActivity
 import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.UserStatus
-import org.jetbrains.compose.resources.getString
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.settings_activity_idle
 import com.tasktracker.resources.settings_activity_syncing
@@ -48,6 +48,7 @@ import com.tasktracker.resources.settings_profile_save_failed
 import com.tasktracker.resources.settings_server_error_cleartext_not_permitted
 import com.tasktracker.resources.settings_server_saved_notice
 import com.tasktracker.resources.settings_sync_waiting
+import org.jetbrains.compose.resources.getString
 import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -79,10 +80,13 @@ object SettingsScenarios {
     val aQuietScreenSaysNothingAboutCounts: suspend ComposeUiTest.() -> Unit = {
         screenShowing(connectivity = ConnectivitySummary.Online, activity = SyncActivity())
 
-        onNodeWithTag(SettingsScreenTag).assertIsDisplayed()
+        val idleText = getString(Res.string.settings_activity_idle)
+
+        // Scroll the LazyColumn to the idle row so it actually gets composed!
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText(idleText))
+
         onNodeWithText(getString(Res.string.settings_connectivity_online)).assertIsDisplayed()
-        onNodeWithText(getString(Res.string.settings_activity_idle)).assertIsDisplayed()
-        // The absence is the assertion. Both rows would be *displayed* if a zero were rendered.
+        onNodeWithText(idleText).assertIsDisplayed()
         onNodeWithTag(SettingsStuckRowTag).assertDoesNotExist()
         onNodeWithTag(SettingsWaitingRowTag).assertDoesNotExist()
     }
@@ -107,8 +111,11 @@ object SettingsScenarios {
             ),
         )
 
+        val waitingText = getString(Res.string.settings_activity_waiting)
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText(waitingText))
+
         onNodeWithText(getString(Res.string.settings_connectivity_offline)).assertIsDisplayed()
-        onNodeWithText(getString(Res.string.settings_activity_waiting)).assertIsDisplayed()
+        onNodeWithText(waitingText).assertIsDisplayed()
         // Scrolled: the User details header plus the status rows above pushed the sync section
         // past the fold, and `assertIsDisplayed` is about pixels — a row below the fold has none.
         onNodeWithText(getString(Res.string.settings_sync_waiting)).performScrollTo().assertIsDisplayed()
@@ -130,6 +137,8 @@ object SettingsScenarios {
             connectivity = ConnectivitySummary.Online,
             activity = SyncActivity(phase = SyncActivity.Phase.Syncing, queueDepth = 3),
         )
+
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSyncNowTag))
 
         onNodeWithText(getString(Res.string.settings_activity_syncing)).assertIsDisplayed()
         onNodeWithTag(SettingsSyncNowTag).assertIsNotEnabled()
@@ -164,7 +173,8 @@ object SettingsScenarios {
         }
 
         // Live, even though a cycle could not start: the tap is what produces the answer.
-        onNodeWithTag(SettingsSyncNowTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(SettingsSyncNowTag))
+        onNodeWithTag(SettingsSyncNowTag).assertIsDisplayed()
         onNodeWithTag(SettingsSyncNowTag).assertIsEnabled()
         onNodeWithTag(SettingsOutcomeTag).assertDoesNotExist()
 

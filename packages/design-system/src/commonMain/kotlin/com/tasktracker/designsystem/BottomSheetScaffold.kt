@@ -1,15 +1,15 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -23,23 +23,21 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 
 /**
  * Shared animated bottom-sheet frame for modal forms.
@@ -104,18 +102,13 @@ fun TTBottomSheetScaffold(
 ) {
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
     val presentation = LocalSheetPresentation.current
-    val isWindow = true
-    val transitionState = remember { MutableTransitionState(false) }
-    var hasBeenVisible by remember { mutableStateOf(false) }
-    // Remembered unconditionally, and applied conditionally below. A `remember` inside the
-    // `if` would be a composable call in a branch, which is legal but throws the state away on
-    // the branch that skips it, so toggling [scrollable] would restart the scroll position.
-    val scrollState = rememberScrollState()
 
-    SideEffect { transitionState.targetState = visible }
-    LaunchedEffect(transitionState.currentState, transitionState.targetState) {
-        if (transitionState.targetState) hasBeenVisible = true
-        if (hasBeenVisible && !transitionState.currentState && !transitionState.targetState) {
+    val isWindow = presentation == SheetPresentation.Window
+    val transitionState = remember { MutableTransitionState(false) }
+    transitionState.targetState = visible
+    val scrollState = rememberScrollState()
+    LaunchedEffect(transitionState.isIdle, transitionState.currentState) {
+        if (transitionState.isIdle && !transitionState.currentState && !visible) {
             onDismissed()
         }
     }
@@ -144,8 +137,17 @@ fun TTBottomSheetScaffold(
             Column(
                 modifier = Modifier
                     .align(if (isWindow) Alignment.Center else Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
+                    .then(
+                        if (isWindow) {
+                            Modifier
+                                .widthIn(max = 560.dp)
+                                .padding(horizontal = ttSpacing.xl, vertical = 48.dp)
+                        } else {
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
+                        }
+                    )
                     // Apply one bottom inset at a time: the keyboard already covers the
                     // navigation area, and adding both shortens the form's viewport.
                     .then(if (keyboardVisible) Modifier.imePadding() else Modifier.navigationBarsPadding())

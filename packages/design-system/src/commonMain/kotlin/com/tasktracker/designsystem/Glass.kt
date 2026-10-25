@@ -5,19 +5,19 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,38 +28,34 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.util.lerp as lerpFloat
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.dp
-import com.tasktracker.designsystem.DeviceMotion
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import androidx.compose.ui.util.lerp as lerpFloat
 
 /**
  * Glass surfaces, shared by every feature that renders content over something.
@@ -879,11 +875,6 @@ fun <Option> ttLensPlacement(
     density: Density,
 ): LensPlacement {
     val selectedBounds = positions[selection]
-    // Inline `spring(...)` rather than [ttGlass.selectionSpring]: the latter is typed
-    // `SpringSpec<Float>` for the selection wash's `animateFloatAsState`, and
-    // `animateDpAsState` has no `AnimationSpec<Float>` overload — passing the constant
-    // there fails to resolve. The values are the same (damping 0.7, stiffness MediumLow),
-    // which is the point: this is the one spring the app uses for a selection that moves.
     val lensSpring: AnimationSpec<Dp> = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
 
     val targetX = with(density) { (selectedBounds?.left ?: 0).toDp() }
@@ -896,17 +887,17 @@ fun <Option> ttLensPlacement(
     val lensWidth by animateDpAsState(targetValue = targetWidth, animationSpec = lensSpring, label = "lensWidth")
     val lensHeight by animateDpAsState(targetValue = targetHeight, animationSpec = lensSpring, label = "lensHeight")
 
-    // Track velocity for motion blur: (current - previous) / dt in dp/s
-    // Use mutable state to track previous position and time for velocity calculation
-    var previousX by remember { mutableStateOf(lensX) }
-    var previousTime by remember { mutableStateOf(0L) }
+    // Use a plain class rather than mutableStateOf so writes don't trigger recomposition
+    class VelocityTracker(var prevX: Dp, var prevTime: Long)
+    val tracker = remember { VelocityTracker(lensX, 0L) }
 
     val currentTime = currentNanoTime()
-    val dtSeconds = if (previousTime > 0) (currentTime - previousTime) / 1_000_000_000.0 else 0.0
-    val deltaX = lensX.value - previousX.value
+    val dtSeconds = if (tracker.prevTime > 0) (currentTime - tracker.prevTime) / 1_000_000_000.0 else 0.0
+    val deltaX = lensX.value - tracker.prevX.value
     val currentVelocityX = if (dtSeconds > 0) (deltaX / dtSeconds).dp else 0.dp
-    previousX = lensX
-    previousTime = currentTime
+
+    tracker.prevX = lensX
+    tracker.prevTime = currentTime
 
     return LensPlacement(lensX, lensY, lensWidth, lensHeight, currentVelocityX)
 }
