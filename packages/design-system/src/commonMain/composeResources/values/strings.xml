@@ -104,6 +104,7 @@
     <string name="common_cancel">Cancel</string>
     <string name="common_delete">Delete</string>
     <string name="common_discard">Discard</string>
+    <string name="common_done">Done</string>
     <string name="common_save">Save</string>
 
     <!--
@@ -505,6 +506,32 @@
       editable row beside the name.
     -->
     <string name="settings_email_label">Account email</string>
+    <string name="settings_change_password">Change Password</string>
+    <string name="settings_forgot_password">Forgot Password</string>
+    <!--
+      The change/forgot flow's own sentences. The row labels above double as the sheets'
+      titles and the submit button, so only what they cannot say is here: the form's body,
+      the two selector segments, the four field hints, the two local refusals, and the
+      success acknowledgment. "Old Password" and "Admin Code" are the two credentials the
+      server accepts in one field — the choice is which one the member is being asked for.
+    -->
+    <string name="settings_change_password_body">Confirm it is you, then choose a new password.</string>
+    <string name="settings_change_password_verify_old">Old Password</string>
+    <string name="settings_change_password_verify_code">Admin Code</string>
+    <string name="settings_change_password_new_hint">New password</string>
+    <string name="settings_change_password_confirm_hint">Confirm new password</string>
+    <string name="settings_change_password_credential_old_hint">Current password</string>
+    <string name="settings_change_password_credential_code_hint">Reset code</string>
+    <string name="settings_change_password_mismatch">Passwords do not match.</string>
+    <string name="settings_change_password_too_short">Use at least 8 characters.</string>
+    <string name="settings_change_password_success">Your password was changed.</string>
+    <!--
+      The forgot sheet instructs rather than requests: the project has no mail infrastructure,
+      so a code comes from the admin who mints one and reaches the member out of band. The CTA
+      is the door into entering it.
+    -->
+    <string name="settings_forgot_password_body">Ask your workspace admin to generate a one-time reset code for you. It expires after 24 hours and can be used once.</string>
+    <string name="settings_forgot_password_have_code">I have a code</string>
     <string name="settings_avatar_label">Avatar</string>
     <string name="settings_position_label">Position</string>
     <string name="settings_position_developer">Developer</string>
@@ -640,6 +667,18 @@
     <string name="admin_members_reactivate">Reactivate</string>
     <string name="admin_members_delete_title">Delete %1$s?</string>
     <string name="admin_members_delete_body">They lose access immediately. The account keeps its row in the deleted list, where you can restore it later.</string>
+    <!--
+      The minted reset code dialog. The code is a credential shown to the admin, so the body
+      says who it is for, that it dies after one use, and when it dies — the three facts that
+      decide whether the hand-off works. The code itself is %2$s, appended last so it sits on
+      a line of its own (the UUID can break at its hyphens rather than run into the sentence).
+    -->
+    <string name="admin_members_reset_code_action">Generate password reset code</string>
+    <string name="admin_members_reset_code_title">Password reset code</string>
+    <string name="admin_members_reset_code_body">Give this code to %1$s. It can be used once and expires in 24 hours.
+
+%2$s</string>
+    <string name="admin_members_reset_code_copy">Copy</string>
 
     <!-- The admin projects screen, reached from the same admin-only Settings row as members. -->
     <string name="admin_projects_title">Projects</string>

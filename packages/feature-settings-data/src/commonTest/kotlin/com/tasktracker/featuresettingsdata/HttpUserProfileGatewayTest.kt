@@ -158,6 +158,41 @@ class HttpUserProfileGatewayTest {
         val thrown = assertFailsWith<AppError.Transport> { gateway.load() }
         assertEquals(failure, thrown)
     }
+
+    /**
+     * `POST /v1/me/password` with both of the body's keys and both of their spellings.
+     *
+     * The route is its own rather than the profile PATCH — a `PATCH /v1/me` is already the
+     * write above — and the key set is asserted on the bytes because the server refuses a body
+     * missing either key, while Kotlin does not match JSON keys case-insensitively: this is the
+     * `@SerialName` contract as it actually goes out.
+     */
+    @Test
+    fun changePasswordPostsBothKeysToOnePasswordRoute() = runTest {
+        val (gateway, client) = gateway(
+            """{"id":"u1","email":"ada@example.com","display_name":"Ada Lovelace","password_hash":"hashed"}""",
+        )
+
+        gateway.changePassword(
+            newPassword = "brand new secret",
+            oldPasswordOrCode = "correct horse battery",
+        )
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Post, request.method)
+        assertEquals("/v1/me/password", request.path)
+        assertTrue(request.requiresAuth)
+
+        val body = Json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
+        assertEquals(setOf("old_password_or_code", "new_password"), body.keys)
+        assertEquals(JsonPrimitive("correct horse battery"), body["old_password_or_code"])
+        assertEquals(JsonPrimitive("brand new secret"), body["new_password"])
+
+        // Not replayable: success consumes the credential — a code is single-use and the old
+        // password stops matching — so a response lost to a dropped connection cannot be
+        // resent safely, and the verb's default must stay in force.
+        assertFalse(request.effectiveIdempotency)
+    }
 }
 
 /**

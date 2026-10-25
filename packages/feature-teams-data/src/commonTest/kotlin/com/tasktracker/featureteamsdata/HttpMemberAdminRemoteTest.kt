@@ -335,6 +335,33 @@ class HttpMemberAdminRemoteTest {
         assertEquals("ada@example.com", reactivated.email)
     }
 
+    // ── Reset code ────────────────────────────────────────────────
+
+    /**
+     * The mint is a bare POST: the member is named by the route, so there is no body to
+     * disagree with the path about. The response's two keys are the whole contract — `code` is
+     * the credential handed back to the admin, and `expires_at` is declared so the strict
+     * decoder does not reject it — and the code is what comes back out.
+     */
+    @Test
+    fun mintingAResetCodePostsToTheMembersPathAndReturnsTheCode() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWith("""{"code":"one-time-code","expires_at":1700000000000}""")
+
+        val code = remote(client).generateResetCode(UserID(MEMBER_ID))
+
+        assertEquals("one-time-code", code)
+        val request = assertNotNull(client.requests.first())
+        assertEquals("/v1/admin/users/$MEMBER_ID/password-reset-code", request.path)
+        assertEquals(HttpMethod.Post, request.method)
+        assertNull(request.body)
+        assertTrue(request.requiresAuth)
+        assertFalse(
+            request.effectiveIdempotency,
+            "a replay would mint a second live code while the admin holds the first",
+        )
+    }
+
     // ── Every call ──────────────────────────────────────────────────
 
     /**
@@ -346,12 +373,13 @@ class HttpMemberAdminRemoteTest {
     @Test
     fun everyAdminCallRequiresAuthentication() = runTest {
         val client = RecordingHttpClient()
-        // The four calls answer different shapes: a list is an array, a write is one object, and
-        // a delete is an empty `204`. Scripted in call order.
+        // The five calls answer different shapes: a list is an array, a write is one object, a
+        // delete is an empty `204`, and a mint is the code object. Scripted in call order.
         client.respondWith("[]")
         client.respondWith(memberObject().toString())
         client.respondWith(ByteArray(0))
         client.respondWith(memberObject().toString())
+        client.respondWith("""{"code":"one-time-code","expires_at":1700000000000}""")
 
         val target = UserID(MEMBER_ID)
         val admin = remote(client)
@@ -359,8 +387,9 @@ class HttpMemberAdminRemoteTest {
         admin.createMember("ada@example.com", "hunter2", MemberRole.Member, null)
         admin.softDeleteMember(target)
         admin.reactivateMember(target)
+        admin.generateResetCode(target)
 
-        assertEquals(4, client.requests.size)
+        assertEquals(5, client.requests.size)
         assertTrue(client.requests.all { it.requiresAuth })
     }
 }

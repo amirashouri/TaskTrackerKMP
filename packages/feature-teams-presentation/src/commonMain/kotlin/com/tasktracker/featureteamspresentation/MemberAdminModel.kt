@@ -32,8 +32,20 @@ enum class MembersBucket(val status: UserStatus) {
 }
 
 /**
- * Drives the members screen: two buckets, the rows in the chosen one, and the four admin
- * commands.
+ * A freshly minted password-reset code and the member it was minted for.
+ *
+ * One value rather than two parallel states: a code without its member cannot be worded (the
+ * dialog says who it is for) and a member without a code has nothing to show, so the pair is
+ * only ever raised and cleared together.
+ */
+data class GeneratedResetCode(
+    val member: User,
+    val code: String,
+)
+
+/**
+ * Drives the members screen: two buckets, the rows in the chosen one, and the admin
+ * commands — delete, reactivate, create, and minting a password-reset code.
  *
  * ## Why the buckets are a type here and a status at the port
  *
@@ -124,6 +136,21 @@ class MemberAdminModel(private val port: MemberAdminPort) {
      * would be a second account for one address.
      */
     var completedCreates: Int by mutableStateOf(0)
+        private set
+
+    /**
+     * The code just minted, with the member it was minted for, or `null` when none is showing.
+     *
+     * Non-null is what draws the code dialog. The member travels with the code because the
+     * dialog's sentence names them — "give this to Grace" is what makes the hand-off
+     * unambiguous when an admin manages several people — and holding both in one value is what
+     * keeps a dismissal a single clear.
+     */
+    var resetCode: GeneratedResetCode? by mutableStateOf(null)
+        private set
+
+    /** Whether a mint is in flight, for the row button it disables. */
+    var isGeneratingResetCode: Boolean by mutableStateOf(false)
         private set
 
     private var observation: Job? = null
@@ -259,6 +286,34 @@ class MemberAdminModel(private val port: MemberAdminPort) {
         } finally {
             isCreating = false
         }
+    }
+
+    // MARK: - Reset code
+
+    /**
+     * Mints a one-time password-reset code for [user] and holds it for the dialog.
+     *
+     * The failure lands in [listFailure] — the same banner every other list-level failure
+     * reaches — rather than in a state of its own: a code that could not be generated is the
+     * same "the server refused" answer a delete or a load gives, and the screen already knows
+     * where to draw that one.
+     */
+    suspend fun generateResetCode(user: User) {
+        isGeneratingResetCode = true
+        try {
+            resetCode = GeneratedResetCode(member = user, code = port.generateResetCode(user.id))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            listFailure = failure
+        } finally {
+            isGeneratingResetCode = false
+        }
+    }
+
+    /** Clears [resetCode], for a dialog the admin has read. */
+    fun dismissResetCode() {
+        resetCode = null
     }
 
     private suspend fun load(target: MembersBucket) {

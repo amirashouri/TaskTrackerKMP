@@ -67,6 +67,15 @@ class FakeMemberAdminPort(
         seeded[UserStatus.Deleted]?.firstOrNull { it.id == id }?.copy(status = UserStatus.Active)
             ?: User(id = id, email = "restored@example.com", status = UserStatus.Active)
 
+    /**
+     * Records nothing and mints nothing real.
+     *
+     * The dialog that shows the code is asserted in the members screen's own scenarios; a
+     * shell scenario only needs the command to answer with something code-shaped rather than
+     * fail the composition.
+     */
+    override suspend fun generateResetCode(id: UserID): String = "reset-code-for-$id"
+
     // The read-only half of `TeamPort`. The members screen resolves names through the rows it
     // was handed rather than through these, so an empty answer is honest here.
 

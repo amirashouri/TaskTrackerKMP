@@ -64,6 +64,22 @@ interface SettingsPort {
     suspend fun syncNow(): SyncOutcome
 
     /**
+     * Attempts to change the signed-in user's password.
+     *
+     * [oldPasswordOrCode] is the user's current password, OR a time-limited code an admin
+     * generated for the forgot-password flow; the sheet has already asked which one it is
+     * sending and refused an empty credential. The server verifies whichever it receives —
+     * a code that verifies is consumed, so one code authorises exactly one change — and then
+     * applies [newPassword], which must meet the server's policy (at least 8 characters).
+     *
+     * @throws AppError.Validation when the server rejects the credential, the code is spent or
+     *   expired, or the new password does not meet policy. The detail is the server's own
+     *   sentence, which the screen shows verbatim.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun changePassword(newPassword: String, oldPasswordOrCode: String)
+
+    /**
      * Puts the changes the server refused permanently back in the queue, rebuilding any the
      * store itself made un-sendable.
      *
@@ -168,6 +184,6 @@ interface SettingsPort {
      * The counterpart to [setServerAddress], and the reason the setting is reversible: a
      * customer who mistypes an address, or moves off a temporary exposure, is not stranded with
      * a value only a reinstall could clear.
-     */
-    suspend fun resetServerAddress()
+     */    suspend fun resetServerAddress()
 }
+

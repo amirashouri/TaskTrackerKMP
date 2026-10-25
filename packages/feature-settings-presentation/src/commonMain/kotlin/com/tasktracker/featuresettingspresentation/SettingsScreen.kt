@@ -49,6 +49,7 @@ import com.tasktracker.resources.settings_activity_signed_out
 import com.tasktracker.resources.settings_activity_syncing
 import com.tasktracker.resources.settings_activity_up_to_date
 import com.tasktracker.resources.settings_activity_waiting
+import com.tasktracker.resources.settings_change_password
 import com.tasktracker.resources.settings_connectivity_needs_connection
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
@@ -57,6 +58,7 @@ import com.tasktracker.resources.settings_manage_members
 import com.tasktracker.resources.settings_manage_projects
 import com.tasktracker.resources.settings_outcome_already_running
 import com.tasktracker.resources.settings_email_label
+import com.tasktracker.resources.settings_forgot_password
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_profile_save_failed
 import com.tasktracker.resources.settings_server_label
@@ -180,6 +182,21 @@ fun SettingsScreen(
     onManageMembers: () -> Unit = {},
     onManageProjects: () -> Unit = {},
     /**
+     * The change-password sheet's command and its model-held answer.
+     *
+     * The two row taps that open the sheets are *local* — the same decision
+     * [nameEditorOpen] documents: the drafts never leave the sheet, so there is no callback
+     * for opening one. What does cross the seam is the submit (new password + credential) and
+     * the outcome the model records, which the sheet renders: `Started` disables submit,
+     * `Failure` shows the server's sentence, `Success` shows the acknowledgment and closes.
+     * The dismiss clears the outcome, so a reopened sheet cannot greet the user with the last
+     * attempt's banner. All three defaulted, so previews and scenarios that never open the
+     * sheet compile unchanged.
+     */
+    changePasswordOutcome: ChangePasswordOutcome? = null,
+    onRequestChangePassword: (newPassword: String, oldPasswordOrCode: String) -> Unit = { _, _ -> },
+    onDismissChangePasswordOutcome: () -> Unit = {},
+    /**
      * The API root this launch is using and the one saved for the next, the open editor (or
      * `null` when the sheet is closed), and the last save/reset notice.
      *
@@ -201,6 +218,15 @@ fun SettingsScreen(
     // sheet, and the model only ever sees the committed value. `false` is closed, which is the
     // state every other screen starts in.
     var nameEditorOpen by remember { mutableStateOf(false) }
+
+    // The two password sheets, in the same local register as the name editor, for the same
+    // reason: their drafts are theirs. `startChangeWithCode` is the one piece of navigation
+    // between them — the forgot sheet's "I have a code" opens the change sheet with the
+    // credential selector already on Admin Code, so the code the member just read out of band
+    // lands in a field that is expecting it rather than one asking for a password they forgot.
+    var changePasswordOpen by remember { mutableStateOf(false) }
+    var forgotPasswordOpen by remember { mutableStateOf(false) }
+    var startChangeWithCode by remember { mutableStateOf(false) }
 
     val identitySection: @Composable () -> Unit = {
         SettingsSection {
@@ -248,6 +274,22 @@ fun SettingsScreen(
                 },
                 onCommit = onUserDetailsCommit,
                 modifier = Modifier.testTag(SettingsStatusTextRowTag),
+            )
+            SettingsDivider()
+            SettingsActionRow(
+                label = stringResource(Res.string.settings_change_password),
+                icon = ttSettingsIcons.lock,
+                tint = ttAccent(),
+                onClick = { changePasswordOpen = true },
+                modifier = Modifier.testTag(SettingsChangePasswordRowTag),
+            )
+            SettingsDivider()
+            SettingsActionRow(
+                label = stringResource(Res.string.settings_forgot_password),
+                icon = ttSettingsIcons.lock,
+                tint = ttError(),
+                onClick = { forgotPasswordOpen = true },
+                modifier = Modifier.testTag(SettingsForgotPasswordRowTag),
             )
         }
     }
@@ -584,6 +626,37 @@ fun SettingsScreen(
                 onDismiss = { nameEditorOpen = false },
             )
         }
+
+        // The forgot sheet, in the same overlay layer. Its one way forward is the change sheet
+        // with the credential selector preset: closing this one and opening that one in the
+        // same tap is what makes the two read as one flow rather than two dialogs to hunt
+        // between.
+        if (forgotPasswordOpen) {
+            ForgotPasswordSheet(
+                onHaveCode = {
+                    forgotPasswordOpen = false
+                    startChangeWithCode = true
+                    changePasswordOpen = true
+                },
+                onDismiss = { forgotPasswordOpen = false },
+            )
+        }
+
+        // The change sheet draws last of the two, so a tap that crossed from the forgot sheet
+        // lands on it rather than over it. Dismissing clears the model's outcome with the
+        // sheet — see the parameter's KDoc — so every open starts from nothing to report.
+        if (changePasswordOpen) {
+            ChangePasswordSheet(
+                outcome = changePasswordOutcome,
+                startWithCode = startChangeWithCode,
+                onSubmit = onRequestChangePassword,
+                onDismiss = {
+                    changePasswordOpen = false
+                    startChangeWithCode = false
+                    onDismissChangePasswordOutcome()
+                },
+            )
+        }
     }
 }
 
@@ -688,5 +761,9 @@ const val SettingsServerNoticeTag = "settings.serverNotice"
  */
 const val SettingsManageMembersTag = "settings.manageMembers"
 const val SettingsManageProjectsTag = "settings.manageProjects"
+
+/** Tags for change password and forgot password rows. */
+const val SettingsChangePasswordRowTag = "settings.changePassword"
+const val SettingsForgotPasswordRowTag = "settings.forgotPassword"
 
 

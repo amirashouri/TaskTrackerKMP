@@ -67,4 +67,19 @@ interface MemberAdminPort : TeamPort {
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun reactivateMember(id: UserID): User
+
+    /**
+     * Mints a time-limited, single-use password-reset code for [id] and returns it.
+     *
+     * This is the forgot-password flow's only source of codes: the member asks an admin, the
+     * admin generates one here, and passes it on out of band — the project owns no mail
+     * infrastructure, so the code in this return value *is* the delivery. The server expires it
+     * after 24 hours and consumes it on the first change it authorises, so each code leads to
+     * exactly one new password.
+     *
+     * @throws AppError when the server refuses (unknown or deleted member) or cannot be
+     *   reached.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun generateResetCode(id: UserID): String
 }

@@ -101,6 +101,15 @@ object ttSettingsIcons {
         close()
     }
 
+    val lock: ImageVector = icon("Lock") {
+        // A shackle arc rising over a rounded body, matching the row-icon weight above.
+        moveTo(8f, 11f)
+        lineTo(8f, 8f)
+        arcTo(4f, 4f, 0f, false, true, 16f, 8f)
+        lineTo(16f, 11f)
+        roundRect(5f, 11f, 19f, 21f, 2f)
+    }
+
     val about: ImageVector = icon("About", PathFillType.EvenOdd) {
         // The filled disc, knockout center, and separate dot and stem make a clear “i”.
         circle(12f, 12f, 10f)

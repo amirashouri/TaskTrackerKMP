@@ -15,6 +15,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * [load] and [update] are both about the *caller's* row. Neither takes a user id, and that is
  * the contract rather than an omission: `GET`/`PATCH /v1/me` resolve the account from the
  * access token, so a member cannot reach another member's profile through this interface.
+ * [changePassword] follows the same rule on its own route.
  */
 interface UserProfileGateway {
 
@@ -37,6 +38,22 @@ interface UserProfileGateway {
      */
     @Throws(AppError::class, CancellationException::class)
     suspend fun update(changes: UserProfileChanges): UserDetails
+
+    /**
+     * Changes the caller's password after verifying identity with [oldPasswordOrCode]: either
+     * their current password or a time-limited, single-use code an admin generated for them.
+     *
+     * The server resolves the account from the access token — the same rule [load] and [update]
+     * follow — and consumes a code that verifies, so one code authorises exactly one change.
+     * A refusal arrives as [AppError.Validation] carrying the server's own sentence (wrong
+     * credential, spent or expired code, password the policy refuses), which the screen may
+     * show verbatim: `400` is one of the statuses whose wording is part of the API contract.
+     *
+     * @throws AppError.Validation when the server refuses the credential or the new password.
+     * @throws AppError when the server cannot be reached.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun changePassword(newPassword: String, oldPasswordOrCode: String)
 }
 
 /**

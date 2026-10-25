@@ -71,6 +71,24 @@ class FakeSettingsPort(
         return outcomeValue
     }
 
+    /** One submitted change, in the order the model sent it: the credential first, then what
+     * the credential was standing in for. */
+    data class PasswordChange(val newPassword: String, val oldPasswordOrCode: String)
+
+    private val passwordChangesMutable = mutableListOf<PasswordChange>()
+
+    /** What [changePassword] was asked to do, attempt by attempt — failures included, since
+     * a refused attempt is still an attempt a test may want to count. */
+    val passwordChanges: List<PasswordChange> get() = passwordChangesMutable.toList()
+
+    /** When set, [changePassword] throws it after recording the attempt. */
+    var changePasswordFailure: AppError? = null
+
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        passwordChangesMutable += PasswordChange(newPassword = newPassword, oldPasswordOrCode = oldPasswordOrCode)
+        changePasswordFailure?.let { throw it }
+    }
+
     /**
      * Counted, because the rule worth asserting is the *order*: the queue has to be put back
      * before a cycle is asked for, and a double that only recorded "a retry happened" could

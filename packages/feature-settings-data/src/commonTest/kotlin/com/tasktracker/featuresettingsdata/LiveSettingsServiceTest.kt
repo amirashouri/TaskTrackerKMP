@@ -495,4 +495,16 @@ private class FakeProfileGateway(
         updateFailure?.let { throw it }
         return saved
     }
+
+    /** Set to make [changePassword] refuse, after recording the attempt. */
+    var passwordChangeFailure: AppError? = null
+
+    /** The last submitted change as (newPassword, credential), or null if never called. */
+    var passwordChange: Pair<String, String>? = null
+        private set
+
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        passwordChange = newPassword to oldPasswordOrCode
+        passwordChangeFailure?.let { throw it }
+    }
 }

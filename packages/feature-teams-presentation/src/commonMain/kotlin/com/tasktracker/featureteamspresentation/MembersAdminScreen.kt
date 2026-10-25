@@ -13,7 +13,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassBackButton
@@ -36,6 +38,9 @@ import com.tasktracker.resources.admin_members_delete_body
 import com.tasktracker.resources.admin_members_delete_title
 import com.tasktracker.resources.admin_members_empty_active
 import com.tasktracker.resources.admin_members_empty_deleted
+import com.tasktracker.resources.admin_members_reset_code_body
+import com.tasktracker.resources.admin_members_reset_code_copy
+import com.tasktracker.resources.admin_members_reset_code_title
 import com.tasktracker.resources.admin_members_segment_active
 import com.tasktracker.resources.admin_members_segment_deleted
 import com.tasktracker.resources.admin_members_title
@@ -77,6 +82,8 @@ fun MembersAdminScreen(
     isAddFormOpen: Boolean,
     isCreating: Boolean,
     createErrorMessage: String?,
+    resetCode: GeneratedResetCode? = null,
+    isGeneratingResetCode: Boolean = false,
     showsAddAction: Boolean = true,
     onBack: () -> Unit,
     onSelectBucket: (MembersBucket) -> Unit,
@@ -84,6 +91,8 @@ fun MembersAdminScreen(
     onCancelDelete: () -> Unit,
     onConfirmDelete: () -> Unit,
     onReactivate: (User) -> Unit,
+    onGenerateResetCode: ((User) -> Unit)? = null,
+    onDismissResetCode: () -> Unit = {},
     onOpenAddForm: () -> Unit,
     onCloseAddForm: () -> Unit,
     onCreate: (email: String, password: String, role: MemberRole, position: String?) -> Unit,
@@ -157,6 +166,11 @@ fun MembersAdminScreen(
                             action = action,
                             onDelete = { onRequestDelete(user) },
                             onReactivate = { onReactivate(user) },
+                            // Nullable through: a caller that does not supply the command — a
+                            // preview, a scenario exercising some other row — gets no padlock
+                            // rather than a padlock that silently does nothing.
+                            onGenerateResetCode = onGenerateResetCode,
+                            isGeneratingResetCode = isGeneratingResetCode,
                         )
                     }
                 }
@@ -187,6 +201,30 @@ fun MembersAdminScreen(
             confirmTint = ttError(),
             onCancel = onCancelDelete,
             onConfirm = onConfirmDelete,
+        )
+    }
+
+    // The minted code, drawn last so it sits over everything — including the row it came from,
+    // which is where the admin's eyes already are. Cancel and Copy are deliberately different:
+    // the code exists on the server either way, so "cancel" would promise a rollback that
+    // cannot happen — Cancel merely closes, and Copy is the real action, putting the credential
+    // in the clipboard the admin pastes wherever they hand it on.
+    resetCode?.let { generated ->
+        val clipboard = LocalClipboardManager.current
+        ConfirmPopup(
+            title = stringResource(Res.string.admin_members_reset_code_title),
+            body = stringResource(
+                Res.string.admin_members_reset_code_body,
+                generated.member.preferredGreeting,
+                generated.code,
+            ),
+            confirmLabel = stringResource(Res.string.admin_members_reset_code_copy),
+            onCancel = onDismissResetCode,
+            onConfirm = {
+                clipboard.setText(AnnotatedString(generated.code))
+                onDismissResetCode()
+            },
+            tag = MembersResetCodeTag,
         )
     }
 }
@@ -273,6 +311,9 @@ const val MembersEmptyTag = "adminMembers.empty"
 
 /** The spinner shown while a bucket loads. */
 const val MembersLoadingTag = "adminMembers.loading"
+
+/** The minted-code popup's own surface, so a test can find that dialog and not the delete one. */
+const val MembersResetCodeTag = "adminMembers.resetCode"
 
 /** The tag on the segment for [bucket]. */
 fun membersBucketTag(bucket: MembersBucket): String = "adminMembers.bucket.${bucket.name.lowercase()}"

@@ -63,6 +63,18 @@ class HttpUserProfileGateway(
             UserProfileResponse.serializer(),
         ).toUserDetails()
     }
+
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        client.send(
+            PostSelfPasswordEndpoint(
+                ChangePasswordRequestBody(
+                    oldPasswordOrCode = oldPasswordOrCode,
+                    newPassword = newPassword,
+                ),
+            ).request,
+            ChangePasswordResponse.serializer(),
+        )
+    }
 }
 
 private const val SELF_PROFILE_PATH = "/v1/me"
@@ -88,6 +100,55 @@ private class PatchSelfProfileEndpoint(
     override val method: HttpMethod = HttpMethod.Patch
     override val isIdempotent: Boolean = true
 }
+
+/**
+ * `POST /v1/me/password` — the change-password action, a route of its own rather than an
+ * overload of the profile PATCH, because it is an action with its own body and a `PATCH /v1/me`
+ * is already the profile write this client decodes.
+ *
+ * Left at the verb's default of *not* replayable, deliberately. The credential in the body is
+ * consumed by success — a reset code is single-use and the old password stops matching — so a
+ * response lost to a dropped connection cannot be resent safely: the replay would be refused
+ * and the screen would report a failure for a change that actually landed.
+ */
+private class PostSelfPasswordEndpoint(
+    private val payload: ChangePasswordRequestBody,
+) : Endpoint {
+    override val path: String = "$SELF_PROFILE_PATH/password"
+    override val method: HttpMethod = HttpMethod.Post
+    override val body: ByteArray? = jsonBody(payload)
+}
+
+/**
+ * The change-password body, transcribed from the server's `changePasswordRequest`.
+ *
+ * Both keys are always present — neither may default away, because the server refuses a
+ * request missing either — and the `@SerialName` list is the whole mapping: Kotlin does not
+ * match JSON keys case-insensitively, so a renamed key is a rejected request rather than a
+ * silently ignored field.
+ */
+@Serializable
+private data class ChangePasswordRequestBody(
+    @SerialName("old_password_or_code") val oldPasswordOrCode: String,
+    @SerialName("new_password") val newPassword: String,
+)
+
+/**
+ * The change-password response: the caller's own row, with the new hash.
+ *
+ * `password_hash` is declared for the same reason every other key is — `JSONCoding` leaves
+ * `ignoreUnknownKeys` off, so a key this DTO does not name fails the decode. The value is
+ * never read: the server includes it by contract (specs/t8.1-change-password.md, the one
+ * endpoint whose response carries the hash) and the client mirrors the contract rather than
+ * opting out of it. Defaults keep the decode total if the server ever omits one.
+ */
+@Serializable
+private data class ChangePasswordResponse(
+    @SerialName("id") val id: String = "",
+    @SerialName("email") val email: String = "",
+    @SerialName("display_name") val displayName: String = "",
+    @SerialName("password_hash") val passwordHash: String = "",
+)
 
 /**
  * The client's transcription of the server's self-profile shape.

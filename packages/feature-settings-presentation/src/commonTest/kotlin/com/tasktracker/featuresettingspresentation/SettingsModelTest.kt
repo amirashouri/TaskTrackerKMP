@@ -521,6 +521,69 @@ class SettingsModelTest {
         // A disposed screen must not arm a banner over whatever the user navigated to next.
         assertNull(model.profileFailure)
     }
+
+    // MARK: - Change password
+
+    @Test
+    fun aChangePasswordSubmitCarriesBothHalvesAndReportsSuccess() = runTest {
+        val port = RecordingSettingsPort()
+        val model = SettingsModel(port)
+
+        assertNull(model.changePasswordOutcome)
+
+        model.requestChangePassword(
+            newPassword = "brand new secret",
+            oldPasswordOrCode = "correct horse battery",
+        )
+
+        // The pair is the contract: the credential the sheet was filled with *and* the password
+        // it authorises. A port that received only one of them could not speak the wire format
+        // the server declares — one body, two keys, `old_password_or_code` + `new_password`.
+        assertEquals(
+            listOf("brand new secret" to "correct horse battery"),
+            port.passwordChangeCalls,
+        )
+        assertEquals(ChangePasswordOutcome.Success, model.changePasswordOutcome)
+
+        model.dismissChangePasswordOutcome()
+        assertNull(model.changePasswordOutcome)
+    }
+
+    @Test
+    fun aRefusedChangeHoldsTheServerSentenceRatherThanThrowing() = runTest {
+        val port = RecordingSettingsPort()
+        port.changePasswordFailure = AppError.Validation("new password does not meet policy")
+        val model = SettingsModel(port)
+
+        model.requestChangePassword(newPassword = "short", oldPasswordOrCode = "a-code")
+
+        // Held, not thrown: the sheet renders the server's own words (`400` is in the
+        // mapping's surface-safe set), and the model keeps no second copy of the error.
+        val failure = model.changePasswordOutcome as? ChangePasswordOutcome.Failure
+        assertNotNull(failure)
+        assertEquals("new password does not meet policy", failure.error.message)
+
+        model.dismissChangePasswordOutcome()
+        assertNull(model.changePasswordOutcome)
+    }
+
+    @Test
+    fun aCancelledChangeIsRethrownRatherThanArmedAsAFailure() = runTest {
+        val port = RecordingSettingsPort()
+        port.changePasswordFailure = CancellationException("the screen went away")
+        val model = SettingsModel(port)
+
+        // A sheet disposed mid-submit must not arm a failure banner over whatever the user
+        // navigated to next — the same rule `signOut` documents, and the reason the catch here
+        // names `AppError` only.
+        assertFailsWith<CancellationException> {
+            model.requestChangePassword(newPassword = "brand new secret", oldPasswordOrCode = "pw")
+        }
+        assertFalse(
+            model.changePasswordOutcome is ChangePasswordOutcome.Failure,
+            "a cancelled submit is not a failed one",
+        )
+    }
 }
 
 /**
@@ -604,6 +667,22 @@ class RecordingSettingsPort(
 
     override suspend fun retryStuckChanges() {
         retryStuckCalls++
+    }
+
+    /** Every change-password submission, as the pair the model sent: (newPassword, credential). */
+    val passwordChangeCalls = mutableListOf<Pair<String, String>>()
+
+    /**
+     * When set, [changePassword] fails with it instead of accepting.
+     *
+     * A `Throwable` for the reason [endSessionFailure] is: a test can script cancellation —
+     * the one failure the model must let through rather than hold as an outcome.
+     */
+    var changePasswordFailure: Throwable? = null
+
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        passwordChangeCalls += newPassword to oldPasswordOrCode
+        changePasswordFailure?.let { throw it }
     }
 
     override suspend fun endSession() {

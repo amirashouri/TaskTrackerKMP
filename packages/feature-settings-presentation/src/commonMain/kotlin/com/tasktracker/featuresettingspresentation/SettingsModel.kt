@@ -46,6 +46,20 @@ data class ServerAddressEditor(
 enum class ServerAddressNotice { Saved, Reset }
 
 /**
+ * The outcome of the last change-password command, or null when there is nothing to report.
+ *
+ * A sealed interface rather than the enum the spec sketched, because [Failure] carries an
+ * [AppError]: an enum entry cannot take a payload, and flattening the failure into a message
+ * here would put the wording in a second place from every other user-facing sentence — the
+ * same rule [commandOutcome] and [signOutFailure] follow by holding their error whole.
+ */
+sealed interface ChangePasswordOutcome {
+    data object Started : ChangePasswordOutcome
+    data object Success : ChangePasswordOutcome
+    data class Failure(val error: AppError) : ChangePasswordOutcome
+}
+
+/**
  * Drives the Settings screen.
  *
  * Holds the three readings the screen renders and the three commands it dispatches, and owns
@@ -102,6 +116,12 @@ class SettingsModel(private val port: SettingsPort) {
      * to a tap.
      */
     var commandOutcome: SyncOutcome? by mutableStateOf(null)
+        private set
+
+    /**
+     * The outcome of the last change-password command, or null when there is nothing to report.
+     */
+    var changePasswordOutcome: ChangePasswordOutcome? by mutableStateOf(null)
         private set
 
     /**
@@ -238,6 +258,22 @@ class SettingsModel(private val port: SettingsPort) {
     }
 
     /**
+     * Requests a password change. Uses [oldPasswordOrCode] for identity verification — the old
+     * password or a time-limited admin code, whichever the sheet is filled with — and applies
+     * [newPassword], which the sheet has already checked against the policy and against its own
+     * confirmation field before dispatching here.
+     */
+    suspend fun requestChangePassword(newPassword: String, oldPasswordOrCode: String) {
+        changePasswordOutcome = ChangePasswordOutcome.Started
+        try {
+            port.changePassword(newPassword = newPassword, oldPasswordOrCode = oldPasswordOrCode)
+            changePasswordOutcome = ChangePasswordOutcome.Success
+        } catch (failure: AppError) {
+            changePasswordOutcome = ChangePasswordOutcome.Failure(failure)
+        }
+    }
+
+    /**
      * Puts the refused changes back in the queue and asks for a cycle, reporting what became
      * of the cycle.
      *
@@ -249,6 +285,18 @@ class SettingsModel(private val port: SettingsPort) {
      */
     suspend fun retryStuckChanges() {
         commandOutcome = retryStuck()
+    }
+
+    /**
+     * Clears [commandOutcome], for a screen that shows the banner only until it is read. */
+    fun dismissCommandOutcome() {
+        commandOutcome = null
+    }
+
+    /**
+     * Clears [changePasswordOutcome], for a screen that shows the banner only until it is read. */
+    fun dismissChangePasswordOutcome() {
+        changePasswordOutcome = null
     }
 
     /**
@@ -418,10 +466,5 @@ class SettingsModel(private val port: SettingsPort) {
         serverAddress = port.serverAddress()
         serverAddressEditor = null
         serverAddressNotice = ServerAddressNotice.Reset
-    }
-
-    /** Clears [commandOutcome], for a screen that shows the banner only until it is read. */
-    fun dismissCommandOutcome() {
-        commandOutcome = null
     }
 }

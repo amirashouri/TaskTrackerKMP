@@ -102,6 +102,9 @@ class PreviewSettingsPort(
 
     override suspend fun syncNow() = com.tasktracker.featuresettingsdomain.SyncOutcome.Started
 
+    /** A preview has no account on a server, so there is no password it could change. */
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) = Unit
+
     override suspend fun endSession() = Unit
 
     /** A preview has no session to end, so both ways out are the same no-op here. */

@@ -11,6 +11,7 @@ import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpQueryItem
 import com.tasktracker.network.jsonBody
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.coroutines.cancellation.CancellationException
@@ -112,6 +113,20 @@ private class ReactivateMemberEndpoint(
 }
 
 /**
+ * `POST /v1/admin/users/{id}/password-reset-code`.
+ *
+ * No body: the member is named by the route, which is also what stops an admin request from
+ * minting a code for one member while naming another in the payload. Left at the verb's
+ * default of *not* replayable — a lost response that was retried would mint a second code and
+ * leave the admin holding the first one's twin, two live credentials for one hand-off.
+ */
+private class GenerateResetCodeEndpoint(id: UserID) : Endpoint {
+    override val path: String = "$ADMIN_USERS/${id.stringValue}/password-reset-code"
+    override val method: HttpMethod = HttpMethod.Post
+    override val requiresAuth: Boolean = true
+}
+
+/**
  * The admin member API, over the authenticated client.
  *
  * The transport half of `MemberAdminPort`: this class knows the paths, the verbs and the JSON,
@@ -184,4 +199,30 @@ class HttpMemberAdminRemote(private val client: HttpClient) {
         ).request,
         decoding = MemberResponse.serializer(),
     ).toUser()
+
+    /**
+     * Mints a reset code and returns it verbatim.
+     *
+     * The response's `expires_at` is declared — `JSONCoding` leaves `ignoreUnknownKeys` off,
+     * so a key this DTO does not name fails the decode — but the value is not carried into the
+     * domain: the TTL is a server fact the dialog states as a fixed "24 hours", and a second
+     * source of it here would be a copy that could drift from the one the server enforces.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun generateResetCode(id: UserID): String = client.send(
+        GenerateResetCodeEndpoint(id).request,
+        decoding = ResetCodeResponse.serializer(),
+    ).code
 }
+
+/**
+ * The minted code, as the admin endpoint returns it.
+ *
+ * Transcribed from the server's `adminPasswordResetCodeResponse`; the `@SerialName` list is
+ * the whole mapping, per the file's KDoc.
+ */
+@Serializable
+private data class ResetCodeResponse(
+    @SerialName("code") val code: String = "",
+    @SerialName("expires_at") val expiresAt: Long = 0,
+)

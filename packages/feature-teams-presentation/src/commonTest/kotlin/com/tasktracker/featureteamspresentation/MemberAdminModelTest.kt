@@ -448,6 +448,41 @@ class MemberAdminModelTest {
         assertFalse(model.isAddFormOpen)
         assertNull(model.createFailure)
     }
+
+    // MARK: - Reset code
+
+    @Test
+    fun mintingAResetCodeCarriesTheMemberSoTheDialogCanNameThem() = runTest {
+        val port = RecordingMemberAdminPort(resetCode = "one-time-code")
+        val model = MemberAdminModel(port)
+
+        model.generateResetCode(grace)
+        advanceUntilIdle()
+
+        assertEquals(listOf(grace.id), port.resetCodeRequests)
+        val shown = assertNotNull(model.resetCode)
+        assertEquals(grace, shown.member)
+        assertEquals("one-time-code", shown.code)
+        assertFalse(model.isGeneratingResetCode)
+
+        model.dismissResetCode()
+        assertNull(model.resetCode)
+    }
+
+    @Test
+    fun aRefusedMintLandsInTheSameBannerEveryOtherListFailureUses() = runTest {
+        val port = RecordingMemberAdminPort(
+            resetCodeFailure = AppError.Server(400, "user is deleted"),
+        )
+        val model = MemberAdminModel(port)
+
+        model.generateResetCode(grace)
+        advanceUntilIdle()
+
+        assertNull(model.resetCode, "nothing was minted, so nothing may be shown as if it were")
+        assertIs<AppError.Server>(model.listFailure)
+        assertFalse(model.isGeneratingResetCode)
+    }
 }
 
 /** One `createMember` call, as the port received it. */
@@ -471,6 +506,8 @@ class RecordingMemberAdminPort(
     var createFailure: Throwable? = null,
     var deleteFailure: Throwable? = null,
     var reactivateFailure: Throwable? = null,
+    var resetCodeFailure: Throwable? = null,
+    var resetCode: String = "reset-code-under-test",
 ) : MemberAdminPort {
 
     /** Every status asked for, in order, so a re-read is visible rather than inferred. */
@@ -481,6 +518,9 @@ class RecordingMemberAdminPort(
     val deletedIDs = mutableListOf<UserID>()
 
     val reactivatedIDs = mutableListOf<UserID>()
+
+    /** Every id a reset code was minted for, in order. */
+    val resetCodeRequests = mutableListOf<UserID>()
 
     override suspend fun members(status: UserStatus): List<User> {
         membersRequests += status
@@ -510,6 +550,12 @@ class RecordingMemberAdminPort(
         return byStatus[UserStatus.Deleted]?.firstOrNull { it.id == id }
             ?.copy(status = UserStatus.Active)
             ?: user(id.stringValue, "restored@example.com", UserStatus.Active)
+    }
+
+    override suspend fun generateResetCode(id: UserID): String {
+        resetCodeRequests += id
+        resetCodeFailure?.let { throw it }
+        return resetCode
     }
 
     // The read-only half of `TeamPort`, which the members screen never uses.

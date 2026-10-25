@@ -70,4 +70,7 @@ class MemberAdminRepository(
 
     @Throws(AppError::class, CancellationException::class)
     override suspend fun reactivateMember(id: UserID): User = remote.reactivateMember(id)
+
+    @Throws(AppError::class, CancellationException::class)
+    override suspend fun generateResetCode(id: UserID): String = remote.generateResetCode(id)
 }

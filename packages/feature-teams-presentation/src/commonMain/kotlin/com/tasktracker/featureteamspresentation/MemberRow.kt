@@ -19,6 +19,7 @@ import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureteamsdomain.MemberRole
@@ -27,6 +28,7 @@ import com.tasktracker.featureteamsdomain.UserStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.admin_members_delete
 import com.tasktracker.resources.admin_members_reactivate
+import com.tasktracker.resources.admin_members_reset_code_action
 import com.tasktracker.resources.admin_members_role_admin
 import com.tasktracker.resources.admin_members_role_member
 import org.jetbrains.compose.resources.stringResource
@@ -71,6 +73,8 @@ fun MemberRow(
     onDelete: () -> Unit,
     onReactivate: () -> Unit,
     modifier: Modifier = Modifier,
+    onGenerateResetCode: ((User) -> Unit)? = null,
+    isGeneratingResetCode: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -108,16 +112,36 @@ fun MemberRow(
         }
 
         when (action) {
-            MemberRowAction.Delete -> ttGlassIconButton(
-                image = ttActionIcons.trash,
-                contentDescription = stringResource(Res.string.admin_members_delete),
-                // The one destructive control in the app that is a single tap away from a row
-                // action, so it is tinted rather than left neutral: the tint is what says the
-                // tap leads to a confirmation and then to a lost session.
-                tint = ttError(),
-                onClick = onDelete,
-                modifier = Modifier.testTag(memberDeleteButtonTag(user.id)),
-            )
+            MemberRowAction.Delete -> Row(
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Live rows only: a deleted member cannot sign in, so a code for them would be
+                // a credential for an account the server still refuses. The padlock is the
+                // settings screen's own glyph — the same mark that leads to the flow this ends
+                // in — so the two halves of "password" wear one shape.
+                if (onGenerateResetCode != null) {
+                    ttGlassIconButton(
+                        image = ttSettingsIcons.lock,
+                        contentDescription = stringResource(Res.string.admin_members_reset_code_action),
+                        onClick = { onGenerateResetCode(user) },
+                        // Disabled while a mint is in flight: a second tap would mint a second
+                        // code and leave the admin holding two live credentials for one hand-off.
+                        enabled = !isGeneratingResetCode,
+                        modifier = Modifier.testTag(memberResetCodeButtonTag(user.id)),
+                    )
+                }
+                ttGlassIconButton(
+                    image = ttActionIcons.trash,
+                    contentDescription = stringResource(Res.string.admin_members_delete),
+                    // The one destructive control in the app that is a single tap away from a row
+                    // action, so it is tinted rather than left neutral: the tint is what says the
+                    // tap leads to a confirmation and then to a lost session.
+                    tint = ttError(),
+                    onClick = onDelete,
+                    modifier = Modifier.testTag(memberDeleteButtonTag(user.id)),
+                )
+            }
 
             MemberRowAction.Reactivate -> ttGlassButton(
                 label = stringResource(Res.string.admin_members_reactivate),
@@ -150,6 +174,9 @@ fun memberRowTag(id: UserID): String = "adminMembers.row.$id"
 
 /** The delete button's tag on [id]'s row. */
 fun memberDeleteButtonTag(id: UserID): String = "adminMembers.row.$id.delete"
+
+/** The reset-code button's tag on [id]'s row. */
+fun memberResetCodeButtonTag(id: UserID): String = "adminMembers.row.$id.resetCode"
 
 /** The reactivate button's tag on [id]'s row. */
 fun memberReactivateButtonTag(id: UserID): String = "adminMembers.row.$id.reactivate"

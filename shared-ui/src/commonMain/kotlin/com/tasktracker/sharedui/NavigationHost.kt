@@ -2177,6 +2177,14 @@ private fun SettingsDestination(
         onUserDetailsCommit = { scope.launch { model.saveUserDetails() } },
         profileFailure = model.profileFailure,
         onDismissProfileFailure = { model.dismissProfileFailure() },
+        // The change-password sheet's pair: state read straight from the model, the submit
+        // launched like every other command here, and the dismissal clearing the outcome the
+        // same way the sign-out and profile banners are cleared — once read, never re-raised.
+        changePasswordOutcome = model.changePasswordOutcome,
+        onRequestChangePassword = { newPassword, credential ->
+            scope.launch { model.requestChangePassword(newPassword = newPassword, oldPasswordOrCode = credential) }
+        },
+        onDismissChangePasswordOutcome = { model.dismissChangePasswordOutcome() },
         isAdmin = isAdmin,
         // The two admin rows. The screen reports the tap; where it lands is navigation, so it
         // goes through the router rather than holding a flag here — and through

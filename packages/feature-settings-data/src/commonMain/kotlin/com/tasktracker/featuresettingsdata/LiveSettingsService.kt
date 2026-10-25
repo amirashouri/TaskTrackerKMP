@@ -324,6 +324,28 @@ class LiveSettingsService(
             statusText = edited.statusText.takeIf { it != confirmed.statusText },
         )
 
+    // MARK: - Password
+
+    /**
+     * Forwarded to [profileGateway], which owns the authenticated `POST /v1/me/password`.
+     *
+     * The `null` gateway is the offline demo: there is no server session and no account on a
+     * server, so there is nothing to change a password *on*. That has to be an error the
+     * banner shows rather than a silent success — a settings screen that reports a password
+     * change nothing performed is worse than one that says it cannot be done — and
+     * [AppError.Validation] is the same type the server's own `400` refusals arrive as, so the
+     * screen needs no second case for it.
+     *
+     * Unlike a profile commit there is no optimistic local state to revert: the password lives
+     * only on the server, so a throw leaves the client holding exactly what it did before.
+     */
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        val gateway = profileGateway ?: throw AppError.Validation(
+            "There is no account on a server to change a password for.",
+        )
+        gateway.changePassword(newPassword = newPassword, oldPasswordOrCode = oldPasswordOrCode)
+    }
+
     // MARK: - Server Address
 
     /**

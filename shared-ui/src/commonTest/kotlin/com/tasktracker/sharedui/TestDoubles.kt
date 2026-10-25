@@ -338,6 +338,14 @@ class FakeShellSettingsPort(
         retryStuckCount++
     }
 
+    /** Counted so a shell scenario can tell the sheet's submit from every other command. */
+    var passwordChangeCount: Int = 0
+        private set
+
+    override suspend fun changePassword(newPassword: String, oldPasswordOrCode: String) {
+        passwordChangeCount++
+    }
+
     override fun appVersion(): AppVersion = AppVersion(marketing = "1.0", build = "1")
 
     override suspend fun userDetails(): UserDetails = UserDetails()
