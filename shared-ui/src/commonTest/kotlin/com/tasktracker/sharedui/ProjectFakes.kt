@@ -537,6 +537,7 @@ val shellTestUserID = UserID("99999999-9999-4999-8999-999999999999")
  */
 fun shellTestSprint(
     projectID: ProjectID,
+    isLocked: Boolean = false,
     name: String = "Sprint 7",
     goalStoryPoints: Int = 12,
     ownerID: UserID? = shellTestUserID,
@@ -553,6 +554,7 @@ fun shellTestSprint(
     endDate = endDate,
     ownerID = ownerID,
     isFinished = isFinished,
+    isLocked = isLocked,
     // Presence, not the instant: `Sprint.reconcileFinishedAt`'s invariant is that the two
     // agree — non-null exactly when finished — and no shell assertion reads the date, so
     // deriving it from the window keeps the invariant under a custom window for free.

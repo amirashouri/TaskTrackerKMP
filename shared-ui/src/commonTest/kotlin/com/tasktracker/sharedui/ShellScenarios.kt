@@ -1491,6 +1491,7 @@ object ShellScenarios {
         // that instant is an *active* sprint, while the fixture's default March-2026
         // window is a planned one. Nothing here depends on the day the suite runs.
         val active = shellTestSprint(
+            isLocked = true,
             projectID = project.id,
             name = "Sprint under way",
             startDate = Instant.parse("2025-09-01T00:00:00Z"),
