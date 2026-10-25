@@ -343,6 +343,9 @@ internal fun aSprint(
     ownerID: UserID? = adaUserID,
     isFinished: Boolean = false,
     finishedAt: Instant? = null,
+    // Non-default for the same reason as `goal`: the completeness test must be able to see
+    // a mapping that forgot the new column, and a value equal to the default would hide it.
+    isLocked: Boolean = true,
     createdAt: Instant = Moments.start,
     updatedAt: Instant = Moments.later,
 ): Sprint = Sprint(
@@ -356,6 +359,7 @@ internal fun aSprint(
     ownerID = ownerID,
     isFinished = isFinished,
     finishedAt = finishedAt,
+    isLocked = isLocked,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )

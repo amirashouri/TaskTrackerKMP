@@ -52,11 +52,14 @@ import com.tasktracker.resources.sprint_finish_confirm
 import com.tasktracker.resources.sprint_finish_confirm_body
 import com.tasktracker.resources.sprint_items_empty
 import com.tasktracker.resources.sprint_items_title
+import com.tasktracker.resources.sprint_lock
+import com.tasktracker.resources.sprint_locked_note
 import com.tasktracker.resources.sprint_owner_none
 import com.tasktracker.resources.sprint_owner_only
 import com.tasktracker.resources.sprint_remove
 import com.tasktracker.resources.sprint_remove_confirm
 import com.tasktracker.resources.sprint_remove_confirm_body
+import com.tasktracker.resources.sprint_unlock
 import com.tasktracker.resources.sprint_view_summary
 import org.jetbrains.compose.resources.stringResource
 
@@ -93,14 +96,21 @@ import org.jetbrains.compose.resources.stringResource
  *
  * ## The add button is disabled, not absent — and the rows go inert with it
  *
- * [SprintDetail.canEditItems] is false for an active or finished sprint, and the header's
+ * [SprintDetail.canEditItems] is false for a locked or finished sprint, and the header's
  * plus is dimmed and dead rather than hidden, unlike [SprintListScreen]'s create button.
  * The list hides its button because nothing on that screen explains a disabled control;
- * here the explanation is on the page — the window says the sprint is under way, and every
- * row below renders without its actions — so the dimmed button and the inert rows are one
- * legible state: *this sprint is frozen*. Both halves are gated from the same value, which
- * is why [onOpenTask] and [onRemoveTask] are dropped at this seam rather than left for the
- * destination to remember: a caller cannot offer an edit the rows do not have.
+ * here the explanation is on the page — the locked note says the sprint is on hold, and
+ * every row below renders without its actions — so the dimmed button and the inert rows
+ * are one legible state: *this sprint is frozen*. Both halves are gated from the same
+ * value, which is why [onOpenTask] and [onRemoveTask] are dropped at this seam rather than
+ * left for the destination to remember: a caller cannot offer an edit the rows do not have.
+ *
+ * ## Lock and unlock are the owner's, and reversible
+ *
+ * Unlike the three lifecycle actions, the lock is undone by the same control that applied
+ * it, so it has no confirmation dialog. It is shown only while the sprint is open —
+ * scheduled or in progress — because a finished sprint is history and an archived one is
+ * filed away; the lock exists to hold a window that may still move.
  */
 @Composable
 fun SprintDetailScreen(
@@ -113,6 +123,12 @@ fun SprintDetailScreen(
     onDismissError: () -> Unit,
     onRemove: () -> Unit,
     onArchive: () -> Unit,
+    /**
+     * Applies or removes the sprint's lock. One callback rather than two, because the
+     * control is one button whose label and effect follow [SprintDetail.sprint]'s current
+     * `isLocked`; splitting it would let a stale label apply the opposite action.
+     */
+    onToggleLock: () -> Unit = {},
     onAddTasks: () -> Unit = {},
     /**
      * Opens the editor over this sprint. On the card rather than in the header, because
@@ -121,9 +137,10 @@ fun SprintDetailScreen(
      * five and was not worth a second affordance for.
      *
      * Offered in every state, including finished: name, prose goal and owner stay editable
-     * always (the window and the cap freeze with the start, and that lock lives in the
-     * form — see [SprintEditorModel.windowLocked]). Gated only on [isBusy], for the same
-     * reason the finish button is: a write in flight and a second sheet opening are a race.
+     * always (the window and the cap freeze while the owner has the sprint locked, and that
+     * lock lives in the form — see [SprintEditorModel.windowLocked]). Gated only on
+     * [isBusy], for the same reason the finish button is: a write in flight and a second
+     * sheet opening are a race.
      */
     onEdit: () -> Unit = {},
     onOpenTask: ((WorkItemID) -> Unit)? = null,
@@ -262,16 +279,41 @@ fun SprintDetailScreen(
                         modifier = Modifier.testTag(SprintDetailOwnerNoteTag),
                     )
                 }
+                if (detail.sprint.isLocked && !detail.sprint.isFinished) {
+                    ttText(
+                        text = stringResource(Res.string.sprint_locked_note),
+                        style = ttTypography.footnote,
+                        color = ttBodyLabel(),
+                        modifier = Modifier.testTag(SprintDetailLockedNoteTag),
+                    )
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                 ) {
+                    // Shown only while the sprint can still move: a finished sprint is
+                    // history and an archived one is filed away. Owner-gated for the same
+                    // reason Finish is — the lock is the owner's decision to make.
+                    if (!detail.sprint.isFinished && detail.canManageLock) {
+                        ttGlassButton(
+                            label = stringResource(
+                                if (detail.sprint.isLocked) {
+                                    Res.string.sprint_unlock
+                                } else {
+                                    Res.string.sprint_lock
+                                },
+                            ),
+                            onClick = onToggleLock,
+                            enabled = !isBusy,
+                            modifier = Modifier.testTag(SprintDetailLockTag),
+                        )
+                    }
                     when (detail.status) {
                         SprintStatus.Scheduled -> {
                             ttGlassButton(
                                 label = stringResource(Res.string.sprint_remove),
                                 onClick = { pendingAction = SprintStatus.Scheduled },
-                                enabled = !isBusy,
+                                enabled = !isBusy && !detail.sprint.isLocked,
                                 modifier = Modifier.testTag(SprintDetailRemoveTag),
                             )
                         }
@@ -407,6 +449,8 @@ const val SprintDetailEditTag = "sprints.detail.edit"
 const val SprintDetailGoalTag = "sprints.detail.goal"
 const val SprintDetailOwnerTag = "sprints.detail.owner"
 const val SprintDetailOwnerNoteTag = "sprints.detail.ownerNote"
+const val SprintDetailLockTag = "sprints.detail.lock"
+const val SprintDetailLockedNoteTag = "sprints.detail.lockedNote"
 const val SprintDetailFinishTag = "sprints.detail.finish"
 const val SprintDetailReopenTag = "sprints.detail.reopen"
 const val SprintDetailSummaryTag = "sprints.detail.summary"

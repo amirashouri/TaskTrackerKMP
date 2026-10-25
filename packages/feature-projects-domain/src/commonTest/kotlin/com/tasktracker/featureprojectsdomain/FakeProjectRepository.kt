@@ -322,6 +322,18 @@ class FakeProjectRepository : ProjectRepositoryPort {
         }
     }
 
+    override suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint {
+        throwIfFailing()
+        return lock.withLock {
+            val sprint = storedSprints.firstOrNull { it.id == id }
+                ?: throw AppError.Validation("No such sprint.")
+            sprint.isLocked = isLocked
+            sprint.updatedAt = now
+            publish(ProjectChange(ProjectChange.Kind.Sprints, sprint.projectID))
+            sprint
+        }
+    }
+
     override suspend fun setWorkItemSprint(
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,

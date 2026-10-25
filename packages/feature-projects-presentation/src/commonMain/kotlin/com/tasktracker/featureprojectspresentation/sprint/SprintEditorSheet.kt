@@ -58,11 +58,12 @@ import org.jetbrains.compose.resources.stringResource
  *
  * The number ([SprintEditorModel.goalStoryPoints], the cap) and the sentence
  * ([SprintEditorModel.goal]) are separate inputs because they are separate facts, and they
- * diverge when the sprint starts: `windowLocked` disables the number and both dates, dims
- * them with the same alpha every disabled glass control uses, and posts the note under the
- * title saying why. Name, sentence and owner stay live — they describe the sprint rather
- * than commit it. The sheet is handed that one flag rather than each field deciding for
- * itself, so the disabled set cannot drift from [SprintEditorModel.windowLocked].
+ * diverge when the owner locks the sprint: `windowLocked` disables the number and both
+ * dates, dims them with the same alpha every disabled glass control uses, and posts the
+ * note under the title saying why. Name, sentence and owner stay live — they describe the
+ * sprint rather than commit it. The sheet is handed that one flag rather than each field
+ * deciding for itself, so the disabled set cannot drift from
+ * [SprintEditorModel.windowLocked].
  *
  * ## The dates are two `TTDateField`s and both errors are under them
  *

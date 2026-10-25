@@ -235,6 +235,35 @@ class SprintUseCasesTest {
     }
 
     @Test
+    fun `a locked sprint refuses window and cap edits but accepts its description`() = runTest {
+        val repository = FakeProjectRepository()
+        val (_, sprint) = sprintIn(repository)
+        repository.setSprintLocked(sprint.id, true, now)
+        val update = UpdateSprint(repository, TestDateProvider(now))
+
+        assertFailsWith<AppError.Validation> {
+            update(id = sprint.id, startDate = Instant.parse("2026-06-01T00:00:00Z"))
+        }
+        assertFailsWith<AppError.Validation> {
+            update(id = sprint.id, goalStoryPoints = 20)
+        }
+
+        // Locking freezes the commitment, not the description. Name, prose goal and owner
+        // stay writable so a locked sprint can still be renamed or handed over.
+        val renamed = update(
+            id = sprint.id,
+            name = "Still sprint 1",
+            goal = Patch.Of("A better sentence"),
+            ownerID = Patch.Of(null),
+        )
+        assertEquals("Still sprint 1", renamed.name)
+        assertEquals("A better sentence", renamed.goal)
+        assertNull(renamed.ownerID)
+        assertEquals(march2, renamed.startDate)
+        assertEquals(10, renamed.goalStoryPoints)
+    }
+
+    @Test
     fun `editing a sprint that no longer exists is refused`() = runTest {
         val repository = FakeProjectRepository()
 
@@ -319,6 +348,28 @@ class SprintUseCasesTest {
     }
 
     @Test
+    fun `deleting a locked sprint is refused until it is unlocked`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "On hold",
+            startDate = march2,
+            endDate = march16,
+        )
+        repository.setSprintLocked(sprint.id, true, now)
+
+        assertFailsWith<AppError.Validation> {
+            DeleteSprint(repository, TestDateProvider(now))(sprint.id)
+        }
+        assertEquals(1, repository.sprints(project.id).size)
+
+        UnlockSprint(repository, TestDateProvider(now))(sprint.id)
+        DeleteSprint(repository, TestDateProvider(now))(sprint.id)
+        assertTrue(repository.sprints(project.id).isEmpty())
+    }
+
+    @Test
     fun `a store refusal reaches the caller as itself`() = runTest {
         val repository = FakeProjectRepository()
         repository.failure = AppError.Validation("'Sprint 3' is still open.")
@@ -335,11 +386,10 @@ class SprintUseCasesTest {
 
     // MARK: Sprint membership
     //
-    // The window these tests use matters more than it looks: `now` is October 2025 and
-    // `march2..march16` is 2026, so `sprintIn` produces a *planned* sprint — the one state
-    // in which membership may be edited. Every refusal test therefore has to move the
-    // window or the clock deliberately, and a fixture that "just happened to be active"
-    // would make the green runs depend on the day they ran on.
+    // Membership is editable unless the sprint is locked or finished, so `sprintIn`'s
+    // planned window is convenient rather than required. The refusal tests lock their
+    // sprint (or finish it) explicitly, which is what makes each one about the rule it
+    // names rather than about the calendar.
 
     private suspend fun itemsIn(repository: FakeProjectRepository, project: Project) =
         listOf(
@@ -584,7 +634,7 @@ class SprintUseCasesTest {
     }
 
     @Test
-    fun `adding to an active sprint is refused`() = runTest {
+    fun `adding to an unlocked active sprint is allowed`() = runTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
         val active = create(repository)(
@@ -595,42 +645,88 @@ class SprintUseCasesTest {
         )
         val item = repository.seedWorkItem(projectID = project.id)
 
+        // The start date alone no longer freezes membership: the explicit lock does, and
+        // this sprint has not been locked.
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = active.id,
+        )
+
+        assertEquals(active.id, repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `adding to a locked sprint is refused`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "Under way",
+            startDate = march2,
+            endDate = march16,
+        )
+        repository.setSprintLocked(sprint.id, true, now)
+        val item = repository.seedWorkItem(projectID = project.id)
+
         val failure = assertFailsWith<AppError.Validation> {
             AddWorkItemsToSprint(repository, TestDateProvider(now))(
                 workItemIDs = listOf(item.id),
-                sprintID = active.id,
+                sprintID = sprint.id,
             )
         }
 
         // The message is what the detail screen's banner shows, so it is asserted rather
         // than left to whatever the string happened to say.
-        assertEquals("'Under way' is in progress, so its tasks cannot be changed.", failure.message)
+        assertEquals("'Under way' is locked, so its tasks cannot be changed.", failure.message)
         assertNull(repository.workItem(item.id)!!.sprintID)
     }
 
     @Test
-    fun `removing from an active sprint is refused`() = runTest {
+    fun `removing from a locked sprint is refused`() = runTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
-        val active = create(repository)(
+        val sprint = create(repository)(
             projectID = project.id,
             name = "Under way",
-            startDate = Instant.fromEpochSeconds(now.epochSeconds - 86_400),
-            endDate = Instant.fromEpochSeconds(now.epochSeconds + 86_400),
+            startDate = march2,
+            endDate = march16,
         )
         val item = repository.seedWorkItem(projectID = project.id, title = "Committed")
         // Put it in through the store directly: the use case that would do it is exactly
         // the one this test proves refuses, so going through it would make the fixture
         // depend on the behaviour under test.
-        repository.setWorkItemSprint(listOf(item.id), Patch.Of(active.id), now)
+        repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), now)
+        repository.setSprintLocked(sprint.id, true, now)
 
         assertFailsWith<AppError.Validation> {
             RemoveWorkItemsFromSprint(repository, TestDateProvider(now))(
                 workItemIDs = listOf(item.id),
-                sprintID = active.id,
+                sprintID = sprint.id,
             )
         }
-        assertEquals(active.id, repository.workItem(item.id)!!.sprintID)
+        assertEquals(sprint.id, repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `unlocking a sprint makes its membership editable again`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val sprint = create(repository)(
+            projectID = project.id,
+            name = "On hold",
+            startDate = march2,
+            endDate = march16,
+        )
+        repository.setSprintLocked(sprint.id, true, now)
+        val item = repository.seedWorkItem(projectID = project.id)
+
+        UnlockSprint(repository, TestDateProvider(now))(sprint.id)
+        AddWorkItemsToSprint(repository, TestDateProvider(now))(
+            workItemIDs = listOf(item.id),
+            sprintID = sprint.id,
+        )
+
+        assertEquals(sprint.id, repository.workItem(item.id)!!.sprintID)
     }
 
     @Test

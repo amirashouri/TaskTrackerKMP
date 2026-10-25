@@ -380,6 +380,11 @@
          rather than a label: the control is an icon, and its name is what a screen reader
          announces. -->
     <string name="sprint_edit">Edit sprint</string>
+    <string name="sprint_lock">Lock sprint</string>
+    <string name="sprint_unlock">Unlock sprint</string>
+    <!-- Shown on the detail card while the sprint is on hold, naming the way out: the
+         lock is reversible, and the button above this line is where it is removed. -->
+    <string name="sprint_locked_note">This sprint is locked. Unlock it to change its dates or tasks.</string>
     <string name="sprint_finished">Finished</string>
     <string name="sprint_progress">%1$d of %2$d pts</string>
     <string name="sprint_editor_new_title">New Sprint</string>
@@ -392,10 +397,12 @@
          quantified target, and the (pts) qualifier is what tells them apart. -->
     <string name="sprint_goal_text_label">Goal</string>
     <string name="sprint_goal_text_placeholder">What this sprint is for</string>
-    <!-- Shown over the form once the sprint has started, naming which fields are frozen
-         and why. Not a banner: it is a statement about the form's own state, so it sits
-         with the title rather than under any one field. -->
-    <string name="sprint_editor_locked_note">The window and the point cap are fixed once the sprint starts.</string>
+    <!-- Shown over the form while the window is frozen, naming which fields are frozen
+         and why. The two causes are the owner's lock and a sprint that has already closed,
+         which is why it does not offer the unlock: the action lives on the detail card.
+         Not a banner: it is a statement about the form's own state, so it sits with the
+         title rather than under any one field. -->
+    <string name="sprint_editor_locked_note">The window and the point cap are fixed while the sprint is locked, and once it is finished.</string>
     <string name="sprint_start_label">Start</string>
     <string name="sprint_end_label">End</string>
     <string name="sprint_owner_label">Owner</string>

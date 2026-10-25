@@ -276,6 +276,15 @@ class FakeProjectRepository : ProjectRepositoryPort {
             existing.copy()
         }
 
+    override suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint = sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
+            failIfSet()
+            val existing = storedSprints.first { it.id == id }
+            existing.isLocked = isLocked
+            existing.updatedAt = now
+            writes += "setSprintLocked"
+            existing.copy()
+        }
+
     override suspend fun reopenSprint(id: SprintID, now: Instant): Sprint =
         sprintWrite({ storedSprints.first { it.id == id }.projectID }) {
             failIfSet()
@@ -907,6 +916,7 @@ fun testSprint(
     ownerID: UserID? = testUserID,
     isFinished: Boolean = false,
     isArchived: Boolean = false,
+    isLocked: Boolean = false,
     finishedAt: Instant? = null,
     id: SprintID = randomSprintID(),
 ): Sprint = Sprint(
@@ -917,12 +927,14 @@ fun testSprint(
     goal = goal,
     startDate = startDate,
     endDate = endDate,
-    ownerID = ownerID,        isFinished = isFinished,
-            isArchived = isArchived,
-            // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
-            // own invariant would make every test using it assert against a state the store cannot
-            // hold — which is a green test and a useless one.
-            finishedAt = finishedAt ?: if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
+    ownerID = ownerID,
+    isFinished = isFinished,
+    isArchived = isArchived,
+    isLocked = isLocked,
+    // Kept in step with `isFinished` by hand, because a fixture that broke the entity's
+    // own invariant would make every test using it assert against a state the store cannot
+    // hold — which is a green test and a useless one.
+    finishedAt = finishedAt ?: if (isFinished) Instant.parse("2026-03-16T12:00:00Z") else null,
     createdAt = FIXED,
     updatedAt = FIXED,
 )

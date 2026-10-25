@@ -21,6 +21,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -1281,6 +1282,60 @@ class RoomSprintRepositoryTest {
         // pull, so the release is part of the delete rather than a separate chore.
         assertNull(assertNotNull(harness.repository.workItem(item.id)).sprintID)
         assertTrue(harness.queued().any { it.entityKind == "sprint" })
+    }
+
+    @Test
+    fun lockingASprintPersistsAnnouncesAndQueuesIt() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val sprint = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
+        )
+        val depthBefore = harness.queueDepth()
+
+        val locked = harness.repository.setSprintLocked(sprint.id, true, Moments.later)
+
+        assertTrue(locked.isLocked)
+        assertTrue(assertNotNull(harness.repository.sprint(sprint.id)).isLocked)
+        // The lock has to reach the other devices, so it is an ordinary queued sprint write.
+        assertEquals(depthBefore + 1, harness.queueDepth())
+
+        val unlocked = harness.repository.setSprintLocked(sprint.id, false, Moments.muchLater)
+
+        assertFalse(unlocked.isLocked)
+        assertFalse(assertNotNull(harness.repository.sprint(sprint.id)).isLocked)
+    }
+
+    @Test
+    fun editingALockedSprintsWindowIsRefusedButItsNameIsNot() = runTest {
+        val (harness, projectID) = aProjectWithASprint()
+        val sprint = harness.repository.sprints(projectID).single()
+        harness.repository.setSprintLocked(sprint.id, true, Moments.later)
+
+        assertFailsWith<AppError.Validation> {
+            harness.repository.updateSprint(
+                id = sprint.id,
+                name = null,
+                goalStoryPoints = null,
+                startDate = Moments.muchLater,
+                endDate = null,
+                ownerID = Patch.Unmentioned,
+                now = Moments.later,
+            )
+        }
+        assertEquals(sprint.startDate, assertNotNull(harness.repository.sprint(sprint.id)).startDate)
+
+        // The description is outside the lock, so a rename goes through without unlocking.
+        val renamed = harness.repository.updateSprint(
+            id = sprint.id,
+            name = "Sprint 1 (renamed)",
+            goalStoryPoints = null,
+            startDate = null,
+            endDate = null,
+            ownerID = Patch.Unmentioned,
+            now = Moments.later,
+        )
+        assertEquals("Sprint 1 (renamed)", renamed.name)
     }
 
     @Test

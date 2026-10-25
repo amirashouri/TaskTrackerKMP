@@ -122,6 +122,7 @@ class RecordCompletenessTest {
             ownerID = adaUserID.stringValue,
             isFinished = false,
             finishedAt = null,
+            isLocked = true,
             createdAt = Moments.start,
             updatedAt = Moments.later,
         )
@@ -297,6 +298,7 @@ class RecordCompletenessTest {
             ownerID = adaUserID.stringValue,
             isFinished = false,
             finishedAt = null,
+            isLocked = true,
             createdAt = Moments.start,
             updatedAt = Moments.later,
         )
@@ -325,6 +327,7 @@ class RecordCompletenessTest {
             ownerID = null,
             isFinished = false,
             finishedAt = null,
+            isLocked = true,
             createdAt = stored.createdAt,
             updatedAt = Moments.muchLater,
         )
@@ -411,6 +414,7 @@ class RecordCompletenessTest {
             ownerID = adaUserID.stringValue,
             isFinished = false,
             finishedAt = null,
+            isLocked = true,
             createdAt = Moments.start,
             updatedAt = Moments.later,
         )

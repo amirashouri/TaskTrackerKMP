@@ -466,6 +466,16 @@ class RoomProjectRepository(
 
         val updated = inTransaction(database) {
             val sprint = readSprint(id)
+            // The window and the cap are what a lock protects. Name, prose goal and owner
+            // stay writable: they describe the sprint rather than commit it to a date or
+            // a number, and the editor keeps offering them while locked.
+            if (sprint.isLocked &&
+                (goalStoryPoints != null || startDate != null || endDate != null)
+            ) {
+                throw AppError.Validation(
+                    "'${sprint.name}' is locked. Unlock it to change its window or point cap.",
+                )
+            }
             normalisedName?.let { sprint.name = it }
             // Floored rather than refused, matching `Sprint`'s own `init`: a negative goal
             // from a sync is normalised in place so every later reader sees one number.
@@ -601,6 +611,21 @@ class RoomProjectRepository(
         }
         changeBus.announceSprints(restored.projectID)
         return restored
+    }
+
+    override suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint {
+        val stamp = currentUserStamp()
+
+        val locked = inTransaction(database) {
+            val sprint = readSprint(id)
+            sprint.isLocked = isLocked
+            sprint.updatedAt = now
+            database.sprintDao().update(sprint.toRecord())
+            enqueueSprint(sprint, stamp, now)
+            sprint
+        }
+        changeBus.announceSprints(locked.projectID)
+        return locked
     }
 
     /**

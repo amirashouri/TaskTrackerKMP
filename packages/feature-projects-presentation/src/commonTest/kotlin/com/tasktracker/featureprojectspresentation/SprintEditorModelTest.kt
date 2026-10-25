@@ -50,13 +50,6 @@ class SprintEditorModelTest {
         projectID: com.tasktracker.core.ProjectID,
         existing: com.tasktracker.domain.Sprint? = null,
         projectSprints: List<com.tasktracker.domain.Sprint> = emptyList(),
-        /**
-         * The day the started-window lock answers from, and a fixed one on purpose: the
-         * fixtures run from 2 March, so anything before that leaves every existing
-         * scenario — which edits windows and caps — unlocked, exactly as it was before the
-         * lock existed. The lock's own scenarios pass a day inside or after the window.
-         */
-        today: LocalDate = LocalDate(2026, Month.JANUARY, 5),
     ) = SprintEditorModel(
         projectID = projectID,
         existing = existing,
@@ -64,7 +57,6 @@ class SprintEditorModelTest {
         repository = repository,
         dateProvider = TestDateProvider(),
         timeZone = zone,
-        today = today,
     )
 
     @Test
@@ -455,28 +447,22 @@ class SprintEditorModelTest {
         assertEquals("Set from another device", stored.goal)
     }
 
-    // MARK: The started-window lock
+    // MARK: The window lock
 
     @Test
-    fun `a started sprint freezes the cap and the window but not what it is about`() = runTest {
+    fun `a locked sprint freezes the cap and the window but not what it is about`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
-        val sprint = testSprint(project.id, goal = "Ship the migration")
+        val sprint = testSprint(project.id, goal = "Ship the migration", isLocked = true)
         repository.seed(sprint)
 
-        // Today is inside the 2–16 March window: the sprint has started.
-        val model = editorModel(
-            repository,
-            project.id,
-            existing = sprint,
-            today = LocalDate(2026, Month.MARCH, 5),
-        )
+        val model = editorModel(repository, project.id, existing = sprint)
         assertTrue(model.windowLocked)
 
         model.onGoalStoryPointsChanged("99")
         model.onStartDateChanged(LocalDate(2026, Month.MARCH, 9))
         model.onEndDateChanged(LocalDate(2026, Month.MARCH, 10))
-        assertEquals(10, model.goalStoryPoints, "the cap is what the window committed to")
+        assertEquals(10, model.goalStoryPoints, "the cap is what the lock protects")
         assertEquals(LocalDate(2026, Month.MARCH, 2), model.startDate)
         assertEquals(LocalDate(2026, Month.MARCH, 16), model.endDate)
 
@@ -499,41 +485,40 @@ class SprintEditorModelTest {
     }
 
     @Test
-    fun `the lock lands on the start day itself`() {
+    fun `the lock comes from the stored sprint, not from the calendar`() {
         val repository = FakeProjectRepository()
         val project = testProject()
         val sprint = testSprint(project.id)
 
-        val dayBefore = editorModel(
-            repository,
-            project.id,
-            existing = sprint,
-            today = LocalDate(2026, Month.MARCH, 1),
-        )
-        assertFalse(dayBefore.windowLocked, "the day before is still planning")
+        val unlocked = editorModel(repository, project.id, existing = sprint)
+        assertFalse(unlocked.windowLocked, "an unlocked sprint accepts window edits")
 
-        val startDay = editorModel(
+        val locked = editorModel(
             repository,
             project.id,
-            existing = sprint,
-            today = LocalDate(2026, Month.MARCH, 2),
+            existing = sprint.copy(isLocked = true),
         )
-        assertTrue(startDay.windowLocked, "the first day of the window is the window")
+        assertTrue(locked.windowLocked, "the owner's lock is what freezes the window")
+
+        // A finished sprint is history whether or not anyone locked it, so the old
+        // start-date rule's answer for it is kept rather than handed back with the lock.
+        val finished = editorModel(
+            repository,
+            project.id,
+            existing = testSprint(project.id, isFinished = true),
+        )
+        assertTrue(finished.windowLocked, "a closed sprint's window stays frozen")
     }
 
     @Test
-    fun `creating is never locked whatever the day`() {
+    fun `creating is never locked`() {
         val repository = FakeProjectRepository()
         val project = testProject()
 
-        val model = editorModel(
-            repository,
-            project.id,
-            today = LocalDate(2026, Month.DECEMBER, 31),
-        )
+        val model = editorModel(repository, project.id)
         assertFalse(
             model.windowLocked,
-            "a sprint nobody has written yet has no window to have started",
+            "a sprint nobody has written yet has no lock to honour",
         )
 
         model.onGoalStoryPointsChanged("99")

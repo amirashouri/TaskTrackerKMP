@@ -126,6 +126,17 @@ class UpdateSprint(
         val existing = repository.sprint(id)
             ?: throw AppError.Storage("That sprint no longer exists.")
 
+        // A lock protects the window and the cap, not the description. The editor disables
+        // the same two fields; this refusal is what keeps a caller holding the use case
+        // from bypassing that screen state.
+        if (existing.isLocked &&
+            (goalStoryPoints != null || startDate != null || endDate != null)
+        ) {
+            throw AppError.Validation(
+                "'${existing.name}' is locked. Unlock it to change its window or point cap.",
+            )
+        }
+
         requireWindow(
             startDate = startDate ?: existing.startDate,
             endDate = endDate ?: existing.endDate,
@@ -182,6 +193,39 @@ class ReopenSprint(
 }
 
 /**
+ * Locks a sprint against window, cap and task edits.
+ *
+ * Thin by design: the flag, the `updatedAt` stamp and the outbox row all belong to the
+ * store. The decision to allow it is the detail screen's — the same owner gate that guards
+ * [FinishSprint] — because a use case has no viewer identity to compare an owner against.
+ */
+class LockSprint(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: SprintID): Sprint =
+        repository.setSprintLocked(id = id, isLocked = true, now = dateProvider.now())
+}
+
+/**
+ * Removes a sprint's lock, so its window, cap and membership accept edits again.
+ *
+ * The inverse of [LockSprint], and the reason the lock is worth having: the old start-date
+ * rule could not be undone, so an owner who mistyped a window had no way back.
+ */
+class UnlockSprint(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(id: SprintID): Sprint =
+        repository.setSprintLocked(id = id, isLocked = false, now = dateProvider.now())
+}
+
+/**
  * Archives a finished sprint, filing it away from the default list.
  *
  * A sprint can be archived only once it is finished — the flow is scheduled → in-progress →
@@ -214,8 +258,17 @@ class DeleteSprint(
 ) {
 
     @Throws(AppError::class, CancellationException::class)
-    suspend operator fun invoke(id: SprintID) =
+    suspend operator fun invoke(id: SprintID) {
+        // Delete is destructive, so it is behind the same lock as the edits: a sprint on
+        // hold should not disappear from under the task list it is holding. A missing
+        // sprint is left to the store's no-op, as before.
+        repository.sprint(id)?.let { sprint ->
+            if (sprint.isLocked) {
+                throw AppError.Validation("'${sprint.name}' is locked. Unlock it before removing it.")
+            }
+        }
         repository.deleteSprint(id = id, now = dateProvider.now())
+    }
 }
 
 /**
@@ -223,19 +276,17 @@ class DeleteSprint(
  *
  * ## The membership lock is here, not only on the button
  *
- * A sprint's membership may be edited **only while the sprint is neither active nor
- * finished** — a planned sprint is still being assembled, and an active or finished one is
- * a commitment whose committed set is what the summary will report. The detail screen
- * hides the affordance for exactly the same rule (see `SprintDetail.canEditItems`), but a
- * hidden button is a UI state, not a guarantee: the port is reachable from any model, and
- * `setWorkItemSprint` itself makes no check. So the rule is stated once here, where a
- * refusal arrives as the banner sentence the user can read, rather than as a row that
- * silently did not move.
+ * A sprint's membership may be edited while it is **not locked and not finished**. The
+ * lock is the owner's explicit decision, replacing the old rule that froze membership when
+ * the start date arrived; a finished sprint is history and stays frozen regardless. The
+ * detail screen hides the affordance for exactly the same rule (see
+ * `SprintDetail.canEditItems`), but a hidden button is a UI state, not a guarantee: the
+ * port is reachable from any model, and `setWorkItemSprint` itself makes no check. So the
+ * rule is stated once here, where a refusal arrives as the banner sentence the user can
+ * read, rather than as a row that silently did not move.
  *
- * "Active" is [Sprint.isActiveOn] — today inside the window, inclusive — plus
- * [Sprint.isFinished], which [Sprint.isActiveOn] deliberately does not consider. The two
- * are checked in that order because a finished sprint can still have today inside its
- * window, and "finished" is the more specific of the two complaints.
+ * The two refusals are checked in that order because a finished sprint can also be locked,
+ * and "finished" is the state the owner cannot undo.
  *
  * An empty list short-circuits before the sprint is even read: there is nothing to write,
  * and a refusal for an instruction that asks for nothing would be a banner about a tap the
@@ -281,7 +332,7 @@ class AddWorkItemsToSprint(
         if (workItemIDs.isEmpty()) return emptyList()
         val sprint = repository.sprint(sprintID)
             ?: throw AppError.Storage("That sprint no longer exists.")
-        requireMembershipEditable(sprint, dateProvider.now())
+        requireMembershipEditable(sprint)
         val now = dateProvider.now()
         // Read every item before writing any of them: committing work into a sprint is one
         // act, so a batch that contains one finished task refuses the whole batch. Partial
@@ -327,10 +378,9 @@ class AddWorkItemsToSprint(
  * Sends work items from a sprint back to the backlog.
  *
  * The same lock as [AddWorkItemsToSprint], for the same reason read the other way: a task
- * pulled out of an active sprint changes its committed set mid-flight, which is the number
- * the progress bar and the eventual summary are built from. Both directions are one rule —
- * membership is frozen once the sprint starts — and [requireMembershipEditable] is where
- * that rule is written down.
+ * pulled out of a sprint changes the set the progress bar and the eventual summary are
+ * built from. Both directions are one rule — membership is frozen while the sprint is
+ * locked or finished — and [requireMembershipEditable] is where that rule is written down.
  */
 class RemoveWorkItemsFromSprint(
     private val repository: ProjectRepositoryPort,
@@ -345,7 +395,7 @@ class RemoveWorkItemsFromSprint(
         if (workItemIDs.isEmpty()) return emptyList()
         val sprint = repository.sprint(sprintID)
             ?: throw AppError.Storage("That sprint no longer exists.")
-        requireMembershipEditable(sprint, dateProvider.now())
+        requireMembershipEditable(sprint)
         return repository.setWorkItemSprint(
             workItemIDs = workItemIDs,
             // `Of(null)` rather than `Unmentioned`: sending a task back to the backlog is an
@@ -364,12 +414,12 @@ class RemoveWorkItemsFromSprint(
  * already renders — `AppError.message` is the user-facing text and a use case that reworded
  * it would create a second owner for it.
  */
-private fun requireMembershipEditable(sprint: Sprint, now: Instant) {
+private fun requireMembershipEditable(sprint: Sprint) {
     if (sprint.isFinished) {
         throw AppError.Validation("'${sprint.name}' is finished, so its tasks cannot be changed.")
     }
-    if (sprint.isActiveOn(now)) {
-        throw AppError.Validation("'${sprint.name}' is in progress, so its tasks cannot be changed.")
+    if (sprint.isLocked) {
+        throw AppError.Validation("'${sprint.name}' is locked, so its tasks cannot be changed.")
     }
 }
 
