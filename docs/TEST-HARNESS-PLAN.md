@@ -13,9 +13,11 @@ phases and progress history.
 ## Decisions already made
 
 - Implement all phases, not just the scripts.
-- `scripts/check.sh` is the fast inner loop: JVM tests, architecture checks, and the
-  baseline check.
-- `scripts/check.sh full` is the release/PR gate: JVM + iOS simulator + Android host +
+- Development runs focused unit tests — one class or package per touched module,
+  `./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'`. (Amended
+  2026-10-25: `scripts/check.sh` was the fast inner loop when this plan was written; it is
+  now the release gate only.)
+- `scripts/check.sh full` is the release gate: JVM + iOS simulator + Android host +
   architecture + baseline + summary.
 - Known failures are **named**, not counted. A failure count that stays the same while the
   test identities change is not a passing gate.
@@ -82,9 +84,9 @@ The 12 JVM/iOS failures are not one category:
 ## Target command surface
 
 ```bash
-scripts/check.sh fast [module...]   # JVM only, module-scoped; fast inner loop
-scripts/check.sh                    # JVM + graph + baseline + summary; green
-scripts/check.sh full               # JVM + iOS + Android + graph + baseline + summary
+scripts/check.sh fast [module...]   # JVM only, module-scoped
+scripts/check.sh                    # JVM + graph + baseline + summary: release gate
+scripts/check.sh full               # three hosts: the release gate
 scripts/check.sh ios|android        # targeted host
 scripts/check.sh lint|docs
 ```
@@ -279,13 +281,13 @@ removed.
 - A PR with a new failing test fails the gate even if the failure count is unchanged.
 - A PR that fixes an allowlisted test but leaves the entry fails the gate.
 - The docs contain no hand-written host totals.
-- `scripts/check.sh full` is green on `main`.
+- `scripts/check.sh full` is green on `main` at release time.
 
 > **Amended 2026-10-17.** The two lines above said "fails CI" because `tests.yml` was
 > written to run on every push. It now runs on `workflow_dispatch` and a nightly schedule
-> only, so a PR is gated by `scripts/check.sh` rather than by CI. The goal is unchanged in
-> substance — the matrix is still enforced, by the local gate — and the measurements
-> behind the change are in `docs/DECISIONS.md` → "Continuous integration".
+> only, so a PR is verified with focused unit tests and the matrix stays the release gate.
+> The goal is unchanged in substance — the matrix is still enforced, at release time — and
+> the measurements behind the change are in `docs/DECISIONS.md` → "Continuous integration".
 
 ## Risks and rollback
 
@@ -331,4 +333,4 @@ owns; the notes below name the evidence instead of a status word, and the two ro
 | 1 — JVM/iOS green | done | Zero failures on both hosts, and `test-known-failures.json` is **empty for all three**. Nothing is expected to fail, so an unexpected failure fails the gate rather than being absorbed by the allowlist. |
 | 2 — Android green | done | `testAndroidHostTest` runs inside `check.sh full` with zero failures. The skipped tests are the documented capability gaps (`docs/TESTING.md`) and report as *skipped*, not as passes — which is the phase's acceptance criterion. |
 | 3 — matrix integrity | **partly** | The abstract base is real (`TaskTrackerAppScenarios`, inherited by all three host classes), so a scenario body with no host entry point is a compile error — the strong half of the goal. `scripts/check-test-matrix.py` exists as the fallback the spike did not need, but **no gate runs it**, so a scenario wired into fewer hosts than it claims is a review catch and not a failure. The spike result is also still not written down here, which is this phase's own outstanding item. |
-| 4 — CI and docs | **partly** | `.github/workflows/tests.yml` runs the matrix, on `workflow_dispatch` and a nightly schedule rather than per push (see the amendment above; PRs are gated by `scripts/check.sh`). Host totals are not hand-copied — `test-baseline.json` is the only source. But `docs/TEST-HOSTS.md` still exists beside `docs/TESTING.md` instead of being merged into it and deleted, so the "one place the policy is written down" item of the definition of done is not met. |
+| 4 — CI and docs | **partly** | `.github/workflows/tests.yml` runs the matrix, on `workflow_dispatch` and a nightly schedule rather than per push (see the amendment above; PRs are verified with focused unit tests and `scripts/check.sh` is the release gate). Host totals are not hand-copied — `test-baseline.json` is the only source. But `docs/TEST-HOSTS.md` still exists beside `docs/TESTING.md` instead of being merged into it and deleted, so the "one place the policy is written down" item of the definition of done is not met. |

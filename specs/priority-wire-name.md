@@ -31,7 +31,7 @@ correct since `0001_initial`, and the client was the side that disagreed.
 
 ## Validation
 
-- Run: `scripts/check.sh full`
+- Run: focused JVM tests for the touched modules (under a minute); the three-host run is the release gate: `scripts/check.sh full`
 - Counts: **+1 test on every host** — `:packages:domain` runs on jvm, iOS and the Android
   host, so all three totals move by one. Regenerate with `scripts/test-baseline.py`;
   `scripts/check-baseline.sh` must pass.

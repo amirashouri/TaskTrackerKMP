@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 #
-# The one place the validation command lives.
+# The one place the release validation command lives.
+#
+# Development runs focused unit tests, not this script: one class or package per
+# touched module via `./gradlew :packages:<module>:jvmTest --tests <pattern>`.
+# See `AGENTS.md` → "Verification" and `docs/TESTING.md`; this file is the gate a
+# release is cut against.
 #
 # `AGENTS.md`, `Project.md` and `README.md` used to each spell out the JAVA_HOME
 # export and the five-task Gradle line, so the three could (and did) drift. This
@@ -169,7 +174,7 @@ trap 'rm -f "$log"' EXIT
 if [ "$scope" = "quick" ]; then
   echo "==> quick: iteration only — no baseline check, no known-failure summary."
   echo "    The results directory is kept so unchanged tests can be skipped."
-  echo "    Gate before pushing: scripts/check.sh fast"
+  echo "    Release gate, not a per-task check: scripts/check.sh full"
 fi
 
 echo "==> ./gradlew --continue ${tasks[*]}"

@@ -52,10 +52,10 @@ the graph binding, and the Settings wiring already exist and are tested.
 
 ## Validation
 
-- Run: `scripts/check.sh jvm composition-root` (the module's JVM tests) and
-  `scripts/check.sh` (JVM + architecture + baseline) before the PR; `scripts/check.sh full`
-  only if a shared `commonTest` changes — this task adds `jvmTest` only, so the iOS and
-  Android host counts do not move.
+- Run: focused JVM tests for the touched module
+  (`./gradlew --offline :composition-root:jvmTest --tests '<pattern>'`, under a minute).
+  The release gate is `scripts/check.sh full`, needed only if a shared `commonTest`
+  changes — this task adds `jvmTest` only, so the iOS and Android host counts do not move.
 - Counts: `jvmTest` gains the new cases; `test-baseline.json` is regenerated and
   `scripts/check-baseline.sh` must pass.
 - Manual jar check (no UI pixels):

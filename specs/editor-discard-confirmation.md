@@ -67,7 +67,7 @@ uses a new `hasUnsavedChanges` that compares against the values the editor opene
 
 ## Validation
 
-- Run: `scripts/check.sh full` — all three hosts, 0 failures.
+- Run: focused JVM tests for the touched modules (under a minute); the three-host run is the release gate: `scripts/check.sh full` — all three hosts, 0 failures.
 - Counts: regenerated with `scripts/test-baseline.py`; `scripts/check-baseline.sh` passes.
   Totals live in `test-baseline.json`, not here.
 - The scenarios read the semantics tree and model state, not pixels, so `test-reviewer` is

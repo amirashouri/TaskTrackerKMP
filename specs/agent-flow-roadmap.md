@@ -38,7 +38,7 @@ Do not change app behavior or wire contracts.
 
 ## Validation
 
-- Run `scripts/check.sh docs` for documentation-only changes.
+- Docs-only change: nothing to build. `scripts/check.sh docs` is the release sweep.
 - Run `git diff --check`.
 - Validate local Markdown links in the changed documents.
 - Verify the archived task details match the original plan.

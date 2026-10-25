@@ -1501,7 +1501,7 @@ The Liquid Glass design system in `:packages:design-system` (tokens in `Glass.kt
 
 2. Update `GlassSurfacePixelTest.kt` to assert the vestigial hairline exists at intensity 0 (new test case or extend existing rim tests).
 
-**Validation:** `scripts/check.sh full` — both hosts must pass; `GlassSurfacePixelTest` assertions for intensity 0 must show rim contrast ≥ 1.0:1 (visible edge).
+**Validation (release gate):** `scripts/check.sh full` — both hosts must pass; `GlassSurfacePixelTest` assertions for intensity 0 must show rim contrast ≥ 1.0:1 (visible edge).
 
 ---
 
@@ -1575,7 +1575,7 @@ The Liquid Glass design system in `:packages:design-system` (tokens in `Glass.kt
    - `BottomSheetScaffold` sheet → `THICK`
    - Any inline badges/chips → `THIN`
 
-**Validation:** `scripts/check.sh full` — all pixel tests pass. Visual review: hierarchy is perceptible (modal > card > chip).
+**Validation (release gate):** `scripts/check.sh full` — all pixel tests pass. Visual review: hierarchy is perceptible (modal > card > chip).
 
 ---
 
@@ -1618,7 +1618,7 @@ The Liquid Glass design system in `:packages:design-system` (tokens in `Glass.kt
 2. Use `drawOutline` with translated shapes or three `border` modifiers with `offset(x = ...)`.
 3. Only apply in dark mode (where rim is white/highlight); in light mode the shadow rim stays monochrome.
 
-**Validation:** `scripts/check.sh full` — pixel tests updated to expect the chromatic split. Visual: subtle rainbow at edge on dark glass.
+**Validation (release gate):** `scripts/check.sh full` — pixel tests updated to expect the chromatic split. Visual: subtle rainbow at edge on dark glass.
 
 ---
 

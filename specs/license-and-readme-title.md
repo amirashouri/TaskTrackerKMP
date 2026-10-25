@@ -56,8 +56,8 @@ on this file, so the two halves could land in either order.
 
 ## Validation
 
-- `scripts/check.sh docs` — the applicable scope: no code, no build file,
-  no test.
+- Nothing to build: no code, no build file, no test. `scripts/check.sh docs` is
+  the release scope for a docs-only change.
 - The release workflow's YAML parses, and the new body section renders the
   intended markdown.
 - Both new README links are checked with an HTTP status, not by reading the

@@ -34,9 +34,11 @@ become catch-all cleanup.
 
 ## Validation
 
-- Run: `scripts/check.sh quick`
-- Counts: <how `test-baseline.json` should move — which host(s), and why>. Regenerate with
-  `scripts/test-baseline.py`; `scripts/check-baseline.sh` must pass.
+- Run: `./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'` — focused, under
+  a minute; one line per touched module. `scripts/check.sh` is the release gate and is not
+  run per task; name any host-only check this change still needs and leave it pending.
+- Counts: <how `test-baseline.json` would move at release — which host(s), and why>. It is
+  regenerated from a `scripts/check.sh full` run, not from the focused run.
 - Pixel-reading tests go through the `test-reviewer` subagent before the PR.
   Structural and behavioral tests do not need this review.
 

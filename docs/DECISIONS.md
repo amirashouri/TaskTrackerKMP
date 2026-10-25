@@ -119,14 +119,14 @@ Do not file these as bugs you introduced:
   strokes small glyphs at ~85% coverage). Set ink values from the worse host; hold
   both to the real threshold.
 - Test counts come from the JUnit XML the build writes, cross-checked against `@Test`
-  — never `grep -c`, which over-counts KDoc mentions. `Project.md` holds the current
-  baseline; update it in the same change as any test addition.
+  — never `grep -c`, which over-counts KDoc mentions. `test-baseline.json` holds the
+  current totals and is regenerated from a release-gate run, not from a focused one.
 
 ## Continuous integration
 
 `tests.yml` runs on `workflow_dispatch` and a nightly schedule, **not on every push**.
-PRs are verified with `scripts/check.sh`; the three-host matrix is a drift backstop for
-`main`.
+PRs are verified with focused JVM unit tests for the touched modules; the three-host
+matrix and `scripts/check.sh` are the release gate and a drift backstop for `main`.
 
 - The gating was never real: the repository is public, so Actions minutes are free, and
   `main` carries no branch protection, so these checks never blocked a merge. The cost

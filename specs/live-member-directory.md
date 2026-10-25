@@ -78,9 +78,9 @@ with the existing `userResponse` shape. No new dependency.
 
 ## Validation
 
-- Run: `scripts/check.sh full` — JVM, `iosSimulatorArm64Test`, and
-  `testAndroidHostTest`. `scripts/check.sh` (JVM + architecture graph +
-  baseline) also passes.
+- Run: focused JVM tests for the touched modules (under a minute). The release gate —
+  `scripts/check.sh full` — covers JVM, `iosSimulatorArm64Test` and `testAndroidHostTest`,
+  which is what proves the shared `commonTest` additions on the two native hosts.
 - Counts: **+9 tests on every host** (1831 → 1840 JVM, 1780 → 1789 iOS,
   1486 → 1495 Android). The new tests live in `commonTest`, so all three hosts
   run them; the two existing tests that asserted the six-seed fixture were

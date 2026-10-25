@@ -53,10 +53,10 @@
 - `./gradlew --offline --no-parallel --max-workers=1 :packages:feature-projects-data:jvmTest --tests '*RoomSprintRepositoryTest*' --tests '*RecordCompletenessTest*'`
 - `./gradlew --offline --no-parallel --max-workers=1 :packages:feature-projects-presentation:jvmTest --tests '*SprintEditorModelTest*' --tests '*SprintDetailModelTest*'`
 - `./gradlew --offline --no-parallel --max-workers=1 :shared-ui:compileTestKotlinJvm`
-- `scripts/check.sh` was not run here (the user asked to skip it); the filtered
-  JVM runs above cover every touched module's unit surface. This spec has no
-  pixel-reading test: the new control is asserted structurally by its test tag
-  and by the model's `canManageLock`/`isLocked`.
+- `scripts/check.sh` is the release gate and was not run for this task; the
+  focused JVM runs above cover every touched module's unit surface. This spec
+  has no pixel-reading test: the new control is asserted structurally by its
+  test tag and by the model's `canManageLock`/`isLocked`.
 
 ## Handoff
 
@@ -65,7 +65,9 @@
 - **Pending:** nothing in this repo.
 - **Next step:** merge alongside the server half; the client declares
   `isLocked` with a default, so it works against a server that does not send it
-  yet.
+  yet. The iOS simulator and Android host runs are pending for the release
+  gate — the change touches a `SprintRecord` column and both sheets, so `full`
+  is the run that proves them.
 - **Gotchas:**
   - `windowLocked` is `isLocked || isFinished`. Dropping the `isFinished` half
     would hand a closed sprint's window back to the editor, which the old

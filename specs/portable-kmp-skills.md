@@ -29,7 +29,7 @@ keeping harness-specific agent configuration in its existing location.
 
 ## Validation
 
-- Run `scripts/check.sh docs`.
+- Docs-only change: nothing to build. `scripts/check.sh docs` is the release sweep.
 - Run `git diff --check`.
 - Validate local Markdown links in updated guidance and docs.
 - Confirm KMP skill names and frontmatter are preserved after relocation.

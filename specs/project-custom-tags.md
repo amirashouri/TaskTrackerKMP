@@ -47,7 +47,7 @@ entity and are written only through the existing admin project API.
 
 ## Validation
 
-- Run: `scripts/check.sh full` — the change spans rendering, storage and the graph.
+- Run: focused JVM tests for the touched modules (under a minute); the three-host run is the release gate: `scripts/check.sh full` — the change spans rendering, storage and the graph.
 - Counts: new `commonTest` cases move **all three** host totals; `test-baseline.json` was
   regenerated with `scripts/test-baseline.py` and `check-baseline.sh` passes.
 - The tag strips and picker are asserted structurally (test tags and the resolved-chip

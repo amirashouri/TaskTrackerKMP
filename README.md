@@ -148,21 +148,23 @@ installer version comes from `-PtasktrackerVersion` (default `0.0.0`); a zero ma
 bumped to 1 because macOS rejects a bundle version whose first number is 0, so
 `-PtasktrackerVersion=0.1.7` packages as `1.1.7`.
 
-## The command that decides whether you are done
+## Verification: a fast development loop, and a release gate
+
+While developing, run the focused tests for the modules you touched — one class or
+package on the JVM, under a minute:
 
 ```bash
-scripts/check.sh
+./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'
 ```
 
-It runs the JVM tests and the architecture checks by default. `scripts/check.sh full`
-runs the complete matrix — JVM, iOS simulator and Android under Robolectric;
-`scripts/check.sh graph` adds the architecture checks and the Android compile, and
-`jvm`, `ios`, `android` and `lint` scope a single host or task. While editing, use
-`scripts/check.sh quick <module> [filter…]`: one module, `--tests` filters, no baseline
-check, and results kept so unchanged tests are skipped. It is an iteration aid, not a
-gate. `docs/TESTING.md` is the authoritative command and host reference;
-`test-baseline.json` holds the generated totals and `test-known-failures.json` the
-named allowlist.
+`scripts/check.sh` is the **release gate**, run when a release is cut — not per push and
+not per task. It runs the JVM tests and the architecture checks by default;
+`scripts/check.sh full` runs the complete matrix — JVM, iOS simulator and Android under
+Robolectric — and is the one required for UI, `expect`/`actual` and build-graph changes.
+`scripts/check.sh graph` is the architecture checks plus the Android compile, and `jvm`,
+`ios`, `android`, `lint` and `docs` scope a single host or task. `docs/TESTING.md` is the
+authoritative command and host reference; `test-baseline.json` holds the generated totals
+and `test-known-failures.json` the named allowlist, both regenerated from a release run.
 
 A failure not in the allowlist fails the gate even when the total failure count is
 unchanged. The Android host is deliberately stricter about some things and weaker about

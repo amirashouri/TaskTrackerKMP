@@ -1,8 +1,8 @@
 name: tests
 
-# On demand and nightly; deliberately not on every push. PRs are verified with
-# `scripts/check.sh`, which `AGENTS.md` already names as the deciding command; this
-# matrix is a drift backstop for main. Measured on run 39042728812: a cold iOS leg is
+# On demand and nightly; deliberately not on every push. PRs are verified with focused
+# JVM unit tests, and `scripts/check.sh` is the release gate (see `AGENTS.md`); this
+# matrix is the cross-host backstop for main. Measured on run 39042728812: a cold iOS leg is
 # 35m04s and a cache-warm one ~15m, against ~5-6m for JVM and Android. That is wall
 # clock in front of every commit, which is the cost — the repository is public, so the
 # Actions minutes were never billed.

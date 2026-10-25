@@ -57,7 +57,7 @@ id the save mints.
 
 ## Validation
 
-- Run: `scripts/check.sh full` — all three hosts, 0 failures.
+- Run: focused JVM tests for the touched modules (under a minute); the three-host run is the release gate: `scripts/check.sh full` — all three hosts, 0 failures.
 - Counts: +8 tests per host (5 model tests in `commonTest`, 3 scenario entry points per host).
   Regenerated with `scripts/test-baseline.py`; `scripts/check-baseline.sh` passes.
 - The scenarios are structural assertions (semantics tree + model state), not pixel reads, so

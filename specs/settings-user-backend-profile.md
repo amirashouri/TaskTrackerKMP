@@ -162,8 +162,9 @@ Mapping rules:
 
 ## Validation
 
-- Run `scripts/check.sh full` (JVM, `iosSimulatorArm64Test`, `testAndroidHostTest`) before
-  merge; `scripts/check.sh` (JVM + architecture + baseline) while iterating.
+- Run: focused JVM tests for the touched modules (under a minute). The release gate is
+  `scripts/check.sh full`, which covers JVM, `iosSimulatorArm64Test` and
+  `testAndroidHostTest`.
 - Counts: the new mapping, transport, service, model and graph tests live in `commonTest`,
   so they run on all three hosts. Record the exact delta in `test-baseline.json` at
   implementation; `scripts/check-baseline.sh` must pass.

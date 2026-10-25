@@ -16,13 +16,15 @@ most of the difficulty.
 ## The three hosts
 
 ```bash
-scripts/check.sh                                 # fast: JVM + graph + baseline
-scripts/check.sh full                            # JVM + iOS + Android
+./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'   # development loop
+scripts/check.sh full                                                # release gate: JVM + iOS + Android
 ```
 
-The script exports the JDK and runs Gradle with `--continue`. A failure is a gate failure
-only when it is not named in `test-known-failures.json`; the generated totals live in
-`test-baseline.json`. `docs/TESTING.md` is the authoritative policy, and
+Development runs focused JVM tests: one class or package per touched module, whole run
+under a minute. `scripts/check.sh` is the release gate, not a per-task check — it exports
+the JDK, runs Gradle with `--continue`, and accepts only failures named in
+`test-known-failures.json`; the generated totals live in `test-baseline.json` and are
+regenerated from that run. `docs/TESTING.md` is the authoritative policy, and
 `docs/TEST-HARNESS-PLAN.md` is the phased cleanup that empties the allowlist.
 
 `jvmTest` is the fast loop (seconds, no simulator). `iosSimulatorArm64Test` is slower but is

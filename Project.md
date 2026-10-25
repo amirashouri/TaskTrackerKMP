@@ -22,18 +22,22 @@ Without it the build dies immediately with `Unable to locate a Java Runtime`. Th
 
 ---
 
-## The command that decides whether you are done
+## Verification: a fast development loop, and a release gate
+
+A task is verified by focused unit tests for the modules it touched, not by the full
+matrix — keep a development run under a minute:
 
 ```bash
-scripts/check.sh quick shared-ui 'com.tasktracker.sharedui.*Sidebar*'
-                          # iteration only: one module, filtered, no baseline
-scripts/check.sh          # gate: JVM + architecture checks + baseline + summary
-scripts/check.sh full     # all three hosts + baseline; required for UI work
+./gradlew --offline :packages:<module>:jvmTest --tests '<TestClass or package pattern>'
 ```
 
-The script exports the JDK, runs Gradle with `--continue`, summarizes failures, and accepts only
-tests named in `test-known-failures.json`. Counts and identities are generated into
-`test-baseline.json`. Policy and host details: [`docs/TESTING.md`](docs/TESTING.md); rollout:
+`scripts/check.sh` is the **release gate**, run when a release is cut, not per push or per
+task. `scripts/check.sh full` runs the complete matrix — JVM, iOS simulator and Android
+under Robolectric — and is the one required for UI, `expect`/`actual` and build-graph
+changes. The script exports the JDK, runs Gradle with `--continue`, summarizes failures,
+and accepts only tests named in `test-known-failures.json`; counts and identities are
+generated into `test-baseline.json` from that run. Policy and host details:
+[`docs/TESTING.md`](docs/TESTING.md); rollout:
 [`docs/TEST-HARNESS-PLAN.md`](docs/TEST-HARNESS-PLAN.md).
 
 ---

@@ -23,14 +23,14 @@
 
 ## Validation
 
-- Run: `:packages:sync:jvmTest` → `BUILD SUCCESSFUL`; 91 tests, 0 failures (includes the 2 new tests below). `scripts/check.sh fast packages:sync` runs the same module plus graph tasks; it gates on `test-baseline.json`, which was generated from a full all-hosts run, so a single-module subset run mismatches on totals — regenerate with `scripts/check.sh full` then `scripts/test-baseline.py` before merge (pre-existing repo constraint, not caused by this change).
+- Run: `:packages:sync:jvmTest` → `BUILD SUCCESSFUL`; 91 tests, 0 failures (includes the 2 new tests below). That focused run is the development loop. `scripts/check.sh fast packages:sync` is a release-gate scope: it gates on `test-baseline.json`, which is generated from a full all-hosts run, so a single-module subset mismatches on totals — the baseline is regenerated at release time with `scripts/check.sh full` then `scripts/test-baseline.py`.
 - Counts: `test-baseline.json` jvmTest should move +2 once regenerated from a full run (the 2 new sync tests); no failures added.
 - Console output reaches the existing default `TTLogger` sink, which is `println` to stdout on every host — exactly the device-readable log the user asked for.
 
 ## Handoff
 
 - **Done:** `isDebug` flag + `logger.error` cycle-failure and transport-failure logging in `SyncEngine.kt`; two `SyncEngineTest` cases pinning the failure-report contract; `:packages:sync:jvmTest` green (`BUILD SUCCESSFUL`, 91 tests, 0 failures).
-- **Pending:** regenerate `test-baseline.json` (`scripts/check.sh full` then `scripts/test-baseline.py`) before merge; optional but recommended: wire `isDebug` to the platform build type so release builds print `false`.
+- **Pending (release gate):** regenerate `test-baseline.json` (`scripts/check.sh full` then `scripts/test-baseline.py`); optional but recommended: wire `isDebug` to the platform build type so release builds print `false`.
 - **Next step:** baseline regeneration + review/merge.
 - **Gotchas:** `packages/core` has no `androidMain`/`iosMain` source sets, so cross-platform build-type detection (`expect`/`actual`) is out of scope; `isDebug` is module-level and defaults `true`. Log sink is `println` (console) by default. Baseline check requires a full all-hosts run; a subset run always mismatches totals against the committed full baseline.
 

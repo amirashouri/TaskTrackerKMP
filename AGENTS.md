@@ -88,25 +88,35 @@ instead of raw rendering logic. If a primitive is missing, map it in your Phase 
 plan before writing UI code. Do not guess or invent styling primitives — this
 burns tokens through endless cosmetic iterations.
 
-## The command that decides whether you are done
+## Verification: a fast development loop, and a release gate
+
+Development does **not** run `scripts/check.sh`. The full matrix takes about an hour, so
+requiring it per task is what makes small changes unfinishable. Run focused unit tests for
+the modules you touched, and keep the whole run under a minute.
 
 ```bash
-scripts/check.sh quick
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+./gradlew --offline --no-parallel :packages:<module>:jvmTest --tests '<TestClass or package pattern>'
 ```
 
-`quick` is the only scope that is not a gate: it keeps the result XML so Gradle can skip
-unchanged tests and it skips the baseline check, because a filtered run cannot match
-whole-host totals. Never use a filtered run as the pre-push gate.
+- A red focused run goes back to the code. Never make it green by deleting the test,
+  weakening the assertion, or allowlisting it in `test-known-failures.json`.
+- A change to an `expect`/`actual` seam, a rendering path, or the build graph is not
+  proven by a JVM unit test. Say so in the spec's `## Validation` and leave the host run
+  to the release gate rather than claiming a pass you did not run.
+- `test-baseline.json` is generated from whole-host results, so a focused run never
+  touches it; regenerate it with the release gate.
 
-The script exports the JDK, runs Gradle with `--continue`, and treats only
-failures named in `test-known-failures.json` as acceptable. Policy:
-`docs/TESTING.md`. Read it when a test fails, not before every task.
+**`scripts/check.sh` is the release gate.** Run it — `check.sh full` for anything that
+touches UI, `expect`/`actual`, or the build graph — when a release is being cut. It is not
+a per-push check and not what a task is judged done by. Command and host policy:
+`docs/TESTING.md`; read it when a host run is due, not before every task.
 
 ## Test hosts
 
 | Host | Task | State |
 | --- | --- | --- |
-| JVM | `jvmTest` | fast gate; known failures in `test-known-failures.json` |
+| JVM | `jvmTest` | the development host; known failures in `test-known-failures.json` |
 | iOS | `iosSimulatorArm64Test` | required for rendering / expect-actual |
 | Android | `testAndroidHostTest` | Robolectric; same allowlist |
 
@@ -195,16 +205,17 @@ git fetch origin
 git switch main && git pull --ff-only
 git switch -c feat/<kebab-case-task-slug>
 # ... do the task, then:
-scripts/check.sh          # must be green before pushing
+./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'  # focused, under a minute
 git push -u origin feat/<kebab-case-task-slug>
 gh pr create --base main --title "<what the task did>" --body "<what changed, and which command verified it>"
 ```
 
 **Review before merge:** read your diff as a stranger (`gh pr diff <number>`).
 Confirm: only planned files changed, no drive-by cleanup, behaviour changes ship
-with tests, validation command is green. Run the `test-reviewer` subagent
-(`.opencode/agent/test-reviewer.md`) against any **pixel-reading test** — not
-needed for structural tests.
+with tests, the focused tests for every touched module are green, and any host-only
+verification this change needs is recorded as pending for the release gate.
+Run the `test-reviewer` subagent (`.opencode/agent/test-reviewer.md`) against any
+**pixel-reading test** — not needed for structural tests.
 
 Merge when review is clean and PR is green:
 ```bash
@@ -219,8 +230,9 @@ review passing is not their approval.
   value arrives with the number that justifies it. Routine tuning needs no
   paragraph.
 - **Counts are generated, not written.** Host totals live in `test-baseline.json`,
-  written by `scripts/test-baseline.py`. Regenerate in the same change as any test
-  addition. Never hand-copy a total into `Project.md`, `AGENTS.md`, or a spec.
+  written by `scripts/test-baseline.py` from a release-gate run. Regenerate it at
+  release time, never from a focused run. Never hand-copy a total into `Project.md`,
+  `AGENTS.md`, or a spec.
 - **`NavigationHost.kt` and `:shared-ui` are large** — a broad scripted replace
   across a tree this size produces a diff nobody reads. Edit deliberately.
 - **No drive-by cleanup.** Do not delete what looks unused while changing code —

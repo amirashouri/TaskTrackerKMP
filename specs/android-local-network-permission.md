@@ -79,7 +79,7 @@ DNS traffic to a local DNS server on port 53.
 
 ## Validation
 
-- Run: `scripts/check.sh full` — the test is in `commonTest`, so the Android and iOS hosts must
+- Run: focused JVM tests for the touched modules (under a minute); the three-host run is the release gate: `scripts/check.sh full` — the test is in `commonTest`, so the Android and iOS hosts must
   compile and run it too.
 - Counts: regenerate `test-baseline.json` with `scripts/test-baseline.py`; all three hosts move.
 - Device: `./gradlew :androidApp:installDebug`, then compare `docker logs` for the login POST
