@@ -352,6 +352,9 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint =
         unused("unarchiveSprint")
 
+    override suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint =
+        unused("setSprintLocked")
+
     override suspend fun deleteSprint(id: SprintID, now: Instant): Unit = unused("deleteSprint")
 
     override suspend fun updateProject(

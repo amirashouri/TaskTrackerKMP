@@ -1560,6 +1560,11 @@ private fun SprintDetailDestination(
         onDismissError = model::dismissError,
         onRemove = { scope.launch { model.removeSprint() } },
         onArchive = { scope.launch { model.archive() } },
+        onToggleLock = {
+            scope.launch {
+                if (detail.sprint.isLocked) model.unlock() else model.lock()
+            }
+        },
         // The gate on the "+" is the screen's (`editable && !isBusy`); [SprintDetailModel.openPicker]
         // re-checks it, because a disabled button is only a courtesy and the write it guards
         // is the one that has to hold.

@@ -21,15 +21,16 @@ import com.tasktracker.featureprojectsdomain.ArchiveSprint
 import com.tasktracker.featureprojectsdomain.CreateSprint
 import com.tasktracker.featureprojectsdomain.DeleteSprint
 import com.tasktracker.featureprojectsdomain.FinishSprint
+import com.tasktracker.featureprojectsdomain.LockSprint
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.RemoveWorkItemsFromSprint
 import com.tasktracker.featureprojectsdomain.ReopenSprint
+import com.tasktracker.featureprojectsdomain.UnlockSprint
 import com.tasktracker.featureprojectsdomain.UpdateSprint
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
-import kotlin.time.Clock
 
 /**
  * The sprint editor, for both creating and editing.
@@ -65,8 +66,8 @@ import kotlin.time.Clock
  * [goalStoryPoints] is the number — the cap [AddWorkItemsToSprint] refuses over — and
  * [goal] is the sentence saying what the sprint is for. Both arrive from one field in the
  * original design, and splitting them is why there are two setters with two behaviours:
- * the number is part of the window's commitment and freezes with it, while the sentence
- * stays editable forever, finished sprints included.
+ * the number is part of the window's commitment and freezes while the owner has the sprint
+ * locked, while the sentence stays editable forever, finished sprints included.
  *
  * ## Save is blocked on the draft, not on the store
  *
@@ -104,17 +105,6 @@ class SprintEditorModel(
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
-    /**
-     * The day the started-window lock is measured against.
-     *
-     * A second seam on one fact, and the reason it exists is that [DateProvider.now]
-     * suspends by design while this answer is needed in the constructor: a model cannot
-     * suspend to build itself. Both default to the same wall clock in production, and a
-     * test injects this next to the clock it gives [dateProvider] so the two can never
-     * disagree inside a suite either — a lock that answered from one date and a save that
-     * wrote from another is the defect shape this parameter exists to prevent.
-     */
-    today: LocalDate = sprintLocalDate(Clock.System.now(), timeZone),
 ) : ProjectModel() {
 
     private val createSprint = CreateSprint(repository, dateProvider)
@@ -163,26 +153,27 @@ class SprintEditorModel(
     val isCreating: Boolean get() = existing == null
 
     /**
-     * Whether the window and the point cap are frozen: the sprint has already started.
+     * Whether the window and the point cap are frozen: the owner has locked the sprint.
      *
-     * From the **original** start date rather than the draft's, deliberately. The lock is a
-     * fact about the sprint the user opened, and deriving it from the draft would let a form
-     * that opened editable move its own start into yesterday and lock itself under the
-     * user's finger mid-edit. A save that pulls the window into the present therefore lands
-     * as one write that starts the sprint, and the next open of the editor is locked.
+     * A fact about the stored sprint, never the draft. The lock is the explicit
+     * replacement for the old rule that measured today against the start date, so it moves
+     * when the owner taps Lock or Unlock — not when a date passes. A draft that arrives
+     * already locked stays locked until the sheet is reopened after an unlock, which is why
+     * this is read from the original.
      *
-     * Never true while creating: a sprint nobody has written yet has no window to have
-     * started. Name, prose goal and owner are outside this entirely and stay editable in
-     * every state — they describe the sprint rather than commit it to a time or a number.
+     * A finished sprint is frozen here too, unlocked or not: the lock is a planning tool
+     * and a closed sprint is history, so the old start-date rule's answer for it is kept.
+     *
+     * Never true while creating: a sprint nobody has written yet has nothing to lock. Name,
+     * prose goal and owner are outside this entirely and stay editable in every state —
+     * they describe the sprint rather than commit it to a time or a number.
      *
      * The setters below refuse on this, and the sheet disables the same fields: the refusal
      * is the guarantee, and the disabled control is what keeps the user from typing into a
      * field whose answer would be dropped. Hiding the fields instead would leave the form's
      * shape lying about what is in it.
      */
-    val windowLocked: Boolean = existing?.let { sprint ->
-        sprintLocalDate(sprint.startDate, timeZone) <= today
-    } ?: false
+    val windowLocked: Boolean = existing?.let { sprint -> sprint.isLocked || sprint.isFinished } ?: false
 
     /**
      * Whether the draft differs from what it started as.
@@ -426,16 +417,25 @@ data class SprintDetail(
     /**
      * Whether the viewer may change this sprint's task membership.
      *
-     * Neither active nor finished — a planned sprint is still being assembled, and once
-     * the window opens the committed set is what the progress bar and, at the end, the
-     * summary report. [AddWorkItemsToSprint] and [RemoveWorkItemsFromSprint] restate this
-     * rule as a refusal, because hiding a button is a UI state and not a guarantee; see
-     * their KDoc. "Active" is [Sprint.isActiveOn], the same rule [com.tasktracker.
-     * featureprojectspresentation.ProjectBoardModel] uses to pick the board's sprint, so
-     * the two screens never disagree about which sprints are under way.
+     * Neither locked nor finished — the owner's lock is the explicit replacement for the
+     * old rule that froze membership when the start date arrived, and a finished sprint is
+     * history regardless. [AddWorkItemsToSprint] and [RemoveWorkItemsFromSprint] restate
+     * this rule as a refusal, because hiding a button is a UI state and not a guarantee;
+     * see their KDoc.
      */
     val canEditItems: Boolean
-        get() = !sprint.isFinished && !isActive
+        get() = !sprint.isFinished && !sprint.isLocked
+
+    /**
+     * Whether the viewer may apply or remove the sprint's lock.
+     *
+     * The same ownership rule as [canFinish]: an unowned sprint is nobody's to hold, so
+     * anyone may lock it, while an owned one answers to its owner. Locking is reversible,
+     * so unlike finishing there is no confirmation step; the refusal that matters is the
+     * one the use cases make when an edit slips past a stale screen.
+     */
+    val canManageLock: Boolean
+        get() = !hasOwner || isViewerTheOwner
 
     /**
      * Whether the viewer may finish this sprint.
@@ -499,6 +499,8 @@ class SprintDetailModel(
     private val finishSprint = FinishSprint(repository, dateProvider)
     private val archiveSprint = ArchiveSprint(repository, dateProvider)
     private val reopenSprint = ReopenSprint(repository, dateProvider)
+    private val lockSprint = LockSprint(repository, dateProvider)
+    private val unlockSprint = UnlockSprint(repository, dateProvider)
     private val deleteSprint = DeleteSprint(repository, dateProvider)
     private val addWorkItemsToSprint = AddWorkItemsToSprint(repository, dateProvider)
     private val removeWorkItemsFromSprint = RemoveWorkItemsFromSprint(repository, dateProvider)
@@ -692,6 +694,18 @@ class SprintDetailModel(
 
     /** Reopens the sprint, and reports whether it did. See [finish]. */
     suspend fun reopen(): Boolean = acting { reopenSprint(sprintID) }
+
+    /**
+     * Locks the sprint, and reports whether it did.
+     *
+     * `false` means the write was refused, and the banner carries the reason; the caller
+     * stays on the screen either way. The owner gate is [SprintDetail.canManageLock], not
+     * here — a model has an opinion about what it just wrote, not about who may ask.
+     */
+    suspend fun lock(): Boolean = acting { lockSprint(sprintID) }
+
+    /** Removes the lock, and reports whether it did. See [lock]. */
+    suspend fun unlock(): Boolean = acting { unlockSprint(sprintID) }
 
     private suspend fun acting(block: suspend () -> Unit): Boolean {
         isBusy = true

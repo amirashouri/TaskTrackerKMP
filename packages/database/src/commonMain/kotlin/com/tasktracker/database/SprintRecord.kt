@@ -77,6 +77,15 @@ data class SprintRecord(
      */
     @androidx.room.ColumnInfo(defaultValue = "0")
     val isArchived: Boolean = false,
+    /**
+     * Whether the owner has locked the sprint against window, cap and task edits.
+     *
+     * Mirrors [Sprint.isLocked]. A `NOT NULL DEFAULT 0` column so the additive migration
+     * leaves every existing sprint unlocked; see [SprintRecord]'s class KDoc on why the
+     * store drops rather than migrates a dev database at version 7.
+     */
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val isLocked: Boolean = false,
     val createdAt: Instant,
     val updatedAt: Instant,
 )

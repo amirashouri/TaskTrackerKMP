@@ -251,6 +251,23 @@ interface ProjectRepositoryPort {
     suspend fun unarchiveSprint(id: SprintID, now: Instant): Sprint
 
     /**
+     * Applies or removes the sprint's explicit lock.
+     *
+     * The lock is the reversible replacement for the old rule that froze a sprint once its
+     * start date arrived. While it is set, the window, the point cap and the task
+     * membership are refused by the use cases above; the name, prose goal and owner stay
+     * editable because they describe the sprint rather than commit it.
+     *
+     * The outbox row is the point of doing this through the store: the decision has to
+     * reach every device, so it travels as an ordinary sprint upsert. `updatedAt` is
+     * stamped from [now] like every other write, and the caller's copy is untouched.
+     *
+     * This method does not check who is asking. Ownership is a screen-level gate — the same
+     * place [finishSprint]'s owner rule lives — because the port has no viewer identity.
+     */
+    suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint
+
+    /**
      * Moves work items into a sprint, or back to the backlog.
      *
      * [Patch] rather than a nullable argument for the same reason as every other patch: a

@@ -726,6 +726,14 @@ private class PreviewRepository(
             broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
         }.copy()
 
+    override suspend fun setSprintLocked(id: SprintID, isLocked: Boolean, now: Instant): Sprint =
+        storedSprints.first { it.id == id }.also {
+            it.isLocked = isLocked
+            it.updatedAt = now
+        }.also {
+            broadcaster.send(ProjectChange(ProjectChange.Kind.Sprints, it.projectID))
+        }.copy()
+
     override suspend fun setWorkItemSprint(
         workItemIDs: List<WorkItemID>,
         sprintID: Patch<SprintID?>,

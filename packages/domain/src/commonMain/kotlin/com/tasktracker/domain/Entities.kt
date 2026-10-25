@@ -345,8 +345,8 @@ data class Project(
  * would answer none of the questions the summary exists to answer; separating them keeps
  * that arithmetic intact and gives the prose a home that does not compete with it. The
  * capacity number is also the cap the sprint write path refuses to exceed — which is why it,
- * unlike `goal`, is only editable before the sprint starts: a window already open has a
- * committed set that changing the ceiling would silently invalidate.
+ * unlike `goal`, is frozen while the sprint is locked: a committed set has a ceiling that
+ * changing the cap would silently invalidate.
  *
  * ## Two open sprints may not share one instant of their windows
  *
@@ -375,8 +375,8 @@ data class Sprint(
      * number the summary measures it against. Never negative; see [SprintGoal].
      *
      * A cap, not only a target: the sprint write path refuses a move that would push the
-     * committed total past it. Hence the edit rule — a number the window has already started
-     * spending cannot be changed under it.
+     * committed total past it. Hence the edit rule — a number the sprint has locked cannot
+     * be changed until the owner unlocks it.
      */
     var goalStoryPoints: Int = 0,
     /**
@@ -423,6 +423,23 @@ data class Sprint(
      * and `isArchived` is "has the user put it away".
      */
     var isArchived: Boolean = false,
+    /**
+     * Whether the sprint has been locked by its owner.
+     *
+     * A lock is the explicit replacement for the old rule that froze a sprint once its
+     * start date arrived. What it protects is the part that commits the sprint: the
+     * window, the point cap and the task membership. What it deliberately does not
+     * protect is the description — name, prose goal and owner stay editable, because they
+     * say what the sprint is rather than commit it to a time or a number.
+     *
+     * The owner can apply and remove it at will. A finished sprint remains uneditable
+     * regardless; the lock is a planning tool, not a way to reopen history.
+     *
+     * Synced, unlike the derived [SprintStatus], because the decision belongs to a person
+     * rather than to the clock. An older payload that omits it decodes as unlocked, which
+     * is what the field's default is for.
+     */
+    var isLocked: Boolean = false,
     val createdAt: Instant,
     var updatedAt: Instant,
 ) {

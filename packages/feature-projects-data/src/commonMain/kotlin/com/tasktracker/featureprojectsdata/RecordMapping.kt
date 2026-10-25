@@ -439,6 +439,7 @@ internal fun Sprint.toRecord(): SprintRecord {
         isFinished = reconciled.isFinished,
         finishedAt = reconciled.finishedAt,
         isArchived = reconciled.isArchived,
+        isLocked = reconciled.isLocked,
         createdAt = reconciled.createdAt,
         updatedAt = reconciled.updatedAt,
     )
@@ -471,6 +472,7 @@ internal fun SprintRecord.apply(value: Sprint): SprintRecord {
         isFinished = reconciled.isFinished,
         finishedAt = reconciled.finishedAt,
         isArchived = reconciled.isArchived,
+        isLocked = reconciled.isLocked,
         updatedAt = reconciled.updatedAt,
     )
 }
@@ -504,6 +506,7 @@ internal val SprintRecord.domainValue: Sprint?
             isFinished = isFinished,
             finishedAt = finishedAt,
             isArchived = isArchived,
+            isLocked = isLocked,
             createdAt = createdAt,
             updatedAt = updatedAt,
         )

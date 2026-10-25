@@ -217,6 +217,63 @@ class SprintDetailModelTest {
     }
 
     @Test
+    fun `the owner can lock and unlock their sprint`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, ownerID = testUserID)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id, currentUserID = testUserID)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        assertTrue(model.detail!!.canManageLock)
+
+        assertTrue(model.lock())
+        assertEquals("setSprintLocked", repository.writes.single())
+        advanceUntilIdle()
+        assertTrue(model.detail!!.sprint.isLocked)
+        assertFalse(model.detail!!.canEditItems, "a lock freezes membership")
+
+        assertTrue(model.unlock())
+        advanceUntilIdle()
+        assertFalse(model.detail!!.sprint.isLocked)
+        assertTrue(model.detail!!.canEditItems, "unlocking makes membership editable again")
+    }
+
+    @Test
+    fun `a non-owner cannot manage somebody else's lock`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, ownerID = testUserID)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id, currentUserID = graceUserID)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertFalse(model.detail!!.canManageLock)
+    }
+
+    @Test
+    fun `an unowned sprint can be locked by anyone`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, ownerID = null)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id, currentUserID = graceUserID)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        // The same `null` reading as finishing: nobody has claimed it, so nobody is
+        // excluded from putting it on hold.
+        assertTrue(model.detail!!.canManageLock)
+    }
+
+    @Test
     fun `a viewer the app cannot identify is not shown to be the owner`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
@@ -408,7 +465,7 @@ class SprintDetailModelTest {
     }
 
     @Test
-    fun `an active sprint locks its task membership`() = runTest {
+    fun `an unlocked active sprint still accepts task edits`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
@@ -422,6 +479,26 @@ class SprintDetailModelTest {
 
         val detail = model.detail!!
         assertTrue(detail.isActive)
+        // The start date no longer freezes membership by itself: the explicit lock is the
+        // replacement for that rule, and this sprint has not been locked.
+        assertTrue(detail.canEditItems)
+        model.openPicker()
+        assertTrue(model.isPickerOpen)
+    }
+
+    @Test
+    fun `a locked sprint refuses task edits`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isLocked = true)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        val detail = model.detail!!
         assertFalse(detail.canEditItems)
         // The sheet does not even open, rather than opening and refusing to confirm: a
         // gate the screen enforced by remembering to disable a button would be one this
