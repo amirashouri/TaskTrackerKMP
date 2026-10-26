@@ -25,12 +25,11 @@ import androidx.compose.ui.unit.Dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
-import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttSpacing
-import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.featureprojectsdomain.BacklogSection
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.resources.Res
@@ -47,20 +46,8 @@ import com.tasktracker.resources.board_add_task
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The backlog tab: untriaged work, the board, and filed-away work, as three switchable
- * sections rather than one split column — a split would be as tall as the longest list (a long
- * archive wins), and a switch keeps each list to its own height. Each section owns its own empty
- * state (three different sentences, also testable without guessing which list was in front), and
- * the busy id tracks the row the user tapped rather than the section now showing, so a write in
- * flight keeps its wait on whatever section the item is really in.
- *
- * ## The header floats over the list
- *
- * The switcher, banner and section picker are drawn over the list rather than above it, so
- * scrolled rows pass behind their glass instead of stopping at a band. The header's height is
- * measured and given back as the list's top `contentPadding`: the viewport runs to the top of
- * the screen, the first row still starts below the header, and the last row keeps the tab bar's
- * inset at the bottom.
+ * Backlog screen: renders untriaged work, active kanban tasks, and archived items in 3 tabs.
+ * The header floats over the list; list top content padding is dynamically derived from header height.
  */
 @Composable
 fun ProjectBacklogScreen(
@@ -82,10 +69,7 @@ fun ProjectBacklogScreen(
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
 
-    // The header floats over the list, so its own height is the only thing that can keep the
-    // first row out from under it. Measured rather than summed from tokens: the banner is
-    // conditional and the controls grow with the font setting, so a token sum would be wrong on
-    // at least one host. The same "measurement, not a token" reasoning as the shell's tab bar.
+    // Measured dynamically to accommodate conditional banners and variable typography scaling
     var headerHeightPx by remember { mutableIntStateOf(0) }
     val firstRowInset = with(LocalDensity.current) {
         headerHeightPx.toDp()
@@ -95,14 +79,8 @@ fun ProjectBacklogScreen(
         modifier = modifier.testTag(ProjectBacklogScreenTag),
     ) { onCopy ->
         Box(modifier = Modifier.fillMaxSize()) {
-            // The list keeps the whole screen height. Its horizontal gutter is on the list itself
-            // because it no longer sits inside the header's `Column`; its top clearance is
-            // `contentPadding`, not a viewport inset, which is what lets scrolled rows travel
-            // under the glass instead of stopping at a band below it.
+            // Tags live on each list individually: testTag overwrites rather than merges in Compose
             when (currentSection) {
-                // Section tags live on each list, not the shared container: a chained
-                // `testTag(a).testTag(b)` keeps only the first value in this Compose version, so
-                // a container tag would hide the empty states from separate queries.
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = projection,
                     busyItemID = busyItemID,
@@ -138,9 +116,6 @@ fun ProjectBacklogScreen(
                 )
             }
 
-            // Drawn after the list and with no fill of its own. The list's rows passing behind
-            // the translucent switcher and picker is the effect; a background band here would
-            // put an opaque strip between the glass and the content.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -150,8 +125,6 @@ fun ProjectBacklogScreen(
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
             ) {
                 onOpenSwitcher?.let { openSwitcher ->
-                    // The add action rides the switcher's row rather than floating over the list;
-                    // `weight(1f)` keeps the switcher at its own width, clear of the action.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -202,12 +175,6 @@ fun ProjectBacklogScreen(
     }
 }
 
-
-
-/**
- * The backlog section: untriaged work, each row offering "Put on board" and "File away" and
- * opening the task on tap — the only section where both verbs apply.
- */
 @Composable
 private fun BacklogSectionList(
     projection: BacklogSectionedProjection,
@@ -249,12 +216,6 @@ private fun BacklogSectionList(
     }
 }
 
-/**
- * The Kanban section: the board as rows, each offering "File away" and opening on tap. Every item
- * is already on a board, so the row drops its put-on-board action. This duplicates
- * `BacklogSectionList` on purpose: the two differ by one handler and one empty state, and folding
- * them together would add a parameter nobody else uses.
- */
 @Composable
 private fun KanbanSectionList(
     projection: BacklogSectionedProjection,
@@ -296,11 +257,6 @@ private fun KanbanSectionList(
     }
 }
 
-/**
- * The archived section: closed work, newest first, read-only. No put-on-board or file-away — every
- * item is already `Closed`, so the section shows Reopen instead, which returns the item to the
- * backlog and clears its resolution date.
- */
 @Composable
 private fun ArchivedSectionList(
     projection: BacklogSectionedProjection,
@@ -328,8 +284,8 @@ private fun ArchivedSectionList(
             items(projection.archived, key = { it.id.stringValue }) { item ->
                 WorkItemBacklogRow(
                     item = item,
-                    onPutOnBoard = { },
-                    onFileAway = { },
+                    onPutOnBoard = {},
+                    onFileAway = {},
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
                     onUnarchive = { onUnarchive(item.id) },
@@ -341,7 +297,6 @@ private fun ArchivedSectionList(
     }
 }
 
-/** The backlog section's empty state. Kept separate from the archive's so the sections stay testable. */
 @Composable
 private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
@@ -351,7 +306,6 @@ private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
     )
 }
 
-/** The Kanban section's empty state: the board has no on-board tasks yet. */
 @Composable
 private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
@@ -361,7 +315,6 @@ private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
     )
 }
 
-/** The archived section's empty state: nothing has been filed away from this backlog yet. */
 @Composable
 private fun EmptyArchivedSection(modifier: Modifier = Modifier) {
     ProjectsEmptyState(
@@ -383,5 +336,4 @@ const val ProjectBacklogEmptyKanbanTag = "backlog.emptyKanban"
 const val ProjectBacklogEmptyArchivedTag = "backlog.emptyArchived"
 const val BacklogAddTaskTag = "backlog.addTask"
 
-/** The section indicator chip for one section, tagged with the section's label so a test can reach either. */
 fun SectionIndicatorTag(label: String): String = "backlog.section.$label"

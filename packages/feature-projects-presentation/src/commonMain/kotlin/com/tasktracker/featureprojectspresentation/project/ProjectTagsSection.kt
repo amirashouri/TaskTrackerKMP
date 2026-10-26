@@ -81,47 +81,17 @@ import com.tasktracker.resources.tag_icon_star
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** The test tag on the admin editor's tags section. */
 const val AdminProjectTagsSectionTag = "admin.projectEditor.tags"
-
-/** The test tag on one existing tag row. */
-fun AdminProjectTagRowTag(tag: ProjectTag): String =
-    "admin.projectEditor.tag.${tag.id.stringValue}"
-
-/** The test tag on the composer's name field. */
+fun AdminProjectTagRowTag(tag: ProjectTag): String = "admin.projectEditor.tag.${tag.id.stringValue}"
 const val AdminProjectTagNameFieldTag = "admin.projectEditor.tagName"
-
-/** The test tag on the composer's add button. */
 const val AdminProjectTagAddTag = "admin.projectEditor.tagAdd"
-
-/** The test tag on the composer's inline refusal. */
 const val AdminProjectTagErrorTag = "admin.projectEditor.tagError"
-
-/** The test tag on one colour swatch. */
-fun AdminProjectTagColorTag(color: TagColor): String =
-    "admin.projectEditor.tagColor.${color.wireValue}"
-
-/** The test tag on one icon choice. */
-fun AdminProjectTagIconTag(icon: TagIcon): String =
-    "admin.projectEditor.tagIcon.${icon.wireValue}"
+fun AdminProjectTagColorTag(color: TagColor): String = "admin.projectEditor.tagColor.${color.wireValue}"
+fun AdminProjectTagIconTag(icon: TagIcon): String = "admin.projectEditor.tagIcon.${icon.wireValue}"
 
 /**
- * The admin's tag catalog: what exists, and the composer that adds another.
- *
- * ## Why this is only in the admin editor
- *
- * A tag is project configuration, like the key prefix, and the server's admin API is the only
- * path that can write it. A member's editor therefore has no business offering the composer,
- * and the shared [ProjectEditorScreen] takes this whole section as a slot rather than a flag —
- * see that screen's `tagsSection`.
- *
- * ## Why removal is a trash button and rename does not exist yet
- *
- * Removing a tag leaves its id on every item that carried it; every reader drops what it cannot
- * resolve, so removal is safe and needs no cascade. Renaming is deliberately not offered in
- * this pass: a rename can be achieved by removing and re-adding, which loses the assignments,
- * and a "rename" that silently kept or dropped them would be a decision this screen has not
- * made yet. Stating that here is cheaper than a reader assuming it was forgotten.
+ * Admin project tag catalog: displays configured project tags with delete controls
+ * and provides a composer to add new tags with color and icon pickers.
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -252,7 +222,6 @@ fun ProjectTagsSection(
     }
 }
 
-/** One existing tag: its glyph, its name, and the removal control. */
 @Composable
 private fun ExistingTagRow(tag: ProjectTag, onRemove: () -> Unit) {
     Row(
@@ -279,12 +248,9 @@ private fun ExistingTagRow(tag: ProjectTag, onRemove: () -> Unit) {
     }
 }
 
-/** One colour in the composer: a tinted disc, ringed when chosen. */
 @Composable
 private fun ColorSwatch(color: TagColor, selected: Boolean, onClick: () -> Unit) {
     val tint = ttTagTint(color.tint())
-    // A ring rather than a second fill: the selected state has to be visible without
-    // changing the colour the swatch exists to show.
     Box(
         modifier = Modifier
             .size(TAG_SWATCH_RING_SIZE)
@@ -304,7 +270,6 @@ private fun ColorSwatch(color: TagColor, selected: Boolean, onClick: () -> Unit)
     )
 }
 
-/** One icon in the composer, drawn in the colour currently chosen. */
 @Composable
 private fun IconChoice(icon: TagIcon, color: TagColor, selected: Boolean, onClick: () -> Unit) {
     val shape = RoundedCornerShape(ttRadius.control)
@@ -331,14 +296,7 @@ private fun IconChoice(icon: TagIcon, color: TagColor, selected: Boolean, onClic
     }
 }
 
-/**
- * Why [ProjectTagsSection]'s composer would refuse the draft, or `null` if it would accept it.
- *
- * Kept out of the model because it is wording, and the model has no `Res`: the model's
- * `addTag` enforces the same three rules and answers `false`, so this is the explanation and
- * that is the decision. The two cannot drift into accepting different drafts because both
- * read [TagRules] and the same `tags` list.
- */
+/** Evaluates [TagRules] and returns localized error resource if draft is invalid, or null if accepted. */
 private fun refusalFor(name: String, tags: List<ProjectTag>): StringResource? = when {
     !TagRules.isNameValid(name) -> Res.string.admin_project_tags_name_required
     tags.size >= TagRules.MAX_PER_PROJECT -> Res.string.admin_project_tags_max
@@ -347,17 +305,9 @@ private fun refusalFor(name: String, tags: List<ProjectTag>): StringResource? = 
     else -> null
 }
 
-/** The colour swatch's overall diameter, including the selection ring. */
 private val TAG_SWATCH_RING_SIZE = 30.dp
-
-/** The gap between the selection ring and the swatch's fill. */
 private val TAG_SWATCH_RING_INSET = 3.dp
-
-/** The tile an icon choice draws. */
 private val TAG_ICON_TILE_SIZE = 30.dp
-
-/** The glyph inside [TAG_ICON_TILE_SIZE]. */
 private val TAG_ICON_GLYPH_SIZE = 17.dp
-
 private const val TAG_ICON_FILL_ALPHA = 0.25f
 private const val TAG_ICON_SELECTED_FILL_ALPHA = 0.40f

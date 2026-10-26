@@ -16,30 +16,9 @@ import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * The admin project editor: the shared project form, seeded from the admin API rather than
- * from the local store.
- *
- * ## Why this is a second model and not a second screen
- *
- * [ProjectEditorScreen] is already stateless — it takes the draft and the callbacks — so the
- * only thing the admin section changes about it is where the draft comes from and where it
- * goes. A second screen would be a second copy of the same fields, which is the drift that
- * screen's own note exists to prevent.
- *
- * ## Why it cannot borrow [ProjectEditorModel]
- *
- * That model writes through [com.tasktracker.featureprojectsdomain.ProjectRepositoryPort] — the
- * offline-first store, whose outbox push the server refuses for a project the writer is not a
- * member of. An admin edits projects they are not in, so their editor has to go to
- * [AdminProjectsPort] and stay online-only. The two models differ in exactly that seam.
- *
- * ## Why the seed is kept whole
- *
- * [AdminProjectsPort.updateProject] is a compare-and-swap: the save must carry the version the
- * row was read at, or it silently overwrites whatever another admin wrote in between. Keeping
- * the [AdminProject] pair — and replacing it with whatever the server returns — is what makes a
- * save-then-save-again sequence send the *new* version rather than the one the screen opened
- * with.
+ * Presentation model for the admin project editor screen.
+ * Uses direct online [AdminProjectsPort] (admin editors bypass project membership requirements)
+ * and enforces optimistic concurrency control using [AdminProject.version].
  */
 class AdminProjectEditorModel(
     private val id: ProjectID,
@@ -51,63 +30,38 @@ class AdminProjectEditorModel(
     private var originalDetails: String = ""
     private var originalTags: List<ProjectTag> = emptyList()
 
-    /** Whether the seed read is in flight, so the screen can tell "loading" from "gone". */
     var isLoading: Boolean by mutableStateOf(true)
         private set
 
-    /** Whether a save is in flight, so the button disables rather than double-submitting. */
     var isSaving: Boolean by mutableStateOf(false)
         private set
 
-    /**
-     * True once a read has confirmed the server no longer has this project.
-     *
-     * Deliberately not the same as a failed read. A `404` says the row is gone and the screen
-     * must say so, while a `500` is a retry — and a screen that showed "gone" for a failure
-     * would send an administrator to recreate a project that is still there.
-     */
+    /** True when server returns 404 (distinguished from network/retryable read failures). */
     var isMissing: Boolean by mutableStateOf(false)
         private set
 
-    /** The project's name, raw as typed. */
     var name: String by mutableStateOf("")
         private set
 
-    /** The key prefix. Shown, never typed: it is the root of every key the project has issued. */
     var keyPrefix: String by mutableStateOf("")
         private set
 
-    /** Free-text notes. */
     var details: String by mutableStateOf("")
         private set
 
-    /**
-     * The project's tag catalog as the editor holds it: the admin-owned set every member's
-     * picker offers and every card resolves against.
-     *
-     * A list, not a database of its own — see [ProjectTag]. The editor is the only writer;
-     * members receive it on the project row and only ever refer to an id.
-     */
+    /** Admin-managed project tag catalog. */
     var tags: List<ProjectTag> by mutableStateOf(emptyList())
         private set
 
-    /** Whether the draft differs from what the server sent. */
     val hasChanges: Boolean
         get() = name.trim() != originalName ||
-            details.trim() != originalDetails ||
-            tags != originalTags
+                details.trim() != originalDetails ||
+                tags != originalTags
 
-    /** Whether save is available: something changed, and a name to save it under. */
     val canSave: Boolean
         get() = seeded != null && name.isNotBlank() && hasChanges
 
-    /**
-     * Reads the project this editor edits.
-     *
-     * Not routed through [ProjectModel.reporting], which answers `null` for both "the read
-     * failed" and "there is no such project" — and telling those apart is the whole reason
-     * [isMissing] exists.
-     */
+    /** Loads project from admin port, separating missing entity state (404) from network errors. */
     suspend fun load() {
         isLoading = true
         isMissing = false
@@ -136,24 +90,15 @@ class AdminProjectEditorModel(
         }
     }
 
-    /** Sets the name. */
     fun onNameChanged(value: String) {
         name = value
     }
 
-    /** Sets the details. */
     fun onDetailsChanged(value: String) {
         details = value
     }
 
-    /**
-     * Adds an admin-defined tag, or answers `false` when the draft refuses it.
-     *
-     * Refused for a blank name, a name already in the catalog (case-insensitively — two
-     * "Bug" chips are indistinguishable at 12dp, which is worse than a duplicate-key error
-     * nobody sees), and the per-project cap. The composer shows the refusal inline, so this
-     * is a validation answer rather than a silent drop.
-     */
+    /** Validates against [TagRules] and appends tag if name is unique (case-insensitive). */
     fun addTag(name: String, color: TagColor, icon: TagIcon): Boolean {
         if (!TagRules.isNameValid(name)) return false
         if (tags.size >= TagRules.MAX_PER_PROJECT) return false
@@ -163,19 +108,11 @@ class AdminProjectEditorModel(
         return true
     }
 
-    /** Removes a tag from the catalog. Items that referenced it keep a stale id, which readers drop. */
     fun removeTag(id: TagID) {
         tags = tags.filterNot { it.id == id }
     }
 
-    /**
-     * Saves through the admin API, carrying the version this editor read the row at.
-     *
-     * Returns whether the save happened, so the caller navigates on success and stays put on
-     * failure. Only the edited fields are replaced: the members, the archived flag and the next
-     * item number travel through from the seed unchanged, because the body is the whole project
-     * and a field left out of it is a field the server would clear.
-     */
+    /** Updates project via admin API using current optimistic lock version. Returns true on success. */
     suspend fun save(): Boolean {
         val current = seeded ?: return false
         if (!canSave || isSaving) return false
@@ -193,8 +130,6 @@ class AdminProjectEditorModel(
                 )
             } ?: return false
 
-            // The form now holds what the server stored, not the draft: it is no longer dirty,
-            // and the next save carries the version this one returned.
             seeded = saved
             name = saved.project.name
             details = saved.project.details

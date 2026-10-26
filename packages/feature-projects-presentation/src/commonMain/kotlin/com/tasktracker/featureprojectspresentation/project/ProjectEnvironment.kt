@@ -30,108 +30,31 @@ import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
 
 /**
- * The collaborators every screen in this module needs, supplied from outside.
- *
- * A container rather than two separate composition locals because a model needs both or
- * neither: [ProjectRepositoryPort] without a [DateProvider] cannot run a single use case,
- * since every one of them takes the instant from the clock and not from the store. Two
- * locals would also let a caller provide a repository from one composition and a clock
- * from another, and the resulting model would stamp records with a time that had nothing
- * to do with the data it was writing.
- *
- * Typed as the port and the interface, never the Room repository and never
- * `SystemDateProvider`. As with auth, that is enforced rather than merely intended: this
- * module does not depend on `:packages:feature-projects-data` or on `:packages:core`'s
- * implementations, so naming either would not compile.
+ * Dependency container providing domain ports and clock services to project presentation screens.
+ * Optional ports default to null for offline or permission-restricted environments.
  */
 class ProjectEnvironment(
     val repository: ProjectRepositoryPort,
     val dateProvider: DateProvider,
-    /**
-     * The user directory, or `null` when the graph supplied none.
-     *
-     * Nullable because a graph can legitimately be built without teams wired — the same
-     * case [MissingProjectEnvironmentView] covers for projects. A missing directory means
-     * assignee/owner labels render as the unassigned placeholder and the picker offers
-     * nobody; it never crashes a screen.
-     */
+    /** Directory port for resolving member profiles and assignees. */
     val teamPort: TeamPort? = null,
-    /**
-     * The member administration port, or `null` when the graph supplied none.
-     *
-     * Extends [TeamPort] and adds write operations; nullable so shells that do not expose
-     * admin can still render projects surfaces.
-     */
+    /** Admin member management port for creating and deactivating users. */
     val memberAdminPort: MemberAdminPort? = null,
-    /**
-     * The platform file picker, or `null` when the graph supplied none.
-     *
-     * Nullable because a graph can legitimately be built without the picker wired — the
-     * same case [MissingProjectEnvironmentView] covers for projects. A missing picker means
-     * the attach button is still on screen, and its press reaches a null pointer instead of
-     * opening anything; it never crashes. Production graphs always supply one, because the
-     * composition root binds it in [com.tasktracker.compositionroot.AppGraph] from the
-     * platform host; a test graph supplies a fake.
-     */
+    /** Platform file picker for attachments; null disables file selection. */
     val filePicker: FilePicker? = null,
-    /**
-     * The project administration port, or `null` when the graph supplied none.
-     *
-     * Nullable for the same reason [memberAdminPort] is: the admin section is online-only, so
-     * a demo graph with no backend binds nothing here and the shell renders its placeholder.
-     * Dimming an offline project list would be the wrong fallback — an administrator editing a
-     * project the server never saw is an edit that did not happen.
-     *
-     * Appended after [filePicker] rather than inserted among the others because `RootScreen`
-     * builds this positionally; a field inserted mid-list would silently hand [filePicker]'s
-     * slot to a new port and type-check only because both are nullable. New nullable ports
-     * go at the end for the same reason.
-     */
+    /** Admin project management port (online-only). */
     val adminProjectsPort: AdminProjectsPort? = null,
-    /**
-     * The attachment byte transport, or `null` when this graph has no server.
-     *
-     * Nullable on purpose and *not* a missing-wiring failure: an offline graph has no file
-     * API to talk to, so an attachment is local-only there and the attach flow must not
-     * attempt an upload that is guaranteed to fail. `null` means "no blob sync", which the
-     * editor treats as "never hand off an upload", not as an error to show.
-     */
+    /** Remote blob transport for attachment uploads/downloads; null disables remote sync. */
     val blobTransport: AttachmentBlobTransport? = null,
-    /**
-     * The platform's file opener, or `null` when the graph supplied none.
-     *
-     * Nullable because a graph can legitimately be built without one — the same case
-     * [MissingProjectEnvironmentView] covers for projects. A missing opener makes an
-     * attachment row un-tappable rather than tappable-and-inert: a press that opens nothing
-     * is the mock this repo refuses.
-     *
-     * Deliberately *not* tied to [blobTransport]. Opening is a local-cache read for a file
-     * this device attached, so a graph with no server must still be able to open its own
-     * files; the two ports answer different questions.
-     *
-     * Last in the list because `RootScreen` builds this positionally, for the reason
-     * [adminProjectsPort] documents: a field inserted mid-list would take the slot of the
-     * nullable port before it and type-check only because both are nullable.
-     */
+    /** Platform file opener for viewing local attachment files. */
     val opener: AttachmentOpener? = null,
 )
 
-/**
- * How a view reaches the projects feature.
- *
- * A `staticCompositionLocalOf`, and nullable, for the same two reasons as
- * `LocalAuthSession`: the environment is fixed for the lifetime of a composition so
- * there is nothing to gain by tracking reads, and making it nullable turns "the
- * composition root has not been wired yet" into a visible message on first composition
- * rather than a crash on a screen nobody was supposed to reach.
- */
 val LocalProjectEnvironment = staticCompositionLocalOf<ProjectEnvironment?> { null }
 
-/** The projects environment, or `null` when the composition root supplied none. */
 val currentProjectEnvironment: ProjectEnvironment?
     @Composable get() = LocalProjectEnvironment.current
 
-/** Supplies a projects environment to a subtree. */
 @Composable
 fun ProvideProjectEnvironment(
     environment: ProjectEnvironment,
@@ -140,16 +63,7 @@ fun ProvideProjectEnvironment(
     CompositionLocalProvider(LocalProjectEnvironment provides environment, content = content)
 }
 
-/**
- * Shown instead of any projects screen when the composition root did not supply an
- * environment.
- *
- * One gate for the whole feature rather than one per screen, because the failure is
- * singular - nothing was wired - and eight identical gates would each need a test to
- * prove they say the same thing. Deliberately not an error *banner* for the same reason
- * as the auth gate: this is not a failed attempt, it is a build that cannot read any
- * projects, and styling it as a failure suggests the user did something wrong.
- */
+/** Fallback screen rendered when the composition root provides no [ProjectEnvironment]. */
 @Composable
 fun MissingProjectEnvironmentView(modifier: Modifier = Modifier) {
     Box(
@@ -170,8 +84,7 @@ fun MissingProjectEnvironmentView(modifier: Modifier = Modifier) {
                 color = ttLabel(),
             )
             ttText(
-                text = "The app was built without a projects data source, so no project " +
-                    "can be shown.",
+                text = "The app was built without a projects data source, so no project can be shown.",
                 style = ttTypography.footnote,
                 color = ttLabelSecondary(),
             )
@@ -179,5 +92,4 @@ fun MissingProjectEnvironmentView(modifier: Modifier = Modifier) {
     }
 }
 
-/** The gate's test tag, so a test asserts on the gate rather than on its copy. */
 const val MissingProjectEnvironmentTag = "projects.missingEnvironment"

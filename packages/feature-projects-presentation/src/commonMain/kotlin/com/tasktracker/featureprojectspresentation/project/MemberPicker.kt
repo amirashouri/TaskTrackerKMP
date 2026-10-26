@@ -1,9 +1,9 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,39 +66,8 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Search a member directory and pick from what comes back, as a dropdown under the field.
- *
- * ## The list is a popup, and it opens with the field
- *
- * The field is a closed control until it is tapped: the results render in a [Popup]
- * anchored beneath it, the way the project switcher's menu anchors under its pill — same
- * `PopupPositionProvider` shape, same 240dp scroll cap, same glass surface. The list does
- * *not* take space in the sheet while closed, which is the whole point of a dropdown in a
- * form that would otherwise grow a permanent eight-row list under a search box.
- *
- * ## Why the popup is not focusable, and what that costs
- *
- * `PopupProperties(focusable = false)`, because a focusable popup takes focus from the
- * search field the moment it opens — which dismisses the IME and makes the box the user
- * just tapped deaf to further typing. AndroidX's own [androidx.compose.material3]
- * `ExposedDropdownMenu` documents the same rule: "if typing on the IME is required, the
- * menu should not be focusable in order to prevent stealing focus from the input method",
- * and makes its editable anchors non-focusable for exactly this reason.
- *
- * The cost is dismissal: a non-focusable popup never receives an outside tap or the back
- * key, so `onDismissRequest` only fires on platforms that route it anyway. The dismiss
- * paths this control actually offers are the ones it owns — tapping the field again
- * toggles the menu (the editable-anchor contract), and a single-select choice closes it.
- * That is fewer paths than a focusable menu has, and it is the price of a search box that
- * keeps working while the menu is open.
- *
- * ## Two selection modes, one component
- *
- * Project members accumulate ([multiSelect]); a sprint's owner and a work item's assignee
- * are single-valued, so there [multiSelect] is false, choosing a row replaces the previous
- * choice, and [clearLabel] offers the way back to nothing. Two components would have been
- * two copies of the row rendering and the filter — and the row is the part that has to
- * stay identical for the three fields to feel like one feature.
+ * Searchable member picker dropdown with dismissible selection pills.
+ * Rendered in a non-focusable popup to prevent stealing IME keyboard focus while typing.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -111,29 +80,11 @@ internal fun MemberPicker(
     clearLabel: String? = null,
     placeholder: String = "",
     searchMembers: suspend (String) -> List<User> = { emptyList() },
-    /**
-     * Resolves the *selected* ids to profiles, for the pills above the field.
-     *
-     * Deliberately separate from [searchMembers]: that one may be scoped to the current
-     * project's members, and a selection that predates a membership change has to render
-     * anyway. Hosts should pass the directory's unfiltered id lookup here — see
-     * [com.tasktracker.featureteamsdomain.TeamPort.users].
-     *
-     * Defaults to searching the directory with a blank query, which is the unfiltered listing
-     * and therefore correct wherever [searchMembers] is *not* scoped.
-     */
+    /** Resolves selected IDs unfiltered so historic/unscoped assignees remain visible. */
     resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
-    /**
-     * The root test tag, and the prefix for every tag this picker draws beneath it.
-     *
-     * The root carries [tagPrefix] verbatim rather than a wrapped form of it, because the
-     * assignee row's callers assert on the row's own tag (`sprints.editor.owner`) and a
-     * wrapper would silently move the node out from under them — which is exactly how the
-     * sprint editor's two window scenarios went red when this picker landed.
-     */
     tagPrefix: String = title,
 ) {
     var query by remember { mutableStateOf("") }
@@ -143,24 +94,11 @@ internal fun MemberPicker(
     var selectedUsers by remember { mutableStateOf<List<User>>(emptyList()) }
     val density = LocalDensity.current
 
-    // Debounced so a four-letter name costs one port call, not four. 250ms is the usual
-    // typing gap between keystrokes; shorter and the debounce never bites, longer and the
-    // list feels broken while somebody is typing quickly.
     LaunchedEffect(query) {
         if (query.isNotEmpty()) delay(SEARCH_DEBOUNCE_MILLIS)
         results = searchMembers(query)
     }
 
-    // The pills need names, and the call sites only hold IDs and the search seam — so the
-    // picker resolves them itself, once per selection change rather than per keystroke.
-    //
-    // Through [resolveSelected], not through [searchMembers], and the difference is the whole
-    // point of this seam. `searchMembers` is now *filtered* to the current project's members
-    // (see `assignableMembersFor`), so a task assigned last month to someone who has since
-    // left the project would resolve to nothing and its pill would silently vanish — the field
-    // would read Unassigned while the saved model still held an assignee, which is the app
-    // lying about data it has. Resolution by id is not filtered, so the pill survives and the
-    // user can see who it is actually assigned to, then reassign or clear it deliberately.
     LaunchedEffect(selectedIDs, resolveSelected) {
         selectedUsers = if (selectedIDs.isEmpty()) {
             emptyList()
@@ -170,9 +108,6 @@ internal fun MemberPicker(
     }
 
     Box(modifier = modifier.fillMaxWidth().testTag(tagPrefix)) {
-        // Field and pills stack vertically; the Box exists only so the dropdown Popup has
-        // an anchor — children of a Box draw on top of each other, which put the first
-        // pill row *over* the field until they were columned.
         Column {
             ProjectsTextField(
                 title = title,
@@ -182,11 +117,7 @@ internal fun MemberPicker(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onGloballyPositioned { anchorWidthPx = it.size.width }
-                    // Observe the tap rather than adding a competing gesture: the Initial pass
-                    // sees the down before the text field consumes it, and nothing is consumed
-                    // here, so cursor placement and selection still behave. Toggle, not
-                    // "open", because the editable-anchor contract is tap-again-to-close —
-                    // the same thing Material's own editable menu anchors do.
+                    // Observe initial down event to toggle dropdown without stealing text field focus
                     .pointerInput(Unit) {
                         awaitEachGesture {
                             awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -223,14 +154,10 @@ internal fun MemberPicker(
                     MemberPickerDropdownPositionProvider(gapPx = gapPx)
                 },
                 onDismissRequest = { expanded = false },
-                // See the class KDoc: focusable would steal the IME from the field.
                 properties = PopupProperties(focusable = false),
             ) {
                 Column(
                     modifier = Modifier
-                        // At least the field's width so the menu lines up with it, and the
-                        // switcher's 240dp scroll cap so a long directory cannot grow a
-                        // menu taller than the sheet it floats over.
                         .widthIn(min = with(density) { anchorWidthPx.toDp() }, max = 280.dp)
                         .heightIn(max = MEMBER_PICKER_MENU_MAX_HEIGHT)
                         .verticalScroll(rememberScrollState())
@@ -264,9 +191,6 @@ internal fun MemberPicker(
                                     when {
                                         multiSelect && isSelected -> selectedIDs - user.id
                                         multiSelect -> selectedIDs + user.id
-                                        // Single-select closes on choice: the decision is
-                                        // made, and a menu left open over the form is a
-                                        // menu the user now has to dismiss by hand.
                                         !multiSelect && isSelected -> {
                                             expanded = false
                                             emptyList()
@@ -287,13 +211,6 @@ internal fun MemberPicker(
     }
 }
 
-/**
- * One directory row: disc, name, email, and a selected mark.
- *
- * No per-row glass: this row only ever draws inside the dropdown's own surface, and two
- * glass layers — the menu's and the row's — is how a list becomes a stack of unreadable
- * panels. The menu owns the surface; the row owns the content.
- */
 @Composable
 private fun PickerRow(
     name: String,
@@ -348,15 +265,6 @@ private fun PickerRow(
     }
 }
 
-/**
- * A selected member, as a dismissible pill under the field.
- *
- * The dependency pill's shape — control-radius clip, [ttGlassCard] — because a selected
- * value in this app should look the same whether it is a blocker or a person. The one
- * difference is the dismiss affordance: that pill draws a text "X", and this one draws
- * [ttActionIcons.close] at [ttIconSize.close], which is the "not so big" cross made into
- * a token instead of a font size.
- */
 @Composable
 private fun MemberPill(
     id: UserID,
@@ -405,12 +313,6 @@ private fun MemberPill(
     }
 }
 
-/**
- * Places the menu under the field, flipped above it when the sheet has no room below.
- *
- * The same geometry [ProjectSwitcherButton]'s provider uses, because the two dropdowns in
- * this app should not disagree about where "under the anchor" is.
- */
 private class MemberPickerDropdownPositionProvider(
     private val gapPx: Int,
 ) : PopupPositionProvider {
@@ -436,15 +338,7 @@ private class MemberPickerDropdownPositionProvider(
     }
 }
 
-/** Milliseconds of silence before the port is called; see the LaunchedEffect above. */
 private const val SEARCH_DEBOUNCE_MILLIS = 250L
-
-/**
- * The menu's height cap.
- *
- * 240dp, not a new number: it is [ProjectSwitcherButton]'s own menu cap, chosen there as
- * "about two thirds of a phone" — two dropdowns in one app do not get two ceilings.
- */
 private val MEMBER_PICKER_MENU_MAX_HEIGHT = 240.dp
 
 fun MemberPickerFieldTag(title: String): String = "projects.picker.$title.field"

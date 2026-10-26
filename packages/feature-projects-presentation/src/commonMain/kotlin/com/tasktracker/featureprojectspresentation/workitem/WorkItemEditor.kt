@@ -19,6 +19,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -26,8 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.TagID
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
@@ -35,10 +35,9 @@ import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
-import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
@@ -49,15 +48,15 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
-import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.PickedFile
-import com.tasktracker.domain.Attachment
+import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_discard
@@ -81,28 +80,7 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Instant
 
 /**
- * The work item form, as a full screen.
- *
- * ## This is a draft, never a stored record
- *
- * Every field is local state that starts from a snapshot and is only sent on an explicit
- * save. The alternative - binding the fields straight to a persisted `WorkItem` - would
- * write an edit the moment a character was typed, which is how a record gets an outbox row
- * per keystroke and how a half-typed title becomes something a second device can pull.
- * [WorkItemEditorModel] holds the draft; this holds nothing.
- *
- * ## Why the key is shown and not offered for editing
- *
- * The project issues it, and a key that changed after the fact would break every message
- * that quotes one. The full sentence explaining that is rendered rather than a lock glyph,
- * because a lock with no explanation reads as a bug.
- *
- * ## Why there is no date picker
- *
- * There is no date-picker dependency, and a hand-rolled calendar grid is not something to
- * reimplement inside a feature module. "Set a due date" and "Clear the due date" toggle
- * between today's date and no date, which is honest about what it can do and does not
- * pretend to be a date picker.
+ * Full-screen work item editor for creating or editing tasks.
  */
 @Composable
 fun WorkItemEditorScreen(
@@ -136,20 +114,14 @@ fun WorkItemEditorScreen(
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    // Attachment params: an empty list means this caller does not host a file list — the
-    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
-    // rather than an empty Attachments block under every preview.
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
     onRemoveAttachment: (AttachmentID) -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
-    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
     projectTags: List<ProjectTag> = emptyList(),
-    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
     selectedTagIDs: List<TagID> = emptyList(),
-    /** Toggles one tag in the draft. */
     onTagToggled: (TagID) -> Unit = {},
 ) {
     WorkItemEditorForm(
@@ -191,29 +163,12 @@ fun WorkItemEditorScreen(
             .fillMaxSize()
             .padding(ttSpacing.screenGutterLarge)
             .verticalScroll(rememberScrollState())
-            // After the scroll, so it is range and not viewport: this form's save and cancel
-            // buttons are its last children, and they are the reason the screen is a scroll at
-            // all. `LocalTabBarScrollUnderInset` — the floating tab bar covers this screen's
-            // bottom edge like it covers the four tabs'.
             .padding(bottom = LocalTabBarScrollUnderInset.current)
             .testTag(WorkItemEditorScreenTag),
     )
 }
 
-/**
- * The same form, drawn over the board.
- *
- * ## Why the body is a shared function and not a copy
- *
- * A screen and a sheet that "look the same" diverge at the fourth field, always in the
- * sheet, and nothing catches it. The only real difference between the two surfaces is what
- * surrounds the form - a full screen has the board's chrome behind it, a sheet has the board
- * itself - so that is the only thing that differs here, and both call this.
- *
- * NOTE: the old expand/collapse sheet seam was removed — the editor is always
- * full-screen now. Keep `ProjectsEditorFullScreen` as the single body both surfaces
- * share, because the only thing that changed between them was the frame around the form.
- */
+/** Modal bottom sheet wrapper for work item editing. */
 @Composable
 fun WorkItemEditorSheet(
     title: String,
@@ -247,22 +202,16 @@ fun WorkItemEditorSheet(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
-    /** See [WorkItemEditorModel.hasUnsavedChanges]; Cancel asks first only when this is true. */
     hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
-    /** See [WorkItemEditorForm.onBack]; `null` for a sheet with nothing under it. */
     onBack: (() -> Unit)? = null,
-    /** See [WorkItemEditorForm.blockers]. */
     blockers: List<WorkItem> = emptyList(),
     onOpenBlocker: (WorkItemID) -> Unit = {},
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
-    // Thread params: `comments == null` means "this caller does not host a thread" —
-    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
-    // all, rather than an empty Comments block under every preview.
     comments: List<Comment>? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
@@ -271,45 +220,27 @@ fun WorkItemEditorSheet(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
-    // Attachment params: an empty list means this caller does not host a file list — the
-    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
-    // rather than an empty Attachments block under every preview.
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
     onRemoveAttachment: (AttachmentID) -> Unit = {},
-    /** See [AttachmentList.syncStateOf]. */
     attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
-    /** See [AttachmentList.onOpen]. `null` means this caller has no platform opener. */
     onOpenAttachment: ((AttachmentID) -> Unit)? = null,
-    /** See [AttachmentList.isOpening]. */
     attachmentOpening: ((Attachment) -> Boolean)? = null,
-    /** See [AttachmentList.pendingAttachments]; held picks while creating. */
     pendingAttachments: List<PickedFile> = emptyList(),
-    /** See [AttachmentList.onRemovePending]. */
     onRemovePending: (Int) -> Unit = {},
-    /** See [WorkItemEditorForm.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
-    /** See [WorkItemEditorForm.resolveSelected]. */
     resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
-    /** See [ProjectsEditorFullScreen.projectTags]. */
     projectTags: List<ProjectTag> = emptyList(),
-    /** See [ProjectsEditorFullScreen.selectedTagIDs]. */
     selectedTagIDs: List<TagID> = emptyList(),
-    /** See [ProjectsEditorFullScreen.onTagToggled]. */
     onTagToggled: (TagID) -> Unit = {},
-    /** See [ProjectsEditorFullScreen.isAdmin]. */
     isAdmin: Boolean = false,
-    /** See [ProjectsEditorFullScreen.onManageTags]. */
     onManageTags: (() -> Unit)? = null,
 ) {
     ProjectsEditorFullScreen(
-        // The draft's own title, not the header: `ProjectsEditorFullScreen` names the
-        // surface itself. Passing the header string here bound the title *field* to a
-        // constant, which is why it read "New Task" and dropped every keystroke.
         title = title,
         details = details,
         storyPointsText = storyPointsText,
@@ -355,9 +286,6 @@ fun WorkItemEditorSheet(
         onCommentReply = onCommentReply,
         onCommentCancelReply = onCommentCancelReply,
         onCommentSubmit = onCommentSubmit,
-        // Attachment params: an empty list means this caller does not host a file list — the
-        // preview-only WorkItemEditorSheet passes nothing and renders no section at all,
-        // rather than an empty Attachments block under every preview.
         attachments = attachments,
         isAttaching = isAttaching,
         onAttachClick = onAttachClick,
@@ -380,16 +308,8 @@ fun WorkItemEditorSheet(
     )
 }
 
+/** Scrollable work item form with pinned bottom action bar. */
 @Composable
-/**
- * The same form, stretched to a full page, with its actions pinned.
- *
- * Shares the form's fields, the error banner, the key footnote and every button — the only
- * thing that changes is the frame. The tab bar floats over this route, so the scroll reserves
- * its inset plus the action slab's measured height; the slab itself is a sibling of the scroll
- * at `BottomCenter`, which keeps File Away / Cancel / Save reachable however far the form
- * scrolls. The back affordance in the header keeps an over-content edit from getting lost.
- */
 private fun ProjectsEditorFullScreen(
     title: String,
     details: String,
@@ -422,18 +342,13 @@ private fun ProjectsEditorFullScreen(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
-    /** See [WorkItemEditorSheet.hasUnsavedChanges]. */
     hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
-    /** See [WorkItemEditorForm.onBack]. */
     onBack: (() -> Unit)? = null,
     blockers: List<WorkItem> = emptyList(),
     onOpenBlocker: (WorkItemID) -> Unit = {},
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
-    // Thread params: `comments == null` means "this caller does not host a thread" —
-    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
-    // all, rather than an empty Comments block under every preview.
     comments: List<Comment>? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
@@ -442,62 +357,28 @@ private fun ProjectsEditorFullScreen(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
-    /**
-     * The directory behind the assignee picker, scoped to this project's members.
-     *
-     * 1.6: an assignee may only be someone the project has as a member, and the scoping is the
-     * host's because only the host holds both the project and the directory — see
-     * [assignableMembersFor].
-     */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
-    /**
-     * Resolves the current assignee, **unfiltered**.
-     *
-     * The counterpart to [searchMembers], and the reason a task assigned to a former member
-     * still shows who it is assigned to instead of reading Unassigned. See
-     * [MemberPicker.resolveSelected].
-     */
     resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
-    // Attachment params: an empty list means this caller does not host a file list — the
-    // preview-only WorkItemEditorScreen passes nothing and renders no section at all,
-    // rather than an empty Attachments block under every preview.
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
     onRemoveAttachment: (AttachmentID) -> Unit = {},
-    /** See [AttachmentList.syncStateOf]. */
     attachmentSyncState: ((Attachment) -> AttachmentSyncState)? = null,
-    /** See [AttachmentList.onOpen]. `null` means this caller has no platform opener. */
     onOpenAttachment: ((AttachmentID) -> Unit)? = null,
-    /** See [AttachmentList.isOpening]. */
     attachmentOpening: ((Attachment) -> Boolean)? = null,
-    /** See [AttachmentList.pendingAttachments]; held picks while creating. */
     pendingAttachments: List<PickedFile> = emptyList(),
-    /** See [AttachmentList.onRemovePending]. */
     onRemovePending: (Int) -> Unit = {},
-    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
     projectTags: List<ProjectTag> = emptyList(),
-    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
     selectedTagIDs: List<TagID> = emptyList(),
-    /** Toggles one tag in the draft. */
     onTagToggled: (TagID) -> Unit = {},
-    /** Whether the signed-in user may create this project's tags. See [WorkItemTagPicker]. */
     isAdmin: Boolean = false,
-    /** Opens the project editor, where an admin writes the catalog. See [WorkItemTagPicker]. */
     onManageTags: (() -> Unit)? = null,
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
-
-    // Cancel's guard: this surface owns the button, so the prompt travels with the screen
-    // rather than being re-wired by every host that hands it a model.
     var showDiscardConfirmation by remember { mutableStateOf(false) }
-
-    // NOTE: the old expand/collapse sheet seam is gone — the editor is always full-screen
-    // now. Keep `ProjectsEditorFullScreen` as the one body both surfaces share, because the
-    // only thing that changed between them was the frame around the form.
 
     Box(
         modifier = modifier
@@ -528,9 +409,6 @@ private fun ProjectsEditorFullScreen(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
                 ) {
-                    // The header names the surface ("New Task" / "Edit TT-1"); `title` is the
-                    // draft and belongs to the field below. Sharing one parameter between the
-                    // two was the defect: the field rendered this constant and never the draft.
                     ttText(
                         text = if (isCreating) {
                             stringResource(Res.string.work_item_editor_new_title)
@@ -621,7 +499,7 @@ private fun ProjectsEditorFullScreen(
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             ) {
                 ttText(
                     text = stringResource(Res.string.work_item_due_label),
@@ -675,27 +553,17 @@ private fun ProjectsEditorFullScreen(
                 pendingAttachments = pendingAttachments,
                 onRemovePending = onRemovePending,
             )
-            // `Modifier`, not the screen's `modifier` parameter: the parameter carries the
-            // shell's test tag and fill, and a Spacer wearing both becomes a second node
-            // under the editor's tag (and forces the scroll content to the viewport).
             Spacer(Modifier.height(40.dp))
         }
 
-// The form's actions, pinned rather than last: on a phone the details, comments and
-        // attachments push Save several screens down, and a save that has to be found is a
-        // draft the user abandons. The slab floats over the scroll and the scroll reserves its
-        // measured height, so nothing ends up permanently behind it.
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = ttSpacing.screenGutterLarge)
-                // Above the shell's tab bar instead of under it. Both are bottom-anchored, and
-                // the bar is drawn after this screen, so sharing the band would hide Save.
                 .padding(bottom = tabBarInset + ttSpacing.md)
                 .ttGlassCard()
-                // Block touches from passing through to the scrollable form behind
                 .background(Color.Transparent)
-                .pointerInput(Unit) { /* consume touches */ }
+                .pointerInput(Unit) { }
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
@@ -711,8 +579,6 @@ private fun ProjectsEditorFullScreen(
             ttGlassButton(
                 label = stringResource(Res.string.common_cancel),
                 onClick = {
-                    // Save and File Away leave without asking: they are what the draft was for.
-                    // Cancel is the one that destroys it, and only a draft with work in it asks.
                     if (hasUnsavedChanges) showDiscardConfirmation = true else onCancel()
                 },
                 modifier = Modifier.testTag(WorkItemCancelTag),
@@ -756,11 +622,8 @@ private fun WorkItemEditorForm(
     status: WorkItemStatus,
     priority: Priority,
     assigneeID: UserID?,
-    /** Who "me" is for the assignee picker, or `null` when no session is known. */
     currentUserID: UserID?,
-    /** What to call the signed-in user in the picker, or `null` for the "Me" fallback. */
     currentUserName: String?,
-    /** Label for [assigneeID] when it is neither `null` nor [currentUserID]. */
     otherAssigneeLabel: String?,
     hasDueDate: Boolean,
     recurrence: Recurrence?,
@@ -776,9 +639,6 @@ private fun WorkItemEditorForm(
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
     onStatusChanged: (WorkItemStatus) -> Unit,
-    // Attachment params: an empty list means this caller does not host a file list — the
-    // preview-only WorkItemEditorForm passes nothing and renders no section at all,
-    // rather than an empty Attachments block under every preview.
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
@@ -796,17 +656,7 @@ private fun WorkItemEditorForm(
     onOpenBlocker: (WorkItemID) -> Unit = {},
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
-    /**
-     * Returns to the sheet underneath this one, or `null` when nothing is underneath.
-     *
-     * Only a sheet stacked over another editor has one: the base editor is dismissed by
-     * Cancel/Save, while a sheet opened *from* a pill has a draft below it that must not be
-     * thrown away, so it needs a distinct gesture that pops exactly one level.
-     */
     onBack: (() -> Unit)? = null,
-    // Thread params: `comments == null` means "this caller does not host a thread" —
-    // the preview-only WorkItemEditorScreen passes nothing and renders no section at
-    // all, rather than an empty Comments block under every preview.
     comments: List<Comment>? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
@@ -815,11 +665,8 @@ private fun WorkItemEditorForm(
     onCommentReply: (CommentID) -> Unit = {},
     onCommentCancelReply: () -> Unit = {},
     onCommentSubmit: () -> Unit = {},
-    /** The project's tag catalog; empty renders no tag section. See [WorkItemTagPicker]. */
     projectTags: List<ProjectTag> = emptyList(),
-    /** The tags this draft carries, at most `TagRules.MAX_PER_ITEM`. */
     selectedTagIDs: List<TagID> = emptyList(),
-    /** Toggles one tag in the draft. */
     onTagToggled: (TagID) -> Unit = {},
 ) {
     Column(
@@ -980,7 +827,7 @@ private fun WorkItemEditorForm(
                     label = stringResource(Res.string.work_item_archive),
                     onClick = { if (!isBusy) onFileAway() },
                     modifier = Modifier.testTag(WorkItemFileAwayTag),
-                    style = TTGlassButtonStyle(tint = ttError()),
+                    style = TTGlassButtonStyle(tint = ttError(), prominent = true),
                 )
             }
             ttGlassButton(
@@ -993,7 +840,7 @@ private fun WorkItemEditorForm(
                 onClick = { if (canSave && !isBusy) onSave() },
                 modifier = Modifier.testTag(WorkItemSaveTag),
                 style = if (canSave && !isBusy) {
-                    TTGlassButtonStyle(tint = ttAccent())
+                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
                 } else {
                     TTGlassButtonStyle()
                 },
@@ -1005,7 +852,6 @@ private fun WorkItemEditorForm(
 const val WorkItemEditorScreenTag = "workItem.editor.screen"
 const val WorkItemEditorSheetTag = "workItem.editor.sheet"
 const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
-/** The chevron in a stacked sheet's header, present only when a sheet sits underneath it. */
 const val WorkItemBackTag = "workItem.editor.back"
 const val WorkItemStatusPickerTag = "workItem.editor.status"
 const val WorkItemPriorityPickerTag = "workItem.editor.priority"

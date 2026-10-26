@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -28,10 +29,8 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
-import com.tasktracker.designsystem.TTGlassSegmentedPicker
-import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.domain.Project
-import com.tasktracker.domain.sprintSummary
+import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_list_empty_body
 import com.tasktracker.resources.sprint_list_empty_title
@@ -42,27 +41,7 @@ import com.tasktracker.resources.sprint_section_scheduled
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * A project's sprints, as a list.
- *
- * ## The create action is always present, and that is the rule rather than an oversight
- *
- * Two unfinished sprints are allowed as long as their windows do not overlap, so "there is
- * already an open sprint" is not a reason to withhold the button — it is the normal state
- * of a project that plans ahead. What the store refuses is an **overlap**, and it refuses
- * it after a window has been chosen, naming the sprint in the way. Hiding the button would
- * hide the one action this screen is for, to prevent an error the window itself announces.
- *
- * The button is therefore unconditional; the form's own `blockedBySprintName` is where a
- * conflicting window is caught before the write, and the store's refusal is still there
- * for the race — another device created one between this read and the press — arriving as
- * the usual banner.
- *
- * ## Why this is a `LazyColumn` and the board is not
- *
- * The same reason [ProjectBacklogScreen] gives: this is one unbounded list with nothing
- * beside it to keep in step, which is the shape Compose's gesture handling is happiest
- * with. The board has columns that must not reflow and gives up laziness for a scrolling
- * `Row` instead.
+ * Screen displaying project sprints segmented into Active (In-Progress, Scheduled, Finished) and Archived lists.
  */
 @Composable
 fun SprintListScreen(
@@ -108,8 +87,6 @@ fun SprintListScreen(
                         onSelectProject = onSelectProject,
                     )
                 }
-                // Always present, whatever the list holds: overlapping windows are what is
-                // refused, not the second sprint — see the class comment.
                 ttGlassIconButton(
                     image = ttActionIcons.add,
                     contentDescription = stringResource(Res.string.sprint_list_new),
@@ -133,14 +110,8 @@ fun SprintListScreen(
                     }
                 },
             )
-            // Active is the three partitions of a sprint's window; Archive is one flat list.
-            // The picker only chooses between the two, and the switch is screen-local state
-            // rather than a reload — the model already holds both, so changing segment must
-            // not re-read the store.
             when (section) {
-                // `null` is still loading, and it is kept distinct from `true` because a
-                // screen that claimed "no sprints" during the first read would flash an
-                // empty state over a populated list on every cold start.
+                // null represents initial load in flight; true triggers empty state
                 SprintSection.Active -> if (activeIsEmpty == true) {
                     ProjectsEmptyState(
                         title = stringResource(Res.string.sprint_list_empty_title),
@@ -166,8 +137,6 @@ fun SprintListScreen(
                     }
                 }
 
-                // No headers here: archived sprints are filed away, not "scheduled",
-                // "in progress" or "finished" — see `SprintListModel.archivedRows`.
                 SprintSection.Archived -> if (archivedIsEmpty == true) {
                     ProjectsEmptyState(
                         title = stringResource(Res.string.sprint_list_empty_title),
@@ -185,16 +154,10 @@ fun SprintListScreen(
     }
 }
 
-/** The list screen, and its rows. */
 const val SprintListScreenTag = "sprints.list"
 const val SprintListTag = "sprints.list.rows"
 const val SprintListNewTag = "sprints.list.new"
 
-// ---------------------------------------------------------------------------------------------
-// Section helpers
-// ---------------------------------------------------------------------------------------------
-
-/** A section header with a label and the count of items in it. */
 @Composable
 private fun SprintSectionHeader(
     label: String,
@@ -221,7 +184,6 @@ private fun SprintSectionHeader(
     }
 }
 
-/** An empty section placeholder. */
 @Composable
 private fun EmptySection(
     title: String,
@@ -241,7 +203,6 @@ private fun EmptySection(
     }
 }
 
-/** A section's list of sprint rows. */
 @Composable
 private fun SprintSectionList(
     rows: List<SprintListRow>,
@@ -249,8 +210,7 @@ private fun SprintSectionList(
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
-        modifier = modifier
-            .testTag(SprintListTag),
+        modifier = modifier.testTag(SprintListTag),
         contentPadding = PaddingValues(bottom = ttSpacing.xxxl),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
@@ -263,7 +223,6 @@ private fun SprintSectionList(
     }
 }
 
-/** The in-progress section: started sprints still under way. */
 @Composable
 private fun InProgressSection(
     rows: List<SprintListRow>,
@@ -283,7 +242,6 @@ private fun InProgressSection(
     }
 }
 
-/** The scheduled section: future sprints not yet started. */
 @Composable
 private fun ScheduledSection(
     rows: List<SprintListRow>,
@@ -303,7 +261,6 @@ private fun ScheduledSection(
     }
 }
 
-/** The finished section: closed sprints with their summaries. */
 @Composable
 private fun FinishedSection(
     rows: List<SprintListRow>,

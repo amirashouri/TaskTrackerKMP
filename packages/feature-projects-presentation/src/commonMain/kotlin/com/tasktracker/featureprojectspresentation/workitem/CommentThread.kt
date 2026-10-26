@@ -36,27 +36,8 @@ import com.tasktracker.resources.comment_send
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * One work item's comment thread: the conversation, plus the box to add to it.
- *
- * ## Threading is grouped, storage is flat
- *
- * [Comment.parentID] points at the comment being answered, and this view turns that flat
- * list into a tree: top-level comments first, replies indented under the one they answer,
- * at any depth. The store deliberately keeps the list flat (see the domain's `Comment`)
- * so a reply whose parent arrives later — or whose parent lives on another device — can
- * still be written; grouping is a rendering decision and belongs here.
- *
- * ## The composer is absent rather than disabled with no session
- *
- * [canComment] is `false` when no signed-in user is known, and the box does not draw at
- * all. A disabled Send the user can never enable teaches nothing; the domain refuses an
- * unattributed comment on purpose ([Comment.authorID] is non-null), so hiding the
- * affordance is the honest UI for "cannot attribute".
- *
- * **Replying** is a mode of the one composer, not a second box per row: tapping Reply
- * anywhere in the thread redirects the same draft, and [onCancelReply] backs out. One
- * box means one draft, one send button, and no state about which of several boxes has
- * focus.
+ * Recursive comment thread component supporting flat storage grouping, nested replies,
+ * and single-box inline composer state.
  */
 @Composable
 fun CommentThread(
@@ -109,9 +90,6 @@ fun CommentThread(
         }
         if (canComment) {
             replyTo?.let { parentID ->
-                // The map is keyed by author, so the parent itself has to supply the id —
-                // and a parent that is gone (its thread changed while this composer held
-                // the target) falls back to the bare word rather than a wrong name.
                 val parent = comments.firstOrNull { it.id == parentID }
                 val parentLabel = parent
                     ?.let { "“${authorNames[it.authorID] ?: it.authorID.stringValue}”" }
@@ -160,13 +138,6 @@ fun CommentThread(
     }
 }
 
-/**
- * One comment and its replies, indented.
- *
- * Replies recurse rather than flattening at one level: a reply to a reply is a real shape
- * the flat store allows, and cutting the tree at depth two would misfile it as a
- * top-level comment merely because it is deep.
- */
 @Composable
 private fun CommentBranch(
     comment: Comment,
@@ -184,8 +155,6 @@ private fun CommentBranch(
             verticalAlignment = Alignment.Top,
         ) {
             if (depth > 0) {
-                // Indentation as spacer at the head of the row, so the disc, name and body
-                // move together and the thread's left edge stays a single read.
                 androidx.compose.foundation.layout.Spacer(
                     Modifier.padding(start = ttSpacing.xl * depth),
                 )
@@ -203,9 +172,6 @@ private fun CommentBranch(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     ttText(
-                        // The honest fallback is the raw id, the same one the members
-                        // list showed when the directory could not name somebody: a
-                        // blank author is worse than an ugly one.
                         text = authorNames[comment.authorID] ?: comment.authorID.stringValue,
                         style = ttTypography.footnote,
                         color = ttLabel(),
@@ -249,5 +215,4 @@ const val WorkItemCommentSendTag = "workItem.editor.comments.send"
 const val WorkItemCommentCancelReplyTag = "workItem.editor.comments.reply.cancel"
 
 fun WorkItemCommentTag(id: CommentID): String = "workItem.editor.comment.$id"
-
 fun WorkItemCommentReplyTag(id: CommentID): String = "workItem.editor.comment.reply.$id"

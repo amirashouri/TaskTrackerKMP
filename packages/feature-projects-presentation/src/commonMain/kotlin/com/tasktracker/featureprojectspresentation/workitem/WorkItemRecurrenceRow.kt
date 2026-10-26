@@ -29,29 +29,14 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
- * The repeat rule, as a wrapping row of glass choices.
- *
- * ## The day a rule repeats on comes from the due date, not from a second picker
- *
- * "Weekly" needs a weekday and "Monthly" a day of the month, and offering those as
- * separate pickers turns a two-tap setting into a small calendar problem — half the
- * monthly options do not exist in February. So a choice takes its day from the item's
- * due date as it stands at that moment (today when there is none): a task due Friday
- * repeats on Fridays, which is what the user meant when they set the due date and the
- * repeat together. The day is fixed when the choice is made, not re-derived on every
- * recomposition, so an existing rule keeps its stored weekday even if the due date
- * moves afterwards — re-picking the cadence is how a moved due date re-anchors it.
- *
- * `until` is not offered here. It is carried through unchanged when the cadence is
- * switched, so a series that was set to end keeps its end; the row only decides the
- * cadence and whether there is a rule at all.
+ * Recurrence rule flow picker anchoring weekly/monthly frequency patterns to due dates or current date.
  */
 @Composable
 fun WorkItemRecurrenceRow(
     recurrence: Recurrence?,
     onRecurrenceChanged: (Recurrence?) -> Unit,
     modifier: Modifier = Modifier,
-    /** The instant the rule takes its day from; today's date in the system zone when `null`. */
+    /** Instant used to anchor day/week/month calculations; defaults to system current time. */
     anchorDate: Instant? = null,
 ) {
     val anchor = anchorDay(anchorDate)
@@ -77,10 +62,6 @@ fun WorkItemRecurrenceRow(
     }
 }
 
-/**
- * The five things the picker can say, spelled as an enum so the lens has a stable
- * position per option and the model never has to compare constructed rules for equality.
- */
 private enum class RecurrenceChoice(val labelRes: StringResource) {
     None(Res.string.work_item_repeat_none),
     Daily(Res.string.work_item_repeat_daily),
@@ -111,5 +92,4 @@ private fun anchorDay(anchorDate: Instant?): LocalDate {
     return instant.toLocalDateTime(TimeZone.currentSystemDefault()).date
 }
 
-/** The repeat row's picker, for scenario tests. */
 const val WorkItemRecurrencePickerTag = "workItem.editor.recurrence"

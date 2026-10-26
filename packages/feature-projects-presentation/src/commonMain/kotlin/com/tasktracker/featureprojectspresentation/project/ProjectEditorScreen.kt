@@ -48,35 +48,8 @@ import com.tasktracker.resources.project_name_label
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The full-screen project editor, for creating a project or renaming an existing one.
- *
- * ## Why this exists alongside [NewProjectSheet]
- *
- * They are two shapes of the same form, and the difference is only where they are opened
- * from. A project is created from the board, so creating draws *over* the board in a sheet
- * and the board is still there when it closes. Editing a project is a deliberate,
- * whole-screen act reached from the project's own header, so it gets a screen.
- *
- * Both are stateless and take the model's state, which is why they cannot drift in what
- * fields they offer: the fields live in [ProjectsTextField] and the rules live in
- * [ProjectEditorModel], and neither screen decides what is valid.
- *
- * ## The title says which of the two this is
- *
- * "New Project" and "Edit Apollo Programme" are different screens that share a form, and a
- * user who cannot tell which one is open will save an edit expecting a new project. So the
- * title is a parameter of the mode rather than a label the caller remembers to change - and
- * the confirm button follows it, reading Create when creating and Save when editing, for the
- * same reason.
- *
- * ## The key prefix is shown, never typed
- *
- * A prefix is a permanent public identity, and the project already suggests one derived from
- * the name (see [NewProjectSheet] for why it is derived rather than asked for). Here it is
- * rendered read-only in both modes, and the explanation sits under it. In edit mode the
- * reason is hard - the project has already issued task keys from this prefix and they are
- * quoted in issues forever - and stating that in the editor is cheaper than answering it in
- * a support thread later.
+ * Full-screen editor for creating or updating a project.
+ * Renders read-only key prefix and prompts discard confirmation if [hasUnsavedChanges] is true.
  */
 @Composable
 fun ProjectEditorScreen(
@@ -89,32 +62,15 @@ fun ProjectEditorScreen(
     onDetailsChanged: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    /**
-     * Whether closing now would throw away work.
-     *
-     * Supplied by the model rather than derived here: this screen has no snapshot to compare
-     * against, and a form that guessed "dirty" from a non-blank field would prompt on an
-     * unchanged edit. Clean and dirty differ only in whether Cancel asks first.
-     */
+    /** Prompts confirmation on cancel if true. */
     hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     errorMessage: String? = null,
     isBusy: Boolean = false,
-    /**
-     * An optional section between the fields and the actions.
-     *
-     * A slot rather than tag parameters because the shared screen serves two editors with
-     * different rights: the member's offline editor has no tag management at all, while the
-     * admin's adds it. A slot keeps the tag UI in its own file and keeps this screen from
-     * growing a `canManageTags` flag that the member editor would have to pass `false` to
-     * forever. `null` — the default — renders exactly the screen that existed before tags.
-     */
+    /** Optional custom slot (e.g. admin tag management). */
     tagsSection: (@Composable () -> Unit)? = null,
 ) {
     val saveEnabled = canSave && !isBusy
-
-    // Kept here rather than in a host: Cancel is this screen's own action, and every caller
-    // that hands it a draft must get the same guard without re-implementing one.
     var showDiscardConfirmation by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -145,9 +101,6 @@ fun ProjectEditorScreen(
             ProjectsTextField(
                 title = stringResource(Res.string.project_key_prefix_label),
                 value = keyPrefix,
-                // No `onValueChange`: the field cannot be typed into, so there is nothing to
-                // report. The model still exposes one for a caller that wants to offer a
-                // suggestion, and it refuses the call while editing regardless.
                 onValueChange = {},
                 modifier = Modifier.testTag(ProjectEditorKeyPrefixTag),
                 placeholder = stringResource(Res.string.project_key_prefix_placeholder),
@@ -187,8 +140,6 @@ fun ProjectEditorScreen(
                 ttGlassButton(
                     label = stringResource(Res.string.common_cancel),
                     onClick = {
-                        // A clean form closes at once: prompting there would make Cancel feel
-                        // broken on the common case. Only work that would disappear asks first.
                         if (hasUnsavedChanges) showDiscardConfirmation = true else onCancel()
                     },
                     modifier = Modifier.testTag(ProjectEditorCancelTag),
@@ -199,9 +150,6 @@ fun ProjectEditorScreen(
                     } else {
                         stringResource(Res.string.common_save)
                     },
-                    // Disabled rather than merely ignored, and *styled* as disabled: a button
-                    // that looks live and does nothing is the more annoying of the two, because
-                    // the user cannot tell whether the tap landed.
                     onClick = { if (saveEnabled) onSave() },
                     modifier = Modifier.testTag(ProjectEditorSaveTag),
                     style = if (saveEnabled) {

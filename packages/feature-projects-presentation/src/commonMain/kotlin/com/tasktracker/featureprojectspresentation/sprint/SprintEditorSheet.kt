@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -21,7 +22,6 @@ import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
-import com.tasktracker.core.UserID
 import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
@@ -43,39 +43,8 @@ import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The create-and-edit form, as a sheet.
- *
- * ## One sheet for both modes
- *
- * Creating a sprint and editing one are the same four fields, and a user who has just
- * created a sprint is usually straight into changing its window — so they are one
- * composable with a mode flag, the way [NewProjectSheet] is. The title and the confirm
- * label follow the mode, for the same reason [ProjectEditorScreen] does it that way: a
- * user who cannot tell which form is open will save an edit expecting a new sprint.
- *
- * ## Two goal fields, and one of them freezes
- *
- * The number ([SprintEditorModel.goalStoryPoints], the cap) and the sentence
- * ([SprintEditorModel.goal]) are separate inputs because they are separate facts, and they
- * diverge when the owner locks the sprint: `windowLocked` disables the number and both
- * dates, dims them with the same alpha every disabled glass control uses, and posts the
- * note under the title saying why. Name, sentence and owner stay live — they describe the
- * sprint rather than commit it. The sheet is handed that one flag rather than each field
- * deciding for itself, so the disabled set cannot drift from
- * [SprintEditorModel.windowLocked].
- *
- * ## The dates are two `TTDateField`s and both errors are under them
- *
- * The window rules ([SprintEditorModel.endIsBeforeStart] and
- * [SprintEditorModel.blockedBySprintName]) are shown against the **end** field rather than
- * as a banner. A banner says something went wrong; a message under the field says which
- * field is wrong, and these are the rules in the form about the relationship between the
- * window and something outside it — the start field, or an existing sprint — rather than
- * about the field alone.
- *
- * The overlap note is rendered only when the window is otherwise well-formed, because
- * [SprintEditorModel.blockedBySprintName] is `null` for a backwards window: showing both
- * under one field would be two complaints about one draft.
+ * Bottom sheet form for creating and editing sprints.
+ * Disables date range and story point cap inputs when [windowLocked] is true.
  */
 @Composable
 fun SprintEditorSheet(
@@ -99,30 +68,18 @@ fun SprintEditorSheet(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
-    /**
-     * Whether the window and the point cap are frozen. The two fields answer to it, the
-     * note under the title names it, and the prose goal and the text fields deliberately
-     * do not — see [SprintEditorModel.windowLocked].
-     */
+    /** Freezes dates and goal story point inputs when true. */
     windowLocked: Boolean = false,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
     onDismissed: () -> Unit = {},
     today: LocalDate? = null,
-    /** The directory behind the owner picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
-    /** Resolves the selected owner, unfiltered; see [MemberPicker.resolveSelected]. */
     resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
-    /**
-     * A refusal that came from the store rather than the form's local checks. The form
-     * stays advisory; a race (another device creating a sprint after the sibling read) is
-     * authoritative, and it arrives as this banner so the user knows why Save did nothing.
-     * Rendered above the action row because the sheet scrolls and the buttons are the
-     * targets the user just pressed.
-     */
+    /** Server or store validation error banner text. */
     errorMessage: String? = null,
     onDismissError: () -> Unit = {},
 ) {
@@ -147,9 +104,6 @@ fun SprintEditorSheet(
                 style = ttTypography.title,
                 color = ttLabel(),
             )
-            // Beside the title rather than under any one field, because it is a statement
-            // about the form as a whole: it says which half of the form has stopped
-            // accepting input, not that one of its fields is wrong.
             if (windowLocked) {
                 ttText(
                     text = stringResource(Res.string.sprint_editor_locked_note),
@@ -200,9 +154,6 @@ fun SprintEditorSheet(
                     today = today,
                     modifier = Modifier.testTag(SprintEditorEndDateTag),
                 )
-                // Under the field, not in a banner: this is the only rule in the form about
-                // the relation between two inputs, so it belongs beside the one the user has
-                // to change. A banner would say *what* is wrong and not *which field*.
                 if (endIsBeforeStart == true) {
                     ttText(
                         text = stringResource(Res.string.sprint_end_before_start_field),
@@ -211,9 +162,6 @@ fun SprintEditorSheet(
                         modifier = Modifier.testTag(SprintEditorWindowErrorTag),
                     )
                 }
-                // Mutually exclusive with the note above in practice — the model reports
-                // no blocker for a backwards window — but the two are drawn independently
-                // so the screen needs no rule about which error wins.
                 blockedBySprintName?.let { blocker ->
                     ttText(
                         text = stringResource(Res.string.sprint_editor_overlap_field, blocker),
@@ -223,13 +171,11 @@ fun SprintEditorSheet(
                     )
                 }
             }
-            // The same picker the work item editor's assignee field uses: ownership is an
-            // id, and the searchable directory is the whole of what the picker offers.
             WorkItemAssigneeRow(
                 assigneeID = ownerID,
                 onAssigneeChanged = onOwnerChanged,
                 searchMembers = searchMembers,
-            resolveSelected = resolveSelected,
+                resolveSelected = resolveSelected,
                 title = stringResource(Res.string.sprint_owner_label),
                 testTag = SprintEditorOwnerTag,
             )
@@ -261,10 +207,8 @@ fun SprintEditorSheet(
     }
 }
 
-/** The editor sheet. */
 const val SprintEditorSheetTag = "sprints.editor"
 const val SprintEditorNameTag = "sprints.editor.name"
-/** The goal in prose. The number has [SprintEditorGoalPointsTag]; see `Sprint`'s two goals. */
 const val SprintEditorGoalTag = "sprints.editor.goal"
 const val SprintEditorGoalPointsTag = "sprints.editor.goalPoints"
 const val SprintEditorLockedNoteTag = "sprints.editor.lockedNote"

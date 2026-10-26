@@ -55,20 +55,6 @@ import com.tasktracker.resources.status_in_review
 import com.tasktracker.resources.status_todo
 import org.jetbrains.compose.resources.stringResource
 
-/**
- * The pieces the project screens share, gathered here rather than in a `components`
- * package.
- *
- * The obvious alternative is to reach for `LabelledField` and `ErrorBanner` from
- * `:packages:feature-auth-presentation`. They are `internal`-shaped, private to that
- * module, and a shared UI module cannot be a dependency of a feature: it would be a
- * cycle. So this file re-declares the two shapes, which is duplication of *code* and not
- * of *design* - both copies read `ttSpacing`, `ttRadius` and `ttTypography`, so a change to
- * the spacing ramp moves both. The alternative - promoting them to `:packages:design-system`
- * - is the right answer and belongs in its own phase, because it changes a finished module's
- * public surface.
- */
-
 @Composable
 internal fun ProjectsLabelledField(
     title: String,
@@ -112,14 +98,7 @@ internal fun ProjectsLabelledField(
     }
 }
 
-/**
- * A single-line text field with a label, or a read-only rendering of one.
- *
- * A read-only field is still a field, not a disabled `BasicTextField`: a disabled field
- * greys its text and takes it out of the semantics tree's editable set, and the project
- * key prefix is a fact the user needs to *read* - it is the prefix every task key will
- * carry - rather than a value they are being prevented from changing.
- */
+/** Labelled text field supporting both editable input and read-only text presentation. */
 @Composable
 internal fun ProjectsTextField(
     title: String,
@@ -129,14 +108,6 @@ internal fun ProjectsTextField(
     placeholder: String? = null,
     isFocused: Boolean = false,
     isReadOnly: Boolean = false,
-    /**
-     * Whether the value may be changed at all — the counterpart of [isReadOnly], for the
-     * case that one is *not*: a field the form refuses while the sprint is under way is a
-     * value the user is being prevented from changing, which is what the read-only rendering
-     * above says it is not. `BasicTextField` takes it, so the node answers
-     * `assertIsNotEnabled()` on the same tag a tap would land on, and the ink drops to
-     * secondary so the field reads dead rather than merely quiet.
-     */
     enabled: Boolean = true,
     keyboardType: KeyboardType = KeyboardType.Text,
     capitalization: KeyboardCapitalization = KeyboardCapitalization.Sentences,
@@ -185,14 +156,7 @@ internal fun ProjectsTextField(
     }
 }
 
-/**
- * A title and a body, for a list that has nothing in it.
- *
- * Both halves are parameters because every empty state in this module is a different
- * sentence - "no project yet" and "this backlog is empty" are not variants of one - and
- * collapsing them into a single empty-state component with an enum parameter would put
- * the choice back in a `when` somewhere with less context than the screen has.
- */
+/** Empty state container rendering a title and instructional body. */
 @Composable
 internal fun ProjectsEmptyState(
     title: String,
@@ -204,32 +168,16 @@ internal fun ProjectsEmptyState(
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
     ) {
         ttText(text = title, style = ttTypography.titleSmall, color = ttLabel())
+        // Uses ttBodyLabel() to satisfy WCAG contrast on light canvas
         ttText(
-              // `ttBodyLabel`, not `ttLabelSecondary()`. This is instructional copy — "no
-              // projects yet, create one" — and it is the only thing on an empty screen, so it
-              // carries the screen's whole meaning. At 60% alpha the secondary label measures
-              // 3.44:1 on the light canvas, below the 4.5:1 bar, and the one message an empty
-              // state exists to deliver would be the hardest to read on the screen.
-              text = body,
-              style = ttTypography.subheadline,
-              color = ttBodyLabel(),
-          )
+            text = body,
+            style = ttTypography.subheadline,
+            color = ttBodyLabel(),
+        )
     }
 }
 
-/**
- * The frame every preview in this module draws into.
- *
- * `AmbientBackdrop` takes a [Modifier] and paints a background - it does not take content
- * - so the content has to be a sibling, not a child. Writing that out seven times is how
- * one preview ends up with a `Column` floating on the raw canvas with no ambient wash
- * behind it, which looks plausible and hides contrast problems.
- *
- * Both schemes are drawn by the preview that uses it, and the convention is to pin
- * [scheme] rather than use [ThemeScheme.System] for anything about colour: a system-driven
- * preview changes with the machine's settings, and a screenshot taken on a light-mode
- * machine cannot then be compared with one taken on a dark-mode machine.
- */
+/** Preview scaffold rendering canvas background and ambient backdrop. */
 @Composable
 internal fun ProjectsPreview(
     scheme: ThemeScheme,
@@ -243,14 +191,6 @@ internal fun ProjectsPreview(
     }
 }
 
-/**
- * The user-facing name of a [WorkItemStatus].
- *
- * An exhaustive `when` over all six cases, and that is the point: `Priority` gained a
- * `Critical` case in this port, and a table lookup would have quietly rendered it as
- * "High". The compiler then fails here when a status is added, which is the only moment
- * the missing label can still be caught.
- */
 @Composable
 internal fun statusLabel(status: WorkItemStatus): String = when (status) {
     WorkItemStatus.Backlog -> stringResource(Res.string.status_backlog)
@@ -270,19 +210,9 @@ internal fun priorityLabel(priority: Priority): String = when (priority) {
     Priority.Critical -> stringResource(Res.string.priority_critical)
 }
 
-/**
- * Turns a field's label into a stable test tag.
- *
- * `title.tagSuffix()` rather than passing a tag per call site: there are nine fields
- * across this module's two editors, and a hand-written tag at each is nine chances to
- * write `"project.name"` in one and `"projectName"` in another. Deriving it from the
- * label the field already has means a test asks for the field the same way the screen
- * names it.
- */
 private fun String.tagSuffix(): String =
     lowercase().replace(' ', '.').filter { it.isLetterOrDigit() || it == '.' }
 
 private const val FOCUS_ANIMATION_MILLIS = 150
-// `val`, not `const val`: Dp is a value class, so a `const val` is not allowed.
 private val FOCUSED_RING_WIDTH = 2.dp
 private val RESTING_RING_WIDTH = 1.dp

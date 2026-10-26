@@ -1,17 +1,8 @@
 package com.tasktracker.featureprojectspresentation
 
 /**
- * The key prefix to offer for a project named [value], as the create form fills one in while the
- * name is typed.
- *
- * The initials of the first two words, falling back to the first two characters of a one-word
- * name: "Task Tracker" suggests `TT`, "Tracker" suggests `TR`. The prefix is the root of every
- * work item key the project will ever issue, so it is *offered* from the name and then left
- * editable rather than derived at save time.
- *
- * Shared by the board's editor and the admin create pane, because two forms that fill the same
- * field from the same name have to agree on the rule: a project named once in each would
- * otherwise issue differently-prefixed keys.
+ * Suggests a 2-character uppercase key prefix from [value] (e.g. "Task Tracker" -> "TT", "Tracker" -> "TR").
+ * Uses the initials of the first two words, falling back to the first two alphanumeric characters of a single word.
  */
 internal fun suggestKeyPrefix(value: String): String {
     val words = value.split(' ', '-', '_').filter(String::isNotBlank)

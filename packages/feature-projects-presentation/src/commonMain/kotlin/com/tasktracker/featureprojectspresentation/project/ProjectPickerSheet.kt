@@ -31,28 +31,8 @@ import com.tasktracker.resources.projects_empty_body
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The list of projects to switch to, drawn over whatever opened it.
- *
- * ## Why it never writes
- *
- * [ProjectPickerModel] is a reader. Choosing a project is a navigation decision, not a
- * change to any project, so this sheet has no save and no confirm - a row is tapped and the
- * sheet is gone. The alternative, a picker with an OK button, asks the user to approve a
- * choice they have already made by tapping the row, and gives them a second chance to leave
- * the app in the state they were in before.
- *
- * The exception is [onCreateProject], which is a *different* action and is drawn as a
- * separate row at the end rather than as an option among the projects. A "+" that is
- * visually a project invites a user to tap it, discover it is not one, and tap again.
- *
- * ## Why the frame comes from [TTBottomSheetScaffold]
- *
- * This used to draw its own surface — a `ttGlassSurface` with no `base`, inside a hand-rolled
- * scrim — while the project and task editors took the shared scaffold. That put a translucent,
- * accent-tinted panel at 0.3025 alpha behind a list of project names, which was reported as
- * the sheet being too see-through. It was not a difference in the design system's intent; it
- * was this file opting out of it. The scaffold owns the frame now, so there is no second
- * spelling of "a modal sheet" left to drift.
+ * Bottom sheet displaying available projects for switching.
+ * Tapping a project immediately invokes [onSelect] without an intermediate confirmation step.
  */
 @Composable
 fun ProjectPickerSheet(
@@ -70,9 +50,7 @@ fun ProjectPickerSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         onDismissed = onDismissed,
-        // The list below is a `LazyColumn` and stays one. A project list is unbounded in
-        // principle and long in practice, so it should not hold every row's composition the
-        // way a `Column` in the scaffold's scroll would.
+        // Disable scaffold outer scroll so nested LazyColumn manages its own scroll and recycling
         scrollable = false,
     ) {
         ProjectPickerContent(
@@ -84,13 +62,6 @@ fun ProjectPickerSheet(
     }
 }
 
-/**
- * The picker's body, and only its body.
- *
- * No surface and no padding here: the scaffold draws the frame and pads it at `xxl`, the same
- * arrangement the project and task editors get. Padding this as well is what would have kept
- * the sheets visually different after the surface was unified.
- */
 @Composable
 private fun ProjectPickerContent(
     projects: List<PickableProject>,
@@ -161,7 +132,6 @@ private fun PickerRow(
         ttText(
             text = project.name,
             style = ttTypography.callout,
-            // The selection is carried by weight and the checkmark, not by colour alone.
             color = if (isSelected) ttLabel() else ttLabelSecondary(),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -178,5 +148,4 @@ const val ProjectPickerSheetTag = "picker.sheet"
 const val ProjectPickerListTag = "picker.rows"
 const val ProjectPickerNewTag = "picker.new"
 
-/** Suffixed with the id, because two projects can share a name and a key prefix is not shown here. */
 fun ProjectPickerRowTag(projectID: ProjectID): String = "picker.row.${projectID.stringValue}"

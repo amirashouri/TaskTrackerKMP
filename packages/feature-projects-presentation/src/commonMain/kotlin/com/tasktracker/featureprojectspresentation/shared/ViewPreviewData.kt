@@ -1,18 +1,21 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
+import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.CommentID
-import com.tasktracker.core.TestDateProvider
-import com.tasktracker.core.WorkItemID
-import com.tasktracker.core.UserID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TagID
+import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.UserID
+import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomWorkItemID
+import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -34,111 +37,33 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
-import com.tasktracker.core.AttachmentID
-import com.tasktracker.core.randomAttachmentID
-import com.tasktracker.domain.Attachment
 
 /**
- * Fixtures for previews, and a [ProjectRepositoryPort] small enough to stand in for a store.
- *
- * ## Why this lives in `commonMain`
- *
- * The same reason `AuthPreviewData` does: the KMP convention gives this module no `debug`
- * source set, and a fixture in `commonTest` is not reachable from a `commonMain` preview.
- * It is also what lets a Compose UI test - which runs in `commonTest` - reuse the same
- * shapes the previews show, so a screen can be written against the fixtures before its real
- * model exists.
- *
- * ## Why this is not the test fake
- *
- * `FakeProjectRepository` in `commonTest` records calls, can fail a chosen one, and asserts
- * nothing about ordering. This one does the opposite: it is *read-mostly*, cheap, and
- * deterministic, because a preview should be able to ask for a board with one card in one
- * column without arranging a scenario. A preview that has to be set up like a test stops
- * being used for layout.
- *
- * The one behaviour it does keep from the real port is the one that took an afternoon to
- * find: **every read returns a copy.** `BoardProjection` and its siblings are `data class`
- * values over *mutable* entities, and a model holds one in `mutableStateOf`, whose
- * `structuralEqualityPolicy` discards a write whose new value compares equal to the old.
- * With a shared instance, mutating a status changes the entity *inside* the projection
- * already on screen, the new projection compares equal, the write is dropped, and the screen
- * silently keeps stale data. `RoomProjectRepository` maps each row to a fresh entity per
- * read; this does the same, and the test fake does too.
+ * Deterministic preview fixtures and an in-memory [ProjectRepositoryPort] implementation.
+ * All repository reads return defensive copies to ensure Compose [mutableStateOf] triggers updates.
  */
 object ViewPreviewData {
 
-    /**
-     * A fixed instant, so a preview does not change with the wall clock.
-     *
-     * A preview of the archive grouped by month that shows a different month each time it is
-     * opened cannot be compared against a screenshot, which is most of what a preview is
-     * for.
-     */
     val instant: Instant = Instant.parse("2026-03-15T12:00:00Z")
 
-    /**
-     * The one identity previews assign work to.
-     *
-     * A fixed id rather than a random one, so a preview's assignee and a preview's board
-     * filter can be pointed at the same person by construction. It is not a real account —
-     * previews have no session — which is why the picker label in a preview passes the
-     * name alongside it rather than resolving through the directory.
-     */
     val previewUserID: UserID = UserID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
-
-    /**
-     * A second person previews can put on a project, so a member row is more than one chip.
-     *
-     * Fixed for the same reason [previewUserID] is: a preview's pill must render the same
-     * initials every time it is opened. "Grace" is not a real account either.
-     */
     val previewGraceID: UserID = UserID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
-
-    /**
-     * A third project member previews can put on a project, deliberately left unnamed.
-     *
-     * The directory cannot name a member it has never seen, and the sheet's honest fallback
-     * is the raw id — so a preview that shows only named pills is a preview of a case that
-     * does not yet exist in production. This one keeps the unnamed path on the page.
-     */
     val previewUnnamedUserID: UserID = UserID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
 
-    /**
-     * The members [seededProject] carries, and the set sheet previews render.
-     *
-     * Two named plus one unnamed, so a preview shows the disc-and-initials pill, the name
-     * fallback, and the add-me affordance (Amir is on the list, so add-me hides) all at once.
-     */
     val previewMemberIDs: List<UserID> = listOf(previewUserID, previewGraceID, previewUnnamedUserID)
 
-    /**
-     * The display name previews put beside [previewUserID].
-     *
-     * Cards and stacks take a resolved name rather than an id, so a preview that wants the
-     * assignee pill to appear hands this map the same way a host hands the real one it got
-     * from the directory.
-     */
     val previewUserNames: Map<UserID, String> = mapOf(
         previewUserID to "Amir",
         previewGraceID to "Grace",
     )
 
-    /**
-     * The directory a preview's member picker searches, so a preview renders the real
-     * control rather than an empty list.
-     *
-     * Filters [previewUserNames] the way the real directory does — case-insensitive
-     * substring, blank query returns all — so a preview's list has the shape production's
-     * has, under the same port method the host passes.
-     */
     val previewSearchMembers: suspend (String) -> List<User> = { query ->
         val normalised = query.trim().lowercase()
         previewUserNames
             .filter { (id, name) ->
                 normalised.isEmpty() ||
-                    name.lowercase().contains(normalised) ||
-                    id.stringValue.contains(normalised)
+                        name.lowercase().contains(normalised) ||
+                        id.stringValue.contains(normalised)
             }
             .map { (id, name) -> User(id = id, email = "${name.lowercase()}@example.com", displayName = name) }
             .sortedBy { it.preferredGreeting.lowercase() }
@@ -146,17 +71,8 @@ object ViewPreviewData {
 
     private val zone: TimeZone = TimeZone.UTC
 
-    /**
-     * The zone a preview's sprint dates are read in.
-     *
-     * Public because a preview that builds a [SprintListRow] or a [SprintDetail] by hand has
-     * to convert the same instants the models convert, and reading them in a different zone
-     * would make a preview disagree with the screen it is previewing. `sprintLocalDate`
-     * takes the zone as a parameter for exactly this reason.
-     */
     val previewZone: TimeZone = zone
 
-    /** The board a first launch starts with, matching the store's own seed. */
     val seededProject: Project = Project(
         id = projectID(1),
         keyPrefix = "TT",
@@ -189,13 +105,6 @@ object ViewPreviewData {
         updatedAt = instant,
     )
 
-    /**
-     * One task per board column, plus one for the backlog and one for the archive.
-     *
-     * Every column gets a card on purpose. A preview with two cards in one column and empty
-     * columns everywhere else cannot show a column header's real height, and the widest
-     * thing a board draws is a card in the column with the longest status name.
-     */
     val workItems: List<WorkItem> = buildList {
         add(item("TT-1", seededProject.id, "Fix the offline queue", status = WorkItemStatus.Backlog))
         add(item("TT-2", seededProject.id, "Write the migration", status = WorkItemStatus.Todo))
@@ -257,8 +166,6 @@ object ViewPreviewData {
                 status = WorkItemStatus.InProgress,
                 priority = Priority.High,
                 assigneeID = previewUserID,
-                // Past due against `instant`, and *not* finished with - which is the only
-                // combination the overdue chip is for, and the reason the fixture needs one.
                 dueDate = Instant.parse("2026-03-10T00:00:00Z"),
             ),
         )
@@ -268,25 +175,12 @@ object ViewPreviewData {
                 seededProject.id,
                 "Publish the release notes",
                 status = WorkItemStatus.Todo,
-                // After `instant`, so the "not late yet" half of the overdue rule has a
-                // fixture of its own rather than relying on a task with no date at all.
                 dueDate = Instant.parse("2026-04-01T00:00:00Z"),
             ),
         )
         add(item("GE-1", secondProject.id, "Rename the colour tokens", status = WorkItemStatus.Todo))
     }
 
-    // MARK: Comments
-
-    /**
-     * A four-comment thread on `TT-1`: two top-level comments, a reply under the first,
-     * and a reply under *that* — so a preview exercises the recursive indent, not just
-     * the flat case.
-     *
-     * Fixed ids and instants because previews render the same shape every time they are
-     * opened; the timestamps are one `instant` plus minutes so ordering reads the same on
-     * every host without depending on a clock.
-     */
     val previewComments: List<Comment> = listOf(
         Comment(
             id = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0001"),
@@ -319,14 +213,7 @@ object ViewPreviewData {
             parentID = CommentID("cccccccc-cccc-4ccc-8ccc-cccccccc0002"),
         ),
     )
-    /**
-     * Three files, sizes spanning the formatter's units so the preview exercises all of
-     * them at once: a sub-KB text file, a mid-KB photo, and a multi-MB report.
-     *
-     * Preview fixtures only. The ids are fixed for the same reason [previewComments]'
-     * are: a preview that re-rolled its ids on every open could not be compared against
-     * a screenshot, which is most of what a preview is for.
-     */
+
     val previewAttachments: List<Attachment> = listOf(
         Attachment(
             id = AttachmentID("dddddddd-dddd-4ddd-8ddd-dddddddd0001"),
@@ -357,26 +244,8 @@ object ViewPreviewData {
         ),
     )
 
-
-    /** Author labels for [previewComments], straight from the shared name fixture. */
     val previewCommentAuthorNames: Map<UserID, String> = previewUserNames
 
-    // MARK: Sprints
-
-    /**
-     * Two sprints: one open and mid-flight, one finished and over its goal.
-     *
-     * Preview fixtures only — **not** the store's first-launch sample data, which 23.8
-     * forbids extending while `SeedingTest` has three documented failures: adding rows to
-     * the fixture those tests assert against makes the baseline worse and their failures
-     * harder to read.
-     *
-     * Both readings are here on purpose. The open sprint is short of its goal and holds an
-     * unestimated task, so a preview shows a bar below the end *and* `TTStoryPoints`'
-     * absent reading. The finished one is over its goal, so a preview shows the overshoot
-     * that [SprintListRow.progressFraction] deliberately does not clamp away, and a
-     * summary reporting a hit.
-     */
     val openSprint: Sprint = Sprint(
         id = sprintID(1),
         projectID = seededProject.id,
@@ -400,9 +269,6 @@ object ViewPreviewData {
         endDate = Instant.parse("2026-02-20T00:00:00Z"),
         ownerID = previewUserID,
         isFinished = true,
-        // A date, because `finishedAt != null` exactly when `isFinished` is what
-        // `Sprint.reconcileFinishedAt` exists to hold and a preview that broke it would be
-        // showing a state the store cannot hold.
         finishedAt = Instant.parse("2026-02-20T16:30:00Z"),
         createdAt = instant,
         updatedAt = instant,
@@ -410,23 +276,12 @@ object ViewPreviewData {
 
     val sprints: List<Sprint> = listOf(openSprint, finishedSprint)
 
-    /**
-     * The task list, with sprint membership and estimates on it.
-     *
-     * Built by copying [workItems] rather than by changing it: the board previews assert on
-     * [workItems] having items in every column and nothing in a sprint, and a fixture that
-     * moved a card into a sprint would take the board's empty-column with it. Every item
-     * below the seeded project that is not already terminal is pulled into [openSprint],
-     * which is what makes the open sprint's bar read as partly filled.
-     */
     fun sprintWorkItems(
         sprint: Sprint = openSprint,
         points: Map<String, Int?> = mapOf(
             "TT-2" to 5,
             "TT-3" to 3,
             "TT-4" to 8,
-            // Unestimated on purpose: the reading `TTStoryPoints` exists to distinguish
-            // from a real zero, and a preview that never shows it cannot show that.
             "TT-8" to null,
             "TT-9" to 2,
         ),
@@ -439,22 +294,17 @@ object ViewPreviewData {
             )
         }
 
-    /** A store holding the fixtures, for a preview that needs a real model behind it. */
     fun repository(
         projects: List<Project> = listOf(seededProject, secondProject),
         items: List<WorkItem> = workItems,
         sprints: List<Sprint> = emptyList(),
     ): ProjectRepositoryPort = PreviewRepository(projects, items, sprints)
 
-    // MARK: Projections
-
-    /** A board with content in every column. */
     fun boardProjection(project: Project = seededProject): BoardProjection = BoardProjection(
         project = project,
         items = workItems.filter { it.projectID == project.id && it.status.appearsOnBoard },
     )
 
-    /** A board with nothing in it, so an empty state can be previewed. */
     fun emptyBoardProjection(project: Project = seededProject): BoardProjection =
         BoardProjection(project = project, items = emptyList())
 
@@ -471,18 +321,14 @@ object ViewPreviewData {
             items = workItems.filter { it.projectID == project.id },
         )
 
-    /** Rows for the projects list, newest activity first. */
     fun summaries(): List<ProjectSummary> = listOf(
         ProjectSummary(seededProject, 7),
         ProjectSummary(secondProject, 1),
     )
 
-    /** Everything available in a project switcher. */
     fun pickable(): List<PickableProject> = listOf(seededProject, secondProject).map {
         PickableProject(id = it.id, name = it.name, keyPrefix = it.keyPrefix)
     }
-
-    // MARK: Builders
 
     @Suppress("LongParameterList")
     private fun item(
@@ -496,7 +342,6 @@ object ViewPreviewData {
         dueDate: Instant? = null,
         rank: Int = 0,
     ): WorkItem {
-        // The status changes the key prefix issued, so a preview never shows TT-0.
         val number = key.substringAfter('-').toIntOrNull() ?: 1
         return WorkItem(
             id = workItemID(key),
@@ -516,7 +361,6 @@ object ViewPreviewData {
     }
 }
 
-/** A read-mostly [ProjectRepositoryPort] over a fixed set of fixtures. */
 private class PreviewRepository(
     projects: List<Project>,
     items: List<WorkItem>,
@@ -525,11 +369,6 @@ private class PreviewRepository(
 
     private val storedProjects = projects.map { it.copy() }.toMutableList()
     private val storedItems = items.map { it.copy() }.toMutableList()
-    // Seeded only when a preview asks for sprints; the default stays empty so the previews
-    // that predate this feature are unaffected. It is real storage rather than an
-    // `emptyList()` return because a preview that is handed a sprint — or that creates
-    // one — should behave, and `setWorkItemSprint` has to be able to write here for the
-    // same reason.
     private val storedSprints = sprints.map { it.copy() }.toMutableList()
     private val storedStatusChanges = mutableListOf<StatusChange>()
     private val storedComments = mutableListOf<Comment>()
@@ -557,9 +396,6 @@ private class PreviewRepository(
     override suspend fun statusChanges(workItemID: WorkItemID): List<StatusChange> =
         storedStatusChanges.filter { it.workItemID == workItemID }
 
-    // Real storage, like `storedSprints`: a preview that adds a comment should see it,
-    // and an empty thread would make the comment section render as its empty state in
-    // every preview whether or not the preview asked for content.
     override suspend fun comments(workItemID: WorkItemID): List<Comment> =
         storedComments.filter { it.workItemID == workItemID }
             .sortedWith(compareBy({ it.createdAt }, { it.id.stringValue }))
@@ -608,9 +444,6 @@ private class PreviewRepository(
             createdAt = now,
         )
         storedAttachments += attachment
-        // A new row announces a work-item change: every open editor re-reads the rows it
-        // holds, and the board watches the work-item kind so a card with a file is never
-        // left behind a card without one.
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems))
         return attachment
     }
@@ -622,8 +455,6 @@ private class PreviewRepository(
     }
 
     override suspend fun seedSampleDataIfNeeded(): Boolean = false
-
-    // MARK: Sprints
 
     override suspend fun sprints(projectID: ProjectID): List<Sprint> = storedSprints
         .filter { it.projectID == projectID }
@@ -646,9 +477,6 @@ private class PreviewRepository(
         ownerID: UserID?,
         now: Instant,
     ): Sprint {
-        // The overlap rule holds here too, and for the same reason the store keeps it: a
-        // preview that could put two unfinished sprints on the same day would show a state
-        // the app cannot produce, hiding the very thing the Sprints tab exists to reveal.
         com.tasktracker.domain.sprintBlockingOverlap(
             startDate,
             endDate,
@@ -813,7 +641,6 @@ private class PreviewRepository(
         broadcaster.send(ProjectChange(ProjectChange.Kind.Projects, id))
     }
 
-    // A preview never sends an invitation, so there is nothing here to record or refuse.
     override suspend fun createWorkItem(
         projectID: ProjectID,
         title: String,
@@ -911,8 +738,6 @@ private class PreviewRepository(
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
     }
 
-    // A preview holds no outbox, so there are never dead rows to revive. Returning zero
-    // keeps the retry affordance a no-op here without faking a sync that cannot happen.
     override suspend fun retryStuckChanges(now: Instant): Int = 0
 
     override fun changes(): Flow<ProjectChange> = broadcaster.stream()
@@ -950,5 +775,4 @@ private fun projectID(n: Int): ProjectID = ProjectID(deterministicID(n))
 private fun workItemID(key: String): WorkItemID =
     WorkItemID("00000000-0000-4000-8001-" + key.substringAfter('-').padStart(12, '0'))
 
-/** Distinct from every other id above it, so a sprint can never collide with a task. */
 private fun sprintID(n: Int): SprintID = SprintID("00000000-0000-4000-8002-" + n.toString().padStart(12, '0'))

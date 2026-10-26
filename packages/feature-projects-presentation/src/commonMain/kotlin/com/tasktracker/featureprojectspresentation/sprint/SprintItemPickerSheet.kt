@@ -20,9 +20,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.core.WorkItemID
-import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
+import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
@@ -33,7 +34,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.sprint_picker_add
@@ -42,23 +42,8 @@ import com.tasktracker.resources.sprint_picker_title
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The multi-select sheet for putting tasks *into* a sprint.
- *
- * ## Why this confirms and [ProjectPickerSheet] does not
- *
- * The project switcher is one choice with no side effects beyond where you are looking, so
- * it applies on tap. This one writes membership: every selected row that gets added is a row
- * the sprint now owns, and the model refuses the write on a locked sprint. Committing on
- * each tap would mean the sheet is silently saving on every gesture, with no way to pick
- * three tasks without performing three writes (and three sync pushes) on the way. A confirm
- * row makes the addition one deliberate act over a selection the user can review first.
- *
- * The empty state is the picker saying the filter did its job rather than that something
- * is broken: [SprintDetailModel] only offers tasks with no sprint and not finished
- * (neither Done nor Closed), so a finished backlog has nothing to add.
- *
- * The frame comes from [TTBottomSheetScaffold], the same scaffold the project and task
- * editors take — there is no second spelling of "a modal sheet" in this package to drift.
+ * Multi-select bottom sheet for adding unassigned backlog items to an active sprint.
+ * Selections are committed in a single batch via [onConfirm].
  */
 @Composable
 fun SprintItemPickerSheet(
@@ -77,9 +62,7 @@ fun SprintItemPickerSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier,
         onDismissed = onDismissed,
-        // A `LazyColumn`, for the same reason the project picker is one: the backlog is
-        // unbounded in principle, and a `Column` in the scaffold's scroll would hold every
-        // row's composition at once.
+        // Disable scaffold outer scroll so nested LazyColumn manages its own scroll and recycling
         scrollable = false,
     ) {
         SprintItemPickerContent(
@@ -93,7 +76,6 @@ fun SprintItemPickerSheet(
     }
 }
 
-/** The sheet's body, and only its body: the scaffold draws the frame and pads it. */
 @Composable
 private fun SprintItemPickerContent(
     items: List<WorkItem>,
@@ -122,15 +104,7 @@ private fun SprintItemPickerContent(
                 modifier = Modifier.testTag(SprintPickerEmptyTag),
             )
         } else {
-            // Bounded by what the sheet has *left*, not by the sheet itself — and
-            // `fill = false` so a short list still wraps its content and the sheet stays
-            // compact instead of stretching to the budget with a hole under the rows.
-            // Unweighted, a long backlog lets the LazyColumn claim the whole height
-            // budget, the confirm row is then measured against the remainder (zero), and
-            // Cancel/Add collapse to 0x0 — invisible, and a click on the node lands at
-            // the root origin on the scrim, dismissing the sheet without writing
-            // anything. The user's only way out is then the scrim or back, with the
-            // selection gone.
+            // weight(1f, fill = false) bounds list height while ensuring action row remains visible
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().weight(1f, fill = false).testTag(SprintPickerListTag),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
@@ -158,23 +132,12 @@ private fun SprintItemPickerContent(
                 onClick = onConfirm,
                 modifier = Modifier.testTag(SprintPickerAddTag),
                 style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
-                // Dimmed rather than swallowed at press time, because "nothing selected"
-                // and "still saving" are two states the user should be able to *see* before
-                // pressing — a live-looking Add that ignores the tap reads as a broken app.
                 enabled = selectedIDs.isNotEmpty() && !isBusy,
             )
         }
     }
 }
 
-/**
- * One pickable task: key, title, status, and the selection carried by weight, a checkmark,
- * and the `Selected` semantics — not by colour alone.
- *
- * The status is shown because it is what the task will land with: every finished and
- * closed task is filtered out of the offer, but Backlog and the on-board statuses remain
- * distinguishable, so a tick is an informed one.
- */
 @Composable
 private fun SprintPickerRow(
     item: WorkItem,
@@ -216,9 +179,6 @@ private fun SprintPickerRow(
             )
         }
         ttText(
-            // The row names what it is adding: a committed task lands in the sprint with
-            // whichever status is shown here, so a user ticking a row should be able to
-            // see that status before committing to it.
             text = statusLabel(item.status),
             style = ttTypography.caption,
             color = ttLabelSecondary(),
@@ -239,7 +199,6 @@ const val SprintPickerEmptyTag = "sprints.picker.empty"
 const val SprintPickerAddTag = "sprints.picker.add"
 const val SprintPickerCancelTag = "sprints.picker.cancel"
 
-/** Suffixed with the key, because two tasks can share a title and the key is unique per project. */
 fun SprintPickerRowTag(item: WorkItem): String = "sprints.picker.row.${item.key}"
 
 private const val PICKER_TITLE_MAX_LINES = 2

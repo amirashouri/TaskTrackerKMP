@@ -40,19 +40,7 @@ import com.tasktracker.resources.sprint_summary_title
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * What a finished sprint came to.
- *
- * ## Every number here is read off [SprintSummary]
- *
- * This screen takes the domain's value and renders it. It does not compare
- * [SprintSummary.achievedStoryPoints] to [Sprint.sprint]'s goal to decide whether the goal
- * was hit — [SprintSummary.didHitGoal] is that answer, computed once in `:packages:domain`,
- * and `SprintGoal.didHitGoal`'s own KDoc names exactly this as the mistake it exists to
- * prevent ("that is the case a `>` gets wrong").
- *
- * **Three outcomes, not two.** `didHitGoal` is `null` when no goal was set, and that is a
- * third state rather than a `false`: a sprint nobody set a target for has not missed it.
- * A two-way rendering would have to claim one of the two, and the claim would be invented.
+ * Finished sprint summary screen displaying story point totals, goal verdict, and done/incomplete task sections.
  */
 @Composable
 fun SprintSummaryScreen(
@@ -101,10 +89,6 @@ fun SprintSummaryScreen(
             )
         }
         ttText(
-            // The verdict, read from the value via [sprintVerdict] — see that function for
-            // why the mapping is not written inline here. `ttOnAccent` would be wrong: it
-            // is the ink *for* the accent fill, and this is ink on the canvas, so the
-            // accent is only used as a tint for the "hit" case.
             text = when (sprintVerdict(summary.didHitGoal)) {
                 SprintVerdict.Hit -> stringResource(Res.string.sprint_summary_hit)
                 SprintVerdict.Miss -> stringResource(Res.string.sprint_summary_miss)
@@ -139,7 +123,6 @@ fun SprintSummaryScreen(
     }
 }
 
-/** One of the summary's two lists. Renders its own "none" rather than an empty column. */
 @Composable
 private fun SprintSummarySection(
     title: String,
@@ -169,50 +152,20 @@ private fun SprintSummarySection(
     }
 }
 
-/**
- * What a sprint's summary says about its goal, as a decision rather than a sentence.
- *
- * ## Why this is a function and not a `when` inside the screen
- *
- * 23.5.4's whole promise is that the hit/miss is **read from [SprintSummary.didHitGoal]** and
- * never recomputed in the view. A `when` written inline in a composable states that
- * promise in a way only a rendered frame can check — and a rendered frame can only check
- * the wording, not the *source* of the verdict. So the mapping is a pure function here and
- * the test below asserts it directly.
- *
- * It is also where the third state has to be named. `didHitGoal` is `Boolean?`, and a
- * two-way rendering has to invent an answer for the `null`: claiming "missed" reports a
- * failure nobody committed to, and claiming "met" reports a success. Neither is true, so
- * [NoGoal] is a distinct outcome with its own string.
- */
+/** Three-way outcome of whether a sprint achieved its point goal. */
 internal enum class SprintVerdict {
-
-    /** The sprint reached or passed its goal. */
     Hit,
-
-    /** The sprint finished short of a goal it did set. */
     Miss,
-
-    /** The sprint set no goal, so it neither met nor missed one. */
     NoGoal,
 }
 
-/**
- * Reads the verdict out of the summary's answer.
- *
- * The input is [SprintSummary.didHitGoal] and nothing else — no `achievedStoryPoints`, no
- * `goalStoryPoints`. That is the point: a function that took the two numbers as well would
- * be free to compare them, and the `>` that gets "exactly at the goal is a miss" wrong
- * would be back. `SprintGoal.didHitGoal`'s KDoc names that as the mistake the named
- * function exists to prevent.
- */
+/** Maps nullable boolean goal result into [SprintVerdict] enum. */
 internal fun sprintVerdict(didHitGoal: Boolean?): SprintVerdict = when (didHitGoal) {
     true -> SprintVerdict.Hit
     false -> SprintVerdict.Miss
     null -> SprintVerdict.NoGoal
 }
 
-/** One task inside the sprint: its key, its title, and its estimate. */
 @Composable
 private fun SprintItemRow(
     key: String,
@@ -246,7 +199,6 @@ private fun SprintItemRow(
 
 private const val SPRINT_ITEM_TITLE_MAX_LINES = 2
 
-/** The summary screen. */
 const val SprintSummaryScreenTag = "sprints.summary"
 const val SprintSummaryBackTag = "sprints.summary.back"
 const val SprintSummaryVerdictTag = "sprints.summary.verdict"

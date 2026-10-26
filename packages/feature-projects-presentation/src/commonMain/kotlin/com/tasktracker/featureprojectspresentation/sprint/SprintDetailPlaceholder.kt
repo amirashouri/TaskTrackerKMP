@@ -21,22 +21,7 @@ import com.tasktracker.resources.sprint_detail_placeholder_title
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * The Sprints tab's second pane on a wide window, before a sprint has been chosen.
- *
- * ## Why a placeholder rather than the list again
- *
- * The two-pane arrangement draws the tab root in the left pane and the pushed route in the
- * right. The Sprints tab's *root* is itself a route (`AppRoute.SprintList`), so with nothing
- * selected the right pane's route is the list — and rendering it there drew the sprint list
- * twice, one copy beside the other. A pane that is empty because nothing is selected needs a
- * sentence saying so, not a second answer to the question the left pane already answers.
- *
- * ## Why this is not the list's own empty state
- *
- * [ProjectsEmptyState] means "there are no sprints"; this means "there are sprints, none
- * chosen". They are the same layout and different claims, and one sentence for both would
- * tell a user with three sprints that they have none. It is also `internal` to this module,
- * so the shell cannot borrow it anyway.
+ * Placeholder displayed in the wide-window secondary pane when no sprint is selected.
  */
 @Composable
 fun SprintDetailPlaceholder(modifier: Modifier = Modifier) {
@@ -57,10 +42,8 @@ fun SprintDetailPlaceholder(modifier: Modifier = Modifier) {
                 color = ttLabel(),
                 textAlign = TextAlign.Center,
             )
+            // Uses ttBodyLabel() to satisfy WCAG contrast on light canvas
             ttText(
-                // `ttBodyLabel`, not `ttLabelSecondary()`, for the reason `ProjectsEmptyState`
-                // states: this is the only text on the pane and carries its whole meaning, and
-                // the secondary label falls under the 4.5:1 bar on the light canvas.
                 text = stringResource(Res.string.sprint_detail_placeholder_body),
                 style = ttTypography.subheadline,
                 color = ttBodyLabel(),

@@ -19,20 +19,8 @@ import com.tasktracker.resources.editor_discard_title
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * [NewProjectForm] as the board opens it: a sheet over the board, which is still there underneath
- * when it closes.
- *
- * ## Why a sheet and not a screen
- *
- * A project is created from the board, and the board is where the user wants to be afterwards. A
- * full-screen form would mean a navigation round trip to do something that takes two fields.
- *
- * ## What this adds, and why it is only this
- *
- * The form itself is [NewProjectForm]; this composable is the container that makes it a sheet. The
- * split exists because a wide window draws the *same panel* in a pane beside the admin projects
- * list, where a sheet would slide over the list the form is working with. Two arrangements, one
- * form.
+ * Bottom sheet container for [NewProjectForm] displayed over the board.
+ * Intercepts Cancel and scrim dismissals with a confirmation popup if [hasUnsavedChanges] is true.
  */
 @Composable
 fun NewProjectSheet(
@@ -45,12 +33,7 @@ fun NewProjectSheet(
     onDetailsChanged: (String) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
-    /**
-     * Whether closing now would throw away work.
-     *
-     * Cancel and the sheet's scrim dismissal share the guard: both end the draft, and a
-     * prompt on one but not the other would let the accidental tap through.
-     */
+    /** Prompts confirmation on dismissal if true. */
     hasUnsavedChanges: Boolean,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
@@ -60,7 +43,6 @@ fun NewProjectSheet(
     isCreating: Boolean = true,
     selectedMemberIDs: List<UserID> = emptyList(),
     onMemberIDsChanged: (List<UserID>) -> Unit = {},
-    /** The directory behind the member picker; see [com.tasktracker.featureteamsdomain.TeamPort.searchMembers]. */
     searchMembers: suspend (String) -> List<User> = { emptyList() },
     resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
         val directory = searchMembers("")
@@ -68,10 +50,6 @@ fun NewProjectSheet(
     },
     errorMessage: String? = null,
 ) {
-    // The action to run once the user confirms the discard, if a dismissal has been interrupted.
-    // Kept as the action rather than a boolean so the pill matches how it was closed: Cancel and
-    // the scrim are the same content loss but not the same callback. Keyed on `visible` so a
-    // prompt interrupted by some other close cannot greet the next time the sheet opens.
     var pendingDiscard by remember(visible) { mutableStateOf<(() -> Unit)?>(null) }
 
     val guardDismiss: (() -> Unit) -> Unit = { action ->
@@ -80,8 +58,6 @@ fun NewProjectSheet(
 
     TTBottomSheetScaffold(
         visible = visible,
-        // The scrim tap is the other way out of this sheet. Guarding only the Cancel button
-        // would leave a second route to lose the draft without a question.
         onDismissRequest = { guardDismiss(onDismissRequest) },
         modifier = modifier,
         onDismissed = onDismissed,
@@ -106,8 +82,6 @@ fun NewProjectSheet(
         )
     }
 
-    // Draws over the sheet, which stays composed behind it. A `visible = false` sheet is on its
-    // way out, so a confirmation over it would be a prompt about a draft that is already gone.
     if (visible) {
         pendingDiscard?.let { discard ->
             ConfirmPopup(
@@ -127,5 +101,4 @@ fun NewProjectSheet(
     }
 }
 
-/** The discard prompt drawn over the project sheet. */
 const val NewProjectDiscardTag = "projects.newForm.discard"

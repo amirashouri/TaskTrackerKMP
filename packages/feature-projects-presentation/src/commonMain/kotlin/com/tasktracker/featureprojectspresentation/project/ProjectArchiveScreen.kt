@@ -39,30 +39,8 @@ import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Instant
 
 /**
- * The archive: everything filed away, grouped by month, newest first.
- *
- * ## Why there are no actions here
- *
- * Every item in this list is terminal - `Done` or `Closed` - and the plan is explicit that
- * terminal-only actions are hidden. That is not tidiness. An action on a finished task
- * invites a second decision about work that is already over, and the two moves available
- * (`Done` → `Closed`, or back out to `Todo`) are both worse than doing nothing: one
- * rewrites a record of what was delivered, the other un-files a decision somebody made on
- * purpose. So the card is display-only, and [WorkItemCard] is deliberately *not* used here -
- * it has a tap target that opens the editor, and the editor is where a change would happen.
- *
- * The one thing a user can still do is read the item, so each row opens the editor. What it
- * will not offer is a status control; that is [WorkItemEditorModel]'s
- * [WorkItemEditorModel.selectableStatuses] being empty, enforced in the model rather than
- * hidden here.
- *
- * ## Why the month header is an instant
- *
- * [ArchiveProjection.Month.monthStart] is a `kotlin.time.Instant`, and the wording is
- * produced here. Grouping by a formatted string would make the group's *identity* change
- * when the device's language does, which turns every lazy-list key into something that has
- * to be re-keyed on a locale change. The header is a caption, and a caption is the view's
- * decision.
+ * Screen displaying read-only archived/terminal tasks grouped by completion month.
+ * Tapping a row opens task details in read-only mode (status actions are disabled).
  */
 @Composable
 fun ProjectArchiveScreen(
@@ -73,14 +51,12 @@ fun ProjectArchiveScreen(
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSwitcher: (() -> Unit)? = null,
-    /** Display names for assignee ids, resolved by the host from the directory. */
+    /** Display names for assignee IDs, resolved from directory. */
     assigneeNames: Map<UserID, String> = emptyMap(),
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            // Top only: bottom padding here would shrink the *list's viewport* and stop it short of the
-            // screen's bottom edge. The clearance is the list's `contentPadding`.
             .padding(horizontal = ttSpacing.xxl)
             .padding(top = ttSpacing.screenGutterLarge)
             .testTag(ProjectArchiveScreenTag),
@@ -128,14 +104,7 @@ fun ProjectArchiveScreen(
     }
 }
 
-/**
- * The month a section belongs to, and how much is in it.
- *
- * The zone is the projection's, not the device's: the projection grouped by
- * [ArchiveProjection.timeZone], and a header computed in a different zone can disagree with
- * the grouping it is labelling - an item filed at 23:30 on the 31st belongs to March under
- * UTC and to April in Tokyo, and the two answers have to come from the same place.
- */
+/** Formatted month header; uses projection timeZone to match partitioned item groups. */
 @Composable
 internal fun MonthHeader(
     monthStart: Instant,
@@ -166,14 +135,6 @@ internal fun MonthHeader(
     }
 }
 
-/**
- * A filed-away task, as a row that can be opened but not acted on.
- *
- * A `ttGlassCard` like everything else, but with no action slot and no status. The
- * strike-through comes from the same place the board's does - the item is `Done` - so a
- * task looks the same filed as it does on the board, and a user scrolling from one to the
- * other is not re-learning a visual language.
- */
 @Composable
 private fun ArchivedItemRow(
     item: WorkItem,
@@ -196,8 +157,6 @@ private fun ArchivedItemRow(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.md)) {
             ttText(text = item.key.toString(), style = ttTypography.key, color = ttLabelSecondary())
-            // The resolved name, or nothing: an id the directory cannot name is not a label,
-            // and the archive is a list of facts rather than a place to invent them.
             item.assigneeID?.let { assigneeNames[it] }?.takeIf { it.isNotBlank() }?.let {
                 ttText(text = it, style = ttTypography.footnote, color = ttLabelSecondary())
             }
@@ -219,9 +178,7 @@ const val ProjectArchiveScreenTag = "archive.screen"
 const val ProjectArchiveListTag = "archive.rows"
 
 fun ArchiveMonthTag(monthStart: Instant): String = "archive.month.$monthStart"
-
 fun ArchiveMonthCountTag(monthStart: Instant): String = "${ArchiveMonthTag(monthStart)}.count"
-
 fun ArchivedItemTag(item: WorkItem): String = "archive.item.${item.key}"
 
 private const val ARCHIVED_TITLE_MAX_LINES = 2
