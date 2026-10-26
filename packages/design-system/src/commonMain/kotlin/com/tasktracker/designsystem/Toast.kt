@@ -37,15 +37,3 @@ fun ttToast(
         )
     }
 }
-
-@Preview(name = "Toast, dark", showBackground = true)
-@Composable
-private fun ToastDarkPreview() = ttPreviewSurface(ThemeScheme.Dark) {
-    ttToast(message = "Copied to clipboard")
-}
-
-@Preview(name = "Toast, light", showBackground = true)
-@Composable
-private fun ToastLightPreview() = ttPreviewSurface(ThemeScheme.Light) {
-    ttToast(message = "Copied to clipboard")
-}
