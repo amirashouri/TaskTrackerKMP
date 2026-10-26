@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +39,7 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.domain.sprintSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
@@ -175,6 +177,7 @@ fun SprintDetailScreen(
                 .fillMaxSize()
                 .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
                 .testTag(SprintDetailScreenTag),
+            contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current + ttSpacing.screenGutterLarge + ttSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
         item {
