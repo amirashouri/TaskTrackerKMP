@@ -3,210 +3,140 @@
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Amirreza%20Ashouri-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/amirreza-ashouri-229019156)
 [![Gmail](https://img.shields.io/badge/Gmail-amirashouri72%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:amirashouri72@gmail.com)
 
-A task and project tracker for **Android, iOS and Desktop**, built with Kotlin
-Multiplatform. One shared Compose UI, one shared domain, Clean Architecture
-boundaries enforced by the compiler rather than by convention.
+A cross-platform task and project tracker for **Android, iOS, and Desktop (macOS, Windows, Linux)**, built with Kotlin Multiplatform and Compose Multiplatform. One shared UI, one shared domain model, and strictly enforced Clean Architecture boundaries.
 
-## What's in it
+---
 
-- **Auth** — sign-in against a Ktor-backed API, a JWT session stored in the OS
-  keychain, token refresh with a single-replay guard, offline-first error mapping.
-- **Projects** — a project list and switcher, a per-project **board** of columns, a
-  **backlog** projection, member management, and a month-grouped **archive** of
-  finished work.
-- **Work items** — creation and editing in a shared editor (title, details, status,
-  priority, story points, assignee, due date, recurrence), dependency links, and file
-  attachments.
-- **Sprints** — sprint list, detail, an editor sheet, and a summary with progress
-  totals.
-- **Teams** — a live member directory: add, deactivate and reactivate members, and
-  resolve display names for the assignee pickers.
-- **Settings** — appearance (light/dark/system), the server address, user details and
-  version info.
-- **Server connection** — a runtime API root, so pointing the app at another server
-  needs no rebuild; URL validation before a save, and a `tasktracker://connect?url=…`
-  pairing link that opens the server field prefilled.
-- **Sync** — Room-backed local store with an outbox queue; mutations are queued
-  locally and reconciled with the server.
-- **Desktop** — the same screen tree in a native window: wide-window layouts, and the
-  window geometry and last-visited project persisted between launches.
+## Highlights
 
-## Tech stack
+- **Work Management:** Boards with custom columns, backlog projections, sprint planning, and month-grouped archive views.
+- **Rich Work Items:** Details, statuses, priorities, story points, assignee assignments, due dates, recurrence rules, and dependency links.
+- **Offline-First Sync:** Local Room store with an outbox queue. Changes are committed locally first and reconciled with the server in the background.
+- **Native Security:** Token storage using `AndroidKeyStore` on Android, `Security.framework` on iOS, and `Security.framework` via JNA on macOS.
+- **Adaptive Liquid Glass Design:** Shared custom glassmorphism design system in `:packages:design-system` adapting across phone, tablet, and wide desktop screens.
+- **Runtime API Root:** Switch backend servers dynamically via in-app Settings or pairing links (`tasktracker://connect?url=...`) without rebuilding the app.
 
-| Layer | Choice |
-| --- | --- |
-| UI | Compose Multiplatform 1.12.1 — one screen tree for Android, iOS and Desktop |
-| Language | Kotlin 2.3.20 — Android (compile/target 37, min 26), iOS (device + simulator arm64), and a JVM Desktop app |
-| Architecture | Clean Architecture — domain / data / presentation modules, `:composition-root` binds them |
-| Storage | Room (KMP) for the store; `:packages:user-defaults` for appearance and window geometry |
-| Secrets | `:packages:keychain` — AndroidKeyStore on Android, Security.framework on iOS, JNA on Desktop |
-| Networking | Ktor 3.6.0 — OkHttp on Android/JVM, Darwin on iOS |
-| Serialization | kotlinx.serialization, strict JSON coding |
-| DI | Koin 4.2.2 behind `:packages:di`'s `Resolver` |
-| Navigation | `:packages:routing` — routes, tab stacks, and the deep-link parser |
-| Design | "Liquid Glass" token system in `:packages:design-system` |
-| Build | Gradle + convention plugins; XcodeGen for the iOS shell |
+---
 
-The module graph is not a suggestion: `verifyArchitectureGraph` and
-`verifyModuleImports` are build tasks that fail on a dependency edge the
-architecture does not allow.
+## Tech Stack
 
-## Project layout
+| Layer | Technology |
+| :--- | :--- |
+| **UI** | Compose Multiplatform 1.12.1 (shared screen tree across Android, iOS, Desktop) |
+| **Language** | Kotlin 2.3.20 (Android SDK 37 / min 26, iOS device + simulator arm64, Desktop JVM) |
+| **Architecture** | Clean Architecture (Domain / Data / Presentation separated by Gradle modules) |
+| **Database** | Room KMP (SQLite) + Outbox pattern for sync |
+| **Preferences** | `:packages:user-defaults` (Platform file/properties store for appearance & window geometry) |
+| **Key Storage** | `:packages:keychain` (Platform-backed secure credential vaults) |
+| **Networking** | Ktor 3.6.0 (OkHttp on Android/JVM, Darwin on iOS) |
+| **Serialization** | `kotlinx.serialization` (strict JSON configuration) |
+| **DI** | Koin 4.2.2 behind `:packages:di`'s `Resolver` interface |
+| **Navigation** | Hand-rolled `:packages:routing` (pure state, no Compose dependency) |
+
+Architecture boundaries are strictly validated: `./gradlew verifyArchitectureGraph verifyModuleImports` fails the build on any unauthorized dependency edge.
+
+---
+
+## Project Structure
 
 ```
-androidApp/                  Android entry point
-iosApp/                      SwiftUI host shell (generated by xcodegen — do not hand-edit)
-shared-ui/                   The shared Compose screen tree, and the Desktop entry point
-composition-root/            Object graph — the one module that sees everything
+androidApp/                  Android application shell
+iosApp/                      SwiftUI host shell (generated via XcodeGen)
+shared-ui/                   Shared Compose screen tree, navigation host & Desktop entry point
+composition-root/            Dependency injection wiring hub (binds ports to adapters)
 packages/
-  core/                      IDs, logging, errors, JSON coding, JWT, platform flags
-  domain/                    Domain models and ports
-  database/                  Room schema, DAOs, outbox
-  network/                   Ktor client, interceptors, retry
-  sync/                      Outbox reconciliation
-  keychain/                  Session storage per platform
-  user-defaults/             Persisted device preferences and window geometry
-  routing/                   Routes, navigation stacks, deep-link parsing
-  di/                        The `Resolver` port and its Koin implementation
-  design-system/             Liquid Glass tokens, components, strings
-  feature-<name>-{domain,data,presentation}/   One triple per feature — auth, projects,
-                                               settings, teams, notifications
-build-logic/                 Convention plugins that define the architecture
-docs/                        Roadmap, design record, testing, host notes
-specs/                       One file per unit of work, with a handoff
-scripts/                     check.sh and the baseline tooling
-tools/                       Icon and asset generators
+  core/                      Shared identifiers, errors, loggers, JSON/Date utilities
+  domain/                    Core business vocabulary and entity rules
+  database/                  Room database schemas, DAOs, and outbox queues
+  network/                   Ktor HTTP client, interceptors, and network monitoring
+  sync/                      Offline outbox queue coordination and sync engine
+  keychain/                  Platform-specific secure credential storage
+  user-defaults/             Non-sensitive preferences and window geometry persistence
+  routing/                   Immutable router state, routes, and deep-link parsing
+  di/                        Dependency resolution interfaces
+  design-system/             Liquid Glass visual tokens, components, and Compose resources
+  feature-<name>-{domain,data,presentation}/
+                             Feature triplets: auth, projects, settings, teams, notifications
 ```
 
-## Requirements
+---
 
-- **JDK 25**. `gradle.properties` points Gradle at Android Studio's JBR, which is the
-  JDK this project is developed against:
+## Getting Started
 
+### Prerequisites
+* **JDK 25:** Developed against Android Studio's JBR:
   ```bash
   export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
   ```
+* **Android SDK 37:** With a device or emulator.
+* **Xcode:** For compiling and running the iOS target.
+* **XcodeGen:** (`brew install xcodegen`) to generate the iOS project file.
 
-  That path is committed, so on another machine append your own
-  `org.gradle.java.home=…` line to `gradle.properties` — later lines win, which is how
-  the release workflow aims Gradle at the runner's JDK.
+---
 
-  Packaging a Desktop installer is the one task that JDK cannot do: the JBR ships no
-  `jpackage`. Use a full JDK (Temurin 25 here) for `packageDmg` / `packageMsi` /
-  `packageDeb`. Tests and the app itself are fine on the JBR.
-- **Android SDK** 37 with a device or emulator.
-- **Xcode** (for the iOS target) with at least one iOS simulator.
-- **XcodeGen** (`brew install xcodegen`) — regenerates the iOS project from
-  `iosApp/project.yml`; the `.xcodeproj` is deliberately not committed.
-
-## Running
+## Running the App
 
 ### Android
-
-Open the project in Android Studio, select the **`androidApp`** run configuration,
-pick an emulator or device, run. The Compose resources are packaged into the APK's
-assets by a hand-wired task (see the comment in `androidApp/build.gradle.kts` — the
-plugin's own wiring is silently broken on this AGP).
-
-### iOS
-
+Open the project in Android Studio, select the **`androidApp`** run configuration, and run. Alternatively:
 ```bash
-cd iosApp && xcodegen generate
+./gradlew :androidApp:installDebug
 ```
 
-Then open `iosApp/TaskTracker.xcodeproj` in Xcode (or the **`TaskTracker`** run
-configuration in Android Studio) and run on a simulator. A build phase links the
-Gradle-built `ComposeApp.framework`, so the Kotlin side is rebuilt automatically —
-but the app always links whatever is already at the framework path, so a green Xcode
-build does not mean the Kotlin you just edited is in it; check the Gradle task output.
+### iOS
+Generate the `.xcodeproj` file and open it in Xcode:
+```bash
+cd iosApp && xcodegen generate
+open TaskTracker.xcodeproj
+```
+*Note: A build phase automatically compiles and links `ComposeApp.framework` from Gradle.*
 
-### Desktop
-
+### Desktop (JVM)
+Run the desktop app directly:
 ```bash
 ./gradlew :shared-ui:runDesktop
 ```
-
-A server address saved in Settings wins; `TASKTRACKER_API_URL` is the build-time
-fallback for a build nobody has configured yet, which is the quickest way to point a
-developer's copy at a server on another host:
-
+To point the app to a custom backend URL at launch:
 ```bash
-TASKTRACKER_API_URL=https://tasks.example.com ./gradlew :shared-ui:runDesktop
+TASKTRACKER_API_URL=https://api.example.com ./gradlew :shared-ui:runDesktop
 ```
 
-### Desktop installers
-
+### Desktop Packaging
+Generate native installers:
 ```bash
-./gradlew :shared-ui:packageDmg    # .dmg  (macOS host)
-./gradlew :shared-ui:packageMsi    # .msi  (Windows host)
-./gradlew :shared-ui:packageDeb    # .deb  (Linux host)
+./gradlew :shared-ui:packageDmg    # macOS (.dmg)
+./gradlew :shared-ui:packageMsi    # Windows (.msi)
+./gradlew :shared-ui:packageDeb    # Linux (.deb)
 ```
+*(Requires a full JDK with `jpackage` installed on the host OS).*
 
-Each writes to `shared-ui/build/compose/binaries/main/<format>/`. `jpackage` can only
-build an installer for the host it runs on, so each format needs its own machine. The
-installer version comes from `-PtasktrackerVersion` (default `0.0.0`); a zero major is
-bumped to 1 because macOS rejects a bundle version whose first number is 0, so
-`-PtasktrackerVersion=0.1.7` packages as `1.1.7`.
+---
 
-## Verification: a fast development loop, and a release gate
+## Testing & Quality Assurance
 
-While developing, run the focused tests for the modules you touched — one class or
-package on the JVM, under a minute:
+* **Fast Inner Dev Loop (<1 min):** Focused JVM unit tests while writing code:
+  ```bash
+  ./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'
+  ```
+* **Full Matrix Gate (<10 min):** Release gate and multiplatform integrity check:
+  ```bash
+  scripts/check.sh full
+  ```
+  Executes JVM tests, iOS Simulator tests, Android Robolectric tests, and architecture graph validations. Failure totals and identities are strictly guarded by `test-baseline.json`.
 
-```bash
-./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'
-```
+---
 
-`scripts/check.sh` is the **release gate**, run when a release is cut — not per push and
-not per task. It runs the JVM tests and the architecture checks by default;
-`scripts/check.sh full` runs the complete matrix — JVM, iOS simulator and Android under
-Robolectric — and is the one required for UI, `expect`/`actual` and build-graph changes.
-`scripts/check.sh graph` is the architecture checks plus the Android compile, and `jvm`,
-`ios`, `android`, `lint` and `docs` scope a single host or task. `docs/TESTING.md` is the
-authoritative command and host reference; `test-baseline.json` holds the generated totals
-and `test-known-failures.json` the named allowlist, both regenerated from a release run.
+## Documentation Index
 
-A failure not in the allowlist fails the gate even when the total failure count is
-unchanged. The Android host is deliberately stricter about some things and weaker about
-others (Robolectric's viewport is small; its `Build` fields are `null`); the policy and
-the phased cleanup live in `docs/TESTING.md` and `docs/TEST-HARNESS-PLAN.md`.
+* [`Project.md`](Project.md) — Operational manual, iOS linking invariants, and detailed request flows.
+* [`AGENTS.md`](AGENTS.md) — Engineering rules, execution boundaries, and test mutation protocol.
+* [`docs/DECISIONS.md`](docs/DECISIONS.md) — Design record and structural architectural invariants.
+* [`docs/TESTING.md`](docs/TESTING.md) — Full test command and host reference.
+* [`docs/PLAN.md`](docs/PLAN.md) — Active roadmap and upcoming features.
 
-## Releasing
-
-Push a `v*` tag (or dispatch the `release` workflow with a version). CI builds an
-Android debug APK, a Linux `.deb`, a Windows `.msi` and a macOS `.dmg` on their own
-runners, then publishes a GitHub Release whose download links are generated from the
-assets the run actually produced. The iOS simulator build is not attached to the
-release — it is available as a workflow artifact.
-
-The macOS build is unsigned and not notarized, so the first launch needs
-right-click → Open.
-
-## Documentation
-
-- [`Project.md`](Project.md) — build, run, verify; the operational manual.
-- [`docs/PLAN.md`](docs/PLAN.md) — the active roadmap; completed work is in
-  [`docs/PLAN-ARCHIVE.md`](docs/PLAN-ARCHIVE.md).
-- [`docs/DECISIONS.md`](docs/DECISIONS.md) — the design record: every rule, with the
-  measurement that justifies it.
-- [`docs/TESTING.md`](docs/TESTING.md) — the command and host reference.
-- [`docs/TEST-HOSTS.md`](docs/TEST-HOSTS.md) — the pre-existing failures per host, and why
-  they are not regressions.
-- [`AGENTS.md`](AGENTS.md) — working agreement for this repository, including the
-  mutation-check ritual behind every test that claims to catch a defect.
-- [`specs/`](specs/README.md) — one file per unit of work: its scope, contract, validation
-  and handoff.
-- [`test-baseline.json`](test-baseline.json) — the host test totals, generated from the build;
-  `scripts/test-baseline.py` writes it and `scripts/check-baseline.sh` guards it.
+---
 
 ## License
 
-[MIT + Commons Clause](LICENSE), plus one extra term: no rebranding.
+[MIT + Commons Clause](LICENSE), plus a non-rebranding condition.
 
-You can use the client and the backend in your own team — personal, commercial,
-or in production — and you can change the code. What you cannot do is sell it,
-or repackage it under your own name and brand: the code stays the author's, and
-the "TaskTracker" name and logos are the author's trademarks.
-
-The full text is in [`LICENSE`](LICENSE). The same license covers the
-[server](https://github.com/amirashouri/TaskTracker).
+You are welcome to use and modify the client and backend for personal, commercial, or team use. You may not resell the code or repackage it under your own name and brand. See [`LICENSE`](LICENSE) for full details.
