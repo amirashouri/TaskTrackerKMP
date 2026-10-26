@@ -5,9 +5,12 @@ import com.tasktracker.featureauthdomain.SessionState
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.routing.RootDestination
 import com.tasktracker.routing.Router
+import com.tasktracker.sync.SyncCoordinator
+import com.tasktracker.sync.SyncTrigger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -83,6 +86,48 @@ class SessionCoordinatorTest {
 
         assertEquals(RootDestination.Main, harness.router.root)
         assertNotNull(harness.stores.session.saved)
+        harness.coordinator.stop()
+    }
+
+    @Test
+    fun `signing in runs a sync cycle so the shell opens on the server's data`() = runTest {
+        val session = RecordingSessionPort().apply { restoreResult = SessionState.SignedOut }
+        val harness = harness(session = session)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        // The defect this test is for. A launch while signed out runs a cycle against nothing,
+        // so by the time the sign-in form appears the account's projects have never been read.
+        assertNull(harness.sync.lastReport, "a signed-out launch should not run a cycle")
+
+        session.publish(SessionState.SignedIn(UserIdentity(randomUserID(), "grace@example.com")))
+        // The cycle is launched, not awaited, so the navigation happens first; this drains the
+        // work it left behind rather than asserting on a scheduling accident.
+        harness.drain()
+
+        assertEquals(
+            SyncTrigger.SignIn,
+            harness.sync.lastReport?.trigger,
+            "signing in must ask for a cycle, or the user has to tap Sync now to see their data",
+        )
+        harness.coordinator.stop()
+    }
+
+    @Test
+    fun `a restored session runs a cycle too, because the launch cycle may have claimed nothing`() = runTest {
+        val session = RecordingSessionPort().apply {
+            restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
+        }
+        val harness = harness(session = session)
+
+        harness.coordinator.start()
+        harness.drain()
+
+        // Deliberate: the launch cycle can start before the session is cached, and the push
+        // stage claims its rows *by* that cache — so "a cycle has run since this session
+        // existed" has to be asked for after the cache is written, not assumed from launch.
+        assertEquals(SyncTrigger.SignIn, harness.sync.lastReport?.trigger)
         harness.coordinator.stop()
     }
 
@@ -338,6 +383,8 @@ class SessionCoordinatorTest {
         val coordinator: SessionCoordinator,
         val router: Router,
         val stores: InMemoryStores,
+        /** The sync coordinator the session layer asks for a cycle. */
+        val sync: SyncCoordinator,
     ) {
         /**
          * Lets every launched coroutine reach its first suspension.
@@ -365,6 +412,9 @@ class SessionCoordinatorTest {
         stores: InMemoryStores = InMemoryStores(),
     ): Harness {
         val router = Router()
+        // One instance for both halves of the session: the coordinator starts a cycle on it and
+        // the teardown stops it on sign-out, which is the pairing production has.
+        val sync = silentSyncCoordinator(scope = backgroundScope)
         val coordinator = SessionCoordinator(
             session = session,
             router = router,
@@ -373,11 +423,16 @@ class SessionCoordinatorTest {
             // test agrees with itself. The one thing a `NoResolver` cannot show — that the
             // session scope is actually reset — is asserted in `SessionTeardownTest` against a
             // real container instead of faked into every test here.
-            teardown = stores.teardown(resolver = NoResolver(), scope = backgroundScope),
+            teardown = stores.teardown(
+                resolver = NoResolver(),
+                scope = backgroundScope,
+                syncCoordinator = sync,
+            ),
             sessionCache = stores.session,
             dateProvider = FixedDateProvider(),
+            syncCoordinator = sync,
             scope = backgroundScope,
         )
-        return Harness(coordinator, router, stores)
+        return Harness(coordinator, router, stores, sync)
     }
 }

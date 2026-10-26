@@ -716,6 +716,9 @@ object AppGraph {
                 teardown = resolver.resolve(SessionTeardown::class),
                 sessionCache = resolver.resolve(SessionCache::class),
                 dateProvider = resolver.resolve(DateProvider::class),
+                // The same coordinator the teardown stops — one instance, so "signed in" and
+                // "signed out" cannot reach two objects that share a gate.
+                syncCoordinator = resolver.resolve(SyncCoordinator::class),
             )
         }
     }

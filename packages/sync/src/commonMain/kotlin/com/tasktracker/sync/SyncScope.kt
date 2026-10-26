@@ -39,6 +39,14 @@ enum class SyncTrigger(val wireName: String) {
     /** App returned to the foreground. */
     Foreground("foreground"),
 
+    /**
+     * A session became live: the user signed in, or a stored session was adopted at launch.
+     *
+     * Its own case because the [AppLaunch] cycle is started before anyone is signed in, and a
+     * launch is exactly when the local store is empty and the server holds everything.
+     */
+    SignIn("signIn"),
+
     /** A local mutation queued an outbox row. */
     LocalWrite("localWrite"),
 

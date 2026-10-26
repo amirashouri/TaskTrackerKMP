@@ -14,6 +14,7 @@ import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.network.SessionInvalidationReason
 import com.tasktracker.routing.Router
 import com.tasktracker.sync.SyncCoordinator
+import com.tasktracker.sync.SyncTrigger
 import com.tasktracker.userdefaults.UserDefaultsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -162,6 +163,14 @@ class SessionCoordinator(
     private val sessionCache: SessionCache,
     private val dateProvider: DateProvider,
     /**
+     * What a session that has just become live asks for a cycle.
+     *
+     * A dependency rather than a closure because the coordinator is the only type that sees
+     * both halves: the auth port knows a session exists and the sync module knows how to
+     * read the server, and neither may depend on the other. See [requestSync].
+     */
+    private val syncCoordinator: SyncCoordinator,
+    /**
      * Where the listener and the restore run.
      *
      * Injectable for the same reason `SyncCoordinator` takes one: a test hands in
@@ -300,12 +309,21 @@ class SessionCoordinator(
             SessionState.Restoring -> router.beginRestoringSession()
 
             is SessionState.SignedIn -> {
+                // A session that has just appeared, as opposed to a redundant republication of
+                // one already announced. Deliberately not "sign-in rather than restore": a
+                // restored session needs the cycle too, and [requestSync] says why.
+                val beginning = !hasLiveSession
                 hasLiveSession = true
                 // Cached before the shell is entered, so the first status change anybody makes
                 // can be attributed. This is the only place the app learns who is signed in:
                 // `SessionState` carries the identity, and every other consumer reads the cache.
                 cache(state.identity)
                 router.enterMain()
+                // After the cache, never before — the cycle's push claims outbox rows by
+                // reading that cache, so a cycle started first would find no owner and skip
+                // every queued change. Launched rather than awaited, so the shell opens on
+                // whatever is already local instead of on a spinner.
+                if (beginning) requestSync()
             }
 
             SessionState.SignedOut -> {
@@ -330,6 +348,38 @@ class SessionCoordinator(
                 }
                 router.enterAuth()
             }
+        }
+    }
+
+    /**
+     * Runs one cycle for a session that has just become live.
+     *
+     * ## Why signing in has to ask for this
+     *
+     * Nothing else does. The three existing triggers are a launch, the periodic timer and a
+     * return of connectivity — and on a device that was signed out when the app launched, the
+     * launch cycle ran as nobody and closed on a server view it could not read. A user then
+     * signs in, lands on an empty local store, and sees their projects and cards only after
+     * tapping "Sync now" or waiting out the timer. This is the missing trigger: the session
+     * becoming live is the moment the server's copy is the truth.
+     *
+     * A restored session asks too, and that is deliberate rather than a duplicate of the
+     * launch cycle. The launch cycle starts before [cache] has written the session the push
+     * stage claims rows by, so its push can claim nothing; the same is true if the restore
+     * wins the coordinator's gate. Asking here is what makes "a cycle has run since this
+     * session existed" true on both paths, and a second cycle at a cold start is one empty
+     * pull rather than a cost worth reasoning about.
+     *
+     * ## Contained, because this is a child of the coordinator's scope
+     *
+     * [SyncCoordinator.synchronize] reports rather than throws, but this is still somebody
+     * else's background work started from a listener with no exception handler — so the rule
+     * `SyncCoordinator`'s post-cycle hook follows applies here too: a failure must never reach
+     * the platform's default handler, which on iOS ends the process.
+     */
+    private fun requestSync() {
+        scope.launch {
+            runCatching { syncCoordinator.synchronize(SyncTrigger.SignIn) }
         }
     }
 

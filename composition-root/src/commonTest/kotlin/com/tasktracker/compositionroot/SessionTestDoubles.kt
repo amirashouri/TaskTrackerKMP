@@ -293,13 +293,24 @@ internal class InMemoryStores {
     fun cursors(): Map<String, String?> =
         metadata.scopes().associateWith { scope -> metadata.metadataBlocking(scope)?.cursor }
 
-    /** The real [SessionTeardown] over this harness's stores, for the coordinator tests. */
-    fun teardown(resolver: Resolver, scope: kotlinx.coroutines.CoroutineScope): SessionTeardown =
+    /**
+     * The real [SessionTeardown] over this harness's stores, for the coordinator tests.
+     *
+     * [syncCoordinator] defaults to a fresh silent one, which is what a teardown-only test
+     * wants: the only collaborator it touches is `stop`. The coordinator tests pass the same
+     * instance they give the coordinator, so "signing in syncs" and "signing out stops" are
+     * assertions about one object rather than about two that happen to look alike.
+     */
+    fun teardown(
+        resolver: Resolver,
+        scope: kotlinx.coroutines.CoroutineScope,
+        syncCoordinator: SyncCoordinator = silentSyncCoordinator(scope = scope),
+    ): SessionTeardown =
         SessionTeardown(
             resolver = resolver,
             metadata = metadata,
             sessionCache = session,
-            syncCoordinator = silentSyncCoordinator(scope = scope),
+            syncCoordinator = syncCoordinator,
             defaults = defaults,
             eraser = eraser,
         )
