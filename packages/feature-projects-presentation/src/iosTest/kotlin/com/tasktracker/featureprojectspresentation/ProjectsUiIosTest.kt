@@ -335,6 +335,9 @@ class ProjectsUiIosTest {
     fun anUnlockedWindowDrawsNoNoteAndEverythingLive() = runComposeUiTest(block = SprintEditorScenarios.anUnlockedWindowDrawsNoNoteAndEverythingLive)
 
     @Test
+    fun aPassedErrorMessageRendersAsABannerAboveSave() = runComposeUiTest(block = SprintEditorScenarios.aPassedErrorMessageRendersAsABannerAboveSave)
+
+    @Test
     fun blockersRenderAsWrappedPillsEachWithARemoveCross() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.blockersRenderAsWrappedPillsEachWithARemoveCross)
 
     @Test

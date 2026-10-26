@@ -5,8 +5,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTDateFieldTag
 import com.tasktracker.designsystem.ttTheme
@@ -34,7 +36,11 @@ import kotlinx.datetime.LocalDate
 object SprintEditorScenarios {
 
     /** The sheet, filled with one fixed draft; [windowLocked] is the only thing that moves. */
-    private fun ComposeUiTest.renderSheet(windowLocked: Boolean) {
+    private fun ComposeUiTest.renderSheet(
+        windowLocked: Boolean,
+        errorMessage: String? = null,
+        onDismissError: () -> Unit = {},
+    ) {
         setContent {
             ttTheme(scheme = ThemeScheme.Dark) {
                 SprintEditorSheet(
@@ -49,6 +55,8 @@ object SprintEditorScenarios {
                     endIsBeforeStart = false,
                     blockedBySprintName = null,
                     windowLocked = windowLocked,
+                    errorMessage = errorMessage,
+                    onDismissError = onDismissError,
                     onNameChanged = {},
                     onGoalStoryPointsChanged = {},
                     onGoalChanged = {},
@@ -109,4 +117,14 @@ object SprintEditorScenarios {
         onNodeWithTag(SprintEditorGoalTag).assertIsEnabled()
         onNodeWithTag(SprintEditorOwnerTag).assertIsEnabled()
     }
+
+    val aPassedErrorMessageRendersAsABannerAboveSave: suspend ComposeUiTest.() -> Unit = {
+        renderSheet(
+            windowLocked = false,
+            errorMessage = "Window overlaps with existing sprint",
+        )
+
+        onNodeWithTag(SprintEditorErrorTag).assertIsDisplayed()
+    }
 }
+

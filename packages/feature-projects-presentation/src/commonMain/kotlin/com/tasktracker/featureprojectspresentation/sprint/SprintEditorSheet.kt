@@ -15,6 +15,7 @@ import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttLabel
@@ -117,6 +118,15 @@ fun SprintEditorSheet(
         val directory = searchMembers("")
         ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
     },
+    /**
+     * A refusal that came from the store rather than the form's local checks. The form
+     * stays advisory; a race (another device creating a sprint after the sibling read) is
+     * authoritative, and it arrives as this banner so the user knows why Save did nothing.
+     * Rendered above the action row because the sheet scrolls and the buttons are the
+     * targets the user just pressed.
+     */
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {},
 ) {
     TTBottomSheetScaffold(
         visible = visible,
@@ -225,6 +235,13 @@ fun SprintEditorSheet(
                 title = stringResource(Res.string.sprint_owner_label),
                 testTag = SprintEditorOwnerTag,
             )
+            errorMessage?.let { message ->
+                ttBanner(
+                    message = message,
+                    onDismiss = onDismissError,
+                    modifier = Modifier.testTag(SprintEditorErrorTag),
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
@@ -257,6 +274,7 @@ const val SprintEditorStartDateTag = "sprints.editor.start"
 const val SprintEditorEndDateTag = "sprints.editor.end"
 const val SprintEditorWindowErrorTag = "sprints.editor.windowError"
 const val SprintEditorOverlapErrorTag = "sprints.editor.overlapError"
+const val SprintEditorErrorTag = "sprints.editor.error"
 const val SprintEditorOwnerTag = "sprints.editor.owner"
 const val SprintEditorSaveTag = "sprints.editor.save"
 const val SprintEditorCancelTag = "sprints.editor.cancel"
