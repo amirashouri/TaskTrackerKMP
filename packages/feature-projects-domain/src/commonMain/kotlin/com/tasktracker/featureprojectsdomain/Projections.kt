@@ -14,38 +14,19 @@ import kotlinx.datetime.yearMonth
 import kotlin.time.Instant
 
 /**
- * The board as the view layer wants it: one entry per status, in column order.
- *
- * Computed in the domain layer rather than in a view so the grouping rule has one home. A
- * view that filtered and sorted its own copy would eventually disagree with
- * [WorkItemGrouping] and the board would reorder itself whenever one of the two changed.
- *
- * The columns are the domain's own [BoardColumn] rather than a nested copy. The original
- * wrapped the tuple that `boardColumns` returned in a second struct that added `isEmpty`
- * and `count`; once that tuple became a named class in the domain, the wrapper was a
- * second type with the same two fields, and a `Column` handed to a component expecting a
- * `BoardColumn` would not compile for a reason no caller could see.
- *
- * A `data class` over the *input* rather than over [columns], so two projections built
- * from equal inputs are equal — which is what a Compose parameter comparison needs in
- * order to skip a recomposition. The cost is one wasted recomposition in the narrow case
- * where a store returns the same items in a different order; the saving is a state object
- * that never recomposes for content it already shows.
+ * Kanban board projection grouped by columns.
  */
 data class BoardProjection(
     val project: Project?,
     val items: List<WorkItem>,
 ) {
-
     val columns: List<BoardColumn> = WorkItemGrouping.boardColumns(items)
-
     val isEmpty: Boolean get() = columns.all { it.items.isEmpty() }
-
     val itemCount: Int get() = columns.sumOf { it.items.size }
 }
 
 /**
- * The backlog: only the untriaged work.
+ * Backlog projection for untriaged items.
  */
 data class BacklogProjection(
     val project: Project?,
@@ -57,10 +38,7 @@ data class BacklogProjection(
 }
 
 /**
- * A month's worth of resolved work, used by [ArchiveProjection].
- *
- * The items are already sorted newest-first by [ArchiveProjection], so this does not
- * repeat that order — it is just a grouping boundary.
+ * Group of resolved items by month.
  */
 data class Month(
     val monthStart: Instant,
@@ -70,9 +48,7 @@ data class Month(
 }
 
 /**
- * The archive: all resolved (done or closed) work, grouped by month.
- *
- * Sorted newest-first, because an archive is read backwards, from now towards the past.
+ * Archive projection grouping resolved items by month.
  */
 data class ArchiveProjection(
     val project: Project?,
@@ -83,11 +59,6 @@ data class ArchiveProjection(
         .filter { it.status.isTerminal }
         .groupBy { it.archivedOn.startOfMonthIn(timeZone) }
         .map { (monthStart, monthItems) ->
-            // The KDoc promises the same newest-first order the top-level `items` arrive in,
-            // but `groupBy` preserves encounter order *within* a month, which is store order —
-            // an archive section rendered from this read the list back front-to-back. Measured
-            // against `ProjectionsTest`: three same-month items arrived TT-1, TT-2, TT-3 by
-            // resolution date and read back in exactly that order, not [TT-2, TT-3, TT-1].
             Month(monthStart, monthItems.sortedByDescending { it.archivedOn.epochSeconds })
         }
         .sortedByDescending { it.monthStart }
@@ -96,23 +67,14 @@ data class ArchiveProjection(
     val isEmpty: Boolean get() = itemCount == 0
 }
 
-/**
- * The backlog tab as three sections: the untriaged work, the work on a board, and the work
- * already filed away.
- */
 enum class BacklogSection {
-    /** The tasks that have not been put on a board yet. */
     Backlog,
-
-    /** Tasks sitting on the board — the whole board, inside the backlog tab. */
     Kanban,
-
-    /** Tasks filed away into the archive — the `Closed`-only section of this tab. */
     Archived,
 }
 
 /**
- * Three partitions of the same project work, for the backlog tab's three sections.
+ * Sectioned backlog projection containing backlog, kanban board, and archive items.
  */
 data class BacklogSectionedProjection(
     val project: Project?,
@@ -123,13 +85,6 @@ data class BacklogSectionedProjection(
         .filter { it.status == WorkItemStatus.Closed }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
-    /**
-     * The board, flattened back into a list: every on-board status in board order, then rank.
-     *
-     * Rather than re-encoding the board's ordering rule, this flattens [WorkItemGrouping.boardColumns]
-     * — the same grouping the board tab draws — so the two listings cannot drift apart. An item
-     * in the Todo column at rank 3 reads back after an InProgress item at any rank.
-     */
     val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items).flatMap { it.items }
 
     val currentSection: BacklogSection = BacklogSection.Backlog
@@ -145,7 +100,7 @@ data class BacklogSectionedProjection(
 }
 
 /**
- * A one-line description of a project for a list row.
+ * Summary representation of a project.
  */
 data class ProjectSummary(
     val id: ProjectID,
@@ -165,8 +120,5 @@ data class ProjectSummary(
     )
 }
 
-/**
- * The first instant of the month this falls in, as seen in [timeZone].
- */
 private fun Instant.startOfMonthIn(timeZone: TimeZone): Instant =
     toLocalDateTime(timeZone).date.yearMonth.onDay(1).atStartOfDayIn(timeZone)

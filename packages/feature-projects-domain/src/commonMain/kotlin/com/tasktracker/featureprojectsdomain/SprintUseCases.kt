@@ -14,44 +14,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /**
- * The decisions a view makes about a sprint before anything reaches the store.
- *
- * ## Why sprint writes need a use case layer at all
- *
- * `ProjectRepositoryPort` grew nine sprint members in 23.3 and nothing above it grew a
- * caller, so for one phase the sprint writes were reachable only by a view model holding
- * the port directly. That is the shape every other write in this feature was moved *away*
- * from: [ProjectUseCases] exists because a decision a view makes — trim a name, refuse an
- * illegal one, fold a status change into the re-rank it implies — is a decision that
- * belongs somewhere reviewable, and a view model is not somewhere.
- *
- * ## What is validated here, and what is not
- *
- * The split is deliberate and it is *not* "the same checks twice":
- *
- * - **Here**: normalisation, and the checks that depend on more than one argument. A
- *   window that ends before it starts is a relation between two fields, and neither
- *   field's own rule can see it.
- * - **In the store**: anything that depends on state the caller does not hold — chiefly
- *   the overlap rule, which needs the project's other sprints and only the transaction can
- *   see them together with the insert. See `ProjectRepositoryPort.createSprint`.
- *
- * A check that appears in both layers is not duplication, because the two layers are
- * asked different questions: this one is "is this edit well-formed", and the store's is
- * "may this project hold it". The reason [ProjectUseCases] restates it anyway is the
- * reason `CreateProject` does: a rejected edit should never reach a store and leave a
- * queued change behind for a sprint that was never created.
- *
- * `now` comes from the injected [DateProvider] on every write, for the same reason as
- * everywhere else in this module — a rule that reads the wall clock is a rule whose tests
- * can only be run on a particular day.
- *
- * ## `@Throws` lists two classes, and that is not padding
- *
- * Every declaration here is `suspend`, and Kotlin/Native **rejects** `@Throws` on a
- * suspend function unless `CancellationException` is among the listed classes. A JVM-only
- * run compiles the identical annotation without complaint, so this reaches `./gradlew
- * check` rather than the module you were working in.
+ * Creates a sprint after validating window and inputs.
  */
 class CreateSprint(
     private val repository: ProjectRepositoryPort,
@@ -73,12 +36,7 @@ class CreateSprint(
         return repository.createSprint(
             projectID = projectID,
             name = name,
-            // Floored rather than refused, matching `Sprint`'s own `init` and
-            // `updateSprint`: a negative goal is normalised in place so every later reader
-            // sees one number rather than a sprint holding a goal no screen can render.
             goalStoryPoints = maxOf(0, goalStoryPoints),
-            // Blank folded to `null` here rather than trusted to the store, so a create
-            // with a whitespace-only goal queues the same payload a create with none does.
             goal = goal?.trim()?.takeIf { it.isNotEmpty() },
             startDate = startDate,
             endDate = endDate,
@@ -89,24 +47,7 @@ class CreateSprint(
 }
 
 /**
- * Applies a partial edit to a sprint.
- *
- * ## The window is checked against the *merged* sprint, not against the arguments
- *
- * `end < start` is a relation between two fields, and a partial edit may name only one of
- * them. Refusing only when both are present would therefore accept exactly the edit that
- * is easiest to make by accident: moving the start past the end while leaving the end
- * alone. So this reads the sprint, applies the patch to a copy, and checks *that* — the
- * store's own `updateSprint` makes the same check inside the transaction, where it is the
- * authority, and this one exists so a refused edit does not reach it.
- *
- * The read costs one call and is why this use case is not a three-line forward. It is
- * still cheaper than the alternative: a write that fails inside a transaction after
- * opening it has already touched the outbox.
- *
- * A missing sprint is refused with [AppError.Storage] rather than being silently
- * ignored — the caller asked to edit something, and reporting success for an edit that
- * was never applied is the combination a user reports as a bug with no reproduction.
+ * Updates an existing sprint.
  */
 class UpdateSprint(
     private val repository: ProjectRepositoryPort,
@@ -126,9 +67,6 @@ class UpdateSprint(
         val existing = repository.sprint(id)
             ?: throw AppError.Storage("That sprint no longer exists.")
 
-        // A lock protects the window and the cap, not the description. The editor disables
-        // the same two fields; this refusal is what keeps a caller holding the use case
-        // from bypassing that screen state.
         if (existing.isLocked &&
             (goalStoryPoints != null || startDate != null || endDate != null)
         ) {
@@ -159,13 +97,6 @@ class UpdateSprint(
     }
 }
 
-/**
- * Closes a sprint.
- *
- * Thin on purpose: the date, the already-finished refusal and the outbox row all belong
- * to the store, which is the only place that can see them. See
- * `ProjectRepositoryPort.finishSprint`.
- */
 class FinishSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -176,12 +107,6 @@ class FinishSprint(
         repository.finishSprint(id = id, now = dateProvider.now())
 }
 
-/**
- * Reopens a sprint.
- *
- * Also thin, and the overlap rule behind it is likewise the store's: this caller cannot
- * see whether an unfinished sibling's window now conflicts with the one being reopened.
- */
 class ReopenSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -192,13 +117,6 @@ class ReopenSprint(
         repository.reopenSprint(id = id, now = dateProvider.now())
 }
 
-/**
- * Locks a sprint against window, cap and task edits.
- *
- * Thin by design: the flag, the `updatedAt` stamp and the outbox row all belong to the
- * store. The decision to allow it is the detail screen's — the same owner gate that guards
- * [FinishSprint] — because a use case has no viewer identity to compare an owner against.
- */
 class LockSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -209,12 +127,6 @@ class LockSprint(
         repository.setSprintLocked(id = id, isLocked = true, now = dateProvider.now())
 }
 
-/**
- * Removes a sprint's lock, so its window, cap and membership accept edits again.
- *
- * The inverse of [LockSprint], and the reason the lock is worth having: the old start-date
- * rule could not be undone, so an owner who mistyped a window had no way back.
- */
 class UnlockSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -225,17 +137,6 @@ class UnlockSprint(
         repository.setSprintLocked(id = id, isLocked = false, now = dateProvider.now())
 }
 
-/**
- * Archives a finished sprint, filing it away from the default list.
- *
- * A sprint can be archived only once it is finished — the flow is scheduled → in-progress →
- * finished → archived — and archiving does not reopen it, so a second archive is a no-op
- * rather than an error. The store is the authority on both rules: it refuses a non-finished
- * sprint and clears the flag on an already-archived one.
- *
- * Thin on purpose: the precondition and the outbox row both belong to the store, which is the
- * only place that can see them. See [ProjectRepositoryPort.archiveSprint].
- */
 class ArchiveSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -246,12 +147,6 @@ class ArchiveSprint(
         repository.archiveSprint(id = id, now = dateProvider.now())
 }
 
-/**
- * Deletes a sprint, returning its tasks to the backlog.
- *
- * Separate from [CreateSprint] on purpose — see `ProjectRepositoryPort.deleteSprint` for
- * why an abandoned sprint's tasks are kept and its history is not.
- */
 class DeleteSprint(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -259,9 +154,6 @@ class DeleteSprint(
 
     @Throws(AppError::class, CancellationException::class)
     suspend operator fun invoke(id: SprintID) {
-        // Delete is destructive, so it is behind the same lock as the edits: a sprint on
-        // hold should not disappear from under the task list it is holding. A missing
-        // sprint is left to the store's no-op, as before.
         repository.sprint(id)?.let { sprint ->
             if (sprint.isLocked) {
                 throw AppError.Validation("'${sprint.name}' is locked. Unlock it before removing it.")
@@ -272,52 +164,7 @@ class DeleteSprint(
 }
 
 /**
- * Puts work items into a sprint.
- *
- * ## The membership lock is here, not only on the button
- *
- * A sprint's membership may be edited while it is **not locked and not finished**. The
- * lock is the owner's explicit decision, replacing the old rule that froze membership when
- * the start date arrived; a finished sprint is history and stays frozen regardless. The
- * detail screen hides the affordance for exactly the same rule (see
- * `SprintDetail.canEditItems`), but a hidden button is a UI state, not a guarantee: the
- * port is reachable from any model, and `setWorkItemSprint` itself makes no check. So the
- * rule is stated once here, where a refusal arrives as the banner sentence the user can
- * read, rather than as a row that silently did not move.
- *
- * The two refusals are checked in that order because a finished sprint can also be locked,
- * and "finished" is the state the owner cannot undo.
- *
- * An empty list short-circuits before the sprint is even read: there is nothing to write,
- * and a refusal for an instruction that asks for nothing would be a banner about a tap the
- * user did not meaningfully make.
- *
- * Two more rules live here, both because a write that changes the board is this use case's
- * job rather than the sheet's:
- *
- * - **A finished task cannot be committed.** A sprint commits work it is going to do, and a
- *   `Done` or `Closed` item is finished work - delivered, or filed away. Committing either
- *   to a *future* window is a contradiction the refusal names out loud. The sheet also
- *   hides this class of task, but a hidden row is UI state, not a guarantee: see the
- *   membership lock above for why the rule is stated once here too.
- * - **A backlog task lands on the board.** Bringing a task that was sitting untriaged in
- *   the backlog into a sprint *is* the sweep that commits it, and a committed task has a
- *   column - `Backlog` is not one, so a committed Backlog task would be present in the
- *   sprint and invisible on its board. It is moved to `Todo`, the first lane. On-board
- *   statuses (Todo, In Progress, In Review) keep themselves; they were already committed
- *   to work.
- *
- * And one more, added with the split of the goal into a number and a sentence:
- *
- * - **The batch may not push the sprint past its story-point cap.** `goalStoryPoints` is
- *   the ceiling of what may be committed inside the window, so the refusal here is what
- *   makes it a cap rather than a target a progress bar politely exceeds. Only when the cap
- *   is set: `0` is "no goal", the same state `SprintGoal.didHitGoal` reads as `null`, and
- *   refusing against a ceiling of zero would refuse everything. The count is the sprint's
- *   current items plus this batch — an already-overfull sprint (its cap was lowered while
- *   planned) refuses every addition until items are removed, which is the direction the
- *   rule exists to force. Checked after the batch is read and **before** the backlog sweep,
- *   so a refusal leaves every status exactly as it was.
+ * Adds work items to a sprint.
  */
 class AddWorkItemsToSprint(
     private val repository: ProjectRepositoryPort,
@@ -334,9 +181,6 @@ class AddWorkItemsToSprint(
             ?: throw AppError.Storage("That sprint no longer exists.")
         requireMembershipEditable(sprint)
         val now = dateProvider.now()
-        // Read every item before writing any of them: committing work into a sprint is one
-        // act, so a batch that contains one finished task refuses the whole batch. Partial
-        // writes would leave the sheet's banner right and the store wrong.
         val commits = workItemIDs.map { id ->
             val item = repository.workItem(id)
                 ?: throw AppError.Validation("That work item no longer exists.")
@@ -347,9 +191,6 @@ class AddWorkItemsToSprint(
             }
             item
         }
-        // The cap, over the sprint's current items plus this batch. `commits` may name
-        // items already in the sprint, so only the ones actually moving are counted here —
-        // double-counting them would refuse a batch that changes nothing.
         val cap = sprint.goalStoryPoints
         if (cap > 0) {
             val incoming = commits.filter { it.sprintID != sprintID }.sumOf { it.storyPoints ?: 0 }
@@ -361,8 +202,6 @@ class AddWorkItemsToSprint(
                 )
             }
         }
-        // `commits` holds the statuses as read above, so the sweep is over the read snapshot
-        // even after a move mutates a stored row (the fake's live objects) below it.
         commits.filter { it.status == WorkItemStatus.Backlog }.forEach { item ->
             repository.moveWorkItem(id = item.id, to = WorkItemStatus.Todo, rank = null, now = now)
         }
@@ -375,12 +214,7 @@ class AddWorkItemsToSprint(
 }
 
 /**
- * Sends work items from a sprint back to the backlog.
- *
- * The same lock as [AddWorkItemsToSprint], for the same reason read the other way: a task
- * pulled out of a sprint changes the set the progress bar and the eventual summary are
- * built from. Both directions are one rule — membership is frozen while the sprint is
- * locked or finished — and [requireMembershipEditable] is where that rule is written down.
+ * Removes work items from a sprint.
  */
 class RemoveWorkItemsFromSprint(
     private val repository: ProjectRepositoryPort,
@@ -398,22 +232,12 @@ class RemoveWorkItemsFromSprint(
         requireMembershipEditable(sprint)
         return repository.setWorkItemSprint(
             workItemIDs = workItemIDs,
-            // `Of(null)` rather than `Unmentioned`: sending a task back to the backlog is an
-            // instruction, and "do not care about membership" is a different one. See
-            // `Patch`.
             sprintID = Patch.Of(null),
             now = dateProvider.now(),
         )
     }
 }
 
-/**
- * The membership lock, named once so both directions cannot drift apart.
- *
- * [AppError.Validation], so the sentence reaches the user through the banner every model
- * already renders — `AppError.message` is the user-facing text and a use case that reworded
- * it would create a second owner for it.
- */
 private fun requireMembershipEditable(sprint: Sprint) {
     if (sprint.isFinished) {
         throw AppError.Validation("'${sprint.name}' is finished, so its tasks cannot be changed.")
@@ -423,18 +247,6 @@ private fun requireMembershipEditable(sprint: Sprint) {
     }
 }
 
-/**
- * The one window rule, named once.
- *
- * A **backwards** window is survivable — `Sprint`'s own KDoc stores one rather than
- * throwing, because a value that arrived from a server has to be representable — but
- * *editing into* it is refused. A sprint that ends before it starts is never active, so it
- * silently books nothing against its goal for its whole lifetime, and the summary at the
- * end of it reports a window that reads as a typo with nothing to say so.
- *
- * Inclusive on both ends, matching `Sprint.isActiveOn`: a one-day sprint has
- * `startDate == endDate` and is not backwards.
- */
 private fun requireWindow(startDate: Instant, endDate: Instant) {
     if (endDate < startDate) {
         throw AppError.Validation("A sprint cannot end before it starts.")

@@ -25,30 +25,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /**
- * The decisions a view makes before anything reaches the store.
- *
- * ## `@Throws` lists two classes, and that is not padding
- *
- * Every declaration here is `suspend`, and Kotlin/Native **rejects** `@Throws` on a
- * suspend function unless `CancellationException` is among the listed classes. A JVM-only
- * run compiles the identical annotation without complaint, so this is the kind of mistake
- * that reaches `./gradlew check` rather than the module you were working in — which is
- * why the fix is recorded as a rule rather than as a patch.
- *
- * The second class is also the correct contract, not a concession to the compiler. A
- * suspend function can be cancelled at any suspension point, and a caller that writes
- * `catch (e: AppError)` around a use case is then relying on the compiler to keep
- * cancellation from being swallowed into a user-facing "something went wrong". Naming it
- * says the same thing to a reader: a cancelled screen is not a failed save.
- */
-
-/**
- * Creates a project, after checking the inputs.
- *
- * The validation rules themselves live in `:packages:domain` because they describe the
- * entity; what lives here is the *decision* to apply them before the write, which is what
- * keeps a rejected edit from ever reaching the store and leaving a queued change behind
- * for a project that was never created.
+ * Creates a project after validating inputs.
  */
 class CreateProject(
     private val repository: ProjectRepositoryPort,
@@ -62,10 +39,6 @@ class CreateProject(
         details: String = "",
         memberIDs: List<UserID> = emptyList(),
     ): Project {
-        // Normalised here, before the port is touched. The data layer checks the same rules
-        // again, and that is not duplication: this is the layer the UI actually goes
-        // through, and a rejected edit should never reach a store or leave a queued change
-        // behind for a project that was never created.
         val name = ProjectRules.normaliseName(name)
         val keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix)
         val details = ProjectRules.normaliseDetails(details)
@@ -80,17 +53,7 @@ class CreateProject(
 }
 
 /**
- * Renames a project, or rewrites its notes.
- *
- * Deliberately narrow: the key prefix is missing from this use case on purpose, because
- * a prefix is the root of every work item key the project has ever issued (`TT-142`).
- * Editing it would either orphan the issued keys or demand a cascade rewrite that the
- * port does not offer, and neither is an edit a rename form should be able to trigger.
- * A project's prefix is fixed at creation; if it is wrong, the project is wrong.
- *
- * Both fields are optional and `null` means "leave it alone", which is what makes an
- * edit that changed nothing a read instead of a write — a write would bump `updatedAt`
- * and reorder the dashboard without changing anything.
+ * Updates a project's name, details, or members.
  */
 class UpdateProject(
     private val repository: ProjectRepositoryPort,
@@ -107,8 +70,6 @@ class UpdateProject(
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
         val normalisedDetails = details?.let { ProjectRules.normaliseDetails(it) }
         if (normalisedName == null && normalisedDetails == null && memberIDs == null) {
-            // Nothing to change: reading beats writing, because a write would bump
-            // `updatedAt` and reorder the dashboard without changing anything.
             return repository.project(id)
                 ?: throw AppError.Storage("That project no longer exists.")
         }
@@ -139,9 +100,6 @@ class CreateWorkItem(
         dueDate: Instant? = null,
         recurrence: Recurrence? = null,
     ): WorkItem {
-        // Same reasoning as [CreateProject]: the rules run here so a bad edit is refused
-        // before the port is reached. [assigneeID] needs no normalisation — a [UserID] is
-        // already an identity, and "unassigned" is exactly its `null`.
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
         return repository.createWorkItem(
@@ -158,7 +116,7 @@ class CreateWorkItem(
     }
 }
 
-/** Moves a work item between columns. */
+/** Moves a work item between statuses. */
 class MoveWorkItem(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -166,26 +124,9 @@ class MoveWorkItem(
 
     @Throws(AppError::class, CancellationException::class)
     suspend operator fun invoke(id: WorkItemID, to: WorkItemStatus): WorkItem {
-        // Confirms the item is really there before moving it, so a stale screen — or a
-        // second device having deleted it since — produces a clear "no longer exists"
-        // rather than a bare failure from the write.
-        //
-        // It also reads the current status, which is the value a transition rule would
-        // have to be checked against. [WorkItemRules.canTransition] is deliberately
-        // permissive until the product decides which moves are legal, so this does not
-        // pretend to enforce a policy that does not exist. When that policy is written
-        // down, this is the line that starts using the status it just read.
         val current = repository.workItem(id)
             ?: throw AppError.Validation("That work item no longer exists.")
         if (!WorkItemRules.canTransition(current.status, to)) {
-            // [WorkItemStatus.wireValue] rather than a display title, and this is a
-            // deviation worth naming. The original interpolated `status.title` — "In
-            // Progress" — into this sentence, and `:packages:domain` dropped `title`
-            // because user-facing text cannot live behind a module that may not depend on
-            // `:packages:design-system`, where `composeResources` is owned. The wire value
-            // is the same string the Room column stores and the deep link routes on, so a
-            // user quoting this message and a developer grepping the database are looking
-            // at the same words.
             throw AppError.Validation(
                 "A work item cannot go from ${current.status.wireValue} to ${to.wireValue}.",
             )
@@ -194,27 +135,13 @@ class MoveWorkItem(
     }
 }
 
-/** What happened when a work item was saved. */
 sealed interface WorkItemSaveOutcome {
-
     data class Created(val workItemID: WorkItemID) : WorkItemSaveOutcome
-
-    /**
-     * [moved] says whether the status also changed, which is a second, different write
-     * and is worth telling apart when testing or logging.
-     */
     data class Updated(val workItemID: WorkItemID, val moved: Boolean) : WorkItemSaveOutcome
 }
 
 /**
- * Creates a work item, or updates an existing one.
- *
- * One use case rather than two, because saving is a single decision the caller should not
- * have to make. The caller knows what the fields say; only this knows that a status
- * change is *also* a move — it has to re-rank the card into its new column, which a
- * field update deliberately does not do. Left in a view model, a status change eventually
- * saves without re-ordering, which looks fine on one device and puts two cards in the
- * same slot on another.
+ * Creates or updates a work item, handling status moves and re-ranking.
  */
 class SaveWorkItem(
     private val repository: ProjectRepositoryPort,
@@ -239,11 +166,7 @@ class SaveWorkItem(
     ): WorkItemSaveOutcome {
         val title = WorkItemRules.normaliseTitle(title)
         val details = WorkItemRules.normaliseDetails(details)
-        // A task cannot wait on itself, and duplicates are one blocker stated twice.
-        // Sanitised here so every caller gets the same rule rather than each screening it.
         val blockers = blockedByIDs.filter { it != id }.distinct()
-        // The cap is a domain rule; the editor also refuses a sixth selection so the
-        // tap has a visible answer, but the payload must not depend on the UI having done it.
         val tags = tagIDs.distinct().take(TagRules.MAX_PER_ITEM)
 
         if (id == null) {
@@ -265,26 +188,17 @@ class SaveWorkItem(
             return WorkItemSaveOutcome.Created(created.id)
         }
 
-        // Read first, because "did the status change" is the whole question here. The
-        // port's update takes no status at all, which is exactly what makes it easy to
-        // forget the move.
         val previous = repository.workItem(id)
         val updated = repository.updateWorkItem(
             id = id,
             title = title,
             details = details,
             priority = priority,
-            // Always an instruction, never "unmentioned". The editor holds the truth for
-            // every field, so a cleared assignee has to reach the store as a clear; a
-            // [Patch.Unmentioned] here would silently keep the previous value.
             assigneeID = Patch.Of(assigneeID),
             dueDate = Patch.Of(dueDate),
             storyPoints = Patch.Of(storyPoints),
             blockedByIDs = Patch.Of(blockers),
-            // Same reasoning as the assignee above: the editor is the truth, so clearing
-            // a repeat rule has to reach the store as a clear, not as silence.
             recurrence = Patch.Of(recurrence),
-            // And the same for tags: emptying the selection is an edit the store must hear.
             tagIDs = Patch.Of(tags),
             now = dateProvider.now(),
         )
@@ -296,28 +210,14 @@ class SaveWorkItem(
     }
 }
 
-/** What happened to a project when the user asked for it to be removed. */
 enum class ProjectRemovalOutcome {
-    /** Unfinished work was found, so the project was archived instead of destroyed. */
     Archived,
-
-    /** Nothing was outstanding, so the project and its work items were deleted. */
     Deleted,
-
     AlreadyArchived,
 }
 
 /**
- * Removes a project, or archives it if that would throw away unfinished work.
- *
- * This is the reason a use case layer is worth having. "Delete project" is one button in
- * the UI and two very different operations underneath: a project whose work is all done
- * can go, and one with open items must not, because deleting it cascades into work items
- * that somebody is still relying on — and the cascade also queues a delete for every one
- * of them, so the server would lose them too.
- *
- * Archiving is the safe default. Nothing is destroyed, the project leaves the default
- * list, and the user can still find it.
+ * Removes a project or archives it if it contains unfinished work.
  */
 class RemoveProject(
     private val repository: ProjectRepositoryPort,
@@ -331,10 +231,6 @@ class RemoveProject(
         if (project.isArchived) return ProjectRemovalOutcome.AlreadyArchived
 
         val items = repository.workItems(id)
-        // `isComplete`, not `isTerminal`, on purpose. A closed item is finished with but
-        // it is also a decision that was taken, and it sits in the project's archive — so
-        // a project holding any of those is archived rather than deleted, and the record
-        // of what was decided survives.
         val outstanding = items.filter { !it.status.isComplete }
         if (outstanding.isNotEmpty()) {
             repository.setArchived(id = id, isArchived = true, now = dateProvider.now())
@@ -347,27 +243,7 @@ class RemoveProject(
 }
 
 /**
- * Creates the next instance of a recurring work item, dated at its next occurrence.
- *
- * The finished instance is left exactly as it is — status, resolvedAt, history — and a
- * *new* row carries the series forward. Sliding the original's due date instead would
- * make the completed occurrence vanish from the archive the moment the next one was
- * created, which is the one thing a recurring task must not do: the point of the series
- * is that each occurrence happened and was filed.
- *
- * The new instance is a fresh backlog card: same title, details, priority, assignee,
- * estimate and blockers; a cleared sprint, because a series that silently refills a
- * finished sprint's capacity is a surprise; and the same [Recurrence], so the series
- * continues until its `until` says stop.
- *
- * Returns `null` when the series has ended — no rule, no due date to step from, or the
- * next occurrence would fall after `until`. A caller showing "repeat" as a button
- * should hide it on that result rather than treat it as a failure.
- *
- * [timeZone] is a parameter rather than a read of the device's zone, for the reason the
- * domain rule takes it: a use case that picked its own zone would be untestable outside
- * one zone, and the editor — which chose the due date the user sees — is the layer that
- * knows which zone the dates on screen are in.
+ * Expands a recurring work item, creating the next occurrence.
  */
 class ExpandRecurrence(
     private val repository: ProjectRepositoryPort,
@@ -379,10 +255,6 @@ class ExpandRecurrence(
         val current = repository.workItem(id)
             ?: throw AppError.Validation("That work item no longer exists.")
         val rule = current.recurrence ?: return null
-        // Stepped from the due date rather than from `now`: a weekly task due last
-        // Friday, completed today, recurs on the Friday after — not a week from today.
-        // A task with no due date has nothing to step from, and guessing one would
-        // invent a schedule the user never set.
         val anchor = current.dueDate ?: return null
         val next = rule.nextOccurrenceAfter(anchor, timeZone) ?: return null
 
@@ -397,15 +269,12 @@ class ExpandRecurrence(
             storyPoints = current.storyPoints,
             blockedByIDs = current.blockedByIDs,
             recurrence = rule,
-            // The next occurrence keeps the series' tags; a tag is a property of the work
-            // being repeated, not of one occurrence.
             tagIDs = current.tagIDs,
             now = dateProvider.now(),
         )
     }
 }
 
-/** Reads one work item's comment thread, oldest first. */
 class LoadComments(
     private val repository: ProjectRepositoryPort,
 ) {
@@ -415,49 +284,18 @@ class LoadComments(
         repository.comments(workItemID)
 }
 
-/**
- * Result of posting a comment, including any mentions parsed from the body.
- *
- * The mention parsing runs in the use case so both the editor (for highlighting)
- * and the sync sink (for notification delivery) share the same rule from
- * [MentionRules]. This avoids a second screen forgetting the rule, and keeps the
- * store agnostic to what a "mention" means.
- */
 sealed interface AddCommentResult {
-    /** Comment was created successfully with the given mentions. */
     data class Success(
         val comment: Comment,
         val mentions: List<MentionRules.Mention>,
     ) : AddCommentResult
 
-    /** The comment body was empty after trimming. */
     data object EmptyBody : AddCommentResult
-
-    /** The parent comment being replied to no longer exists. */
     data object ParentNotFound : AddCommentResult
 }
 
 /**
- * Posts one comment — top-level or a reply — after the two rules only this can enforce.
- *
- * Both rules live here rather than in the store, deliberately: neither needs to see
- * anything the transaction can see (unlike the sprint-overlap rule, which does, and is
- * therefore enforced in the port), so a use case is the earliest shared place every
- * caller passes through. A check in the view would be the second screen that forgets it.
- *
- * **The blank refusal and the trim are one rule, not two.** A body of `"   "` is empty
- * after normalisation, so the refusal is on the normalised value — otherwise whitespace
- * would sail past the check and store a comment that renders as nothing.
- *
- * **A reply must name a comment that is still in the thread.** An orphaned reply is a
- * sentence addressing nobody, and the two reads racing a delete across devices is a real
- * window — so the parent is checked against the thread as this device holds it, and a
- * reply to a deleted comment is refused with a message that says so rather than stored
- * pointing at nothing.
- *
- * **Mentions are parsed from the trimmed body** using [MentionRules.extractMentions].
- * The result carries both the created comment and the list of mentions so callers can
- * highlight them in the editor or deliver notifications (see 1.3) without re-parsing.
+ * Posts a comment on a work item.
  */
 class AddComment(
     private val repository: ProjectRepositoryPort,
@@ -490,7 +328,6 @@ class AddComment(
     }
 }
 
-/** Reads one work item's attachments, oldest first. */
 class LoadAttachments(
     private val repository: ProjectRepositoryPort,
 ) {
@@ -500,40 +337,15 @@ class LoadAttachments(
         repository.attachments(workItemID)
 }
 
-/**
- * Result of attaching a file, including the reason for every refusal.
- *
- * The refusals carry what the editor needs to say, not just that it must say no: a
- * "too large" banner that does not name the limit teaches nothing, and a size check
- * whose message omits the measured size cannot be mutation-tested against the number
- * the guard actually enforces.
- */
 sealed interface AttachFileResult {
-    /** The file was stored; the editor shows the row the use case returns. */
     data class Success(val attachment: Attachment) : AttachFileResult
-
-    /** The pick produced no name — nothing was chosen, or the platform could not say. */
     data object BlankName : AttachFileResult
-
-    /** The pick produced no bytes. */
     data object EmptyFile : AttachFileResult
-
-    /** The pick is over the cap the blob store is prepared to hold. */
     data class TooLarge(val sizeBytes: Long, val limitBytes: Long) : AttachFileResult
 }
 
 /**
- * Attaches one picked file, after the two rules only this can enforce.
- *
- * Both rules live here rather than in the store, for the same reason the comment trim
- * does: neither needs anything the transaction can see, so a use case is the earliest
- * shared place every caller passes through. A check in the view would be the second
- * screen that forgets it; a check in the store would put policy next to persistence.
- *
- * **The size cap is a product choice, not a technical limit.** 25 MiB holds a slide deck,
- * a phone photo burst, or a minutes PDF with room to spare, while keeping the eager
- * in-memory pick — which the seam's port documents — bounded on every device. A larger
- * cap arrives with a streaming blob store, not with a larger constant.
+ * Attaches a file to a work item.
  */
 class AttachFile(
     private val repository: ProjectRepositoryPort,
@@ -541,23 +353,13 @@ class AttachFile(
 ) {
 
     companion object {
-        /** The largest file the blob store will take, in bytes. */
         const val MAX_ATTACHMENT_BYTES: Long = 25L * 1024L * 1024L
 
-        /**
-         * The refusals only attaching can decide, as a pure check the editor can also run.
-         *
-         * `null` means the pick passes. Extracted so the editor's create-time staging can
-         * screen a held pick on the **same** rules the eventual attach applies — one source
-         * for the cap, rather than a second copy that drifts from this one and from the
-         * server's `AttachmentMaxBytes`.
-         */
         fun refusal(fileName: String, bytes: ByteArray): AttachFileResult? = when {
             fileName.trim().isEmpty() -> AttachFileResult.BlankName
             bytes.isEmpty() -> AttachFileResult.EmptyFile
             bytes.size > MAX_ATTACHMENT_BYTES ->
                 AttachFileResult.TooLarge(bytes.size.toLong(), MAX_ATTACHMENT_BYTES)
-
             else -> null
         }
     }
@@ -582,15 +384,6 @@ class AttachFile(
     }
 }
 
-/**
- * Removes one attachment, dropping its row and its blob.
- *
- * Thin by design: unlike attaching, removing has no guard the store cannot own itself —
- * the port is idempotent, so there is no refusal to share between callers. The class
- * still exists (rather than letting the view call the port) because a second screen
- * that calls the port directly is how the thread about which writes go through use
- * cases gets lost.
- */
 class DeleteAttachment(
     private val repository: ProjectRepositoryPort,
 ) {
@@ -601,37 +394,15 @@ class DeleteAttachment(
     }
 }
 
-/** What happened when an attachment's bytes were pushed. */
 sealed interface UploadAttachmentResult {
-    /** The server now holds the bytes; the local row is marked synced. */
     data object Uploaded : UploadAttachmentResult
-
-    /** There is nothing to do: already synced, or the row is gone. */
     data object AlreadySynced : UploadAttachmentResult
-
-    /** The metadata row exists but its bytes are not on this device. */
     data object NoLocalBytes : UploadAttachmentResult
-
-    /**
-     * The server does not have the metadata row yet, so it refused the bytes with `404`.
-     *
-     * Expected, not exceptional: the row is in the outbox and the upload runs right after
-     * the local write, so the first attempt can beat the metadata push. A later attempt
-     * (after a sync) succeeds.
-     */
     data object NotYetOnServer : UploadAttachmentResult
 }
 
 /**
- * Pushes one attachment's bytes to the server, after the metadata has been queued.
- *
- * Deliberately separate from [AttachFile]: attaching must commit locally and return
- * immediately, while uploading is a network round trip that can take seconds and fail.
- * Fusing them would make the attach button wait for the radio, which is the one thing an
- * offline-first editor must never do.
- *
- * The upload is idempotent end to end — the server overwrites a blob and re-records the
- * same `blob_ref` — so a retry after a transport error is safe.
+ * Uploads an attachment's binary bytes.
  */
 class UploadAttachment(
     private val repository: ProjectRepositoryPort,
@@ -643,9 +414,6 @@ class UploadAttachment(
     suspend operator fun invoke(id: AttachmentID): UploadAttachmentResult {
         val attachment = repository.attachment(id) ?: return UploadAttachmentResult.AlreadySynced
         if (attachment.blobRef != null) return UploadAttachmentResult.AlreadySynced
-        // A pulled row can name no project only if a build wrote it before `projectID`
-        // existed; without one the file API cannot scope the request, so there is nothing
-        // safe to send.
         val projectID = attachment.projectID ?: return UploadAttachmentResult.AlreadySynced
         val bytes = repository.attachmentBytes(id) ?: return UploadAttachmentResult.NoLocalBytes
         return try {
@@ -657,8 +425,6 @@ class UploadAttachment(
             )
             repository.markAttachmentUploaded(
                 id = id,
-                // The server names the blob after the attachment id; mirroring that keeps
-                // the local "synced" flag honest without a second round trip to read it.
                 blobRef = id.stringValue,
                 uploadedAt = dateProvider.now(),
             )
@@ -669,84 +435,28 @@ class UploadAttachment(
     }
 }
 
-/** One attachment's upload attempt as the sweep saw it: the row, and why it did not make it. */
 data class AttachmentSweepFailure(
     val id: AttachmentID,
     val error: AppError,
 )
 
-/**
- * What one sweep of the pending-attachment queue found, in full.
- *
- * ## Why a report and not a count
- *
- * The only caller today is a post-sync hook that logs a line, but "3 uploaded" is not
- * enough to say what happened to the other seven: a row the store has no bytes for is a
- * permanent local state, a row the server refused is a verdict on that one file, and a row
- * that was mid-flight is a timing artefact. Three different facts, three different
- * follow-ups, and one number would have flattened them into nothing.
- *
- * ## The order is the story
- *
- * [refused] and [interruptedBy] are the only two that carry an [AppError], and they are
- * different breaks of the same rule rather than two spellings of one failure. See
- * [SweepPendingAttachments] for why one keeps going and the other stops.
- */
 data class AttachmentSweepReport(
-    /** The bytes are now on the server and the row is marked synced. */
     val uploaded: List<AttachmentID> = emptyList(),
-    /** Another path — an open editor, most likely — uploaded the same row first. */
     val alreadySynced: List<AttachmentID> = emptyList(),
-    /** The row exists but its bytes are not on this device. Retrying cannot help. */
     val noLocalBytes: List<AttachmentID> = emptyList(),
-    /** The server has no metadata row for it yet, so the next sweep retries. */
     val notYetOnServer: List<AttachmentID> = emptyList(),
-    /** The server refused these outright. The sweep kept going past them. */
     val refused: List<AttachmentSweepFailure> = emptyList(),
-    /** The first transport-level failure, which stopped the sweep. The rest were not tried. */
     val interruptedBy: AttachmentSweepFailure? = null,
 ) {
-    /** Rows the sweep touched at all, in either direction. */
     val attempted: Int
         get() = uploaded.size + alreadySynced.size + noLocalBytes.size +
             notYetOnServer.size + refused.size + if (interruptedBy == null) 0 else 1
 
-    /** Whether there was nothing to do — the common case, and the one that must stay cheap. */
     val isEmpty: Boolean get() = attempted == 0
 }
 
 /**
- * Drains every attachment whose bytes are still local-only, one [UploadAttachment] at a time.
- *
- * ## Why this exists at all
- *
- * [UploadAttachment] is fired by the editor after an attach, which means the queue is only
- * drained while an editor is open. A user who attaches a file and leaves the card before the
- * upload lands keeps `blobRef == null` until they come back — the bytes are safe on this
- * device, but the file is invisible to teammates for as long as that lasts. Running the same
- * use case after every *successful* sync cycle closes it: by then the metadata row is on the
- * server, so an upload cannot be answered with the `404` that [UploadAttachmentResult.NotYetOnServer]
- * describes, and the list is empty on the overwhelmingly common cycles.
- *
- * ## Refusals continue, transport failures stop
- *
- * The distinction is [AppError.isRetryable] again, the same property the sync engine retries
- * on and the editor's own retry reads, because the reasoning is the same:
- *
- * - A **refusal** is a verdict on one file — a `413` from a cap that drifted, a `400` from a
- *   row the server will never accept. It says nothing about the next row, so stopping would
- *   strand perfectly uploadable files behind one bad one. The row is recorded and the sweep
- *   moves on.
- * - A **transport failure** is a fact about the path — no route, a timeout, a 500. Every
- *   remaining row would walk the same broken road, so the sweep stops at the first one and
- *   lets the next successful sync pick the queue back up.
- *
- * ## What it does not coordinate
- *
- * It does not know about the editor's `uploadingIDs`, and does not need to: the upload is
- * idempotent end to end, so the same row uploaded twice by two paths overwrites the same
- * blob and lands on the same `blobRef`. The report's [AttachmentSweepReport.alreadySynced]
- * bucket exists for exactly that overlap, so a race reads as a fact rather than as an error.
+ * Sweeps and uploads pending attachments.
  */
 class SweepPendingAttachments(
     private val repository: ProjectRepositoryPort,
@@ -760,27 +470,20 @@ class SweepPendingAttachments(
             val outcome = try {
                 upload(id)
             } catch (cancellation: CancellationException) {
-                // A cancelled sweep is not a failed one, and must not be reported as one.
                 throw cancellation
             } catch (failure: AppError) {
                 if (!failure.isRetryable) {
-                    // A verdict on one file, not on the path: recorded, and the sweep keeps
-                    // going, because the next row is a different file.
                     report = report.copy(refused = report.refused + AttachmentSweepFailure(id, failure))
                     continue
                 }
-                // The path just failed. Every remaining row would walk the same broken
-                // road, so the next successful sync picks the queue back up.
                 return report.copy(interruptedBy = AttachmentSweepFailure(id, failure))
             }
             report = when (outcome) {
                 UploadAttachmentResult.Uploaded -> report.copy(uploaded = report.uploaded + id)
                 UploadAttachmentResult.AlreadySynced ->
                     report.copy(alreadySynced = report.alreadySynced + id)
-
                 UploadAttachmentResult.NoLocalBytes ->
                     report.copy(noLocalBytes = report.noLocalBytes + id)
-
                 UploadAttachmentResult.NotYetOnServer ->
                     report.copy(notYetOnServer = report.notYetOnServer + id)
             }
@@ -789,33 +492,6 @@ class SweepPendingAttachments(
     }
 }
 
-/**
- * Queues the metadata change for every attachment whose bytes have never been pushed.
- *
- * ## The gap this is for
- *
- * Attachments written before the change feed carried them have a row, a blob and **no
- * outbox entry** — so no cycle pushes them and no teammate sees them, however many times
- * the app syncs. The bytes are on this device and the post-sync sweep will upload them, but
- * only once the server has the metadata row to attach them to, and only a queued change
- * can put it there. This is that write.
- *
- * ## Why the pending set is the right set, and why no flag is kept here
- *
- * [ProjectRepositoryPort.pendingAttachmentIDs] is `blobRef IS NULL AND blobPath != ''`, and
- * that is exactly the set the server cannot already hold as *metadata*: a row reaches
- * `blobRef != null` only through an upload, and an upload is answered `404` unless the
- * metadata row is already there. So a row still pending is either pre-sync, or queued and
- * not yet pushed — and in both cases queueing its change is the correct next step, never a
- * mistake. A row the server has falls out of the set by itself, which is what makes this
- * converge without any durable marker: run it once and the set empties as the uploads land.
- *
- * Whether it has *already run* is a different question, and it belongs to whoever holds the
- * durable state — see the composition root's upgrade backfill, which runs this once per
- * install so a healthy store is not re-announced on every cycle.
- *
- * @return how many changes were queued, for a caller that records what it did.
- */
 class BackfillUnqueuedAttachments(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
@@ -832,23 +508,7 @@ class BackfillUnqueuedAttachments(
 }
 
 /**
- * Returns one attachment's bytes, downloading and caching them on first read.
- *
- * The local cache is the fast path and the only path when the device is offline: a file
- * this device attached is already on disk, so opening it must not touch the network. A
- * file another member attached arrives as metadata only, and its bytes are fetched here,
- * once, then cached.
- *
- * [transport] is nullable, and `null` means "this build has no file API" rather than "this
- * use case is unavailable". The distinction matters: a demo graph has no server, and a file
- * it attached is still on this device, so it must still be openable. Refusing to build the
- * use case without a transport — which is what the editor did first — made every local file
- * unopenable in exactly the build that has nothing else to open. With no transport, a cache
- * hit answers and a cache miss returns `null`.
- *
- * Returns `null` when there is nothing to open: the row is gone, or its bytes have not
- * reached the server yet. Both are "not available now" rather than failures the editor
- * should paint red.
+ * Fetches an attachment's bytes, downloading and caching on first read.
  */
 class FetchAttachment(
     private val repository: ProjectRepositoryPort,
@@ -858,12 +518,8 @@ class FetchAttachment(
     @Throws(AppError::class, CancellationException::class)
     suspend operator fun invoke(id: AttachmentID): ByteArray? {
         repository.attachmentBytes(id)?.let { return it }
-        // Checked before the row read: with no file API there is nothing a download could
-        // use, so the round trip to learn that would buy nothing.
         val transport = transport ?: return null
         val attachment = repository.attachment(id) ?: return null
-        // No `blobRef` means the bytes were never uploaded, so there is nothing to fetch
-        // and no reason to spend a round trip learning that.
         if (attachment.blobRef == null) return null
         val projectID = attachment.projectID ?: return null
         val bytes = transport.download(
