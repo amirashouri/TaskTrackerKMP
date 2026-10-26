@@ -4,32 +4,10 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.WorkItemStatus
 
 /**
- * The board a first launch starts with.
- *
- * ## Relative due dates, not fixed ones
- *
- * [ProjectSeed.Item.dueInDays] is an offset rather than a date, and it has to be: a sample
- * board with hard-coded due dates is a wall of overdue cards the moment the app has been
- * installed for a week, which teaches a new user that "overdue" is noise before they have
- * written a single item of their own.
- *
- * The offsets are mostly positive and a couple are near, so the seeded board shows a due-date
- * badge in a plausible state rather than a uniform one.
- *
- * ## A value, not a function of a clock
- *
- * [projects] is a pure function of nothing. The offsets are applied by
- * [RoomProjectRepository.seed], which has a `now` from its caller. A `SampleData.seeds(now)`
- * signature would put the arithmetic in two places and make the fixture's shape depend on the
- * instant, which is exactly the kind of coupling a fixture exists to avoid.
+ * Seeding sample projects and work items for initial app launch.
  */
 object SampleData {
 
-    /**
-     * Two projects, so the dashboard, the deep links and the project switcher have more than
-     * one thing to point at — a single-project sample board makes every list, picker and
-     * navigation test look like it has passed when it has only proved the single-item case.
-     */
     fun projects(): List<ProjectSeed> = listOf(
         ProjectSeed(
             keyPrefix = "APO",
@@ -151,12 +129,6 @@ object SampleData {
                 ProjectSeed.Item("Handle revoked notification permission", status = WorkItemStatus.Todo, priority = Priority.Medium),
                 ProjectSeed.Item("Add an in-app notification inbox", status = WorkItemStatus.Todo, priority = Priority.High),
             ),
-            // One sprint per status, and every window disjoint from every other — no two share
-            // an instant regardless of status. The finished/archived flags alone would already
-            // keep the stores from refusing each other, but a fixture whose finished sprints
-            // overlap teaches that overlap is only a live-sprint problem; disjoint windows keep
-            // the seeded history unambiguous too. Offsets, not dates, so the statuses hold at
-            // any install time: InProgress always contains the seed instant.
             sprints = listOf(
                 ProjectSeed.SprintSeed(
                     name = "Gemini Sprint 3",
@@ -229,22 +201,7 @@ object SampleData {
 }
 
 /**
- * One project to seed, and the items filed under it.
- *
- * No ids and no timestamps: both are generated at insert time, and baking them into the
- * fixture would mean a seeded board that looks identical on two devices — which is precisely
- * the situation the local-first design has to be tested in.
- *
- * @param keyPrefix the project key, e.g. `APO` produces `APO-1`, `APO-2`.
- * @param members seeds the *signed-in user* as a project member when true, and nobody when
- *   false. A flag and not a list of ids, for the same reason [Item.assignee] is: a sample
- *   name cannot resolve to a `UserID`, and the member section can only *name* a person the
- *   directory knows — which at seed time is the signed-in user. Previews carry richer
- *   multi-member fixtures because a preview can hand the name map itself; a seeded install
- *   gets the one member it can honestly have.
- * @param items seeded in list order, and the position in this list is the number in the
- *   item's key — so the third entry is `APO-3` and a test can assert on key numbering without
- *   counting rows.
+ * Seed model for a project and its items/sprints.
  */
 class ProjectSeed(
     val keyPrefix: String,
@@ -255,26 +212,6 @@ class ProjectSeed(
     val sprints: List<SprintSeed> = emptyList(),
 ) {
 
-    /**
-     * One seeded work item.
-     *
-     * `details` defaults to empty rather than being required, because most items on a real
-     * board have neither, and a fixture that has to spell out `details = ""` thirteen times
-     * stops being readable as a board.
-     *
-     * @param status the column the item lands in. Terminal statuses are dated by the seeder,
-     *   because the archive files by resolution date and an undated `Done` item is invisible
-     *   in it.
-     * @param assignee seeds the item to the *signed-in user* when true, and leaves it
-     *   unassigned when false. A flag and not a name, because a sample name cannot resolve
-     *   to a `UserID` — the sample board is the user's own board, so "mine" is the only
-     *   assignment a fixture can honestly make until a member directory exists.
-     * @param dueInDays days from the seeding instant, or `null` for no due date — which is
-     *   the majority, and a board where everything has a due date is its own kind of noise.
-     * @param rank position within its own column, which is why every seeded item leaves this
-     *   at 0. They all share a rank on purpose: it is the case the read path's tie-break
-     *   exists for, and a fixture that gave each card its own rank would never exercise it.
-     */
     class Item(
         val title: String,
         val details: String = "",
@@ -285,20 +222,6 @@ class ProjectSeed(
         val rank: Int = 0,
     )
 
-    /**
-     * One seeded sprint.
-     *
-     * Windows are day offsets from the seeding instant, for the same reason
-     * [Item.dueInDays] is: a fixture with fixed dates has a different status every month it
-     * is installed in. Offsets keep the seeded statuses stable — the InProgress window always
-     * contains the seed instant, the Scheduled one always starts after it, and the two
-     * finished ones always ended before it.
-     *
-     * @param startsInDays first day of the window, relative to the seeding instant.
-     * @param endsInDays last day, inclusive, relative to the seeding instant.
-     * @param owner seeds the sprint to the *signed-in user* when true — the same rule as
-     *   [Item.assignee], and for the same reason.
-     */
     class SprintSeed(
         val name: String,
         val goalStoryPoints: Int = 0,
