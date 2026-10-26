@@ -37,7 +37,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -45,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -683,36 +681,6 @@ internal fun BoardMoveActions(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun ProjectBoardScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectBoardScreen(
-        projection = ViewPreviewData.boardProjection(),
-        isLoading = false,
-        errorMessage = null,
-        movingItemID = null,
-        onSelect = {},
-        onFileAway = {},
-        onMove = { _, _ -> },
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectBoardScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectBoardScreen(
-        projection = ViewPreviewData.emptyBoardProjection(),
-        isLoading = false,
-        errorMessage = null,
-        movingItemID = null,
-        onSelect = {},
-        onFileAway = {},
-        onMove = { _, _ -> },
-        onDismissError = {},
-    )
 }
 
 const val ProjectBoardScreenTag = "board.screen"

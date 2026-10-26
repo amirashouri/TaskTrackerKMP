@@ -2,10 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.member_picker_search
@@ -67,25 +64,3 @@ fun WorkItemAssigneeRow(
 
 /** The picker's test tag, so a test asserts on the picker rather than on its copy. */
 const val WorkItemAssigneePickerTag = "workItem.editor.assigneePicker"
-
-@Preview(name = "Assignee picker", showBackground = true)
-@Composable
-private fun WorkItemAssigneeRowPreview() {
-    ttTheme(ThemeScheme.Dark) {
-        WorkItemAssigneeRow(
-            assigneeID = null,
-            onAssigneeChanged = {},
-        )
-    }
-}
-
-@Preview(name = "Assignee picker — me", showBackground = true)
-@Composable
-private fun WorkItemAssigneeRowMePreview() {
-    ttTheme(ThemeScheme.Dark) {
-        WorkItemAssigneeRow(
-            assigneeID = ViewPreviewData.previewUserID,
-            onAssigneeChanged = {},
-        )
-    }
-}

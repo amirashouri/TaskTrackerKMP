@@ -21,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -340,54 +339,6 @@ private fun RemoveProjectConfirmation(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun ProjectsListScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectsListScreen(
-        rows = ViewPreviewData.summaries().map { ProjectRow(summary = it, outstandingCount = it.itemCount) },
-        notice = null,
-        isLoading = false,
-        errorMessage = null,
-        onOpen = {},
-        onConfirmRemove = {},
-        onDismissRemove = {},
-        onDismissNotice = {},
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectsListScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectsListScreen(
-        rows = emptyList(),
-        notice = null,
-        isLoading = false,
-        errorMessage = null,
-        onOpen = {},
-        onConfirmRemove = {},
-        onDismissRemove = {},
-        onDismissNotice = {},
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectsListScreenArchivedNoticePreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectsListScreen(
-        rows = ViewPreviewData.summaries().map { ProjectRow(summary = it, outstandingCount = it.itemCount) },
-        notice = RemovalNotice.ArchivedInstead(projectName = "Gemini", outstandingCount = 3),
-        isLoading = false,
-        errorMessage = null,
-        onOpen = {},
-        onConfirmRemove = {},
-        onDismissRemove = {},
-        onDismissNotice = {},
-        onDismissError = {},
-    )
 }
 
 const val ProjectsListScreenTag = "projects.list"

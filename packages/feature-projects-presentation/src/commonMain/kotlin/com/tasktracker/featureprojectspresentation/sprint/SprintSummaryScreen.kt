@@ -11,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.TTStoryPoints
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -254,26 +253,3 @@ const val SprintSummaryVerdictTag = "sprints.summary.verdict"
 const val SprintSummaryEmptyTag = "sprints.summary.empty"
 const val SprintSummaryDoneTag = "sprints.summary.done"
 const val SprintSummaryIncompleteTag = "sprints.summary.incomplete"
-
-// ---------------------------------------------------------------------------------------------
-// Previews
-// ---------------------------------------------------------------------------------------------
-
-// Pinned schemes, not `ThemeScheme.System`, and fixtures from `ViewPreviewData` rather than
-// `seedSampleDataIfNeeded` — see `ProjectsPreview`'s KDoc and 23.8.
-
-@Preview(name = "Sprint summary", showBackground = true, widthDp = 380, heightDp = 720)
-@Composable
-private fun SprintSummaryScreenPreview() = ProjectsPreview(ThemeScheme.Light) {
-    val sprint = ViewPreviewData.finishedSprint
-    SprintSummaryScreen(
-        summary = sprintSummary(sprint, ViewPreviewData.sprintWorkItems(sprint)),
-        onBack = {},
-    )
-}
-
-@Preview(name = "Sprint summary, empty", showBackground = true, widthDp = 380, heightDp = 420)
-@Composable
-private fun SprintSummaryScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    SprintSummaryScreen(summary = sprintSummary(ViewPreviewData.finishedSprint, emptyList()), onBack = {})
-}

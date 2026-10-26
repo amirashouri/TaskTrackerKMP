@@ -21,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
@@ -201,41 +200,6 @@ fun ProjectBacklogScreen(
             }
         }
     }
-}
-
-@Preview
-@Composable
-private fun ProjectBacklogScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectBacklogScreen(
-        projection = ViewPreviewData.backlogSectionedProjection(),
-        isLoading = false,
-        errorMessage = null,
-        busyItemID = null,
-        onSelect = {},
-        onPutOnBoard = {},
-        onFileAway = {},
-        onUnarchive = {},
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectBacklogScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectBacklogScreen(
-        projection = BacklogSectionedProjection(
-            project = ViewPreviewData.seededProject,
-            items = emptyList(),
-        ),
-        isLoading = false,
-        errorMessage = null,
-        busyItemID = null,
-        onSelect = {},
-        onPutOnBoard = {},
-        onFileAway = {},
-        onUnarchive = {},
-        onDismissError = {},
-    )
 }
 
 

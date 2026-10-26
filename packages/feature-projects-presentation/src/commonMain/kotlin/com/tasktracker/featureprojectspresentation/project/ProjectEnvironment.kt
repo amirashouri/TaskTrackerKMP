@@ -12,7 +12,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.DateProvider
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttCanvas
@@ -182,11 +181,3 @@ fun MissingProjectEnvironmentView(modifier: Modifier = Modifier) {
 
 /** The gate's test tag, so a test asserts on the gate rather than on its copy. */
 const val MissingProjectEnvironmentTag = "projects.missingEnvironment"
-
-@Preview(name = "Missing projects environment", showBackground = true)
-@Composable
-private fun MissingProjectEnvironmentPreview() {
-    ttTheme(ThemeScheme.System) {
-        MissingProjectEnvironmentView()
-    }
-}

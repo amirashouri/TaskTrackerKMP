@@ -19,7 +19,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTBottomSheetScaffold
@@ -232,28 +231,6 @@ private fun SprintPickerRow(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun SprintItemPickerSheetPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    SprintItemPickerSheet(
-        items = ViewPreviewData.workItems.filter { it.status != WorkItemStatus.Closed },
-        selectedIDs = setOf(ViewPreviewData.workItems.first().id),
-        onToggle = {},
-        onConfirm = {},
-    )
-}
-
-@Preview
-@Composable
-private fun SprintItemPickerSheetEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    SprintItemPickerSheet(
-        items = emptyList(),
-        selectedIDs = emptySet(),
-        onToggle = {},
-        onConfirm = {},
-    )
 }
 
 const val SprintPickerSheetTag = "sprints.picker"

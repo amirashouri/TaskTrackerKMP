@@ -25,7 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.TagID
 import com.tasktracker.core.randomTagID
@@ -362,17 +361,3 @@ private val TAG_ICON_GLYPH_SIZE = 17.dp
 
 private const val TAG_ICON_FILL_ALPHA = 0.25f
 private const val TAG_ICON_SELECTED_FILL_ALPHA = 0.40f
-
-@Preview
-@Composable
-private fun ProjectTagsSectionPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectTagsSection(
-        tags = listOf(
-            ProjectTag(id = randomTagID(), name = "Bug", color = TagColor.Red, icon = TagIcon.Bug),
-            ProjectTag(id = randomTagID(), name = "Mobile", color = TagColor.Blue, icon = TagIcon.Mobile),
-        ),
-        onAdd = { _, _, _ -> true },
-        onRemove = {},
-        modifier = Modifier.padding(ttSpacing.xl),
-    )
-}

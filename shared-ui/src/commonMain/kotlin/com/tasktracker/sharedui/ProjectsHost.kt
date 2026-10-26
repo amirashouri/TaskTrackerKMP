@@ -17,6 +17,10 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItemStatus
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
+import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.featureprojectspresentation.NewProjectForm
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectBoardModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
@@ -101,76 +105,77 @@ fun ProjectsHost(
     // On a wide window the project editor is the right pane rather than a sheet: the
     // list stays in place beside it, matching the Backlog editor and the admin projects
     // section. Compact windows keep the sheet (below), unchanged.
-//    if (isWide && isProjectEditorOpen && projectEditorModel != null && navigation.projectsPath.lastOrNull() == null) {
-//        Box(
-//            modifier = modifier
-//                .fillMaxSize()
-//                .testTag(ProjectsHostTag),
-//        ) {
-//            AdminTwoPanes(
-//                listPane = {
-//                    ProjectsListDestination(
-//                        environment = environment,
-//                        scope = scope,
-//                        onOpenProject = { router.openProject(it, AppTab.Board) },
-//                        onNewProject = {
-//                            projectEditorModel = ProjectEditorModel(null, environment.repository, environment.dateProvider)
-//                            isProjectEditorOpen = true
-//                        },
-//                        onEditProject = { id ->
-//                            scope.launch {
-//                                val project = environment.repository.project(id) ?: return@launch
-//                                projectEditorModel = ProjectEditorModel(project, environment.repository, environment.dateProvider)
-//                                isProjectEditorOpen = true
-//                            }
-//                        },
-//                    )
-//                },
-//                detailPane = {
-//                    projectEditorModel?.let { editor ->
-//                        Box(
-//                            modifier = Modifier.fillMaxSize(),
-//                            contentAlignment = Alignment.Center,
-//                        ) {
-//                            NewProjectForm(
-//                                name = editor.name,
-//                                keyPrefix = editor.keyPrefix,
-//                                details = editor.details,
-//                                canSave = editor.canSave,
-//                                isCreating = editor.isCreating,
-//                                selectedMemberIDs = editor.memberIDs,
-//                                onMemberIDsChanged = editor::onMemberIDsChanged,
-//                                onNameChanged = editor::onNameChanged,
-//                                onKeyPrefixChanged = editor::onKeyPrefixChanged,
-//                                onDetailsChanged = editor::onDetailsChanged,
-//                                searchMembers = { query ->
-//                                    environment.teamPort?.searchMembers(query) ?: emptyList()
-//                                },
-//                                resolveSelected = { ids ->
-//                                    environment.teamPort?.users(ids) ?: emptyList()
-//                                },
-//                                errorMessage = editor.errorMessage,
-//                                onSave = {
-//                                    scope.launch {
-//                                        if (editor.save()) {
-//                                            isProjectEditorOpen = false
-//                                            projectEditorModel = null
-//                                        }
-//                                    }
-//                                },
-//                                onDismiss = {
-//                                    isProjectEditorOpen = false
-//                                    projectEditorModel = null
-//                                },
-//                                modifier = Modifier.fillMaxSize().padding(ttSpacing.lg),
-//                            )
-//                        }
-//                    }
-//                },
-//            )
-//        }
-//        return
-//    }
+    if (isWide && isProjectEditorOpen && projectEditorModel != null && navigation.projectsPath.lastOrNull() == null) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .testTag(ProjectsHostTag),
+        ) {
+            AdminTwoPanes(
+                listPane = {
+                    ProjectsListDestination(
+                        environment = environment,
+                        scope = scope,
+                        onOpenProject = { router.openProject(it, AppTab.Board) },
+                        onNewProject = {
+                            projectEditorModel = ProjectEditorModel(null, environment.repository, environment.dateProvider)
+                            isProjectEditorOpen = true
+                        },
+                        onEditProject = { id ->
+                            scope.launch {
+                                val project = environment.repository.project(id) ?: return@launch
+                                projectEditorModel = ProjectEditorModel(project, environment.repository, environment.dateProvider)
+                                isProjectEditorOpen = true
+                            }
+                        },
+                    )
+                },
+                detailPane = {
+                    projectEditorModel?.let { editor ->
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            NewProjectForm(
+                                name = editor.name,
+                                keyPrefix = editor.keyPrefix,
+                                details = editor.details,
+                                canSave = editor.canSave,
+                                isCreating = editor.isCreating,
+                                isBusy = editor.isCreating,
+                                selectedMemberIDs = editor.memberIDs,
+                                onMemberIDsChanged = editor::onMemberIDsChanged,
+                                onNameChanged = editor::onNameChanged,
+                                onKeyPrefixChanged = editor::onKeyPrefixChanged,
+                                onDetailsChanged = editor::onDetailsChanged,
+                                searchMembers = { query ->
+                                    environment.teamPort?.searchMembers(query) ?: emptyList()
+                                },
+                                resolveSelected = { ids ->
+                                    environment.teamPort?.users(ids) ?: emptyList()
+                                },
+                                errorMessage = editor.errorMessage,
+                                onSave = {
+                                    scope.launch {
+                                        if (editor.save()) {
+                                            isProjectEditorOpen = false
+                                            projectEditorModel = null
+                                        }
+                                    }
+                                },
+                                onDismiss = {
+                                    isProjectEditorOpen = false
+                                    projectEditorModel = null
+                                },
+                                modifier = Modifier.fillMaxSize().padding(ttSpacing.lg),
+                            )
+                        }
+                    }
+                },
+            )
+        }
+        return
+    }
 
 
     Box(

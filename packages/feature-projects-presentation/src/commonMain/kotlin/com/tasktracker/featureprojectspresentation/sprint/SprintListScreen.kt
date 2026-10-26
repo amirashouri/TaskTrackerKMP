@@ -18,10 +18,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -323,70 +321,4 @@ private fun FinishedSection(
             SprintSectionList(rows = rows, onOpen = onOpen)
         }
     }
-}
-
-// ---------------------------------------------------------------------------------------------
-// Previews
-// ---------------------------------------------------------------------------------------------
-
-// Pinned schemes, not `ThemeScheme.System`, and fixtures from `ViewPreviewData` rather than
-// `seedSampleDataIfNeeded` — see `ProjectsPreview`'s KDoc and 23.8.
-
-/** Rows built from the preview fixtures, with the domain's own arithmetic. */
-private fun previewSprintRows(): List<SprintListRow> {
-    val items = ViewPreviewData.sprintWorkItems()
-    return ViewPreviewData.sprints.map { sprint ->
-        val summary = sprintSummary(sprint, items)
-        SprintListRow(
-            sprint = sprint,
-            startDate = sprintLocalDate(sprint.startDate, ViewPreviewData.previewZone),
-            endDate = sprintLocalDate(sprint.endDate, ViewPreviewData.previewZone),
-            committedStoryPoints = summary.committedStoryPoints,
-            achievedStoryPoints = summary.achievedStoryPoints,
-        )
-    }
-}
-
-/** Categorise preview rows into the three sections. */
-private fun previewSectionedRows(): Triple<List<SprintListRow>, List<SprintListRow>, List<SprintListRow>> {
-    val allRows = previewSprintRows()
-    val inProgress = allRows.filter { !it.sprint.isFinished && it.sprint.startDate <= ViewPreviewData.instant }
-    val scheduled = allRows.filter { !it.sprint.isFinished && it.sprint.startDate > ViewPreviewData.instant }
-    val finished = allRows.filter { it.sprint.isFinished }
-    return Triple(inProgress, scheduled, finished)
-}
-
-@Preview(name = "Sprint list", showBackground = true, widthDp = 380, heightDp = 720)
-@Composable
-private fun SprintListScreenPreview() = ProjectsPreview(ThemeScheme.Light) {
-    val (inProgress, scheduled, finished) = previewSectionedRows()
-    SprintListScreen(
-        inProgressRows = inProgress,
-        scheduledRows = scheduled,
-        finishedRows = finished,
-        archivedRows = emptyList(),
-        activeIsEmpty = false,
-        archivedIsEmpty = true,
-        errorMessage = null,
-        onOpen = {},
-        onNewSprint = {},
-        onDismissError = {},
-    )
-}
-
-@Preview(name = "Sprint list, empty", showBackground = true, widthDp = 380, heightDp = 400)
-@Composable
-private fun SprintListScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    SprintListScreen(
-        inProgressRows = emptyList(),
-        scheduledRows = emptyList(),
-        finishedRows = emptyList(),
-        archivedRows = emptyList(),
-        activeIsEmpty = true,
-        archivedIsEmpty = true,
-        errorMessage = null,
-        onOpen = {},
-        onNewSprint = {},
-        onDismissError = {},
-    )
 }

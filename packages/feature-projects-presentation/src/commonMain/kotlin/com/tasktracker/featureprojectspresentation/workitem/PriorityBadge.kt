@@ -16,10 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttLabel
@@ -121,22 +119,6 @@ private fun PriorityDot(
 
 /** The two levels that warrant interrupting somebody about. */
 private val Priority.actsNow: Boolean get() = this == Priority.Critical || this == Priority.High
-
-@Preview
-@Composable
-private fun PriorityBadgePreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
-        Priority.entries.forEach { PriorityBadge(priority = it) }
-    }
-}
-
-@Preview
-@Composable
-private fun PriorityBadgeLightPreview() = ProjectsPreview(ThemeScheme.Light) {
-    Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
-        Priority.entries.forEach { PriorityBadge(priority = it) }
-    }
-}
 
 /**
  * The badge's tag, suffixed with the priority's own wire name.

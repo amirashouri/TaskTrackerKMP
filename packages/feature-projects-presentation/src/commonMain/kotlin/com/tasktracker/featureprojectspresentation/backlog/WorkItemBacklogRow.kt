@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ThemeScheme
@@ -273,36 +272,6 @@ private fun BacklogAction(
         onClick = { if (!isBusy) onClick() },
         modifier = modifier.testTag(testTag),
         style = if (isBusy) TTGlassButtonStyle() else TTGlassButtonStyle(tint = ttAccent(), prominent = true),
-    )
-}
-
-@Preview
-@Composable
-private fun WorkItemBacklogRowPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        ViewPreviewData.backlogProjection().items
-            .filter { it.status == com.tasktracker.domain.WorkItemStatus.Backlog }
-            .forEach { workItem ->
-            WorkItemBacklogRow(
-                item = workItem,
-                onPutOnBoard = {},
-                onFileAway = {},
-            )
-        }
-    }
-}
-
-@Preview
-@Composable
-private fun WorkItemBacklogRowBusyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    WorkItemBacklogRow(
-        item = ViewPreviewData.workItems.first(),
-        onPutOnBoard = {},
-        onFileAway = {},
-        isBusy = true,
     )
 }
 

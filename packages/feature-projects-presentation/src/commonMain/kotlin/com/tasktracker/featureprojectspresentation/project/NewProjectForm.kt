@@ -11,9 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
@@ -177,40 +175,6 @@ fun NewProjectForm(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun NewProjectFormPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    NewProjectForm(
-        name = "Apollo Programme",
-        keyPrefix = "AP",
-        details = "",
-        canSave = true,
-        onNameChanged = {},
-        onKeyPrefixChanged = {},
-        onDetailsChanged = {},
-        onSave = {},
-        onDismiss = {},
-        selectedMemberIDs = ViewPreviewData.previewMemberIDs,
-        searchMembers = ViewPreviewData.previewSearchMembers,
-    )
-}
-
-@Preview
-@Composable
-private fun NewProjectFormDisabledPreview() = ProjectsPreview(ThemeScheme.Light) {
-    NewProjectForm(
-        name = "",
-        keyPrefix = "",
-        details = "",
-        canSave = false,
-        onNameChanged = {},
-        onKeyPrefixChanged = {},
-        onDetailsChanged = {},
-        onSave = {},
-        onDismiss = {},
-    )
 }
 
 const val NewProjectFormTag = "projects.newForm"

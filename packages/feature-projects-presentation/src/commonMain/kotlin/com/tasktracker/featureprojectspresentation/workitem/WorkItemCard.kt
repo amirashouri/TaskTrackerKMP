@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,9 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -376,42 +373,6 @@ internal fun dueDateLabel(dueDate: Instant): String {
     return "${local.day} ${local.month.name.take(MONTH_ABBREVIATION_LENGTH)}"
 }
 
-@Preview
-@Composable
-private fun WorkItemCardPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        modifier = Modifier.width(CARD_PREVIEW_WIDTH),
-    ) {
-        ViewPreviewData.workItems.take(4).forEach { item ->
-            WorkItemCard(
-                item = item,
-                onClick = {},
-                onCopy = {},
-                assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
-            )
-        }
-    }
-}
-
-@Preview
-@Composable
-private fun WorkItemCardLightPreview() = ProjectsPreview(ThemeScheme.Light) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        modifier = Modifier.width(CARD_PREVIEW_WIDTH),
-    ) {
-        ViewPreviewData.workItems.take(4).forEach { item ->
-            WorkItemCard(
-                item = item,
-                onClick = {},
-                onCopy = {},
-                assigneeName = item.assigneeID?.let { ViewPreviewData.previewUserNames[it] },
-            )
-        }
-    }
-}
-
 /** Surfaces, not ids. */
 const val WorkItemCardTagPrefix = "workItem.card"
 const val WorkItemCardDueTag = "workItem.card.dueDate"
@@ -439,4 +400,3 @@ private const val CARD_TITLE_MAX_LINES = 3
 private const val MONTH_ABBREVIATION_LENGTH = 3
 private const val OVERDUE_FILL_ALPHA = 0.16f
 private val CHIP_PADDING_V = 2.dp
-private val CARD_PREVIEW_WIDTH = 280.dp

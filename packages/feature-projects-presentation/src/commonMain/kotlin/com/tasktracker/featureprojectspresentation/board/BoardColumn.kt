@@ -35,7 +35,6 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
@@ -384,33 +383,6 @@ class BoardCardDrag(
     val onEnd: () -> Unit,
     val onCancel: () -> Unit,
 )
-
-@Preview
-@Composable
-private fun BoardColumnPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.md)) {
-        WorkItemStatus.boardOrder.forEach { status ->
-            BoardColumnView(
-                column = BoardColumn(
-                    status = status,
-                    items = ViewPreviewData.boardProjection().items.filter { it.status == status },
-                ),
-                onSelect = {},
-            )
-        }
-    }
-}
-
-@Preview
-@Composable
-private fun BoardColumnLightPreview() = ProjectsPreview(ThemeScheme.Light) {
-    Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.md)) {
-        BoardColumnView(
-            column = BoardColumn(status = WorkItemStatus.Todo, items = emptyList()),
-            onSelect = {},
-        )
-    }
-}
 
 const val BoardColumnTagPrefix = "board.column"
 

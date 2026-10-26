@@ -10,8 +10,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSpacing
@@ -70,12 +68,6 @@ fun SprintDetailPlaceholder(modifier: Modifier = Modifier) {
             )
         }
     }
-}
-
-@Preview(name = "Sprint detail placeholder", showBackground = true, widthDp = 380, heightDp = 400)
-@Composable
-private fun SprintDetailPlaceholderPreview() = ProjectsPreview(ThemeScheme.Light) {
-    SprintDetailPlaceholder()
 }
 
 const val SprintDetailPlaceholderTag = "sprints.detail.placeholder"

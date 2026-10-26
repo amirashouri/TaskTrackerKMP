@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
@@ -230,57 +229,6 @@ fun ProjectEditorScreen(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun ProjectEditorNewPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectEditorScreen(
-        name = "Apollo Programme",
-        keyPrefix = "AP",
-        details = "",
-        isCreating = true,
-        canSave = true,
-        onNameChanged = {},
-        onDetailsChanged = {},
-        onSave = {},
-        onCancel = {},
-        hasUnsavedChanges = false,
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectEditorEditPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectEditorScreen(
-        name = "Apollo Programme",
-        keyPrefix = "AP",
-        details = "Two milestones, both due this quarter.",
-        isCreating = false,
-        canSave = true,
-        onNameChanged = {},
-        onDetailsChanged = {},
-        onSave = {},
-        onCancel = {},
-        hasUnsavedChanges = false,
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectEditorCannotSavePreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectEditorScreen(
-        name = "",
-        keyPrefix = "",
-        details = "",
-        isCreating = true,
-        canSave = false,
-        onNameChanged = {},
-        onDetailsChanged = {},
-        onSave = {},
-        onCancel = {},
-        hasUnsavedChanges = false,
-    )
 }
 
 const val ProjectEditorTag = "projects.editor"

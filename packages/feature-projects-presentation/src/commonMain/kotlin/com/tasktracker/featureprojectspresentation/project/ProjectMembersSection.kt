@@ -2,9 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.member_picker_search
@@ -57,26 +55,6 @@ internal fun ProjectMembersSection(
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
         tagPrefix = ProjectMembersSectionTag,
-    )
-}
-
-@Preview(name = "Members, dark", showBackground = true, widthDp = 360)
-@Composable
-private fun ProjectMembersSectionDarkPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectMembersSection(
-        selectedMemberIDs = ViewPreviewData.previewMemberIDs,
-        onMemberIDsChanged = {},
-        searchMembers = ViewPreviewData.previewSearchMembers,
-    )
-}
-
-@Preview(name = "Members, light", showBackground = true, widthDp = 360)
-@Composable
-private fun ProjectMembersSectionLightPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectMembersSection(
-        selectedMemberIDs = ViewPreviewData.previewMemberIDs,
-        onMemberIDsChanged = {},
-        searchMembers = ViewPreviewData.previewSearchMembers,
     )
 }
 

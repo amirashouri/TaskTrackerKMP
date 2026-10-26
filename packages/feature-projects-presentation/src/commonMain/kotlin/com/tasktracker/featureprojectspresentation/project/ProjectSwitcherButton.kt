@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -238,20 +237,6 @@ private class ProjectSwitcherDropdownPositionProvider(
         val y = if (below + popupContentSize.height <= windowSize.height) below else above.coerceAtLeast(0)
         return IntOffset(x, y)
     }
-}
-
-@Preview
-@Composable
-private fun ProjectSwitcherButtonPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
-        ProjectSwitcherButton(project = ViewPreviewData.seededProject, onClick = {})
-    }
-}
-
-@Preview
-@Composable
-private fun ProjectSwitcherButtonEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectSwitcherButton(project = null, onClick = {})
 }
 
 const val ProjectSwitcherTag = "board.switcher"

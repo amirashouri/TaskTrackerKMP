@@ -22,7 +22,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
@@ -1001,83 +1000,6 @@ private fun WorkItemEditorForm(
             )
         }
     }
-}
-
-@Preview
-@Composable
-private fun WorkItemEditorScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    WorkItemEditorScreen(
-        title = "Crash on launch when the vault is empty",
-        details = "Reported on a cold install with no keychain entry.",
-        storyPointsText = "5",
-        status = WorkItemStatus.InProgress,
-        priority = Priority.Critical,
-        assigneeID = ViewPreviewData.workItems.first { it.assigneeID != null }.assigneeID,
-        currentUserID = ViewPreviewData.workItems.first { it.assigneeID != null }.assigneeID,
-        currentUserName = "Amir",
-        otherAssigneeLabel = null,
-        hasDueDate = false,
-        recurrence = null,
-        repeatAnchor = null,
-        isCreating = false,
-        issuedKey = ViewPreviewData.workItems.first { it.status == WorkItemStatus.InProgress }.key,
-        selectableStatuses = WorkItemStatus.boardOrder,
-        isFiledAway = false,
-        canSave = true,
-        isBusy = false,
-        errorMessage = null,
-        onTitleChanged = {},
-        onDetailsChanged = {},
-        onStoryPointsChanged = {},
-        onStatusChanged = {},
-        onPriorityChanged = {},
-        onAssigneeChanged = {},
-        onToggleDueDate = {},
-        onRecurrenceChanged = {},
-        onFileAway = {},
-        onSave = {},
-        onCancel = {},
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun WorkItemEditorFiledAwayPreview() = ProjectsPreview(ThemeScheme.Light) {
-    WorkItemEditorSheet(
-        title = "Archive the old sync experiments",
-        details = "",
-        storyPointsText = "",
-        status = WorkItemStatus.Closed,
-        priority = Priority.Low,
-        assigneeID = null,
-        currentUserID = null,
-        currentUserName = null,
-        otherAssigneeLabel = null,
-        hasDueDate = false,
-        recurrence = null,
-        repeatAnchor = null,
-        isCreating = false,
-        issuedKey = ViewPreviewData.workItems.first { it.status == WorkItemStatus.Closed }.key,
-        selectableStatuses = emptyList(),
-        isFiledAway = true,
-        canSave = true,
-        isBusy = false,
-        errorMessage = null,
-        onTitleChanged = {},
-        onDetailsChanged = {},
-        onStoryPointsChanged = {},
-        onStatusChanged = {},
-        onPriorityChanged = {},
-        onAssigneeChanged = {},
-        onToggleDueDate = {},
-        onRecurrenceChanged = {},
-        onFileAway = {},
-        onSave = {},
-        onCancel = {},
-        onDismissError = {},
-        hasUnsavedChanges = false,
-    )
 }
 
 const val WorkItemEditorScreenTag = "workItem.editor.screen"

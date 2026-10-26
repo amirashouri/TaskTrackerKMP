@@ -10,11 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
@@ -278,63 +276,3 @@ const val SprintEditorErrorTag = "sprints.editor.error"
 const val SprintEditorOwnerTag = "sprints.editor.owner"
 const val SprintEditorSaveTag = "sprints.editor.save"
 const val SprintEditorCancelTag = "sprints.editor.cancel"
-
-// ---------------------------------------------------------------------------------------------
-// Previews
-// ---------------------------------------------------------------------------------------------
-
-// Pinned schemes, not `ThemeScheme.System`, and fixtures from `ViewPreviewData` rather than
-// `seedSampleDataIfNeeded` — see `ProjectsPreview`'s KDoc and 23.8.
-
-@Preview(name = "Sprint editor, new", showBackground = true, widthDp = 380, heightDp = 640)
-@Composable
-private fun SprintEditorSheetPreview() = ProjectsPreview(ThemeScheme.Light) {
-    SprintEditorSheet(
-        name = "Sprint 8",
-        goalStoryPoints = 13,
-        goal = "Ship the migration to the new store",
-        startDate = LocalDate(2026, 3, 30),
-        endDate = LocalDate(2026, 4, 10),
-        ownerID = ViewPreviewData.previewUserID,
-        isCreating = true,
-        canSave = true,
-        endIsBeforeStart = false,
-        blockedBySprintName = null,
-        onNameChanged = {},
-        onGoalStoryPointsChanged = {},
-        onGoalChanged = {},
-        onStartDateChanged = {},
-        onEndDateChanged = {},
-        onOwnerChanged = {},
-        onSave = {},
-        onCancel = {},
-        today = LocalDate(2026, 3, 16),
-    )
-}
-
-@Preview(name = "Sprint editor, window backwards", showBackground = true, widthDp = 380, heightDp = 640)
-@Composable
-private fun SprintEditorSheetInvalidPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    SprintEditorSheet(
-        name = "Sprint 8",
-        goalStoryPoints = 13,
-        goal = "",
-        startDate = LocalDate(2026, 4, 10),
-        endDate = LocalDate(2026, 4, 3),
-        ownerID = null,
-        isCreating = true,
-        canSave = false,
-        // The third state the rule has: a chosen end that is before a chosen start.
-        endIsBeforeStart = true,
-        blockedBySprintName = null,
-        onNameChanged = {},
-        onGoalStoryPointsChanged = {},
-        onGoalChanged = {},
-        onStartDateChanged = {},
-        onEndDateChanged = {},
-        onOwnerChanged = {},
-        onSave = {},
-        onCancel = {},
-        today = LocalDate(2026, 3, 16),
-    )
-}

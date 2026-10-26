@@ -14,11 +14,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIconSize
@@ -124,20 +122,6 @@ fun WorkItemCardDependencies(
             )
         }
     }
-}
-
-@Preview(name = "Card dependencies, dark", showBackground = true, widthDp = 280)
-@Composable
-private fun WorkItemCardDependenciesPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    WorkItemCardDependencies(blockerKeys = listOf(WorkItemKey("TT-1"), WorkItemKey("TT-7")))
-}
-
-@Preview(name = "Card dependencies, light, overflowing", showBackground = true, widthDp = 280)
-@Composable
-private fun WorkItemCardDependenciesOverflowPreview() = ProjectsPreview(ThemeScheme.Light) {
-    WorkItemCardDependencies(
-        blockerKeys = listOf(WorkItemKey("TT-1"), WorkItemKey("TT-7"), WorkItemKey("TT-9"), WorkItemKey("TT-12")),
-    )
 }
 
 /**

@@ -13,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ThemeScheme
@@ -173,27 +172,6 @@ private fun PickerRow(
             color = ttLabelSecondary(),
         )
     }
-}
-
-@Preview
-@Composable
-private fun ProjectPickerSheetPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectPickerSheet(
-        projects = ViewPreviewData.pickable(),
-        selectedProjectID = ViewPreviewData.seededProject.id,
-        onSelect = {},
-        onCreateProject = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectPickerSheetEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectPickerSheet(
-        projects = emptyList(),
-        selectedProjectID = null,
-        onSelect = {},
-    )
 }
 
 const val ProjectPickerSheetTag = "picker.sheet"

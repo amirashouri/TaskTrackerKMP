@@ -6,9 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.designsystem.TTGlassFlowPicker
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
@@ -111,26 +109,6 @@ private fun RecurrenceChoice.toRecurrence(anchor: LocalDate, until: Instant?): R
 private fun anchorDay(anchorDate: Instant?): LocalDate {
     val instant = anchorDate ?: Clock.System.now()
     return instant.toLocalDateTime(TimeZone.currentSystemDefault()).date
-}
-
-@Preview
-@Composable
-private fun WorkItemRecurrenceRowPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    WorkItemRecurrenceRow(
-        recurrence = Recurrence.Weekly(5),
-        onRecurrenceChanged = {},
-        anchorDate = Instant.parse("2026-01-16T12:00:00Z"),
-    )
-}
-
-@Preview
-@Composable
-private fun WorkItemRecurrenceRowNonePreview() = ProjectsPreview(ThemeScheme.Light) {
-    WorkItemRecurrenceRow(
-        recurrence = null,
-        onRecurrenceChanged = {},
-        anchorDate = Instant.parse("2026-01-16T12:00:00Z"),
-    )
 }
 
 /** The repeat row's picker, for scenario tests. */

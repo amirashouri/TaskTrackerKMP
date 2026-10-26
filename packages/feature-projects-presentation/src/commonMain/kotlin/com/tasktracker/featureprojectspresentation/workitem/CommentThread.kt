@@ -12,10 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAvatarSize
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttInitialsAvatar
@@ -241,38 +239,6 @@ private fun CommentBranch(
             )
         }
     }
-}
-
-@Preview(name = "Comment thread, dark", showBackground = true, widthDp = 360)
-@Composable
-private fun CommentThreadPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    CommentThread(
-        comments = ViewPreviewData.previewComments,
-        authorNames = ViewPreviewData.previewCommentAuthorNames,
-        canComment = true,
-        draft = "",
-        replyTo = null,
-        onDraftChanged = {},
-        onReply = {},
-        onCancelReply = {},
-        onSubmit = {},
-    )
-}
-
-@Preview(name = "Comment thread, light, replying", showBackground = true, widthDp = 360)
-@Composable
-private fun CommentThreadReplyingPreview() = ProjectsPreview(ThemeScheme.Light) {
-    CommentThread(
-        comments = ViewPreviewData.previewComments,
-        authorNames = ViewPreviewData.previewCommentAuthorNames,
-        canComment = true,
-        draft = "Looking into it",
-        replyTo = ViewPreviewData.previewComments.firstOrNull()?.id,
-        onDraftChanged = {},
-        onReply = {},
-        onCancelReply = {},
-        onSubmit = {},
-    )
 }
 
 const val WorkItemCommentsTag = "workItem.editor.comments"

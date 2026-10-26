@@ -2,8 +2,6 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAvatarDescription
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttInitialsStack
@@ -106,9 +104,3 @@ internal fun boardAssigneeNames(
     .sortedBy { it.lowercase() }
 
 const val ProjectBoardAssigneesTag = "board.assignees"
-
-@Preview
-@Composable
-private fun AssigneeStackPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    AssigneeStack(names = boardAssigneeNames(ViewPreviewData.workItems, ViewPreviewData.previewUserNames))
-}

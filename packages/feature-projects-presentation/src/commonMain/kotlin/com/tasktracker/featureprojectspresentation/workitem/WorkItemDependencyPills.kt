@@ -15,9 +15,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
@@ -132,28 +130,6 @@ private fun DependencyPill(
                 .testTag(WorkItemDependsRemoveTag(item)),
         )
     }
-}
-
-@Preview(name = "Dependency pills, dark", showBackground = true, widthDp = 360)
-@Composable
-internal fun WorkItemDependencyPillsPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    WorkItemDependencyPills(
-        blockers = ViewPreviewData.workItems.take(3),
-        onOpenBlocker = {},
-        onRemoveBlocker = {},
-        onAddClick = {},
-    )
-}
-
-@Preview(name = "Dependency pills, light", showBackground = true, widthDp = 360)
-@Composable
-internal fun WorkItemDependencyPillsLightPreview() = ProjectsPreview(ThemeScheme.Light) {
-    WorkItemDependencyPills(
-        blockers = ViewPreviewData.workItems.take(3),
-        onOpenBlocker = {},
-        onRemoveBlocker = {},
-        onAddClick = {},
-    )
 }
 
 const val WorkItemDependsSectionTag = "workItem.editor.depends"

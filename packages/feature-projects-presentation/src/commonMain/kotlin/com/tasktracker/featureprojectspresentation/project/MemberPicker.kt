@@ -42,9 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttAvatarSize
@@ -436,32 +434,6 @@ private class MemberPickerDropdownPositionProvider(
         }
         return IntOffset(x, y)
     }
-}
-
-@Preview(name = "Member picker, dark", showBackground = true, widthDp = 360)
-@Composable
-private fun MemberPickerMultiPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    MemberPicker(
-        title = "Members",
-        selectedIDs = listOf(ViewPreviewData.previewUserID),
-        onSelectedIDsChanged = {},
-        placeholder = "Search members",
-        searchMembers = ViewPreviewData.previewSearchMembers,
-    )
-}
-
-@Preview(name = "Member picker, single, light", showBackground = true, widthDp = 360)
-@Composable
-private fun MemberPickerSinglePreview() = ProjectsPreview(ThemeScheme.Light) {
-    MemberPicker(
-        title = "Assignee",
-        selectedIDs = listOf(ViewPreviewData.previewUserID),
-        onSelectedIDsChanged = {},
-        multiSelect = false,
-        clearLabel = "Unassigned",
-        placeholder = "Search people",
-        searchMembers = ViewPreviewData.previewSearchMembers,
-    )
 }
 
 /** Milliseconds of silence before the port is called; see the LaunchedEffect above. */

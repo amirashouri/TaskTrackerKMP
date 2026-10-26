@@ -20,10 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.SprintStatus
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBodyLabel
@@ -461,96 +459,3 @@ const val SprintDetailItemsEmptyTag = "sprints.detail.itemsEmpty"
 const val SprintDetailRemoveTag = "sprints.detail.remove"
 const val SprintDetailArchiveTag = "sprints.detail.archive"
 const val SprintActionConfirmationTag = "sprints.detail.actionConfirmation"
-
-// ---------------------------------------------------------------------------------------------
-// Previews
-// ---------------------------------------------------------------------------------------------
-
-// Pinned schemes, not `ThemeScheme.System`, and fixtures from `ViewPreviewData` rather than
-// `seedSampleDataIfNeeded` — see `ProjectsPreview`'s KDoc and 23.8.
-
-@Preview(name = "Sprint detail, open", showBackground = true, widthDp = 380, heightDp = 720)
-@Composable
-private fun SprintDetailScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    val sprint = ViewPreviewData.openSprint
-    val items = ViewPreviewData.sprintWorkItems(sprint)
-    SprintDetailScreen(
-        detail = SprintDetail(
-            sprint = sprint,
-            startDate = sprintLocalDate(sprint.startDate, ViewPreviewData.previewZone),
-            endDate = sprintLocalDate(sprint.endDate, ViewPreviewData.previewZone),
-            items = items,
-            summary = sprintSummary(sprint, items),
-            isViewerTheOwner = true,
-            // A preview has no clock to ask, and the static window is shown as one still
-            // to come — so the sheet's affordances render in their editable state.
-            isActive = false,
-            status = SprintStatus.Scheduled,
-        ),
-        isBusy = false,
-        errorMessage = null,
-        onFinish = {},
-        onReopen = {},
-        onViewSummary = {},
-        onDismissError = {},
-        onRemove = {},
-        onArchive = {},
-        // Present rather than defaulted away, so the preview shows the sprint-mode rows
-        // (remove verb, tappable body) the real destination wires up.
-        onOpenTask = {},
-        onRemoveTask = {},
-    )
-}
-
-@Preview(name = "Sprint detail, not the owner", showBackground = true, widthDp = 380, heightDp = 720)
-@Composable
-private fun SprintDetailScreenOtherOwnerPreview() = ProjectsPreview(ThemeScheme.Light) {
-    val sprint = ViewPreviewData.openSprint
-    SprintDetailScreen(
-        detail = SprintDetail(
-            sprint = sprint,
-            startDate = sprintLocalDate(sprint.startDate, ViewPreviewData.previewZone),
-            endDate = sprintLocalDate(sprint.endDate, ViewPreviewData.previewZone),
-            items = emptyList(),
-            summary = sprintSummary(sprint, emptyList()),
-            // The state that hides Finish and shows the note naming the owner instead.
-            isViewerTheOwner = false,
-            isActive = false,
-            status = SprintStatus.InProgress,
-        ),
-        isBusy = false,
-        errorMessage = null,
-        onFinish = {},
-        onReopen = {},
-        onViewSummary = {},
-        onDismissError = {},
-        onRemove = {},
-        onArchive = {},
-    )
-}
-
-@Preview(name = "Sprint detail, finished", showBackground = true, widthDp = 380, heightDp = 720)
-@Composable
-private fun SprintDetailScreenFinishedPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    val sprint = ViewPreviewData.finishedSprint
-    SprintDetailScreen(
-        detail = SprintDetail(
-            sprint = sprint,
-            startDate = sprintLocalDate(sprint.startDate, ViewPreviewData.previewZone),
-            endDate = sprintLocalDate(sprint.endDate, ViewPreviewData.previewZone),
-            items = emptyList(),
-            summary = sprintSummary(sprint, emptyList()),
-            isViewerTheOwner = true,
-            isActive = false,
-            status = SprintStatus.Finished,
-        ),
-        isBusy = false,
-        errorMessage = null,
-        onFinish = {},
-        onReopen = {},
-        onViewSummary = {},
-        onDismissError = {},
-        onRemove = {},
-        onArchive = {},
-    )
-}

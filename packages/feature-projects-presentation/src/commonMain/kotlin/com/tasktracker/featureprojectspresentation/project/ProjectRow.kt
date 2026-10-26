@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -20,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
@@ -193,24 +191,6 @@ private fun ProjectKeyMonogram(
     }
 }
 
-@Preview
-@Composable
-private fun ProjectRowPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-        modifier = Modifier.width(PROJECT_ROW_PREVIEW_WIDTH),
-    ) {
-        ViewPreviewData.summaries().forEach { summary ->
-            ProjectRowView(project = summary, onOpen = {}, onRemove = {})
-        }
-        ProjectRowView(
-            project = ProjectSummary(ViewPreviewData.archivedProject, itemCount = 1),
-            onOpen = {},
-            onRemove = {},
-        )
-    }
-}
-
 const val ProjectRowTagPrefix = "projects.row"
 
 /** Suffixed with the key prefix: unique by construction, unlike a name. */
@@ -225,4 +205,3 @@ private const val MONOGRAM_CHARACTERS = 2
 private const val MONOGRAM_FILL_ALPHA = 0.16f
 private const val MONOGRAM_RIM_ALPHA = 0.34f
 private val monogramSize = 36.dp
-private val PROJECT_ROW_PREVIEW_WIDTH = 360.dp

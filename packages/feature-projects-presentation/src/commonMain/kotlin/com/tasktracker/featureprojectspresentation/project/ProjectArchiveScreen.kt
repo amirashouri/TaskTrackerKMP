@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
@@ -214,38 +213,6 @@ private fun ArchivedItemRow(
         )
         ttText(text = statusLabel(item.status), style = ttTypography.captionSmall, color = ttLabelSecondary())
     }
-}
-
-@Preview
-@Composable
-private fun ProjectArchiveScreenPreview() = ProjectsPreview(ThemeScheme.Dark) {
-    ProjectArchiveScreen(
-        projection = ArchiveProjection(
-            project = ViewPreviewData.seededProject,
-            items = ViewPreviewData.workItems.filter { it.status.isTerminal },
-            timeZone = TimeZone.UTC,
-        ),
-        isLoading = false,
-        errorMessage = null,
-        onSelect = {},
-        onDismissError = {},
-    )
-}
-
-@Preview
-@Composable
-private fun ProjectArchiveScreenEmptyPreview() = ProjectsPreview(ThemeScheme.Light) {
-    ProjectArchiveScreen(
-        projection = ArchiveProjection(
-            project = ViewPreviewData.seededProject,
-            items = emptyList(),
-            timeZone = TimeZone.UTC,
-        ),
-        isLoading = false,
-        errorMessage = null,
-        onSelect = {},
-        onDismissError = {},
-    )
 }
 
 const val ProjectArchiveScreenTag = "archive.screen"
