@@ -55,6 +55,18 @@ abstract class SettingsViewScenarios {
     fun theStatusFieldSitsCentredInItsPill() =
         runComposeUiTest(block = SettingsScenarios.theStatusFieldSitsCentredInItsPill)
 
+    @Test
+    fun theChangePasswordConfirmationIsCentredOnThePage() =
+        runComposeUiTest(block = SettingsScenarios.theChangePasswordConfirmationIsCentredOnThePage)
+
+    @Test
+    fun theChangePasswordSuccessLineIsCentredInItsCard() =
+        runComposeUiTest(block = SettingsScenarios.theChangePasswordSuccessLineIsCentredInItsCard)
+
+    @Test
+    fun theSettingsListMakesRoomForTheStatusBar() =
+        runComposeUiTest(block = SettingsScenarios.theSettingsListMakesRoomForTheStatusBar)
+
     /**
      * [GlassIntensityScenarios] on the JVM.
      *

@@ -1,11 +1,13 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -24,7 +26,11 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
+import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
@@ -51,6 +57,7 @@ import com.tasktracker.resources.settings_sync_waiting
 import org.jetbrains.compose.resources.getString
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -385,6 +392,135 @@ object SettingsScenarios {
             "the status field's centre is ${fieldCentreY}dp against the pill's ${pillCentreY}dp — " +
                 "${offset}dp apart, so the text rides high in the glass pill instead of sitting on " +
                 "its centre (a top-aligned Box leaves it 4dp off)",
+        )
+    }
+
+    /**
+     * The list makes room for the status bar *inside* its scroll range.
+     *
+     * The shell stops applying the top safe-area inset to this destination so the list can reach
+     * the window's top edge, and hands the height down through
+     * [LocalStatusBarScrollUnderInset] instead. What this scenario holds is that the screen
+     * *spends* it and that it lands in `contentPadding`: a `padding(top)` on the list would move
+     * the first row by the same 47dp and still keep every row out of the status-bar strip, so the
+     * assertion is on the row's position while a non-zero inset is provided — the other half (the
+     * viewport reaching the edge) is the shell's, and is verified where the inset is applied.
+     */
+    val theSettingsListMakesRoomForTheStatusBar: suspend ComposeUiTest.() -> Unit = {
+        var statusBarInset by mutableStateOf(0.dp)
+        setContent {
+            Themed {
+                CompositionLocalProvider(LocalStatusBarScrollUnderInset provides statusBarInset) {
+                    SettingsScreen(
+                        connectivity = ConnectivitySummary.Online,
+                        activity = SyncActivity(),
+                        themeScheme = ThemeScheme.System,
+                        version = SettingsPreviewData.version,
+                        commandOutcome = null,
+                        onThemeChange = {},
+                        onSyncNow = {},
+                        onSignOut = {},
+                        userDetails = UserDetails(fullName = "Sam", email = "sam@example.com"),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        val withoutInset = onNodeWithTag(SettingsUserDetailsTag).getBoundsInRoot().top.value
+        statusBarInset = 47.dp
+        waitForIdle()
+        val withInset = onNodeWithTag(SettingsUserDetailsTag).getBoundsInRoot().top.value
+
+        assertEquals(
+            47f,
+            withInset - withoutInset,
+            0.5f,
+            "a 47dp status bar moved the first row ${withInset - withoutInset}dp, from " +
+                "$withoutInset to $withInset — the inset is not reaching the list's start padding, " +
+                "so the first row sits under the notch instead of below it",
+        )
+    }
+
+    /**
+     * The success line is laid out centred in its card.
+     *
+     * Read from the text layout result rather than measured from bounds or a captured frame:
+     * `ttText` folds `textAlign` into the `TextStyle`, so the node's bounds are full width whichever
+     * way the glyphs are aligned. The layout result is the one structural place the answer lives —
+     * and reading a frame here would be pixel work for a property that does survive a read off the
+     * layout.
+     */
+    val theChangePasswordSuccessLineIsCentredInItsCard: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            Themed {
+                ChangePasswordSheet(
+                    outcome = ChangePasswordOutcome.Success,
+                    startWithCode = false,
+                    onSubmit = { _, _ -> },
+                    onDismiss = {},
+                )
+            }
+        }
+        waitForIdle()
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        val action = onNodeWithTag(ChangePasswordSuccessTag)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+        assertNotNull(action, "the success line exposes no text layout, so its alignment is unreadable")
+        action(layouts)
+
+        val alignment = layouts.single().layoutInput.style.textAlign
+        assertEquals(
+            TextAlign.Center,
+            alignment,
+            "the success line is laid out $alignment, so the sentence hangs off the card's leading " +
+                "edge instead of sitting centred under its Done button",
+        )
+    }
+
+    /**
+     * The change-password acknowledgement is centred on the page, not at the bottom edge.
+     *
+     * Measured instead of asserted off a modifier, because the placement is the scaffold's
+     * `LocalSheetPresentation`, which only becomes geometry at layout time. The card's own
+     * vertical padding is symmetric, so the midpoint between its first row and its last is its
+     * centre — and on a bottom-anchored sheet that midpoint sits roughly a card-height from the
+     * bottom edge, which is the state this scenario was written against.
+     *
+     * The tolerance is not "approximately": it is 48dp, which absorbs the navigation-bar inset
+     * the scaffold adds on a host that has one and still leaves the bottom-anchored placement
+     * (hundreds of dp away on any screen) red.
+     */
+    val theChangePasswordConfirmationIsCentredOnThePage: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            Themed {
+                ChangePasswordSheet(
+                    outcome = ChangePasswordOutcome.Success,
+                    startWithCode = false,
+                    onSubmit = { _, _ -> },
+                    onDismiss = {},
+                )
+            }
+        }
+        waitForIdle()
+
+        // The sheet's own tag is on the scaffold's full-screen root, so it is the page bounds.
+        val page = onNodeWithTag(ChangePasswordSheetTag).getBoundsInRoot()
+        val message = onNodeWithTag(ChangePasswordSuccessTag).getBoundsInRoot()
+        val done = onNodeWithTag(ChangePasswordDoneTag).getBoundsInRoot()
+
+        val cardCentreY = (message.top.value + done.bottom.value) / 2f
+        val pageCentreY = (page.top.value + page.bottom.value) / 2f
+        val offset = abs(cardCentreY - pageCentreY)
+
+        assertTrue(
+            offset < 48f,
+            "the confirmation's centre is ${cardCentreY}dp against the page's ${pageCentreY}dp — " +
+                "${offset}dp apart, so the acknowledgement sits at the bottom edge it used to " +
+                "share with the form instead of in the middle of the screen",
         )
     }
 

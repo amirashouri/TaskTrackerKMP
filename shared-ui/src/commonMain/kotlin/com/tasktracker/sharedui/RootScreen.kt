@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,10 +23,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.AmbientBackdrop
+import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.SystemBarAppearance
 import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttTheme
@@ -118,10 +121,20 @@ import kotlinx.coroutines.delay
  * instead would mean repainting a gradient on every frame of a transition that is only ever
  * between two states of the same theme — the same pixels, so the cost buys nothing.
  *
- * The backdrop fills the full window, while one foreground container applies the top safe-drawing
- * inset to both content and splash. Applying the inset before this screen shrinks the backdrop
- * too, exposing the window's light background behind a notch when the app is pinned dark.
- * `windowInsetsPadding` consumes the inset, so child screens cannot apply it twice.
+ * The backdrop fills the full window, while the top safe-drawing inset is applied *inside* this
+ * screen rather than before it. Applying it before this screen shrinks the backdrop too, exposing
+ * the window's light background behind a notch when the app is pinned dark.
+ *
+ * ## The inset goes to the splash and the auth gate, and the signed-in shell gets the measurement
+ *
+ * The signed-in tree is deliberately *not* padded here: a list can only scroll under the notch if
+ * it is allowed to reach the window's top edge, and [NavigationHost] is the first place that knows
+ * which destination is on screen — so it applies the inset to every tab except the settings root,
+ * which gets the height through [LocalStatusBarScrollUnderInset] and spends it as content
+ * padding. The measurement is read here, before anything consumes it.
+ *
+ * `windowInsetsPadding` consumes the inset, so a padded child cannot read it a second time —
+ * which is why the value the settings list needs is published rather than queried down there.
  *
  * The fade is [CONTENT_FADE_MILLIS] on both layers, and equal on purpose: a fade that started
  * before the splash finished moving its own content, or outlasted it, would show two things at
@@ -275,11 +288,14 @@ fun RootScreen(
             // *over* the backdrop rather than a change of the backdrop.
             AmbientBackdrop()
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)),
-            ) {
+            // Read before any `windowInsetsPadding` consumes it: the settings tab spends it as
+            // content padding so its rows can pass under the notch — see the class note.
+            val density = LocalDensity.current
+            val statusBarInset = with(density) {
+                WindowInsets.safeDrawing.getTop(this).toDp()
+            }
+
+            Box(modifier = Modifier.fillMaxSize()) {
                 if (isContentMounted) {
                     Box(
                         modifier = Modifier
@@ -289,8 +305,16 @@ fun RootScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         when (navigation.root) {
-                            RootDestination.Auth -> ProvideAuthSession(session) {
-                                SignInView(onAuthenticated = {})
+                            RootDestination.Auth -> Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .windowInsetsPadding(
+                                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+                                    ),
+                            ) {
+                                ProvideAuthSession(session) {
+                                    SignInView(onAuthenticated = {})
+                                }
                             }
 
                             // The layout class is read here, around the *signed-in* half only.
@@ -298,14 +322,18 @@ fun RootScreen(
                             // file's note on the splash gate is why nothing may add a measure
                             // pass ahead of the handoff. The splash and the sign-in form have
                             // no opinion about how much room they have, so they are outside it.
-                            RootDestination.Main -> ShellLayout {
-                                ProvideAuthSession(session) {
-                                    SignedInArea(
-                                        environment = environment,
-                                        settings = settings,
-                                        preferences = preferences,
-                                        router = router,
-                                    )
+                            RootDestination.Main -> CompositionLocalProvider(
+                                LocalStatusBarScrollUnderInset provides statusBarInset,
+                            ) {
+                                ShellLayout {
+                                    ProvideAuthSession(session) {
+                                        SignedInArea(
+                                            environment = environment,
+                                            settings = settings,
+                                            preferences = preferences,
+                                            router = router,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -314,11 +342,17 @@ fun RootScreen(
 
                 // Still composed while it fades, which is the other half of a cross-fade. Taken
                 // out at zero rather than left at `alpha(0f)`, so a splash that has faded is
-                // also a splash that is no longer in the tree.
+                // also a splash that is no longer in the tree. The inset moves onto this
+                // modifier rather than staying on a container: the splash is a full-window
+                // surface and its content still has to clear the notch.
                 if (showsSplash || splashAlpha.value > 0f) {
                     SplashScreen(
                         isWorking = navigation.isRestoringSession,
-                        modifier = Modifier.alpha(splashAlpha.value),
+                        modifier = Modifier
+                            .alpha(splashAlpha.value)
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+                            ),
                     )
                 }
             }

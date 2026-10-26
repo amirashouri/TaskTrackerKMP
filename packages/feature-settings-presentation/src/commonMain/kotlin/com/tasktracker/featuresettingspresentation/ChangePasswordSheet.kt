@@ -11,6 +11,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +24,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.tasktracker.designsystem.LocalSheetPresentation
+import com.tasktracker.designsystem.SheetPresentation
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
@@ -111,32 +115,19 @@ internal fun ChangePasswordSheet(
         confirmation == newPassword &&
         credential.isNotEmpty()
 
+    // Success is answered as a centred card, not as the sheet the form occupies.
+    //
+    // See [ChangePasswordSuccessCard] for why, and for why the form is not composed behind it.
+    if (isSuccess) {
+        ChangePasswordSuccessCard(onDone = dismiss, modifier = modifier)
+        return
+    }
+
     TTBottomSheetScaffold(
         visible = true,
         onDismissRequest = dismiss,
         modifier = modifier.testTag(ChangePasswordSheetTag),
     ) {
-        if (isSuccess) {
-            ttText(
-                text = stringResource(Res.string.settings_change_password_success),
-                style = ttTypography.title,
-                color = ttLabel(),
-                modifier = Modifier.testTag(ChangePasswordSuccessTag),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
-            ) {
-                ttGlassButton(
-                    label = stringResource(Res.string.common_done),
-                    onClick = dismiss,
-                    modifier = Modifier.testTag(ChangePasswordDoneTag),
-                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
-                )
-            }
-            return@TTBottomSheetScaffold
-        }
-
         ttText(
             text = stringResource(Res.string.settings_change_password),
             style = ttTypography.title,
@@ -245,6 +236,62 @@ internal fun ChangePasswordSheet(
                 style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                 enabled = canSubmit,
             )
+        }
+    }
+}
+
+/**
+ * The acknowledgement a completed change gets: one sentence and a Done, centred on the page.
+ *
+ * ## Why this is not the sheet the form was in
+ *
+ * A bottom sheet is the phone vocabulary for a *form* — thumb-reachable, and the surface system
+ * back already dismisses. A success is not a form. Anchored to the bottom edge it read as one
+ * more row of the sheet the user had just filled in rather than as the answer to whether the
+ * password changed, which is the one thing this state exists to say.
+ *
+ * So it takes this component's other presentation, `Window`: the same surface, opaque base,
+ * scrim and outside-tap dismissal, centred instead of bottom-anchored. That presentation is
+ * provided here rather than passed because `TTBottomSheetScaffold` reads it from
+ * [LocalSheetPresentation], and the shell's default is the phone one at every phone width — this
+ * is the one surface in the app that is a confirmation rather than a sheet, so it is the one
+ * place that answers that question differently.
+ *
+ * The form is not composed underneath while this is showing, and that is deliberate: the success
+ * state cannot be returned to, so leaving three text fields alive behind the scrim would keep a
+ * draft the user can no longer see, edit, or submit.
+ */
+@Composable
+private fun ChangePasswordSuccessCard(
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CompositionLocalProvider(LocalSheetPresentation provides SheetPresentation.Window) {
+        TTBottomSheetScaffold(
+            visible = true,
+            onDismissRequest = onDone,
+            modifier = modifier.testTag(ChangePasswordSheetTag),
+        ) {
+            // Centred, because this card holds one sentence and nothing else: left-aligned it
+            // read as the first row of a form that had lost its fields.
+            ttText(
+                text = stringResource(Res.string.settings_change_password_success),
+                style = ttTypography.title,
+                color = ttLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().testTag(ChangePasswordSuccessTag),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            ) {
+                ttGlassButton(
+                    label = stringResource(Res.string.common_done),
+                    onClick = onDone,
+                    modifier = Modifier.testTag(ChangePasswordDoneTag),
+                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
+                )
+            }
         }
     }
 }

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ConfirmPopup
+import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSeparator
@@ -479,7 +480,7 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = ttSpacing.xxl)
-                    .padding(top = ttSpacing.xl)
+                    .padding(top = LocalStatusBarScrollUnderInset.current + ttSpacing.xl)
                     .testTag(SettingsScreenTag),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             ) {
@@ -534,13 +535,22 @@ fun SettingsScreen(
                 }
             }
         } else {
+            // The top gap is *content* padding, not viewport padding, and that is the whole
+            // difference between a list that starts below the notch and one that scrolls under
+            // it: `padding(top)` would shorten the viewport and keep every row out of the
+            // status-bar strip forever. The shell stops applying the safe-area inset to this
+            // destination for the same reason, and publishes the height for this line to spend
+            // (`LocalStatusBarScrollUnderInset`). It is `0.dp` outside the shell, where there is
+            // no notch to clear and this is the same layout as before.
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = ttSpacing.xxl)
-                    .padding(top = ttSpacing.xl)
                     .testTag(SettingsScreenTag),
-                contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+                contentPadding = PaddingValues(
+                    top = LocalStatusBarScrollUnderInset.current + ttSpacing.xl,
+                    bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current,
+                ),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
             ) {
                 profileFailure?.let {

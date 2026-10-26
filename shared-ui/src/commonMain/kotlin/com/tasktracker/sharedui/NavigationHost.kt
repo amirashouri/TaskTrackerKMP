@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -318,14 +322,44 @@ fun NavigationHost(
             // composition is never measured again — so the value is honoured only where the rail
             // is actually drawn, and the remembered width survives the trip back to `Expanded`
             // instead of being thrown away on the way out.
+            //
+            // The one destination that draws to the window's top edge.
+            //
+            // `RootScreen` no longer insets the signed-in tree, because a list cannot scroll
+            // under the notch unless it reaches the top of the window — so the inset is applied
+            // here instead, at the first point that knows which destination is on screen. Every
+            // tab keeps it; the settings root does not, and spends the measured height as its
+            // own scroll content padding (`LocalStatusBarScrollUnderInset`), which puts the
+            // first row below the notch at rest while the rows behind it slide under the glass.
+            //
+            // The settings *root* is the empty path: `RouterState.settingsPath` starts empty and
+            // `openAdminMembers` installs `[Settings, AdminMembers]`, so "at its root" is
+            // `isEmpty()`, not `size == 1`. A pushed admin route is a list with a back header of
+            // its own and keeps the inset, and so does the missing-settings fallback, which is a
+            // sentence on a blank page rather than a list — hence the port check.
+            val path = navigation.pathFor(tab)
+            val fullBleedTop = drawsUnderStatusBar(
+                tab = tab,
+                path = path,
+                hasSettingsPort = settings != null,
+            )
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
                         start = if (layoutClass.isWide) leadingChromeInset.value else 0.dp,
+                    )
+                    .then(
+                        if (fullBleedTop) {
+                            Modifier
+                        } else {
+                            Modifier.windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+                            )
+                        },
                     ),
             ) {
-                val path = navigation.pathFor(tab)
                 val pushed = path.lastOrNull()
 
                 // A pushed editor is an *overlay*, not a destination of its own right: the
@@ -687,6 +721,29 @@ fun NavigationHost(
     }
 }
 /** The tab's own root, with nothing pushed onto it. Exhaustive over [AppTab]. */
+/**
+ * Whether the destination on screen draws to the window's top edge.
+ *
+ * ## Why this is a named function rather than an inline condition
+ *
+ * It was an inline condition first, and it was wrong: it asked for `path.size == 1`, which is the
+ * shape of a *pushed* settings stack, not of the settings root — `RouterState.settingsPath`
+ * starts empty and `openAdminMembers` installs `[Settings, AdminMembers]`. Nothing on the JVM
+ * host could see the difference, because `WindowInsets.safeDrawing` reports `0.dp` there, so the
+ * wrong answer and the right one laid out identically and the mistake only surfaced on a device.
+ * Naming it makes the decision the thing under test; the padding it selects still needs a notched
+ * host.
+ *
+ * The settings root is the only destination allowed to run to the edge, and only while the port
+ * that draws it exists: a missing-settings fallback is a sentence on a blank page, which keeps
+ * the inset like every other non-scrolling surface.
+ */
+internal fun drawsUnderStatusBar(
+    tab: AppTab,
+    path: List<AppRoute>,
+    hasSettingsPort: Boolean,
+): Boolean = tab == AppTab.Settings && hasSettingsPort && path.isEmpty()
+
 @Composable
 private fun TabRoot(
     tab: AppTab,

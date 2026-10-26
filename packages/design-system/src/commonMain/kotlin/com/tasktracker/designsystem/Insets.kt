@@ -37,6 +37,29 @@ import androidx.compose.ui.unit.dp
  */
 val LocalTabBarScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
 
+/**
+ * How much of the top of the current screen the notch (or status bar) covers.
+ *
+ * The top counterpart of [LocalTabBarScrollUnderInset], for the one layout where the shell stops
+ * applying the safe-area inset itself: a screen whose list reaches the window's top edge so rows
+ * slide *under* the notch, which is the glass treatment the tab bar already gets at the bottom.
+ * The screen adds this to its scroll range's start padding, which puts the first row below the
+ * notch at rest while the content behind it keeps moving under the glass.
+ *
+ * **It is a measurement, not a token**, for the reason the bar inset gives: a notched phone, a
+ * desktop window with a title bar, and a simulator reporting nothing are three different
+ * numbers. The shell reads `WindowInsets.safeDrawing.getTop` before that inset is consumed, and
+ * publishes the result.
+ *
+ * **Content inset, not viewport inset.** Applied to the screen's root it just reproduces the old
+ * layout; applied to the scroll range's `contentPadding` it is what lets the list run behind the
+ * notch. Same rule as its bottom counterpart, and the same reason.
+ *
+ * Defaulted rather than required, so a preview or a screen rendered outside the shell reads
+ * `0.dp` and lays out exactly as it did before.
+ */
+val LocalStatusBarScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
+
 /** Sets the system status bar icon appearance (light vs dark) based on the active theme. */
 @Composable
 expect fun SystemBarAppearance(isDark: Boolean)
