@@ -485,7 +485,10 @@ class SprintEditorModelTest {
     }
 
     @Test
-    fun `the lock comes from the stored sprint, not from the calendar`() {
+    // No comma in this name: the iOS source set is compiled by Kotlin/Native, which rejects
+    // a backticked name containing one ("Name contains illegal characters") and fails the
+    // whole test compilation, so the suite cannot run at all.
+    fun `the lock comes from the stored sprint and not from the calendar`() {
         val repository = FakeProjectRepository()
         val project = testProject()
         val sprint = testSprint(project.id)
