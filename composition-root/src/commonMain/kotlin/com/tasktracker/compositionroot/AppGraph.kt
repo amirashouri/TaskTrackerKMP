@@ -615,15 +615,20 @@ object AppGraph {
                 outbox = resolver.resolve(OutboxQueue::class),
                 metadata = resolver.resolve(SyncMetadataStore::class),
                 transport = resolver.resolve(SyncTransport::class),
-                sinks = mapOf(
-                    OutboxEntity.Project to sink,
-                    OutboxEntity.WorkItem to sink,
-                    // Attachment metadata arrives on its own `attachments` stream and must
-                    // reach the same sink; without this entry a pulled attachment would hit
-                    // `NoSink`, and the pull for that scope would stop on its first change —
-                    // so a member would never see an attachment another member added.
-                    OutboxEntity.Attachment to sink,
-                ),
+                // Every entity the feed can deliver, derived from the enum rather than listed.
+                //
+                // A hand-written map is what dropped sprints and comments: the server wrote
+                // their log rows, the client's pull returned them, and the engine looked the
+                // entity up here, found nothing and threw `NoSink` — which the pull treats as
+                // fatal for the whole scope, so the `workItems` cursor never advanced past the
+                // first sprint and cards stopped arriving too. The gap was invisible for as
+                // long as the server never served those rows.
+                //
+                // Building it from `entries` is what makes the map total. `LocalDataSyncSink`
+                // has an exhaustive `when` over the same enum, so a new entity still fails to
+                // compile there first, and this line binds it without anyone having to
+                // remember this file exists.
+                sinks = OutboxEntity.entries.associateWith { sink },
                 // Claims only the signed-in account's queued rows, read at cycle time from the
                 // same cache the repository stamps rows with. The two must agree, or a stamped
                 // row would never be claimed again — which is why this is the session cache

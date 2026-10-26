@@ -55,4 +55,9 @@ class HostedGraphAndroidHostTest {
     fun `the sample seed only runs without a backend`() = runTest {
         HostedGraphScenarios.theSampleSeedOnlyRunsWithoutABackend(this)
     }
+
+    @Test
+    fun `a pulled sprint lands in the store`() = runTest {
+        HostedGraphScenarios.aPulledSprintLandsInTheStore(this)
+    }
 }

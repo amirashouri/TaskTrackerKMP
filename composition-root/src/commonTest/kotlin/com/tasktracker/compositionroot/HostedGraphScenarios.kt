@@ -1,5 +1,6 @@
 package com.tasktracker.compositionroot
 
+import com.tasktracker.core.randomSprintID
 import com.tasktracker.database.DatabaseConfiguration
 import com.tasktracker.database.NewOutboxEntry
 import com.tasktracker.database.OutboxEntity
@@ -11,13 +12,21 @@ import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.network.SessionInvalidationReason
+import com.tasktracker.sync.InMemorySyncTransport
+import com.tasktracker.sync.RemoteChange
 import com.tasktracker.sync.SyncCoordinator
+import com.tasktracker.sync.SyncEngine
+import com.tasktracker.sync.SyncScope
+import com.tasktracker.sync.SyncTransport
+import com.tasktracker.sync.SyncTrigger
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Instant
 import kotlinx.coroutines.test.TestScope
 
 /**
@@ -246,6 +255,97 @@ object HostedGraphScenarios {
             }
         }
     }
+
+    /**
+     * A sprint another device pushed lands in this device's store.
+     *
+     * The reported defect, end to end: the server now serves sprint rows on the `workItems`
+     * stream, and this is the half that applies them. The engine looks an incoming change's
+     * entity up in its sink map and throws `NoSink` when it is missing — and `SyncEngine.pull`
+     * treats that as fatal for *the whole scope*, leaving the cursor where it was. So a map that
+     * omitted `Sprint` did not merely drop sprints: the `workItems` feed stopped on the first
+     * one, and every later card was unreadable too.
+     *
+     * A real store rather than a double, because the assertion is that a row written by a pull
+     * is *readable through the repository* — and it is guarded by [thisHostOpensRoomStores] for
+     * the reason [theOutboxIsLeftAlone] is: the Android host has no `sqliteJni` on its library
+     * path, so it records a skip instead of a failure that is not the graph's.
+     */
+    val aPulledSprintLandsInTheStore: suspend TestScope.() -> Unit = {
+        if (!thisHostOpensRoomStores()) {
+            println("skipped: this host cannot open a Room store to pull a sprint into")
+        } else {
+            val resolver = AppGraph.start(testBindings())
+            try {
+                val repository = resolver.resolve(ProjectRepositoryPort::class)
+                val now = Clock.System.now()
+                // The project exists locally and the sprint does not: a sprint this device
+                // already held would make the assertion pass with the sink still missing.
+                val project = repository.createProject(
+                    name = "Synced",
+                    keyPrefix = "SYN",
+                    details = "",
+                    now = now,
+                )
+                val sprintID = randomSprintID()
+
+                // The document a second device's push would have logged. Written as the wire
+                // literal rather than built from a `Sprint`, because this module has no
+                // serialization plugin: the shape has to match `Sprint`'s own property names
+                // (`projectID`, not the server's `projectId`), and a key the client does not
+                // declare is a hard decoding failure under `JSONCoding`'s strict reader.
+                val transport = assertIs<InMemorySyncTransport>(resolver.resolve(SyncTransport::class))
+                transport.seed(
+                    scope = SyncScope.WorkItems,
+                    changes = listOf(
+                        RemoteChange(
+                            entity = OutboxEntity.Sprint,
+                            entityID = sprintID.stringValue,
+                            operation = OutboxOperation.Upsert,
+                            payload = sprintPayload(
+                                id = sprintID.stringValue,
+                                projectID = project.id.stringValue,
+                                now = now,
+                            ),
+                            version = null,
+                        ),
+                    ),
+                )
+
+                resolver.resolve(SyncEngine::class).run(SyncTrigger.Manual)
+
+                assertNotNull(
+                    repository.sprint(sprintID),
+                    "a sprint delivered on the workItems stream was not applied. Without a sink " +
+                        "for its entity the pull stops on this change and never advances the " +
+                        "scope's cursor, so cards after it stop arriving as well",
+                )
+            } finally {
+                resolver.stop()
+            }
+        }
+    }
+
+    /**
+     * A sprint as `RoomProjectRepository.enqueueSprint` serializes it.
+     *
+     * Only the keys without a default are named: `goal`, `ownerID`, `finishedAt` and the three
+     * flags are omitted so the payload also proves the client's defaults still decode a document
+     * from an older peer.
+     */
+    private fun sprintPayload(id: String, projectID: String, now: Instant): ByteArray =
+        (
+            "{" +
+                "\"id\":\"$id\"," +
+                "\"projectID\":\"$projectID\"," +
+                "\"name\":\"Sprint from another device\"," +
+                "\"goalStoryPoints\":20," +
+                "\"startDate\":\"$now\"," +
+                "\"endDate\":\"$now\"," +
+                "\"createdAt\":\"$now\"," +
+                "\"updatedAt\":\"$now\"" +
+                "}"
+            ).encodeToByteArray()
 
     /** A queued row, so "left alone" has something to leave alone. */
     private fun sampleEntry() = NewOutboxEntry(

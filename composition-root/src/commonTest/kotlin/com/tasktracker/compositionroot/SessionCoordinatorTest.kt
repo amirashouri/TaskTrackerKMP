@@ -115,7 +115,9 @@ class SessionCoordinatorTest {
     }
 
     @Test
-    fun `a restored session runs a cycle too, because the launch cycle may have claimed nothing`() = runTest {
+    // No comma in this name: the iOS test target is compiled by Kotlin/Native, which rejects a
+    // backticked name containing one with "illegal characters" and fails the whole source set.
+    fun `a restored session runs a cycle too because the launch cycle may have claimed nothing`() = runTest {
         val session = RecordingSessionPort().apply {
             restoreResult = SessionState.SignedIn(UserIdentity(randomUserID(), "ada@example.com"))
         }
