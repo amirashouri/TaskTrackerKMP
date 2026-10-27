@@ -52,59 +52,6 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.routing.AppTab
 import kotlinx.coroutines.CoroutineScope
 
-/**
- * The very wide shell's chrome: a labelled sidebar down the leading edge.
- *
- * ## The rail's argument, taken one step further
- *
- * [NavigationRail] is correct for the band above [ShellExpandedMinimumWidth], where the width is
- * being spent on a second pane and a ~100dp column of glyphs is the right amount of chrome. At
- * [ShellSidebarMinimumWidth] that stops being true: the rail is still as wide as its widest
- * caption, so it cannot say more than five words, and its cells divide the window height between
- * them — 146dp each in a 736dp window. The sidebar is what that space is for: the same five
- * destinations with their labels readable, and the project switcher that every project-scoped
- * tab needs.
- *
- * ## One stack, ordered by scope
- *
- * The panel is a single top-aligned column: the **Projects** index, the project list it opens,
- * the three views of the active project, then **Settings**, with the remaining glass empty below
- * them. The order is the hierarchy — the four work destinations sit next to the project context
- * they act on, and only the one app-level destination comes last.
- *
- * It used to be `heading → list(weight(1f)) → five destinations`, and that was wrong for a
- * reason worth recording: the weight was the only flexible child, so the *primary* navigation
- * was pinned to the bottom edge by accident and separated from the project list by however much
- * space a short list left. A desktop sidebar's bottom is for secondary items, not for the four
- * destinations a user taps all day. Here the list is the only flexible child again, but
- * `fill = false` makes it wrap when it is short, so two projects no longer open a 400dp void
- * between the list and the rows that act on it — and the empty glass ends up after the last row,
- * where nothing is being separated.
- *
- * ## Two selection signals, because there are two states
- *
- * "Which view am I on" and "which project am I in" are different questions, and drawing both
- * with [ttSelectionWash] made two rows look selected for unrelated reasons. The wash now marks
- * the current destination only; the active project is marked by the accent glyph and the
- * selected label ink, and carries `selected` semantics for accessibility. The indent on
- * Board/Backlog/Sprints is the third signal: they are children of the project above them.
- *
- * ## Why the panel fills the height
- *
- * The rail's height is owned by its weighted cells. Here the panel asks for the height and its
- * rows are content-sized, because the glass is a floating surface down the window's leading edge
- * and the empty room belongs below the last row rather than as a band between two groups. The
- * one flexible child is the project list, and `weight(1f, fill = false)` is load-bearing twice:
- * the weight stops twenty projects from measuring the list unbounded and pushing the destinations
- * off the panel, and `fill = false` lets a short list take only the height it needs.
- *
- * ## Why the tag is on the wrapper
- *
- * The same call [NavigationRail] makes: the wrapper carries the edge inset, and [leadingChromeInset]
- * is read from *this* node's size, so the tag and the measurement have to agree about what is
- * being measured — the chrome plus the room it takes, because that is the space the content has
- * to start after.
- */
 @Composable
 internal fun NavigationSidebar(
     selected: AppTab,
@@ -167,7 +114,6 @@ internal fun NavigationSidebar(
                 modifier = Modifier.testTag(SidebarButtonTag(AppTab.Projects)),
             )
 
-            // The switcher: the projects the three rows below act on.
             if (projectPicker.projects.isNotEmpty()) {
                 LazyColumn(
                     modifier = Modifier
@@ -187,18 +133,9 @@ internal fun NavigationSidebar(
                     }
                 }
             }
-            // If no projects, nothing is rendered here; the five destinations are still there.
 
-            // A break, not a divider: the list above is context and the rows below act on it.
-            // `xl` rather than a small step, because a row already carries 6dp of its own
-            // vertical padding: the edge-to-edge distance across a group has to be roughly
-            // twice the distance between two rows inside one, or the two groups read as a
-            // single list. That is exactly what the first pass did with `sm`.
             Spacer(Modifier.height(ttSpacing.xl))
 
-            // The active project's views, indented under the list that chose it. Order comes from
-            // `AppTab.entries` (Board, Backlog, Sprints) so the bar, the rail and the sidebar all
-            // keep the same left-to-right/down-the-list order.
             Column(
                 modifier = Modifier.padding(start = ttSpacing.lg),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
@@ -219,9 +156,6 @@ internal fun NavigationSidebar(
 
             Spacer(Modifier.height(ttSpacing.xl))
 
-            // The only app-level destination. Last in the stack rather than glued to the floor:
-            // it is the one row that is not part of the project's work, and the empty glass after
-            // it separates nothing that belongs together.
             SidebarDestinationRow(
                 label = tabTitle(AppTab.Settings),
                 icon = tabIcon(AppTab.Settings),
@@ -235,14 +169,6 @@ internal fun NavigationSidebar(
     }
 }
 
-/**
- * One destination in the sidebar: glyph beside label, on the selection wash when it is current.
- *
- * The rail's [RailCell] is the same idea on its side, and the differences are deliberate: this
- * one is a row rather than a column, and it selects with [ttSelectionWash] rather than with a
- * travelling lens. `Role.Tab` and the `selected` semantics are the rail's, unchanged — the label
- * carries the state because a tint and a translucent wash are not states.
- */
 @Composable
 private fun SidebarDestinationRow(
     label: String,
@@ -256,16 +182,9 @@ private fun SidebarDestinationRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            // The wash is clipped to the row's own shape so the accent cannot square off the
-            // panel's rounded interior — the same defect `TabLensCornerTest` found on the bar,
-            // caught here by construction rather than by a pixel.
             .clip(RoundedCornerShape(ttRadius.control))
             .ttSelectionWash(selected = isSelected)
             .clickable(
-                // No indication, for the rail's reason and with the rail's measurement: the
-                // default one paints the pressed cell as a rectangle the cell has no clip to
-                // bound, and on glass this light it darkens the cell more than twice what the
-                // selection wash contributes. The wash is what confirms the selection.
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 role = Role.Tab,
@@ -284,9 +203,6 @@ private fun SidebarDestinationRow(
         )
         ttText(
             text = label,
-            // `callout` rather than the rail's `caption`: this label sits beside its glyph on a
-            // 280dp panel, not under it in a ~100dp column, so it is read as body copy rather
-            // than as a caption.
             style = ttTypography.callout,
             color = if (isSelected) selectedInk else inactiveInk,
             maxLines = 1,
@@ -294,43 +210,6 @@ private fun SidebarDestinationRow(
     }
 }
 
-/**
- * One project row in the sidebar project switcher: name, then the project's key prefix.
- *
- * ## Why the row is text, not a glyph and a label
- *
- * The first pass drew the same `ttTabIcons.projects` glyph on every project at the destination
- * rows' own size and type, so two projects read as `Projects, Projects` — duplicate navigation
- * rather than a list of records. Nothing about a project is carried by that glyph; every row
- * showed the same one. The key prefix is carried by the data and is the identifier the rest of
- * the app already uses (`AP` on `AP-12`), so it is the leading edge of recognition rather than
- * decoration.
- *
- * It trails the name rather than leading it because a prefix is 2–10 characters
- * (`ProjectRules.KEY_PREFIX_LENGTH`): a fixed leading column has to be sized for ten, which
- * leaves a 280dp panel with a ~66dp gutter in the common two-character case. Trailing, the key
- * takes only its own width and the *name* holds the aligned left edge, which is the column a
- * reader actually scans.
- *
- * The name is one type step down from a destination ([ttTypography.subheadline] against
- * `callout`), which is the hierarchy: destinations are navigation, project rows are the
- * collection that navigation acts on. The active row is the mark in the reserved leading slot,
- * with both labels in the selected ink — a shape as well as a colour, which the wash alone was
- * not.
- *
- * ## Why this is not a second kind of selected row
- *
- * Being *in* a project and being *on* a view are different states, so they get different
- * signals: the active project takes the marker dot and the selected label ink, and the current
- * destination keeps the wash. Drawing the wash on both is what made the panel look like two
- * unrelated lists with two unrelated selections. `selected` semantics still carries the project
- * state for accessibility, because a tint is not a state.
- *
- * ## Why the role is a button
- *
- * The row switches context and then lands on Board; it does not become the current `AppTab`.
- * `Role.Tab` described it wrongly — [SidebarDestinationRow] is the row that is a tab.
- */
 @Composable
 private fun SidebarProjectRow(
     project: PickableProject,
@@ -355,9 +234,6 @@ private fun SidebarProjectRow(
             .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // The marker's slot is reserved on every row, so the names share one leading edge
-        // whether the row is active or not; only the current project fills it. A dot that
-        // appeared and disappeared would shift every name one slot to the left.
         Box(
             modifier = Modifier.size(ttSpacing.sm),
             contentAlignment = Alignment.Center,
@@ -377,8 +253,6 @@ private fun SidebarProjectRow(
             color = if (isActive) selectedInk else inactiveInk,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            // Fills the leftover width so the key sits on the trailing edge and a long name
-            // ellipsises instead of pushing the identifier out of the panel.
             modifier = Modifier
                 .weight(1f)
                 .padding(start = ttSpacing.md),

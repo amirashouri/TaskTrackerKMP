@@ -36,41 +36,6 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * The projects administration section, in whichever arrangement the shell called it for: the list
  * with one project's edit page, and the create form the section owns.
- *
- * ## Why the arrangement is a parameter and not two composables
- *
- * The two arrangements differ in what the create form is drawn *in* and whether the list carries a
- * button to open it — a phone draws the form as a sheet over the list, opened by that button; a wide
- * window draws the very same panel in the pane beside the list, where it is on screen from the
- * moment the section opens. Everything else — the ports, the list, every callback — is identical,
- * so a second composable would be a second copy of this wiring, and the two would drift in the way
- * that costs the most here: one arm wired to a model the other one is not. The same argument
- * [AdminMembersDestination] makes, and the same [isWide] parameter.
- *
- * The decision stays in [NavigationHost], which is the only place that knows the layout class;
- * this composable draws what it is told.
- *
- * ## Why the wide pane carries the editor as well as the form
- *
- * The section has both (the members section has only the form): a project selected in the list is
- * its edit page, which is a route, and with nothing selected the pane is the create form. Ordering
- * them as a selection first and a form second is what the pane's own placeholder used to say by
- * being empty — a wide window opens the section ready to make a project, which is what an admin
- * opening this section is usually there for.
- *
- * ## Why the create model lives here and not in the list screen
- *
- * The form is drawn outside the list in both arrangements — a sheet over it, a pane beside it — and
- * its draft has to survive neither the list re-reading nor the bucket changing. A model inside the
- * list screen could not be handed to the pane, which is the same reason the members section keeps
- * its own model here.
- *
- * ## Why the phone's form is a sheet and the pane's is bare
- *
- * [NewProjectSheet] is what the board already opens a project form in, so the phone reuses it
- * rather than growing a second container for the same fields. The wide pane *is* the form: there is
- * nothing to slide over and nothing to dismiss, so [NewProjectForm] is drawn directly, with `null`
- * for its dismiss and no Cancel to imply otherwise.
  */
 @Composable
 fun AdminProjectsDestination(
