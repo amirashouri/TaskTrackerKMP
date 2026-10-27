@@ -1,6 +1,6 @@
 # glass-1 — DeviceMotion: one shared controller, real updates, draw-phase reads
 
-- **status:** pending
+- **status:** done
 - **priority:** P0
 - **plan:** no `docs/PLAN.md` entry — standalone design-system hardening sprint
   (`specs/glass-1..7`). No wire-format change; Fast Path per workspace AGENTS.md.
@@ -65,11 +65,27 @@
 
 ## Handoff
 
-- **Done:** to fill at implementation.
-- **Pending:** to fill at implementation.
+- **Done:** controller contract rewritten to `State<Float>` properties with
+  `start()`/`stop()`; `DeviceMotionProvider` (app-scoped, test-injectable) +
+  `LocalDeviceMotion` + `rememberDeviceMotion()` fallback in commonMain; Android
+  registers/unregisters via `DisposableEffect` (`start()` is idempotent); iOS
+  installs the missing `CMDeviceMotionHandler` on `NSOperationQueue.mainQueue`
+  (the specular never moved on iOS before this — nothing wrote the States) and
+  stops updates on dispose; JVM stub is a static zero singleton. `ttGlassSurface`
+  now reads `roll.value` inside `drawBehind` (draw-phase invalidation only).
+  Tests: `DeviceMotionTest` (3 structural tests, commonTest) — sharing, provider
+  dispose, and the `StartStopMotion` discipline.
+- **Pending:** iOS host run (`iosSimulatorArm64Test`) and Android host run are
+  release-gate items, not run in this session. The shell (`shared-ui`) has not
+  yet adopted `DeviceMotionProvider` — until it does, `ttGlassSurface` uses the
+  per-call-site fallback (no regression: one controller per surface with proper
+  dispose, vs. before one controller per surface with a leak). Adopting the
+  provider at the app root is a one-line follow-up.
 - **Next step:** implement glass-2.
 - **Gotchas:** the specular offset math (`roll * size.width * 0.15f`) is
-  pixel-test-adjacent — do not touch the formula, only where the value is read.
+  pixel-test-adjacent — untouched, only where the value is read changed. The
+  controller interface is a breaking change (`roll()`/`pitch()` composables are
+  gone) — safe because `Glass.kt` was the only call site in the repo.
 
 ## Risks / notes
 

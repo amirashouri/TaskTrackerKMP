@@ -133,8 +133,11 @@ fun Modifier.ttGlassSurface(
     val intensity = LocalGlassIntensity.current
     val rim = ttGlassHairline()
     val isDark = LocalThemeScheme.current == ThemeScheme.Dark
-    val deviceMotion = DeviceMotion()
-    val roll = deviceMotion.roll()
+    // Composition takes the controller object only; the roll State itself is read inside
+    // the drawBehind below. The sensor updates at frame rate, so a composition-phase read
+    // would recompose every glass surface per motion event where the draw-phase read
+    // invalidates redraw only. See [DeviceMotionController].
+    val deviceMotion = rememberDeviceMotion()
 
     val wash = if (base == null) {
         ttGlass.fillRamp(
@@ -181,7 +184,7 @@ fun Modifier.ttGlassSurface(
                 )
             }
 
-            val specularOffset = roll * size.width * 0.15f
+            val specularOffset = deviceMotion.roll.value * size.width * 0.15f
             val specularHeight = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() }
             drawRect(
                 brush = Brush.linearGradient(
