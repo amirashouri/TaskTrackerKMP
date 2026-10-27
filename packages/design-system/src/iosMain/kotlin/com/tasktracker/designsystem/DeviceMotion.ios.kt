@@ -29,7 +29,12 @@ private class IosDeviceMotion : DeviceMotionController {
         // the sensor real.
         if (motionManager.deviceMotionAvailable && !motionManager.deviceMotionActive) {
             motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
-            motionManager.startDeviceMotionUpdates(toQueue = NSOperationQueue.mainQueue) { motion, _ ->
+            // The ObjC selector is `startDeviceMotionUpdatesToQueue:withHandler:`, and Kotlin/Native
+            // keeps that whole first part as the function name rather than folding the queue into a
+            // named parameter — `startDeviceMotionUpdates(toQueue = …)` reads as the queue-less
+            // overload and does not compile. Nothing caught this before because the iOS target had
+            // not been compiled since the handler was added; see the handoff.
+            motionManager.startDeviceMotionUpdatesToQueue(NSOperationQueue.mainQueue) { motion, _ ->
                 motion?.let { writeAttitude(it) }
             }
         }
