@@ -107,8 +107,16 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheSprintListAndDetailSideBySide)
 
     @Test
+    fun aWideShellOpensTheNewSprintFormBesideTheList() =
+        runComposeUiTest(block = ShellScenarios.aWideShellOpensTheNewSprintFormBesideTheList)
+
+    @Test
     fun aNarrowShellReplacesTheSprintListWithTheDetail() =
         runComposeUiTest(block = ShellScenarios.aNarrowShellReplacesTheSprintListWithTheDetail)
+
+    @Test
+    fun aNarrowShellStillOpensTheNewSprintFormAsASheet() =
+        runComposeUiTest(block = ShellScenarios.aNarrowShellStillOpensTheNewSprintFormAsASheet)
 
     @Test
     fun choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack() =

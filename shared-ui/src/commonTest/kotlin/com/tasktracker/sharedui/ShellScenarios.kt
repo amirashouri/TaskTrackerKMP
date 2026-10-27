@@ -94,6 +94,9 @@ import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
 import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholderTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
+import com.tasktracker.featureprojectspresentation.SprintEditorCancelTag
+import com.tasktracker.featureprojectspresentation.SprintEditorSheetTag
+import com.tasktracker.featureprojectspresentation.SprintListNewTag
 import com.tasktracker.featureprojectspresentation.SprintListScreenTag
 import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
 import com.tasktracker.featureprojectspresentation.SprintPickerRowTag
@@ -3164,6 +3167,89 @@ object ShellScenarios {
     }
 
     /**
+     * "New sprint" opens its form in the right pane on a wide shell, beside the list.
+     *
+     * The complaint this answers is that a window is not the wide arrangement's vocabulary: a
+     * sprint's *detail* opens in the pane beside the list, so its form arriving as a floating
+     * sheet makes one tab use two ideas of where a sprint is worked on. The assertion is
+     * therefore the same one the detail scenario makes, and for the same reason — both panes
+     * being present is not enough, because a form drawn *over* the list satisfies that too, and
+     * covering the list is precisely the arrangement this replaces.
+     *
+     * This walks in through the rail rather than through `openProject(inTab = Sprints)`, which
+     * makes it the harder case: a tab switch leaves the stack alone (`Router.selectTab`), so the
+     * tab is a single full-width list with no right pane at all, and the pane has to be created
+     * for the form rather than found already there. That is the state a desktop user is in when
+     * they press the button.
+     *
+     * Cancel then closes it, which is also what proves the pane is the surface: there is no
+     * scrim out here to dismiss it with, so the pane's own action row is the only way back.
+     */
+    val aWideShellOpensTheNewSprintFormBesideTheList: suspend ComposeUiTest.() -> Unit = wide@{
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
+
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListNewTag).performClick()
+        waitForIdle()
+
+        // Asserted before the bounds so that the failure names the defect. A window is its own
+        // scene, so a form drawn as one is absent from this tree entirely rather than sitting
+        // in the wrong place — and "no such node" would otherwise read as "the button did
+        // nothing", which is a different bug with a different fix.
+        onNodeWithTag(SprintEditorSheetTag).assertExists(
+            "the new-sprint form is not in the shell's own tree. Either the button opened " +
+                "nothing, or the form is still a window — which lives in a scene of its own, " +
+                "over both panes instead of beside the list",
+        )
+
+        val list = onNodeWithTag(SprintListScreenTag).getBoundsInRoot()
+        val form = onNodeWithTag(SprintEditorSheetTag).getBoundsInRoot()
+
+        assertTrue(
+            list.right.value < form.left.value,
+            "the list runs to ${list.right.value}dp and the form starts at ${form.left.value}dp, " +
+                "so the form is not beside the list. Drawn over it, it starts inside it — and a " +
+                "window over both panes is the thing this arrangement exists to replace",
+        )
+        assertTrue(
+            form.right.value - form.left.value > 0f,
+            "the form is ${form.right.value - form.left.value}dp wide, so the pane has collapsed " +
+                "to nothing and the width went to the list",
+        )
+
+        onNodeWithTag(SprintEditorCancelTag).performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintEditorSheetTag).assertDoesNotExist()
+        // The tab goes back to the single full-width list it was before the form opened, rather
+        // than to a right pane holding a placeholder: with no route on the stack there is no
+        // pair to be half of, and the width the form borrowed has to be given back.
+        val restoredList = onNodeWithTag(SprintListScreenTag).getBoundsInRoot()
+        assertTrue(
+            restoredList.right.value > list.right.value,
+            "the list still runs to ${restoredList.right.value}dp, the width it had while the " +
+                "form was open, so the pane is gone but its share of the width is not",
+        )
+    }
+
+    /**
      * A narrow window replaces the list with the detail, as it always has.
      *
      * The compact path is the one that had to stay unchanged, so it is asserted directly rather
@@ -3200,6 +3286,49 @@ object ShellScenarios {
             SprintListScreenTag,
             "at ${PHONE_WIDTH.value}dp the sprint list is still composed behind the detail. It is " +
                 "meant to be replaced, not stacked — the same arrangement as before this section",
+        )
+    }
+
+    /**
+     * A narrow window still opens "New sprint" as the sheet it always was.
+     *
+     * The wide arrangement is the one that changed, and this is the other half of that claim:
+     * the destination is handed no `requestNewSprint` under a compact class, so it keeps the
+     * editor to itself. Read from the list side rather than the form's — the list is *still
+     * there* behind the sheet, which is the difference between a modal and the pane the wide
+     * shell draws beside it.
+     */
+    val aNarrowShellStillOpensTheNewSprintFormAsASheet: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        projects.seedSprint(shellTestSprint(projectID = project.id))
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = PHONE_WIDTH,
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintListNewTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(SprintEditorSheetTag).assertExists(
+            "at ${PHONE_WIDTH.value}dp pressing \"New sprint\" opened nothing. The wide shell " +
+                "draws the form in its right pane; a compact one has no pane to draw it in, so " +
+                "the destination has to keep drawing the sheet itself",
+        )
+        onNodeWithTag(SprintListScreenTag).assertExists(
+            "at ${PHONE_WIDTH.value}dp the list is gone from under the form, so the editor is " +
+                "occupying the screen rather than covering it — that is the pane arrangement, " +
+                "which this width must not have",
         )
     }
 

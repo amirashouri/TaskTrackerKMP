@@ -96,6 +96,7 @@ import com.tasktracker.featureprojectspresentation.SprintDetailModel
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholder
 import com.tasktracker.featureprojectspresentation.SprintDetailScreen
 import com.tasktracker.featureprojectspresentation.SprintEditorModel
+import com.tasktracker.featureprojectspresentation.SprintEditorPresentation
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
 import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
@@ -420,6 +421,19 @@ fun NavigationHost(
                     },
                 )
 
+                // Whether the Sprints pane is holding the "New sprint" form rather than a
+                // sprint. Hoisted to here because the pane and the button that opens it are in
+                // different subtrees: the button is the list's, inside `SprintsDestination`, and
+                // the pane is this arrangement's. The destination reports the request through
+                // `TabRoot`'s `requestNewSprint` and draws no sheet of its own while wide.
+                //
+                // Keyed on the tab so a switch away and back starts on the list rather than on a
+                // form nobody asked for this time round, and cleared whenever the stack moves, so
+                // a row tapped behind an open form is what the pane shows: the pane is the last
+                // thing asked for, not a surface that outlives the request that replaced it.
+                var isNewSprintOpen by remember(tab) { mutableStateOf(false) }
+                LaunchedEffect(backgroundPushed) { isNewSprintOpen = false }
+
                 // The tab's root and whatever is pushed onto it, as two values rather than two
                 // call sites, because there are now three arrangements and writing a ten-argument
                 // call three times is three places for the wiring to drift apart.
@@ -433,6 +447,13 @@ fun NavigationHost(
                         themeScheme = themeScheme,
                         scope = scope,
                         isWide = layoutClass.isWide,
+                        // Only under a wide class: on a compact window the destination keeps the
+                        // editor to itself and draws it as the sheet it always was.
+                        requestNewSprint = if (layoutClass.isWide) {
+                            { isNewSprintOpen = true }
+                        } else {
+                            null
+                        },
                     )
                 }
                 val pushedPane: @Composable () -> Unit = {
@@ -457,6 +478,30 @@ fun NavigationHost(
                 // `pushedPane` are: it is a whole pane of one arrangement arm, and inlining the
                 // lambda would make this the one pane of the three with no name.
                 val noSprintSelected: @Composable () -> Unit = { SprintDetailPlaceholder() }
+                // The form, as the Sprints pane's third occupant. A value for the reason the
+                // other panes are: it is a whole pane of one arm.
+                //
+                // The project comes from `navigation.activeProjectID` — the same field
+                // `ProjectScopedTabScreen` hands the list — rather than from the route, so the
+                // form is scoped to the project the list beside it is showing even on the frames
+                // where a tab switch has moved the active project and the stack has not caught
+                // up yet. It cannot be null while the button that opens this exists, because the
+                // list is only drawn with a project; the placeholder is what a future caller that
+                // forgot that would get, rather than a crash.
+                val newSprintPane: @Composable () -> Unit = {
+                    val projectID = navigation.activeProjectID
+                    if (projectID == null) {
+                        noSprintSelected()
+                    } else {
+                        SprintCreateEditor(
+                            projectID = projectID,
+                            environment = environment,
+                            scope = scope,
+                            presentation = SprintEditorPresentation.Pane,
+                            onDismiss = { isNewSprintOpen = false },
+                        )
+                    }
+                }
                 // The projects section's two panes with no port bound: the tagged placeholder the
                 // routing is exercised through, and a right pane that stays empty because a
                 // section with no list has nothing to put in it. Values rather than inline
@@ -533,23 +578,35 @@ fun NavigationHost(
                         detailPane = { editorDestination(backlogEditorInPane) },
                     )
 
-                    backgroundPushed == null -> tabRoot()
-
                     // The Sprints list-detail pair. Its root stack is `[SprintList]` and never
                     // empty — see `Router.openProject` — so `backgroundPushed` is non-null even
                     // with no sprint selected, and rendering `pushedPane` unconditionally drew
                     // the *list* in the right pane: the same screen on both sides. The right pane
                     // is the detail only when the stack actually holds a detail route; otherwise
                     // nothing is selected and the pane says so.
-                    layoutClass.isWide && tab == AppTab.Sprints ->
+                    //
+                    // Two things reach this arm, not one. A route on the stack is the obvious
+                    // one. The other is the new-sprint form: a *tab switch* deliberately leaves
+                    // the stack alone (`Router.selectTab`), so landing on Sprints from the rail
+                    // gives an empty path and the single-pane arm below — a list at full width
+                    // with no right pane at all. Opening the form from there has to widen the tab
+                    // the way choosing a sprint does, or the form has nowhere to go but a window.
+                    //
+                    // The form is checked first because it is the most recent request: it is not
+                    // a route, so the stack underneath has not moved and the detail arm below
+                    // would otherwise win the pane back.
+                    layoutClass.isWide && tab == AppTab.Sprints &&
+                        (backgroundPushed != null || isNewSprintOpen) ->
                         SprintTwoPanes(
                             listPane = tabRoot,
-                            detailPane = if (backgroundPushed is AppRoute.SprintDetail) {
-                                pushedPane
-                            } else {
-                                noSprintSelected
+                            detailPane = when {
+                                isNewSprintOpen -> newSprintPane
+                                backgroundPushed is AppRoute.SprintDetail -> pushedPane
+                                else -> noSprintSelected
                             },
                         )
+
+                    backgroundPushed == null -> tabRoot()
 
                     layoutClass.isWide && tab == AppTab.Settings &&
                         backgroundPushed is AppRoute.AdminMembers ->
@@ -754,6 +811,16 @@ private fun TabRoot(
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
     isWide: Boolean = false,
+    /**
+     * Where the wide arrangement wants the Sprints tab's "New sprint" form drawn, or `null`
+     * when the destination should draw it itself.
+     *
+     * Only the Sprints branch reads it — no other tab has a form that belongs in a pane — but
+     * it is a parameter of this function rather than of [SprintsDestination]'s own call site
+     * because the branch is the only place that knows which destination it is building. See
+     * [SprintCreateEditor] for what the callback is wired to.
+     */
+    requestNewSprint: (() -> Unit)? = null,
 ) {
     when (tab) {
         AppTab.Projects -> ProjectsHost(
@@ -809,6 +876,7 @@ private fun TabRoot(
                 environment = environment,
                 scope = scope,
                 preferences = preferences,
+                requestNewSprint = requestNewSprint,
             )
         }
 
@@ -1380,6 +1448,16 @@ private fun SprintsDestination(
     environment: ProjectEnvironment,
     scope: CoroutineScope,
     preferences: ShellPreferences,
+    /**
+     * Where the shell wants "New sprint" drawn, when it can draw it somewhere better than this
+     * destination can, or `null` when it cannot and this destination should draw it itself.
+     *
+     * `null` is every compact layout, and it keeps the editor here: a bottom sheet owned by the
+     * screen that opened it. Non-null is the wide arrangement, whose right pane is beside the
+     * list and is the same place a sprint's detail already opens — the form belongs there too,
+     * rather than in a window covering both panes. See [SprintCreateEditor].
+     */
+    requestNewSprint: (() -> Unit)? = null,
 ) {
     val model = remember(projectID, environment) {
         SprintListModel(projectID, environment.repository, environment.dateProvider)
@@ -1405,12 +1483,11 @@ private fun SprintsDestination(
         value = runCatching { environment.repository.project(projectID) }.getOrNull()
     }
 
-    // `null` for creating, a `SprintID` for editing. Named rather than a separate boolean
-    // because "creating" and "editing sprint X" are one state with two shapes, and two
-    // booleans would allow the impossible third.
-    var editorSprintID by remember(projectID) { mutableStateOf<SprintID?>(null) }
+    // Whether *this* destination is drawing the editor. Only ever true on a compact layout —
+    // under a wide one the form is the shell's pane and [requestNewSprint] is how it is asked
+    // for, so nothing is drawn here and no window covers the two panes it is meant to sit
+    // beside.
     var isEditorVisible by remember(projectID) { mutableStateOf(false) }
-    var isEditorBusy by remember(projectID) { mutableStateOf(false) }
 
     SprintListScreen(
         inProgressRows = model.inProgressRows,
@@ -1428,108 +1505,137 @@ private fun SprintsDestination(
             // never published with the list missing.
             router.openSprint(projectID = projectID, sprintID = sprintID)
         },
-        onNewSprint = {
-            editorSprintID = null
-            isEditorVisible = true
-        },
+        // This list only ever *creates*: editing a sprint is the detail screen's `onEdit`,
+        // because the rows carry no edit affordance and a form for a sprint the user has not
+        // opened would have to read it first to know what it is editing. The destination used
+        // to carry a nullable `editorSprintID` for the second case and never set it to anything
+        // but null.
+        onNewSprint = requestNewSprint ?: { isEditorVisible = true },
         onDismissError = model::dismissError,
         onOpenSwitcher = { router.popToRoot() },
         projects = picker.projects,
         onSelectProject = { router.openProject(it, AppTab.Sprints) },
     )
 
-    // Open the editor for a sprint by id, reading it first. `null` when it has gone — the
-    // store deletes a sprint independently — and a create rather than an edit is the honest
-    // answer for a form whose subject no longer exists, because it is not silently editing
-    // a blank.
-    val existingSprint by produceState<Sprint?>(initialValue = null, editorSprintID, environment) {
-        value = if (isEditorVisible && editorSprintID != null) {
-            runCatching { environment.repository.sprint(editorSprintID!!) }.getOrNull()
-        } else {
-            null
-        }
+    if (isEditorVisible) {
+        SprintCreateEditor(
+            projectID = projectID,
+            environment = environment,
+            scope = scope,
+            presentation = SprintEditorPresentation.Sheet,
+            onDismiss = { isEditorVisible = false },
+        )
     }
-    // The project's sprints as they stood when the editor opened, so the form can name a
-    // blocker before the write is attempted. Read on every open rather than held across
-    // them: a sibling created by another device while the list was on screen is exactly the
-    // case the form exists to catch, and a cached read would miss it.
-    val siblingSprints by produceState<List<Sprint>>(
-        emptyList(),
-        isEditorVisible,
-        projectID,
-        environment,
-    ) {
-        value = if (isEditorVisible) {
-            runCatching { environment.repository.sprints(projectID) }.getOrDefault(emptyList())
-        } else {
-            emptyList()
-        }
+}
+
+/**
+ * The "New sprint" form, in whichever surface the layout has room for.
+ *
+ * ## One model, two callers
+ *
+ * The compact arrangement reaches this from [SprintsDestination] and the wide one from the
+ * shell's right pane, and both go through here rather than each building the model beside its
+ * own copy of the form. The sequence below — read the siblings, hand them to
+ * [SprintEditorModel], rebuild when the read lands, then write and dismiss — is the part that
+ * must not exist twice: two copies is how a sheet and a pane would start disagreeing about
+ * which sibling blocks the window, or about whether a second Save is still in flight.
+ *
+ * ## A create, and only a create
+ *
+ * The model is built without an `existing` sprint. Editing is [SprintDetailDestination]'s
+ * editor, which already holds the sprint it is editing and would have to read it again to
+ * hand it over — see the note there on why its model is keyed on visibility rather than on
+ * `detail.sprint`.
+ *
+ * ## The project is read here, not passed in
+ *
+ * [SprintEditorModel]'s owner picker is filtered to this project's members (1.6), and only the
+ * host holds both the project and the directory. This is the same independent read
+ * [SprintsDestination] makes for its switcher pill and [SprintDetailDestination] makes for its
+ * own editor, and it is deliberately not shared: the two are never on screen together in the
+ * compact arrangement, and in the wide one the pill and the form want the same value for
+ * different reasons rather than one value kept in step by hand.
+ */
+@Composable
+private fun SprintCreateEditor(
+    projectID: ProjectID,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+    presentation: SprintEditorPresentation,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentProject by produceState<Project?>(initialValue = null, projectID, environment) {
+        value = runCatching { environment.repository.project(projectID) }.getOrNull()
     }
-    val editor = remember(
-        projectID,
-        editorSprintID,
-        environment,
-        existingSprint,
-        siblingSprints,
-    ) {
+    // The project's sprints as they stood when the form opened, so it can name a blocker
+    // before the write is attempted. Read on every open rather than held across them: a
+    // sibling created by another device while the list was on screen is exactly the case the
+    // form exists to catch, and a cached read would miss it.
+    val siblingSprints by produceState<List<Sprint>>(emptyList(), projectID, environment) {
+        value = runCatching { environment.repository.sprints(projectID) }.getOrDefault(emptyList())
+    }
+    // Same reason the task form has one: the model has no in-flight flag, and a save button
+    // that can be pressed twice answers a double tap with two writes.
+    var isBusy by remember(projectID) { mutableStateOf(false) }
+    val editor = remember(projectID, environment, siblingSprints) {
         SprintEditorModel(
             projectID = projectID,
-            existing = existingSprint,
+            existing = null,
             projectSprints = siblingSprints,
             repository = environment.repository,
             dateProvider = environment.dateProvider,
         )
     }
-    // Same reason the task form has one: the model has no in-flight flag, and a save button
-    // that can be pressed twice answers a double tap with two writes.
-    if (isEditorVisible) {
-        SprintEditorSheet(
-            name = editor.name,
-            goalStoryPoints = editor.goalStoryPoints,
-            goal = editor.goal,
-            startDate = editor.startDate,
-            endDate = editor.endDate,
-            ownerID = editor.ownerID,
-            isCreating = editor.isCreating,
-            canSave = editor.canSave,
-            endIsBeforeStart = editor.endIsBeforeStart,
-            blockedBySprintName = editor.blockedBySprintName,
-            windowLocked = editor.windowLocked,
-            errorMessage = editor.errorMessage,
-            onDismissError = editor::dismissError,
-            onNameChanged = editor::onNameChanged,
-            onGoalStoryPointsChanged = editor::onGoalStoryPointsChanged,
-            onGoalChanged = editor::onGoalChanged,
-            onStartDateChanged = editor::onStartDateChanged,
-            onEndDateChanged = editor::onEndDateChanged,
-            onOwnerChanged = editor::onOwnerChanged,
-            searchMembers = { query ->
-                // 1.6: a sprint's owner may only be one of this project's members. The
-                // directory knows nothing about projects, so the intersection is applied here,
-                // where the project and the directory are both to hand.
-                assignableMembersFor(
-                    project = currentProject,
-                    directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
-                )
-            },
-            // Unfiltered by design: see MemberPicker.resolveSelected. The owner a sprint already
-            // has must keep its name even if that person has since left the project.
-            resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
-            onSave = {
-                scope.launch {
-                    isEditorBusy = true
-                    val saved = editor.save()
-                    isEditorBusy = false
-                    if (saved) isEditorVisible = false
-                }
-            },
-            onCancel = { isEditorVisible = false },
-            isBusy = isEditorBusy,
-            visible = true,
-            onDismissRequest = { isEditorVisible = false },
-            onDismissed = {},
-        )
-    }
+
+    SprintEditorSheet(
+        name = editor.name,
+        goalStoryPoints = editor.goalStoryPoints,
+        goal = editor.goal,
+        startDate = editor.startDate,
+        endDate = editor.endDate,
+        ownerID = editor.ownerID,
+        isCreating = editor.isCreating,
+        canSave = editor.canSave,
+        endIsBeforeStart = editor.endIsBeforeStart,
+        blockedBySprintName = editor.blockedBySprintName,
+        windowLocked = editor.windowLocked,
+        errorMessage = editor.errorMessage,
+        onDismissError = editor::dismissError,
+        onNameChanged = editor::onNameChanged,
+        onGoalStoryPointsChanged = editor::onGoalStoryPointsChanged,
+        onGoalChanged = editor::onGoalChanged,
+        onStartDateChanged = editor::onStartDateChanged,
+        onEndDateChanged = editor::onEndDateChanged,
+        onOwnerChanged = editor::onOwnerChanged,
+        searchMembers = { query ->
+            // 1.6: a sprint's owner may only be one of this project's members. The directory
+            // knows nothing about projects, so the intersection is applied here, where the
+            // project and the directory are both to hand.
+            assignableMembersFor(
+                project = currentProject,
+                directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
+            )
+        },
+        // Unfiltered by design: see MemberPicker.resolveSelected. The owner a sprint already
+        // has must keep its name even if that person has since left the project.
+        resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
+        onSave = {
+            scope.launch {
+                isBusy = true
+                val saved = editor.save()
+                isBusy = false
+                if (saved) onDismiss()
+            }
+        },
+        onCancel = onDismiss,
+        modifier = modifier,
+        isBusy = isBusy,
+        visible = true,
+        onDismissRequest = onDismiss,
+        onDismissed = {},
+        presentation = presentation,
+    )
 }
 
 /**

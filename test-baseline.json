@@ -3,30 +3,30 @@
   "hosts": {
     "jvmTest": {
       "target": "jvm",
-      "tests": 2050,
+      "tests": 2069,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "failed": [],
-      "resultFiles": 178
+      "resultFiles": 182
     },
     "iosSimulatorArm64Test": {
       "target": "iosSimulatorArm64",
-      "tests": 1996,
+      "tests": 2007,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "failed": [],
-      "resultFiles": 162
+      "resultFiles": 164
     },
     "testAndroidHostTest": {
       "target": "androidHost",
-      "tests": 1690,
+      "tests": 1701,
       "failures": 0,
       "errors": 0,
-      "skipped": 80,
+      "skipped": 86,
       "failed": [],
-      "resultFiles": 144
+      "resultFiles": 146
     }
   }
 }

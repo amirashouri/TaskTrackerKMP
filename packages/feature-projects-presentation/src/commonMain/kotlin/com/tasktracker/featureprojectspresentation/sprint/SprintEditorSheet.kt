@@ -3,7 +3,11 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -11,6 +15,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import com.tasktracker.core.UserID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -43,7 +48,23 @@ import kotlinx.datetime.LocalDate
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Bottom sheet form for creating and editing sprints.
+ * The sprint form: creates a sprint, or edits the one [isCreating] is false for.
+ *
+ * ## One form, two surfaces
+ *
+ * [presentation] decides only what the form is *drawn on*. The fields, their order, their
+ * tags and the action row are one `Column` — `body` below — and both arms invoke that same
+ * `Column`, so a pane and a sheet cannot drift into asking for different things. The wide
+ * shell passes [SprintEditorPresentation.Pane] to open a new sprint in the right pane beside
+ * the list, the way a sprint's detail already opens there; every other caller takes the
+ * default and gets the modal it always had.
+ *
+ * A pane is not a sheet with the backdrop removed. It has no scrim to dismiss it, so Cancel
+ * is the only way out, and it carries its own scroll and the pane's gutters. That is also why
+ * its bottom inset is padding *inside* the scroll rather than on the scroll container — the
+ * same distinction [SprintDetailScreen] draws, and for the same reason: padding on the
+ * container shrinks the viewport and leaves a band the content can never reach.
+ *
  * Disables date range and story point cap inputs when [windowLocked] is true.
  */
 @Composable
@@ -82,13 +103,9 @@ fun SprintEditorSheet(
     /** Server or store validation error banner text. */
     errorMessage: String? = null,
     onDismissError: () -> Unit = {},
+    presentation: SprintEditorPresentation = SprintEditorPresentation.Sheet,
 ) {
-    TTBottomSheetScaffold(
-        visible = visible,
-        onDismissRequest = onDismissRequest,
-        modifier = modifier,
-        onDismissed = onDismissed,
-    ) {
+    val body: @Composable () -> Unit = {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -205,6 +222,43 @@ fun SprintEditorSheet(
             }
         }
     }
+
+    when (presentation) {
+        SprintEditorPresentation.Sheet -> TTBottomSheetScaffold(
+            visible = visible,
+            onDismissRequest = onDismissRequest,
+            modifier = modifier,
+            onDismissed = onDismissed,
+        ) { body() }
+
+        // The pane's gutters and top inset are `SprintDetailScreen`'s, so a sprint's form and
+        // a sprint's detail start on the same line and the pane does not shift under the user
+        // when one replaces the other.
+        SprintEditorPresentation.Pane -> Column(
+            modifier = modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    start = ttSpacing.xxl,
+                    end = ttSpacing.xxl,
+                    top = ttSpacing.screenGutterLarge,
+                    bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current,
+                ),
+        ) { body() }
+    }
+}
+
+/**
+ * What [SprintEditorSheet] draws its form on.
+ *
+ * [Sheet] is the modal: anchored and sliding on a compact window, a centred window on a wide
+ * one, both chosen by `LocalSheetPresentation` inside [TTBottomSheetScaffold]. [Pane] is the
+ * same form standing in the wide shell's right pane, with no scrim and no window — the shell
+ * asks for it when the form belongs *beside* the list rather than over it.
+ */
+enum class SprintEditorPresentation {
+    Sheet,
+    Pane,
 }
 
 const val SprintEditorSheetTag = "sprints.editor"
