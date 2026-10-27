@@ -113,6 +113,7 @@ import com.tasktracker.featureprojectspresentation.WorkItemEditorModel
 import com.tasktracker.featureprojectspresentation.WorkItemEditorSheet
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.MissingSettingsServiceView
+import com.tasktracker.featuresettingspresentation.ResetCodePanel
 import com.tasktracker.featuresettingspresentation.SettingsModel
 import com.tasktracker.featuresettingspresentation.SettingsScreen
 import com.tasktracker.resources.Res
@@ -454,6 +455,9 @@ fun NavigationHost(
                         } else {
                             null
                         },
+                        // The Settings branch's change-password sheet mints a member's code
+                        // through this port; every other tab ignores it.
+                        memberAdminPort = memberAdminPort,
                     )
                 }
                 val pushedPane: @Composable () -> Unit = {
@@ -821,6 +825,14 @@ private fun TabRoot(
      * [SprintCreateEditor] for what the callback is wired to.
      */
     requestNewSprint: (() -> Unit)? = null,
+    /**
+     * The member directory, for the Settings branch's change-password sheet.
+     *
+     * Defaulted to `null` so every other caller — and every scenario that builds a tab root
+     * without an admin backend — says nothing about it. Only [SettingsDestination] reads it,
+     * and only to mint a reset code for a member.
+     */
+    memberAdminPort: MemberAdminPort? = null,
 ) {
     when (tab) {
         AppTab.Projects -> ProjectsHost(
@@ -889,6 +901,7 @@ private fun TabRoot(
                 preferences = preferences,
                 themeScheme = themeScheme,
                 scope = scope,
+                memberAdminPort = memberAdminPort,
             )
         }
     }
@@ -984,6 +997,7 @@ private fun PushedRoute(
                 preferences = preferences,
                 themeScheme = themeScheme,
                 scope = scope,
+                memberAdminPort = memberAdminPort,
             )
         }
 
@@ -2270,12 +2284,25 @@ private fun SettingsDestination(
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
+    memberAdminPort: MemberAdminPort?,
 ) {
     val layoutClass = LocalShellLayoutClass.current
     val model = remember(port) { SettingsModel(port) }
     DisposableEffect(model) {
         model.observe(scope)
         onDispose { model.stopObserving() }
+    }
+
+    // The administrator's half of the change-password sheet. Created only when the graph bound
+    // the member directory, because the generator's one job is a call on that port — a model
+    // over a missing port would draw a picker that could never mint anything. `null` is
+    // therefore not an error state: the sheet falls back to the member's form, which is exactly
+    // what a build with no admin backend can honestly offer.
+    val resetCodeModel = remember(memberAdminPort) {
+        memberAdminPort?.let { PasswordResetCodeModel(it) }
+    }
+    DisposableEffect(resetCodeModel) {
+        onDispose { resetCodeModel?.stopObserving() }
     }
 
     val accentPalette by preferences.accentPalette.collectAsState()
@@ -2352,6 +2379,14 @@ private fun SettingsDestination(
             scope.launch { model.requestChangePassword(newPassword = newPassword, oldPasswordOrCode = credential) }
         },
         onDismissChangePasswordOutcome = { model.dismissChangePasswordOutcome() },
+        // The administrator's half of the same sheet. The picker loads when the segment is
+        // opened, not here, which is why the load is a command the sheet calls rather than
+        // something `observe` does on arrival.
+        canGenerateResetCode = resetCodeModel != null,
+        resetCode = resetCodeModel?.panel ?: ResetCodePanel(),
+        onLoadResetMembers = { resetCodeModel?.ensureMembersLoaded(scope) },
+        onSelectResetMember = { candidate -> resetCodeModel?.select(candidate) },
+        onGenerateResetCode = { scope.launch { resetCodeModel?.generate() } },
         isAdmin = isAdmin,
         // The two admin rows. The screen reports the tap; where it lands is navigation, so it
         // goes through the router rather than holding a flag here — and through

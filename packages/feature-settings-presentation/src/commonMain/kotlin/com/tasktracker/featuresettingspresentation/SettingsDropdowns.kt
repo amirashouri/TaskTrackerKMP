@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupPositionProvider
 import com.tasktracker.designsystem.ttGlass
@@ -61,12 +62,22 @@ internal object SettingsDropdownPositionProvider : PopupPositionProvider {
 /** The theme dropdown's own width, shared so the two popups on this page are the same size. */
 internal val ThemeDropdownWidth = 216.dp
 
-/** The shared popup column: glass surface, control rounding, and the option inset. */
+/**
+ * The shared popup column: glass surface, control rounding, and the option inset.
+ *
+ * [width] is a parameter rather than a constant because the member picker in the
+ * change-password sheet lists names and addresses, which do not fit the theme dropdown's
+ * 216dp. Everything else about the two popups — surface, thickness, rounding, inset — is
+ * still one copy, which is what this function exists to keep true.
+ */
 @Composable
-internal fun SettingsDropdownColumn(content: @Composable () -> Unit) {
+internal fun SettingsDropdownColumn(
+    width: Dp = ThemeDropdownWidth,
+    content: @Composable () -> Unit,
+) {
     Column(
         modifier = Modifier
-            .width(ThemeDropdownWidth)
+            .width(width)
             .ttGlassSurface(
                 shape = RoundedCornerShape(ttRadius.control),
                 thickness = ttGlass.GlassThickness.THICK,

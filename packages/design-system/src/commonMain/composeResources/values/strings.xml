@@ -518,6 +518,22 @@
     <string name="settings_change_password_body">Confirm it is you, then choose a new password.</string>
     <string name="settings_change_password_verify_old">Old Password</string>
     <string name="settings_change_password_verify_code">Admin Code</string>
+    <!--
+      The administrator's third segment. Same control, other end of the same exchange: they
+      mint the code a member will spend, so the segment is named for the act rather than for
+      the credential. The member is chosen from a list, which is what the hint says.
+    -->
+    <string name="settings_change_password_verify_generate">Give a Code</string>
+    <string name="settings_change_password_member_hint">Choose a member</string>
+    <string name="settings_change_password_members_empty">No members to choose from.</string>
+    <string name="settings_change_password_generate">Generate code</string>
+    <!--
+      The outcome of a copy, for any surface that confirms one with a toast. Deliberately not
+      named for the surface that first needed it: it says what happened, not which control did
+      it, so the reset-code sheet and the work-item card can share one sentence instead of
+      keeping two translations of it in step.
+    -->
+    <string name="copied_to_clipboard">Copied to clipboard</string>
     <string name="settings_change_password_new_hint">New password</string>
     <string name="settings_change_password_confirm_hint">Confirm new password</string>
     <string name="settings_change_password_credential_old_hint">Current password</string>

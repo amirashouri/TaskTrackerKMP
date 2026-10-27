@@ -158,4 +158,19 @@ abstract class SettingsViewScenarios {
     @Test
     fun aFailedProfileWriteRaisesADismissibleBanner() =
         runComposeUiTest(block = SettingsScenarios.aFailedProfileWriteRaisesADismissibleBanner)
+
+    /**
+     * The administrator's half of the change-password sheet.
+     *
+     * Both are pure composition — a role switch and a clipboard write — so they run on every
+     * host with no raster support needed.
+     */
+
+    @Test
+    fun anAdminGetsTheGeneratorAndAMemberGetsTheCodeField() =
+        runComposeUiTest(block = SettingsScenarios.anAdminGetsTheGeneratorAndAMemberGetsTheCodeField)
+
+    @Test
+    fun theMintedCodeIsShownAndCopyPutsItOnTheClipboard() =
+        runComposeUiTest(block = SettingsScenarios.theMintedCodeIsShownAndCopyPutsItOnTheClipboard)
 }

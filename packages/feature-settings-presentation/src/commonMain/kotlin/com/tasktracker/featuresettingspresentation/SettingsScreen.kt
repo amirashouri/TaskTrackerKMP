@@ -198,6 +198,28 @@ fun SettingsScreen(
     onRequestChangePassword: (newPassword: String, oldPasswordOrCode: String) -> Unit = { _, _ -> },
     onDismissChangePasswordOutcome: () -> Unit = {},
     /**
+     * Whether the administrator's generator can actually mint, which is not the same question
+     * as [isAdmin].
+     *
+     * [isAdmin] is about the person; this is about the build. An administrator on a client with
+     * no member directory bound — the offline demo — still sees the Admin section, whose two
+     * rows lead to placeholders, but must not be offered a picker whose Generate button would
+     * have no port to call. Two flags rather than one because they can disagree, and the sheet
+     * is given their conjunction: an administrator, on a build that can mint.
+     */
+    canGenerateResetCode: Boolean = false,
+    /**
+     * The administrator's half of the same sheet: the member picker, the mint, and its answer.
+     *
+     * Read straight through to [ChangePasswordSheet], which draws them for the segment an
+     * administrator has and for nobody else. Defaulted, like the other three commands here, so
+     * a preview or a scenario that never opens the sheet names none of them.
+     */
+    resetCode: ResetCodePanel = ResetCodePanel(),
+    onLoadResetMembers: () -> Unit = {},
+    onSelectResetMember: (ResetCodeCandidate) -> Unit = {},
+    onGenerateResetCode: () -> Unit = {},
+    /**
      * The API root this launch is using and the one saved for the next, the open editor (or
      * `null` when the sheet is closed), and the last save/reset notice.
      *
@@ -665,6 +687,15 @@ fun SettingsScreen(
                     startChangeWithCode = false
                     onDismissChangePasswordOutcome()
                 },
+                // An administrator, on a build that can mint. The conjunction rather than
+                // `isAdmin` alone: the segment's only control is a call on the member
+                // directory, so a client without one must show the member's form instead of a
+                // picker that cannot produce anything.
+                isAdmin = isAdmin && canGenerateResetCode,
+                resetCode = resetCode,
+                onLoadResetMembers = onLoadResetMembers,
+                onSelectResetMember = onSelectResetMember,
+                onGenerateResetCode = onGenerateResetCode,
             )
         }
     }

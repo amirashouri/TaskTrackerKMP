@@ -6,8 +6,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -27,12 +31,14 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.TTToastTag
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -883,6 +889,139 @@ object SettingsScenarios {
         onNodeWithTag(SettingsProfileFailureTag).assertDoesNotExist()
         onNodeWithText("Sam").assertIsDisplayed()
     }
+
+    /**
+     * The third segment is a different form for an administrator than for a member.
+     *
+     * Both compositions enter through `startWithCode`, which is the forgot sheet's "I have a
+     * code" — the one path that preselects a segment other than Old Password. What it lands on
+     * is the claim: a member gets the field they paste a code into, an administrator gets the
+     * generator, and neither sees the other's control.
+     *
+     * The flip is one recomposition of the same sheet rather than two compositions, so the
+     * absence on the second half cannot be an artefact of a different tree — the same node
+     * either exists or it does not.
+     *
+     * Mutation: make `VerifyMethod.AdminCode.visibleTo` return `true` for an administrator and
+     * this fails on the first assertion — the code field reappears and the picker never mounts.
+     */
+    val anAdminGetsTheGeneratorAndAMemberGetsTheCodeField: suspend ComposeUiTest.() -> Unit = {
+        var isAdmin by mutableStateOf(true)
+        setContent {
+            Themed {
+                ChangePasswordSheet(
+                    outcome = null,
+                    startWithCode = true,
+                    onSubmit = { _, _ -> },
+                    onDismiss = {},
+                    isAdmin = isAdmin,
+                    resetCode = ResetCodePanel(candidates = listOf(resetCodeMember)),
+                )
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(SettingsResetMemberPickerTag).assertExists(
+            "an administrator was not offered a member to mint a code for",
+        )
+        onNodeWithTag(ChangePasswordCredentialTag).assertDoesNotExist()
+
+        isAdmin = false
+        waitForIdle()
+
+        onNodeWithTag(ChangePasswordCredentialTag).assertExists(
+            "a member lost the field they paste an admin's code into",
+        )
+        onNodeWithTag(SettingsResetMemberPickerTag).assertDoesNotExist()
+    }
+
+    /**
+     * The minted code is on screen and Copy puts it on the clipboard.
+     *
+     * The clipboard is the whole delivery: there is no mailer and none may be added for this
+     * flow (AGENTS.md §7), so an administrator hands the code over by pasting it somewhere. A
+     * Copy button that copied nothing — or copied a different string than the one shown — is
+     * the defect, and it is invisible to an assertion that only counts buttons. So this reads
+     * the text back out of a recording clipboard the sheet was composed under.
+     */
+    val theMintedCodeIsShownAndCopyPutsItOnTheClipboard: suspend ComposeUiTest.() -> Unit = {
+        val clipboard = RecordingClipboard()
+        val minted = MintedResetCode(forMember = resetCodeMember, code = "9F2A-11C4-77DE")
+
+        setContent {
+            Themed {
+                CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                    ChangePasswordSheet(
+                        outcome = null,
+                        startWithCode = true,
+                        onSubmit = { _, _ -> },
+                        onDismiss = {},
+                        isAdmin = true,
+                        resetCode = ResetCodePanel(
+                            candidates = listOf(resetCodeMember),
+                            selectedID = resetCodeMember.id,
+                            minted = minted,
+                        ),
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        val shown = onNodeWithTag(SettingsResetCodeTag)
+            .fetchSemanticsNode()
+            .config
+            .getOrNull(SemanticsProperties.Text)
+            .orEmpty()
+            .joinToString(separator = "") { it.text }
+        assertTrue(
+            shown.contains(minted.code),
+            "the sheet shows \"$shown\", which does not contain the code it minted (${minted.code}) " +
+                "— the administrator has nothing to read out",
+        )
+
+        // Nothing has been copied yet, so there is nothing to confirm: the toast is the answer
+        // to the tap, not a permanent part of the card.
+        onNodeWithTag(TTToastTag).assertDoesNotExist()
+
+        onNodeWithTag(SettingsResetCopyTag).performClick()
+        waitForIdle()
+
+        assertEquals(
+            minted.code,
+            clipboard.text,
+            "Copy left the clipboard holding ${clipboard.text} instead of the minted code",
+        )
+        onNodeWithTag(TTToastTag).assertExists(
+            "the code reached the clipboard but nothing confirmed it — an icon with no answer " +
+                "reads as a button that did nothing",
+        )
+    }
+}
+
+/**
+ * The member every generator scenario mints for.
+ *
+ * A label and an address that disagree on purpose: the picker's row shows the label, the
+ * delivery sentence names the person by it, and the address is what tells two people apart —
+ * so a fixture where the two matched could not show which string each surface used.
+ */
+private val resetCodeMember = ResetCodeCandidate(
+    id = "00000000-0000-4000-8000-0000000000a1",
+    label = "Grace",
+    detail = "grace@example.com",
+)
+
+/** A clipboard that records what was written to it, so Copy can be checked rather than counted. */
+private class RecordingClipboard : ClipboardManager {
+    var text: String? = null
+        private set
+
+    override fun setText(annotatedString: AnnotatedString) {
+        text = annotatedString.text
+    }
+
+    override fun getText(): AnnotatedString? = text?.let { AnnotatedString(it) }
 }
 
 @OptIn(ExperimentalTestApi::class)
