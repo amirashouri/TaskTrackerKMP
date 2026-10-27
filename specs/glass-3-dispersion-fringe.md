@@ -1,6 +1,6 @@
 # glass-3 — Dispersion fringe: document it, name it, keep the pixels
 
-- **status:** pending
+- **status:** done
 - **priority:** P2
 - **plan:** no `docs/PLAN.md` entry — standalone design-system hardening sprint
   (`specs/glass-1..7`). No wire-format change; Fast Path per workspace AGENTS.md.
@@ -47,11 +47,10 @@
 
 ## Handoff
 
-- **Done:** to fill at implementation.
-- **Pending:** to fill at implementation.
+- **Done:** Moved dispersion values to `ttGlass.DISPERSION_ALPHA` (0.4f) and `ttGlass.DISPERSION_GREEN_MULTIPLIER` (1.5f) with explanatory comments. No rendering change; all glass tests pass.
+- **Pending:** None.
 - **Next step:** implement glass-4.
-- **Gotchas:** the fringe draws *under* the border brush in `drawBehind`; keep
-  that order when touching the block.
+- **Gotchas:** The fringe still draws before the rim border in `drawBehind`; order unchanged.
 
 ## Risks / notes
 

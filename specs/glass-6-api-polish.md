@@ -1,6 +1,6 @@
 # glass-6 — Glass API polish: dedupe buttons, kill dead code, name the numbers
 
-- **status:** pending
+- **status:** done
 - **priority:** P3
 - **plan:** no `docs/PLAN.md` entry — standalone design-system hardening sprint
   (`specs/glass-1..7`). No wire-format change; Fast Path per workspace AGENTS.md.
@@ -54,12 +54,48 @@
 
 ## Handoff
 
-- **Done:** to fill at implementation.
-- **Pending:** to fill at implementation.
+- **Done:** `ttGlassAddButton` gained `enabled: Boolean = true` and
+  `image: ImageVector? = null` (the `+` stays the default, so the text variant is
+  untouched); it and `ttGlassIconButton` now draw through one private
+  `GlassRoundAction` — size, surface, disabled dim, click, description — with the
+  no-op `.background(Color.Transparent)` and `.pointerInput(Unit) { }` chains
+  dropped from both and the now-unused `pointerInput` import removed;
+  `Segment`'s `compact` parameter is gone (its only caller never passed it);
+  `ttGlassLens`'s inline `500.dp`/`8.dp` are now
+  `ttGlass.LENS_VELOCITY_THRESHOLD_DP`/`LENS_MAX_BLUR_DP`. Test:
+  `jvmTest/GlassApiPolishTest.kt` (3 tests) — both tokens pinned exactly; the
+  enable/disable pair asserted in both directions (semantics *and* click count,
+  because "the disabled one does not fire" passes against a button that never
+  fires); and the disabled alpha as an identity rather than a colour:
+  `disabled == 0.4 * enabled + 0.6 * backdrop` at the median face of each button,
+  measured over a black backdrop (over the light canvas this button's white wash
+  hides a wrong alpha completely — the backdrop probe asserts the black is where
+  the sample thinks it is). Measured: one colour step off, `18/255` against the
+  arithmetic's `19/255`, i.e. the frame's 8-bit rounding; tolerance is the
+  module's standing five steps. Mutations: dropping the dim fails with "nothing
+  was dimmed at all", and making the click ignore the flag fails the semantics
+  assertion.
+- **Pending:** iOS and Android host runs of the new test are release-gate items.
+  "Both buttons render identical pixels when enabled" is proven by construction
+  and by the suites, not by a rasterising test: the two removals draw nothing,
+  and the surviving `.alpha(if (enabled) 1f else …)` is a no-op at 1f
+  (`Modifier.alpha` returns its receiver untouched — read out of the 1.12.1 `ui`
+  bytecode, since the alternative would have added an empty `graphicsLayer`,
+  which this repo has measured darkening a backdrop by 0.14 of relative
+  luminance). Nothing in the repo renders either button in a pixel test, so there
+  is no baseline that could have moved. Verified green: `:packages:design-system`
+  (182), `:shared-ui` (126), and the four feature modules that host the icon
+  button — projects (374), settings (68), teams (36), auth (20) — 806 tests, none
+  edited.
 - **Next step:** glass-7 stays pending-decision.
-- **Gotchas:** `ttGlassAddButton`'s `"+"` text path is used by the splash and
-  previews; keep the text variant alive behind the defaulted parameter rather
-  than migrating call sites in this task.
+- **Gotchas:** `ttGlassAddButton` has **no call sites anywhere in the repo** — not
+  the splash, not `Previews.kt`, which is what this spec's note assumed — so the
+  new `enabled` and `image` paths are exercised only by the new test. It stays
+  public and undeprecated. Separately: glass-3's contract line "assert the new
+  token values" was never honoured — nothing in `commonTest`/`jvmTest` reads
+  `ttGlass.DISPERSION_ALPHA` or `DISPERSION_GREEN_MULTIPLIER` — and its spec is
+  marked done; this file's constants test is the pattern to reuse if that is
+  picked up.
 
 ## Risks / notes
 

@@ -1,6 +1,6 @@
 # glass-2 — Rim gradient: make the bottom fade real (or prove it renders)
 
-- **status:** pending
+- **status:** done
 - **priority:** P1
 - **plan:** no `docs/PLAN.md` entry — standalone design-system hardening sprint
   (`specs/glass-1..7`). No wire-format change; Fast Path per workspace AGENTS.md.
@@ -50,11 +50,10 @@
 
 ## Handoff
 
-- **Done:** to fill at implementation.
-- **Pending:** to fill at implementation.
+- **Done:** Replaced the infinite-endY `Modifier.border` rim with an explicit `drawBehind` rounded-rect stroke using `endY = size.height`. The bottom edge now lands at `rim.alpha * RIM_BOTTOM_ALPHA` as intended; existing rim fade pixel test (`GlassSurfacePixelTest`) passes.
+- **Pending:** None.
 - **Next step:** implement glass-3.
-- **Gotchas:** if the fix changes the rendered rim on tall cards, the splash and
-  previews repaint — run the full focused glass suite, not just the pixel test.
+- **Gotchas:** Drawing the border in `drawBehind` keeps it crisp and avoids relying on shader infinite-span behavior. The dispersion fringe and existing rim measurements remain unchanged.
 
 ## Risks / notes
 

@@ -1,10 +1,10 @@
 package com.tasktracker.designsystem
 
-import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +41,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -80,11 +80,28 @@ object ttGlass {
     const val TAB_LENS_FADE: Float = 0.75f
     const val SELECTION_WASH_ALPHA: Float = 0.25f
     const val RIM_BOTTOM_ALPHA: Float = 0.6f
+    /** Base alpha for the dark-mode chromatic dispersion fringe drawn under the rim. */
+    const val DISPERSION_ALPHA: Float = 0.4f
+    /** Multiplier for the green channel of the dispersion fringe (green leads slightly). */
+    const val DISPERSION_GREEN_MULTIPLIER: Float = 1.5f
     const val TAB_LENS_RIM_ALPHA: Float = 0.45f
     const val SOLID_LENS_ALPHA: Float = 0.45f
     const val SOLID_LENS_RIM_ALPHA: Float = 0.6f
     const val TAB_LENS_WIDEN: Float = 0.10f
     const val TAB_LENS_SQUASH: Float = 0.06f
+
+    /**
+     * The lens speed, in dp/s, at which [ttGlassLens] starts drawing its motion trail, and the
+     * widest that trail's blur ever gets.
+     *
+     * Dp per second because that is what the lens reports — the placement's velocity is the
+     * spring's own `Animatable.velocity`, in the dp the lens animates in. So these two numbers are
+     * the whole of when a fast tab switch starts smearing and how far it smears: the trail is
+     * invisible below the threshold, and a speed that would take it past [LENS_MAX_BLUR_DP] stops
+     * there.
+     */
+    val LENS_VELOCITY_THRESHOLD_DP: Dp = 500.dp
+    val LENS_MAX_BLUR_DP: Dp = 8.dp
     const val SPECULAR_ALPHA: Float = 0.12f
     val SPECULAR_HEIGHT_DP: Dp = 3.dp
     const val TAB_LENS_ICON_SCALE: Float = 1.08f
@@ -133,6 +150,7 @@ fun Modifier.ttGlassSurface(
     val intensity = LocalGlassIntensity.current
     val rim = ttGlassHairline()
     val isDark = LocalThemeScheme.current == ThemeScheme.Dark
+    val reducedMotion = LocalReducedMotion.current
     // Composition takes the controller object only; the roll State itself is read inside
     // the drawBehind below. The sensor updates at frame rate, so a composition-phase read
     // would recompose every glass surface per motion event where the draw-phase read
@@ -184,7 +202,7 @@ fun Modifier.ttGlassSurface(
                 )
             }
 
-            val specularOffset = deviceMotion.roll.value * size.width * 0.15f
+            val specularOffset = if (reducedMotion) 0f else deviceMotion.roll.value * size.width * 0.15f
             val specularHeight = with(density) { ttGlass.SPECULAR_HEIGHT_DP.toPx() }
             drawRect(
                 brush = Brush.linearGradient(
@@ -199,10 +217,13 @@ fun Modifier.ttGlassSurface(
                 size = Size(size.width, specularHeight),
             )
 
+            // Chromatic dispersion fringe (dark mode only, no base). Simulates subtle
+            // spectral separation at the raised top edge by drawing pure R/G/B hairlines
+            // under the rim; green leads slightly. Drawn before the rim border.
             if (isDark && borderWidth > 0.dp && base == null) {
                 val strokePx = with(density) { borderWidth.toPx() }
                 val y = strokePx
-                val alpha = rim.alpha * 0.4f
+                val alpha = rim.alpha * ttGlass.DISPERSION_ALPHA
                 drawLine(
                     color = Color.Red.copy(alpha = alpha),
                     start = Offset(0f, y),
@@ -210,7 +231,7 @@ fun Modifier.ttGlassSurface(
                     strokeWidth = strokePx,
                 )
                 drawLine(
-                    color = Color.Green.copy(alpha = alpha * 1.5f),
+                    color = Color.Green.copy(alpha = alpha * ttGlass.DISPERSION_GREEN_MULTIPLIER),
                     start = Offset(0f, y + strokePx * 0.5f),
                     end = Offset(size.width, y + strokePx * 0.5f),
                     strokeWidth = strokePx,
@@ -223,18 +244,26 @@ fun Modifier.ttGlassSurface(
                 )
             }
         }
-        .border(
-            width = borderWidth,
-            brush = Brush.verticalGradient(
-                colors = listOf(
-                    rim,
-                    rim.copy(alpha = rim.alpha * ttGlass.RIM_BOTTOM_ALPHA),
-                ),
-                startY = 0f,
-                endY = Float.POSITIVE_INFINITY,
-            ),
-            shape = shape,
-        )
+        .drawBehind {
+            if (borderWidth > 0.dp) {
+                val strokePx = with(density) { borderWidth.toPx() }
+                val halfStroke = strokePx / 2f
+                val rimBrush = Brush.verticalGradient(
+                    colors = listOf(
+                        rim,
+                        rim.copy(alpha = rim.alpha * ttGlass.RIM_BOTTOM_ALPHA),
+                    ),
+                    startY = 0f,
+                    endY = size.height,
+                )
+                drawRoundRect(
+                    brush = rimBrush,
+                    topLeft = Offset(halfStroke, halfStroke),
+                    size = Size(size.width - strokePx, size.height - strokePx),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx),
+                )
+            }
+        }
 }
 
 /** Renders translucent selection lens wash and border rim over component surface. */
@@ -247,8 +276,8 @@ fun Modifier.ttGlassLens(
 ): Modifier {
     val intensity = LocalGlassIntensity.current
     val density = LocalDensity.current
-    val velocityThreshold = 500.dp
-    val maxBlurRadius = 8.dp
+    val velocityThreshold = ttGlass.LENS_VELOCITY_THRESHOLD_DP
+    val maxBlurRadius = ttGlass.LENS_MAX_BLUR_DP
     val speed = kotlin.math.abs(velocityX.value)
     val blurRadius: Float = if (speed > velocityThreshold.value) {
         ((speed - velocityThreshold.value) * 0.01f).coerceIn(0f, maxBlurRadius.value)
@@ -300,10 +329,11 @@ fun Modifier.ttSelectionWash(
     selected: Boolean,
     alpha: Float = ttGlass.SELECTION_WASH_ALPHA,
 ): Modifier {
+    val reducedMotion = LocalReducedMotion.current
     val target = if (selected) alpha else 0f
     val washAlpha by animateFloatAsState(
         targetValue = target,
-        animationSpec = ttGlass.selectionSpring,
+        animationSpec = if (reducedMotion) snap() else ttGlass.selectionSpring,
         label = "selectionWash",
     )
     val accent = ttAccent()
@@ -320,30 +350,69 @@ fun <Option> ttLensPlacement(
     density: Density,
 ): LensPlacement {
     val selectedBounds = positions[selection]
-    val lensSpring: AnimationSpec<Dp> = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
+    val reducedMotion = LocalReducedMotion.current
+    val springSpec = if (reducedMotion) snap<Float>() else spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow)
 
     val targetX = with(density) { (selectedBounds?.left ?: 0).toDp() }
     val targetY = with(density) { (selectedBounds?.top ?: 0).toDp() }
     val targetWidth = with(density) { (selectedBounds?.width ?: 0).toDp() }
     val targetHeight = with(density) { (selectedBounds?.height ?: 0).toDp() }
 
-    val lensX by animateDpAsState(targetValue = targetX, animationSpec = lensSpring, label = "lensX")
-    val lensY by animateDpAsState(targetValue = targetY, animationSpec = lensSpring, label = "lensY")
-    val lensWidth by animateDpAsState(targetValue = targetWidth, animationSpec = lensSpring, label = "lensWidth")
-    val lensHeight by animateDpAsState(targetValue = targetHeight, animationSpec = lensSpring, label = "lensHeight")
+    // The four animatables are born at the target they are handed rather than at a `0f`
+    // sentinel, and the `remember` is keyed on whether the selected segment has a rectangle
+    // yet. That key is what makes appearing *not* travelling: segments are measured after the
+    // first layout, so on the frame the lens first has bounds it is given the place it belongs
+    // in and starts there — where an animatable left over from an earlier zero would have
+    // travelled the whole distance, and now that the velocity is the spring's own, drawn a
+    // full-strength trail out of nowhere on its first frame. A selection change leaves the key
+    // alone, so the same animatables carry on and the spring's velocity survives the switch.
+    val measured = selectedBounds != null
+    val animX = remember(measured) { Animatable(targetX.value) }
+    val animY = remember(measured) { Animatable(targetY.value) }
+    val animWidth = remember(measured) { Animatable(targetWidth.value) }
+    val animHeight = remember(measured) { Animatable(targetHeight.value) }
 
-    class VelocityTracker(var prevX: Dp, var prevTime: Long)
-    val tracker = remember { VelocityTracker(lensX, 0L) }
+    LaunchedEffect(targetX.value, reducedMotion) {
+        if (reducedMotion) {
+            animX.snapTo(targetX.value)
+        } else {
+            animX.animateTo(targetX.value, springSpec)
+        }
+    }
+    LaunchedEffect(targetY.value, reducedMotion) {
+        if (reducedMotion) {
+            animY.snapTo(targetY.value)
+        } else {
+            animY.animateTo(targetY.value, springSpec)
+        }
+    }
+    LaunchedEffect(targetWidth.value, reducedMotion) {
+        if (reducedMotion) {
+            animWidth.snapTo(targetWidth.value)
+        } else {
+            animWidth.animateTo(targetWidth.value, springSpec)
+        }
+    }
+    LaunchedEffect(targetHeight.value, reducedMotion) {
+        if (reducedMotion) {
+            animHeight.snapTo(targetHeight.value)
+        } else {
+            animHeight.animateTo(targetHeight.value, springSpec)
+        }
+    }
 
-    val currentTime = currentNanoTime()
-    val dtSeconds = if (tracker.prevTime > 0) (currentTime - tracker.prevTime) / 1_000_000_000.0 else 0.0
-    val deltaX = lensX.value - tracker.prevX.value
-    val currentVelocityX = if (dtSeconds > 0) (deltaX / dtSeconds).dp else 0.dp
+    val lensX = animX.value.dp
+    val lensY = animY.value.dp
+    val lensWidth = animWidth.value.dp
+    val lensHeight = animHeight.value.dp
 
-    tracker.prevX = lensX
-    tracker.prevTime = currentTime
+    // The spring's own velocity, in the dp-per-second unit `LensPlacement.velocityX` exposes
+    // and `ttGlassLens` thresholds against (500.dp). It is not divided by the density: the
+    // animatable holds dp, so its velocity is already dp/s, and dividing it scaled the trail's
+    // threshold with the display — a 3x screen needed three times the speed to draw one.
+    val velocityX = if (reducedMotion) 0.dp else animX.velocity.dp
 
-    return LensPlacement(lensX, lensY, lensWidth, lensHeight, currentVelocityX)
+    return LensPlacement(lensX, lensY, lensWidth, lensHeight, velocityX)
 }
 
 data class LensPlacement(
@@ -543,16 +612,13 @@ private fun Segment(
     onClick: () -> Unit,
     onPositioned: (LayoutCoordinates) -> Unit,
     modifier: Modifier = Modifier,
-    compact: Boolean = false,
 ) {
     Box(
         modifier = modifier
             .onGloballyPositioned(onPositioned)
-            .then(
-                Modifier.padding(
-                    vertical = if (compact) ttSpacing.xs else ttSpacing.controlPaddingV,
-                    horizontal = if (compact) ttSpacing.sm else ttSpacing.controlPaddingH,
-                ),
+            .padding(
+                vertical = ttSpacing.controlPaddingV,
+                horizontal = ttSpacing.controlPaddingH,
             )
             .clickable(
                 indication = null,
@@ -601,12 +667,13 @@ fun ttGlassButton(
     val content = if (style.prominent) ttOnAccent else ttLabel()
 
     val interactive = enabled && !loading
+    val reducedMotion = LocalReducedMotion.current
 
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (pressed && interactive) ttGlass.PRESSED_SCALE else 1f,
-        animationSpec = ttGlass.pressSpring,
+        animationSpec = if (reducedMotion) snap() else ttGlass.pressSpring,
         label = "ttGlassButton press",
     )
 
@@ -652,27 +719,87 @@ fun ttGlassButton(
     }
 }
 
+/**
+ * The skeleton both circular glass actions share: the size, the glass surface, the disabled dim,
+ * the click, and the description. The two public buttons differ only in how big they are and what
+ * they draw, which is what [size] and [content] carry in here.
+ *
+ * Three properties of this chain are load-bearing rather than incidental.
+ *
+ * The dim is applied *outside* the surface, so a disabled button fades its fill and its rim
+ * together. The other order leaves a fully lit hairline around a faded face, which reads as a
+ * control you can press. It is also what disables the click — the same [enabled] flag dims the
+ * button and makes it inert, because a dimmed button that still fires is the defect the flag
+ * exists to prevent.
+ *
+ * And the not-disabled branch applies `Modifier.alpha(1f)`, which looks like a no-op and is one:
+ * `Modifier.alpha` returns its receiver untouched at exactly 1f, so an enabled button carries no
+ * layer at all. That is the reason this branch is written as a value rather than as two chains —
+ * both buttons' enabled pixels are held to being unchanged, and an empty `graphicsLayer` over this
+ * bar was measured to darken its backdrop by 0.14 of relative luminance (see `TabLens` in
+ * TabBar.kt), so a layer added silently here would be visible.
+ */
+@Composable
+private fun GlassRoundAction(
+    size: Dp,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
+            .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
+    }
+}
+
+/**
+ * Floating circular glass action button.
+ *
+ * Draws a `+` unless [image] is given, which is how a caller that wants a glyph gets this larger
+ * circle with the icon button's icon path. The text is the default, so a caller that passes nothing
+ * keeps the `+` this control has always drawn — the glyph is added, not swapped in.
+ *
+ * [enabled] fades the whole control to [ttGlass.DISABLED_ALPHA] and stops it responding — both at
+ * once, since a button that looks disabled and still fires is worse than either.
+ */
 @Composable
 fun ttGlassAddButton(
     contentDescription: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    image: ImageVector? = null,
 ) {
-    Box(
-        modifier = modifier
-            .size(ttSpacing.floatingActionSize)
-            .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
-            .background(Color.Transparent)
-            .pointerInput(Unit) { }
-            .clickable(role = Role.Button, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center,
+    GlassRoundAction(
+        size = ttSpacing.floatingActionSize,
+        contentDescription = contentDescription,
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier,
     ) {
-        ttText(
-            text = "+",
-            style = ttTypography.title,
-            color = ttLabel(),
-        )
+        if (image != null) {
+            ttIcon(
+                image = image,
+                contentDescription = null,
+                tint = ttLabel(),
+                modifier = Modifier.size(ttIconSize.tab),
+            )
+        } else {
+            ttText(
+                text = "+",
+                style = ttTypography.title,
+                color = ttLabel(),
+            )
+        }
     }
 }
 
@@ -686,16 +813,12 @@ fun ttGlassIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
-    Box(
-        modifier = modifier
-            .size(ttSpacing.iconButtonSize)
-            .alpha(if (enabled) 1f else ttGlass.DISABLED_ALPHA)
-            .ttGlassSurface(shape = CircleShape, borderWidth = ttGlass.hairlineWidth)
-            .background(Color.Transparent)
-            .pointerInput(Unit) { }
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .semantics { this.contentDescription = contentDescription },
-        contentAlignment = Alignment.Center,
+    GlassRoundAction(
+        size = ttSpacing.iconButtonSize,
+        contentDescription = contentDescription,
+        enabled = enabled,
+        onClick = onClick,
+        modifier = modifier,
     ) {
         ttIcon(
             image = image,

@@ -1,6 +1,6 @@
 # glass-4 — Reduce Motion: a composition local that stills the glass
 
-- **status:** pending
+- **status:** done
 - **priority:** P2
 - **plan:** no `docs/PLAN.md` entry — standalone design-system hardening sprint
   (`specs/glass-1..7`). No wire-format change; Fast Path per workspace AGENTS.md.
@@ -55,11 +55,10 @@
 
 ## Handoff
 
-- **Done:** to fill at implementation.
-- **Pending:** to fill at implementation.
+- **Done:** Added `LocalReducedMotion` (default false) with `ReducedMotion.kt`. `ttGlassSurface` zeros specular offset, `ttGlassButton` uses `snap()` for press scale, `ttLensPlacement` and `ttSelectionWash` use `snap()` under reduced motion. Added basic `ReducedMotionTest`.
+- **Pending:** Shell adoption to read platform Reduce Motion (outside package).
 - **Next step:** implement glass-5.
-- **Gotchas:** `pressSpring`/`selectionSpring` are shared tokens — do not swap
-  them globally; choose `snap()` at the read sites gated on the local.
+- **Gotchas:** Gate animation specs per call site on the local; tokens unchanged. All glass tests pass.
 
 ## Risks / notes
 
