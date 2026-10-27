@@ -1,23 +1,33 @@
 package com.tasktracker.featureauthpresentation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AppError
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTheme
+import kotlin.math.abs
 import kotlin.test.assertTrue
 
 /**
@@ -159,7 +169,70 @@ object SignInScenarios {
         onNodeWithTag(MissingAuthSessionTag).assertDoesNotExist()
         onNodeWithTag(EmailFieldTag).assertIsDisplayed()
     }
+
+    /**
+     * The form is capped on a wide window, and still fills a phone.
+     *
+     * Both halves in one composition, because they are one decision rather than two. The cap is
+     * chosen at the *narrow* end so that it never binds on a phone, and a test that only
+     * measured a desktop would pass just as well if the form had been inset on phones too —
+     * which is the way this change could plausibly go wrong.
+     *
+     * Measured on the email field rather than on its card, because the field is the thing the
+     * user types into and `LabelledField`'s padding is the only thing between the two: a change
+     * to either shows up as a change here. The expected numbers are derived from the tokens
+     * rather than written down, so moving the gutter or the cap moves the expectation with it.
+     */
+    val theFormIsCappedOnAWideWindowAndStillFillsAPhone: suspend ComposeUiTest.() -> Unit = {
+        var windowWidth by mutableStateOf(PHONE_FORM_WIDTH)
+        themed {
+            previewSession {
+                Box(Modifier.width(windowWidth)) {
+                    SignInView(onAuthenticated = {})
+                }
+            }
+        }
+        waitForIdle()
+
+        // The gutter is the screen's, the inset is the field card's own padding, and the border
+        // draws inside the bounds so it takes no space of its own.
+        val gutter = ttSpacing.xxl.value
+        val cardInset = ttSpacing.xxl.value
+
+        val onPhone = fieldWidth()
+        val phoneExpected = PHONE_FORM_WIDTH.value - 2 * gutter - 2 * cardInset
+        assertTrue(
+            abs(onPhone - phoneExpected) < 0.5f,
+            "at ${PHONE_FORM_WIDTH.value}dp the field is ${onPhone}dp, and a phone is meant to " +
+                "measure what it always did: the window minus the screen gutter and the card's " +
+                "padding, which is ${phoneExpected}dp. A smaller number means the cap is " +
+                "insetting a window that was already narrow enough",
+        )
+
+        windowWidth = WIDE_FORM_WIDTH
+        waitForIdle()
+
+        val onWide = fieldWidth()
+        val wideExpected = ttSpacing.signInFormWidth.value - 2 * cardInset
+        assertTrue(
+            abs(onWide - wideExpected) < 0.5f,
+            "at ${WIDE_FORM_WIDTH.value}dp the field is ${onWide}dp, so the form is not capped " +
+                "at ttSpacing.signInFormWidth (${ttSpacing.signInFormWidth.value}dp); it is " +
+                "${wideExpected}dp when it is. Uncapped, it is the window minus the gutter — the " +
+                "form stretched to both edges that the cap exists to prevent",
+        )
+    }
 }
+
+/** A phone width: narrower than the form's cap, so the cap must not bind here. */
+private val PHONE_FORM_WIDTH = 390.dp
+
+/** A window wide enough that the cap is what decides the form's width, not the window. */
+private val WIDE_FORM_WIDTH = 1024.dp
+
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.fieldWidth(): Float =
+    onNodeWithTag(EmailFieldTag).getBoundsInRoot().let { it.right.value - it.left.value }
 
 /** Every scenario renders in the same theme, so none of them is an unthemed outlier. */
 @OptIn(ExperimentalTestApi::class)

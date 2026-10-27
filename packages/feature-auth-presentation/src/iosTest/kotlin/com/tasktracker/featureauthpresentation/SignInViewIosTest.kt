@@ -36,4 +36,7 @@ class SignInViewIosTest {
 
     @Test
     fun aProvidedSessionShowsTheForm() = runComposeUiTest(block = SignInScenarios.aProvidedSessionShowsTheForm)
+
+    @Test
+    fun theFormIsCappedOnAWideWindowAndStillFillsAPhone() = runComposeUiTest(block = SignInScenarios.theFormIsCappedOnAWideWindowAndStillFillsAPhone)
 }

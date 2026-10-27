@@ -210,6 +210,21 @@ object ttSpacing {
     val signInTopInset: Dp = 56.dp
 
     /**
+     * 360dp — the widest the sign-in form gets, however wide the window is.
+     *
+     * Both fields' cards and the button are full-width, so with nothing but the [xxl] gutter
+     * they followed whatever window they were given: a desktop window drew a text field the
+     * width of the screen, which reads as a page that failed to lay out rather than as a form.
+     *
+     * A **cap**, not a width, and the number is chosen at the narrow end rather than the wide
+     * one. A 390dp phone leaves 358dp inside its gutters, which is already less than 360 — so
+     * the cap never binds there and the phone layout measures exactly what it did before.
+     * Anything below 358 would start insetting phones that were fine, and 360 is the smallest
+     * round value that leaves them alone.
+     */
+    val signInFormWidth: Dp = 360.dp
+
+    /**
      * The scale in ramp order, for a test that asserts the ramp is actually increasing.
      *
      * Exposed rather than kept private so `SpacingTest` can walk it instead of restating

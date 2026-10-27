@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -113,54 +114,69 @@ fun SignInView(
                 .padding(horizontal = ttSpacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(ttSpacing.signInTopInset))
-            AppMark()
-            Spacer(Modifier.height(ttSpacing.splashStack))
-            ttText(
-                text = "Task Tracker",
-                style = ttTypography.title,
-                color = ttLabelSecondary(),
-            )
-            Spacer(Modifier.height(ttSpacing.formStack))
+            // The form's own measure. Every child below is full-width — both field cards and
+            // the button all `fillMaxWidth` — so with nothing but the gutter they followed
+            // whatever window they were handed, and a desktop window drew a text field the
+            // width of the screen.
+            //
+            // A cap rather than a width, so the phone is untouched: the constraint arriving
+            // here is already narrower than `signInFormWidth` at 390dp, and `widthIn` only
+            // ever clamps. See `ttSpacing.signInFormWidth` for the two numbers that make that
+            // true. The scroll viewport above stays full-bleed, so the form scrolls wherever
+            // the window is dragged and the backdrop keeps covering the whole page.
+            Column(
+                modifier = Modifier.widthIn(max = ttSpacing.signInFormWidth),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.height(ttSpacing.signInTopInset))
+                AppMark()
+                Spacer(Modifier.height(ttSpacing.splashStack))
+                ttText(
+                    text = "Task Tracker",
+                    style = ttTypography.title,
+                    color = ttLabelSecondary(),
+                )
+                Spacer(Modifier.height(ttSpacing.formStack))
 
-            EmailField(
-                value = model.email,
-                onValueChange = { model.email = it },
-                isFocused = focusedField == EmailOrPasswordField.Email,
-                focusRequester = emailFocus,
-                onFocusChanged = { focusedField = it },
-                imeAction = ImeAction.Next,
-                onImeAction = { passwordFocus.requestFocus() },
-            )
-            Spacer(Modifier.height(ttSpacing.fieldStack))
+                EmailField(
+                    value = model.email,
+                    onValueChange = { model.email = it },
+                    isFocused = focusedField == EmailOrPasswordField.Email,
+                    focusRequester = emailFocus,
+                    onFocusChanged = { focusedField = it },
+                    imeAction = ImeAction.Next,
+                    onImeAction = { passwordFocus.requestFocus() },
+                )
+                Spacer(Modifier.height(ttSpacing.fieldStack))
 
-            PasswordField(
-                value = model.password,
-                onValueChange = { model.password = it },
-                isFocused = focusedField == EmailOrPasswordField.Password,
-                focusRequester = passwordFocus,
-                isEnabled = phase !is SignInModel.Phase.Submitting,
-                onFocusChanged = { focusedField = it },
-                imeAction = ImeAction.Done,
-                onImeAction = { scope.launch { model.submit() } },
-            )
+                PasswordField(
+                    value = model.password,
+                    onValueChange = { model.password = it },
+                    isFocused = focusedField == EmailOrPasswordField.Password,
+                    focusRequester = passwordFocus,
+                    isEnabled = phase !is SignInModel.Phase.Submitting,
+                    onFocusChanged = { focusedField = it },
+                    imeAction = ImeAction.Done,
+                    onImeAction = { scope.launch { model.submit() } },
+                )
 
-            // The banner takes a slot whether or not it is showing, so that showing one does
-            // not shove the button down the screen. The original's `.if let` around the
-            // spacer does the same thing, for the same reason.
-            Spacer(Modifier.height(ttSpacing.formStack))
-            model.errorMessage?.let { ttBanner(message = it) }
+                // The banner takes a slot whether or not it is showing, so that showing one
+                // does not shove the button down the screen. The original's `.if let` around
+                // the spacer does the same thing, for the same reason.
+                Spacer(Modifier.height(ttSpacing.formStack))
+                model.errorMessage?.let { ttBanner(message = it) }
 
-            Spacer(Modifier.height(ttSpacing.formStack))
-            PrimaryButton(
-                label = "Sign In",
-                onClick = { scope.launch { model.submit() } },
-                enabled = model.canSubmit,
-                isLoading = phase is SignInModel.Phase.Submitting,
-            )
-            // Clears the focus ring off whichever field was last touched, so the form does
-            // not go on showing a focus it no longer has.
-            Spacer(Modifier.height(ttSpacing.xxl))
+                Spacer(Modifier.height(ttSpacing.formStack))
+                PrimaryButton(
+                    label = "Sign In",
+                    onClick = { scope.launch { model.submit() } },
+                    enabled = model.canSubmit,
+                    isLoading = phase is SignInModel.Phase.Submitting,
+                )
+                // Clears the focus ring off whichever field was last touched, so the form
+                // does not go on showing a focus it no longer has.
+                Spacer(Modifier.height(ttSpacing.xxl))
+            }
         }
     }
 }
