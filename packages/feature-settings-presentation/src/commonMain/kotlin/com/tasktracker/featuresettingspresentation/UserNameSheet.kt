@@ -1,13 +1,8 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -17,20 +12,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTextField
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
@@ -81,51 +73,18 @@ internal fun UserNameSheet(
             style = ttTypography.footnote,
             color = ttLabelSecondary(),
         )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .padding(vertical = ttSpacing.sm)
-                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row)),
-            // Centred for the reason `StatusTextEditor` gives: the pill is taller than one line
-            // of body text, and a top-aligned field rides high inside it.
-            contentAlignment = Alignment.Center,
-        ) {
-            BasicTextField(
-                value = draft,
-                onValueChange = { next ->
-                    // The server's limit is 120 runes; cutting on a code-point boundary keeps
-                    // a pasted name from being refused (or an emoji from being split).
-                    draft = next.capToCodePoints(MaxDisplayNameLength)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(UserNameFieldTag),
-                textStyle = ttTypography.body.copy(color = ttLabel()),
-                cursorBrush = SolidColor(ttAccent()),
-                singleLine = true,
-                maxLines = 1,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (canSave) onSave(trimmed) }),
-                decorationBox = { inner ->
-                    Box(
-                        modifier = Modifier.padding(
-                            horizontal = ttSpacing.sm,
-                            vertical = ttSpacing.xs,
-                        ),
-                    ) {
-                        if (draft.isEmpty()) {
-                            ttText(
-                                text = stringResource(Res.string.settings_name_hint),
-                                style = ttTypography.body,
-                                color = ttLabelSecondary(),
-                            )
-                        }
-                        inner()
-                    }
-                },
-            )
-        }
+        ttTextField(
+            value = draft,
+            onValueChange = { next ->
+                // The server's limit is 120 runes; cutting on a code-point boundary keeps
+                // a pasted name from being refused (or an emoji from being split).
+                draft = next.capToCodePoints(MaxDisplayNameLength)
+            },
+            hint = stringResource(Res.string.settings_name_hint),
+            fieldModifier = Modifier.testTag(UserNameFieldTag),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (canSave) onSave(trimmed) }),
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),

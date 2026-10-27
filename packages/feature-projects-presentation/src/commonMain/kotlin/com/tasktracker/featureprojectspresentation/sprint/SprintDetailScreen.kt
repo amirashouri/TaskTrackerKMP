@@ -96,9 +96,15 @@ fun SprintDetailScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
+                .padding(horizontal = ttSpacing.xxl)
+                .padding(top = ttSpacing.screenGutterLarge)
                 .testTag(SprintDetailScreenTag),
-            contentPadding = PaddingValues(bottom = LocalTabBarScrollUnderInset.current + ttSpacing.screenGutterLarge + ttSpacing.xl),
+            // The bottom inset is `contentPadding`, not a `Modifier.padding`. Padding on the
+            // modifier would shrink the scroll viewport and leave a dead band the content can
+            // never scroll into, so the list would stop short of the screen edge. As content
+            // padding it is scrollable space instead: the content reaches the bottom edge
+            // seamlessly, and the last row still lands `xl` clear of it.
+            contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
             item {

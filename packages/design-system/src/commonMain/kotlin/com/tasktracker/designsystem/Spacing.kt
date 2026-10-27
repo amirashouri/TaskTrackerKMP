@@ -112,6 +112,16 @@ object ttSpacing {
     /** 44dp — a compact circular icon action's visible and tappable diameter. */
     val iconButtonSize: Dp = 44.dp
 
+    /**
+     * 48dp — a text field's minimum height.
+     *
+     * The smallest comfortable target for a control you type into, and the height the
+     * settings sheets were each spelling as a `48.dp` literal before [ttTextField] owned it.
+     * It is a minimum rather than a fixed height: a field grows with its text when the
+     * platform font scale is turned up, and pinning it would clip the value instead.
+     */
+    val fieldMinHeight: Dp = 48.dp
+
     /** 18dp — the splash mark's distance to its title. */
     val splashStack: Dp = 18.dp
 

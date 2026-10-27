@@ -1,13 +1,8 @@
 package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
@@ -18,14 +13,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.LocalSheetPresentation
 import com.tasktracker.designsystem.SheetPresentation
 import com.tasktracker.designsystem.TTBottomSheetScaffold
@@ -34,12 +25,11 @@ import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
-import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTextField
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
@@ -162,7 +152,7 @@ internal fun ChangePasswordSheet(
             },
         )
 
-        PasswordSheetField(
+        ttTextField(
             value = credential,
             onValueChange = { credential = it },
             hint = stringResource(
@@ -173,23 +163,38 @@ internal fun ChangePasswordSheet(
             ),
             // The credential is masked whether it is a password or a code: both authorize the
             // change, so shoulder-surfing either one is the same win for whoever is looking.
-            tag = ChangePasswordCredentialTag,
+            // It was not, in fact, masked before this — the comment said so and the call never
+            // passed `masked`, which the shared field made visible as a missing argument.
+            fieldModifier = Modifier.testTag(ChangePasswordCredentialTag),
+            masked = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Next,
+            ),
         )
-        PasswordSheetField(
+        ttTextField(
             value = newPassword,
             onValueChange = { newPassword = it },
             hint = stringResource(Res.string.settings_change_password_new_hint),
+            fieldModifier = Modifier.testTag(ChangePasswordNewTag),
             masked = true,
-            isLastField = false,
-            tag = ChangePasswordNewTag,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Next,
+            ),
         )
-        PasswordSheetField(
+        ttTextField(
             value = confirmation,
             onValueChange = { confirmation = it },
             hint = stringResource(Res.string.settings_change_password_confirm_hint),
+            fieldModifier = Modifier.testTag(ChangePasswordConfirmTag),
             masked = true,
-            isLastField = true,
-            tag = ChangePasswordConfirmTag,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
+            ),
+            // The submit button is the only action.
+            keyboardActions = KeyboardActions(onDone = {}),
         )
 
         // The two refusals that are the user's own typing, said while they are still looking at
@@ -293,66 +298,6 @@ private fun ChangePasswordSuccessCard(
                 )
             }
         }
-    }
-}
-
-/**
- * One masked-or-not single-line field in the sheet's glass pill, with its hint drawn inside
- * while empty.
- *
- * The same construction `UserNameSheet` uses, factored out because this sheet needs three of
- * it — and a third inline copy of the pill geometry is how the pill ends up styled four ways.
- */
-@Composable
-private fun PasswordSheetField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    hint: String,
-    tag: String,
-    modifier: Modifier = Modifier,
-    masked: Boolean = false,
-    isLastField: Boolean = false,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .padding(vertical = ttSpacing.sm)
-            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row)),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth().testTag(tag),
-            textStyle = ttTypography.body.copy(color = ttLabel()),
-            cursorBrush = SolidColor(ttAccent()),
-            singleLine = true,
-            maxLines = 1,
-            visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (masked) KeyboardType.Password else KeyboardType.Text,
-                imeAction = if (isLastField) ImeAction.Done else ImeAction.Next,
-            ),
-            keyboardActions = KeyboardActions(onDone = { /* The submit button is the only action. */ }),
-            decorationBox = { inner ->
-                Box(
-                    modifier = Modifier.padding(
-                        horizontal = ttSpacing.sm,
-                        vertical = ttSpacing.xs,
-                    ),
-                ) {
-                    if (value.isEmpty()) {
-                        ttText(
-                            text = hint,
-                            style = ttTypography.body,
-                            color = ttLabelSecondary(),
-                        )
-                    }
-                    inner()
-                }
-            },
-        )
     }
 }
 
