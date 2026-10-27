@@ -87,7 +87,14 @@
   (182), `:shared-ui` (126), and the four feature modules that host the icon
   button — projects (374), settings (68), teams (36), auth (20) — 806 tests, none
   edited.
-- **Next step:** glass-7 stays pending-decision.
+- **Next step:** glass-7 **decided and closed**: backdrop blur is a deliberate
+  non-goal (option 3 of that spec). The painted material is what this product
+  ships — it passes its contrast and pixel tests, and the two alternatives were a
+  third-party dependency inside the one package every module compiles against, or a
+  UIKit/RenderEffect interop that replaces the Compose-drawn rim on iOS and needs a
+  host to verify. Per its own instruction the spec was deleted; the decision is
+  recorded here so it is not re-litigated from a file that no longer exists. The
+  sprint is closed.
 - **Gotchas:** `ttGlassAddButton` has **no call sites anywhere in the repo** — not
   the splash, not `Previews.kt`, which is what this spec's note assumed — so the
   new `enabled` and `image` paths are exercised only by the new test. It stays

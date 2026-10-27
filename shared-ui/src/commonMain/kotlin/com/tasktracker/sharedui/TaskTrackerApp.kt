@@ -8,6 +8,11 @@ import com.tasktracker.di.Resolver
 
 /**
  * Shared Compose application entry point called by Android and iOS host shells.
+ *
+ * The shell's motion inputs are installed here, above every screen rather than inside one: the
+ * platform's Reduce Motion preference is one answer for the whole app, and the device-motion
+ * controller must be one sensor instance for every glass surface the app puts on screen. See
+ * [ShellMotionProvider] for why the shell is the thing that reads them.
  */
 @Composable
 fun TaskTrackerApp(
@@ -18,13 +23,15 @@ fun TaskTrackerApp(
     /** Deep link source stream for pairing and navigation routes. */
     deepLinks: DeepLinkSource = appDeepLinks,
 ) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-    ) {
-        RootScreen(
-            resolver = resolver,
-            splashMinimumHoldMillis = splashMinimumHoldMillis,
-            deepLinks = deepLinks,
-        )
+    ShellMotionProvider {
+        Box(
+            modifier = modifier.fillMaxSize(),
+        ) {
+            RootScreen(
+                resolver = resolver,
+                splashMinimumHoldMillis = splashMinimumHoldMillis,
+                deepLinks = deepLinks,
+            )
+        }
     }
 }

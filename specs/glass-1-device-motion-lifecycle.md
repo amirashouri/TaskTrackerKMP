@@ -75,12 +75,26 @@
   now reads `roll.value` inside `drawBehind` (draw-phase invalidation only).
   Tests: `DeviceMotionTest` (3 structural tests, commonTest) — sharing, provider
   dispose, and the `StartStopMotion` discipline.
-- **Pending:** iOS host run (`iosSimulatorArm64Test`) and Android host run are
-  release-gate items, not run in this session. The shell (`shared-ui`) has not
-  yet adopted `DeviceMotionProvider` — until it does, `ttGlassSurface` uses the
-  per-call-site fallback (no regression: one controller per surface with proper
-  dispose, vs. before one controller per surface with a leak). Adopting the
-  provider at the app root is a one-line follow-up.
+- **Pending:** The shell adoption is **done**: `:shared-ui`'s `ShellMotionProvider`
+  calls `DeviceMotionProvider` at the `TaskTrackerApp` root, so one platform
+  controller is created, started and stopped for the whole app. `ShellMotionScenarios`
+  pins that two readers under it get that instance (asserted against an injected
+  controller, because on the JVM host the platform controller is itself a singleton and
+  a test comparing two reads would pass without the provider doing anything) and that
+  the sensor stops when the shell leaves. The iOS host run (`iosSimulatorArm64Test`)
+  and the Android host run remain release-gate items, not run in this session — but see
+  the note below, they could not have passed.
+- **Found and fixed in the next session:** the iOS target **did not compile** as
+  committed. `startDeviceMotionUpdates(toQueue = …)` is not how Kotlin/Native spells
+  `startDeviceMotionUpdatesToQueue:withHandler:` — the queue is part of the function
+  name, not a named parameter — so `:packages:design-system:compileKotlinIosSimulatorArm64`
+  failed with "Too many arguments for 'fun startDeviceMotionUpdates()'" and every iOS
+  build in the repo was broken. Compiling the iOS target for the first time (to check
+  the shell's new iOS actual) is what surfaced it; the call is now
+  `startDeviceMotionUpdatesToQueue(NSOperationQueue.mainQueue) { motion, _ -> … }` and
+  both `:packages:design-system` and `:shared-ui` compile for `iosSimulatorArm64`. The
+  lesson is this file's own pending line: the iOS work was committed without any host
+  ever compiling it, because the target had simply not been built.
 - **Next step:** implement glass-2.
 - **Gotchas:** the specular offset math (`roll * size.width * 0.15f`) is
   pixel-test-adjacent — untouched, only where the value is read changed. The

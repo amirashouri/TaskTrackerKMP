@@ -56,7 +56,23 @@
 ## Handoff
 
 - **Done:** Added `LocalReducedMotion` (default false) with `ReducedMotion.kt`. `ttGlassSurface` zeros specular offset, `ttGlassButton` uses `snap()` for press scale, `ttLensPlacement` and `ttSelectionWash` use `snap()` under reduced motion. Added basic `ReducedMotionTest`.
-- **Pending:** Shell adoption to read platform Reduce Motion (outside package).
+- **Pending:** None in the package. The shell adoption landed in `:shared-ui` in the
+  same session: `platformReducedMotion()` (Android's animator duration scale via
+  `ValueAnimator.areAnimatorsEnabled`, iOS's
+  `UIAccessibilityIsReduceMotionEnabled`, and `false` on the JVM host, which has no
+  desktop switch on its classpath), provided by `ShellMotionProvider` at the
+  `TaskTrackerApp` root — the same division the device-motion controller uses, per
+  this spec's non-goal that the package never auto-detects. `ShellMotionScenarios`
+  pins that the preference reaches the material in both directions and that one
+  motion controller is shared; `check-test-matrix.py` reports every scenario wired
+  on all three hosts. Two caveats, both deliberate: the read is per composition and
+  **not observed**, so a mid-session switch is picked up on the next composition of
+  the root rather than a frame later (the note on `platformReducedMotion` records
+  what observing it would cost); and the app root's *call* to the provider is not
+  observable by a test — every use of `LocalReducedMotion` is a draw-phase or
+  animation decision, so nothing in the semantics tree can read it back. Removing
+  that call leaves `:shared-ui:jvmTest` green; that mutation was run, and is why the
+  provider's own contract is what the new scenarios assert instead.
 - **Next step:** implement glass-5.
 - **Gotchas:** Gate animation specs per call site on the local; tokens unchanged. All glass tests pass.
 

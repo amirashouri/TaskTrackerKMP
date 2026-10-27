@@ -291,4 +291,24 @@ abstract class TaskTrackerAppScenarios {
     fun aChosenThemeOutlivesTheProcess() = runComposeUiTest(block = ShellScenarios.aChosenThemeOutlivesTheProcess)
     @Test
     fun forcedOfflineSurvivesTheSessionEnding() = runComposeUiTest(block = ShellScenarios.forcedOfflineSurvivesTheSessionEnding)
+
+    /**
+     * The shell's motion inputs, asserted where the material reads them.
+     *
+     * [ShellMotionScenarios] rather than [ShellScenarios] because those are the shell's screens
+     * and these are its platform inputs; the app root's use of them is covered by every
+     * scenario above, since they all render `TaskTrackerApp`. Wired here rather than in the
+     * host files so a scenario cannot be written and then run on one host only.
+     */
+    @Test
+    fun theShellPassesTheReducedMotionPreferenceToTheMaterial() =
+        runComposeUiTest(block = ShellMotionScenarios.theShellPassesTheReducedMotionPreferenceToTheMaterial)
+
+    @Test
+    fun everyGlassSurfaceUnderTheShellSharesOneMotionController() =
+        runComposeUiTest(block = ShellMotionScenarios.everyGlassSurfaceUnderTheShellSharesOneMotionController)
+
+    @Test
+    fun theShellsMotionControllerStopsWhenTheShellLeaves() =
+        runComposeUiTest(block = ShellMotionScenarios.theShellsMotionControllerStopsWhenTheShellLeaves)
 }
