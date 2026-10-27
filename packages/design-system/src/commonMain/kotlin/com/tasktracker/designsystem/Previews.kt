@@ -261,9 +261,7 @@ private fun GlassOverBackdropPreview() {
  * scheme *somewhere* rather than leaving it to the developer's machine, which is the point
  * noted at the top of the file.
  */
-// ---------------------------------------------------------------------------------------------
-// The components that had no preview at all
-// ---------------------------------------------------------------------------------------------
+// MARK: The components that had no preview at all
 //
 // These five were the gaps in a gallery that covered ten components. They are grouped here
 // rather than scattered, because they share a reason for having been missed: each one is

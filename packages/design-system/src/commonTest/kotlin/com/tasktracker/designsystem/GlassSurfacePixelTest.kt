@@ -301,6 +301,48 @@ class GlassSurfacePixelTest {
 
     // --- measurement ------------------------------------------------------------------------------
 
+    /**
+     * The rim's bottom fade, read at both edges of the same card.
+     *
+     * The rim's contract is that it fades: `ttGlass.RIM_BOTTOM_ALPHA` says the bottom edge
+     * lands at 60% of the top edge's alpha. That claim lives on a brush whose gradient runs
+     * from `startY = 0f` to `endY = Float.POSITIVE_INFINITY` — and a gradient mapped onto an
+     * infinite span has an interpolation fraction of ~0 at every y, so the suspicion this
+     * test exists to settle is that the rim actually paints flat and the token is dead.
+     *
+     * The card used here carries a `base`, which skips the dark-mode dispersion fringe that
+     * paints in the top band of the unpainted card — without that, the top reading would
+     * include the fringe and the fade ratio would be measuring two effects at once.
+     */
+    @Test
+    fun `the rim fades toward the bottom edge`() {
+        assumeHostRasterisesText()
+        val reading = requireNotNull(measureRimFade(ThemeScheme.Dark)) { NO_READING }
+        // Alphas, not raw deltas: the fill itself differs between the two bands (the wash
+        // fades top to bottom), so the rim's measured channel delta over a darker bottom fill
+        // is not comparable to its delta over the top fill. The implied paint alpha is.
+        val fade = if (reading.topAlpha > 0f) reading.bottomAlpha / reading.topAlpha else 0f
+        println(
+            "rim fade dark: top alpha ${reading.topAlpha} (delta ${reading.topDelta}, " +
+                "${reading.topRim.hex()} over ${reading.topFill.hex()}), bottom alpha " +
+                "${reading.bottomAlpha} (delta ${reading.bottomDelta}, ${reading.bottomRim.hex()} " +
+                "over ${reading.bottomFill.hex()}), ratio $fade",
+        )
+        assertTrue(
+            reading.topAlpha > 0f,
+            "dark appearance: the rim painted nothing at the top edge (implied alpha 0) - the " +
+                "measurement broke before it could say anything about the fade",
+        )
+        assertTrue(
+            fade in FADE_MINIMUM..FADE_MAXIMUM,
+            "dark appearance: the rim's implied alpha at the bottom edge is " +
+                "${reading.bottomAlpha} against ${reading.topAlpha} at the top (ratio $fade). " +
+                "The contract is a fade to ${ttGlass.RIM_BOTTOM_ALPHA} (accepted " +
+                "$FADE_MINIMUM..$FADE_MAXIMUM). A ratio near 1.0 means the rim paints flat; " +
+                "a ratio near 0 means the bottom boundary is the fill alone.",
+        )
+    }
+
     private class FillReading(
         val fill: Color,
         val secondary: Color,
@@ -450,6 +492,121 @@ class GlassSurfacePixelTest {
     private fun measureRim(scheme: ThemeScheme): RimReading? = measureRimAtIntensity(scheme, 1f)
 
     /**
+     * The rim's contribution at the card's top and bottom edges, from one bordered frame
+     * against one borderless twin. Same difference method as [measureRimAtIntensity]; the
+     * card is a `base` card so the dispersion fringe does not paint into the top band.
+     */
+    private fun measureRimFade(scheme: ThemeScheme): RimFadeReading? {
+        var bordered: PixelMap? = null
+        var plain: PixelMap? = null
+        var bounds: DpRect? = null
+        var scale = 1f
+
+        for (borderWidth in listOf(ttGlass.hairlineWidth, 0.dp)) {
+            rasterising {
+                setContent {
+                    ttTheme(scheme) {
+                        CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
+                            Box(Modifier.fillMaxSize().background(ttCanvas())) {
+                                baseCard(borderWidth)
+                            }
+                        }
+                    }
+                }
+                waitForIdle()
+                val frame = onRoot().captureToImage().toPixelMap()
+                // Image pixels are content dp × RIM_DENSITY: the card is laid out inside a
+                // LocalDensity(RIM_DENSITY) override. Deriving the scale from the root's own
+                // bounds (frame width / root dp width) yields 1 here — the root is measured at
+                // the host's density 1 — and quietly puts every sample in the wrong place: the
+                // wide-card "center" was being read a third of the way in, and the rim-fade
+                // "bottom" band was being read in the middle of the card.
+                val frameScale = RIM_DENSITY
+                if (borderWidth > 0.dp) {
+                    bordered = frame
+                    bounds = onNodeWithTag(BASE_CARD_TAG).getBoundsInRoot()
+                    scale = frameScale
+                } else {
+                    plain = frame
+                }
+            }
+        }
+
+        val rimFrame = bordered ?: return null
+        val controlFrame = plain ?: return null
+        val box = bounds ?: return null
+
+        val x = ((box.left.value + box.width.value / 2f) * scale)
+            .toInt().coerceIn(0, min(rimFrame.width, controlFrame.width) - 1)
+        val top = (box.top.value * scale).toInt()
+        val bottom = (box.top.value * scale + box.height.value * scale).toInt() - 1
+        val band = (ttGlass.hairlineWidth.value * scale).toInt() + 4
+
+        fun bandReading(first: Int, last: Int): Quad<Color, Color, Float, Float> {
+            var bestDelta = 0f
+            var rim = Color.Transparent
+            var fill = Color.Transparent
+            for (y in max(0, first)..min(min(rimFrame.height, controlFrame.height) - 1, last)) {
+                val delta = channelDistance(rimFrame[x, y], controlFrame[x, y])
+                if (delta > bestDelta) {
+                    bestDelta = delta
+                    rim = rimFrame[x, y]
+                    fill = controlFrame[x, y]
+                }
+            }
+            return Quad(rim, fill, bestDelta, impliedAlpha(rim, fill))
+        }
+
+        val (topRim, topFill, topDelta, topAlpha) = bandReading(top - 1, top + band)
+        val (bottomRim, bottomFill, bottomDelta, bottomAlpha) = bandReading(bottom - band, bottom + 1)
+        return RimFadeReading(topRim, topFill, topDelta, topAlpha, bottomRim, bottomFill, bottomDelta, bottomAlpha)
+    }
+
+    /** The rim's implied paint alpha over its fill: `(rim - fill) / (1 - fill)` per channel. */
+    private fun impliedAlpha(rim: Color, fill: Color): Float {
+        var sum = 0f
+        for (channel in listOf(rim.red, rim.green, rim.blue).zip(listOf(fill.red, fill.green, fill.blue))) {
+            val (r, f) = channel
+            if (1f - f <= 0.01f) continue
+            sum += ((r - f) / (1f - f)).coerceIn(0f, 1f)
+        }
+        return sum / 3f
+    }
+
+    private data class RimFadeReading(
+        val topRim: Color,
+        val topFill: Color,
+        val topDelta: Float,
+        val topAlpha: Float,
+        val bottomRim: Color,
+        val bottomFill: Color,
+        val bottomDelta: Float,
+        val bottomAlpha: Float,
+    )
+
+    private class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D) {
+        operator fun component1(): A = first
+        operator fun component2(): B = second
+        operator fun component3(): C = third
+        operator fun component4(): D = fourth
+    }
+
+    /** A card carrying a `base`, so the dispersion fringe (a `base == null` branch) stays out of the top band. */
+    @Composable
+    private fun baseCard(borderWidth: Dp) {
+        Box(
+            Modifier
+                .testTag(BASE_CARD_TAG)
+                .size(240.dp, 240.dp)
+                .ttGlassSurface(
+                    shape = RoundedCornerShape(ttRadius.surface),
+                    borderWidth = borderWidth,
+                    base = Color.Transparent,
+                ),
+        )
+    }
+
+    /**
      * Measures the subsurface scattering on a wide card (400x150).
      *
      * Renders a wide card and samples the top edge at center (x = width/2) and corner
@@ -473,8 +630,11 @@ class GlassSurfacePixelTest {
             }
             waitForIdle()
             frame = onRoot().captureToImage().toPixelMap()
-            val root = onRoot().getBoundsInRoot()
-            scale = frame!!.width.toFloat() / max(root.right.value, 1f)
+            // Same density-override reasoning as measureRimFade: content dp × RIM_DENSITY.
+            // With the root-derived scale this helper used before, the "center" sample read
+            // a third of the way into the card and the "corner" a twelfth — both on the left
+            // sixth, where the radial scatter gradient barely varies.
+            scale = RIM_DENSITY
             bounds = onNodeWithTag(WIDE_CARD_TAG).getBoundsInRoot()
         }
 
@@ -597,6 +757,17 @@ val centerColor = Color(center.red, center.green, center.blue, 1f)
 
         const val CARD_TAG = "glass.pixel.card"
         const val WIDE_CARD_TAG = "glass.pixel.wideCard"
+        const val BASE_CARD_TAG = "glass.pixel.baseCard"
+
+        /**
+         * The accepted band for the rim's bottom/top contribution ratio.
+         *
+         * The contract is [ttGlass.RIM_BOTTOM_ALPHA] = 0.6; the band is wide enough for
+         * rasteriser variance and subpixel phase, and narrow enough that a flat rim (1.0)
+         * cannot squeeze in.
+         */
+        const val FADE_MINIMUM = 0.4f
+        const val FADE_MAXIMUM = 0.8f
 
         const val CHANNEL_SCALE = 255f
 

@@ -79,9 +79,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import org.jetbrains.compose.resources.stringResource
 
-// ---------------------------------------------------------------------------------------------
-// The calendar arithmetic, as pure functions
-// ---------------------------------------------------------------------------------------------
+// MARK: The calendar arithmetic, as pure functions
 //
 // Every interesting thing about a date grid is a piece of arithmetic about which day lands
 // where, and none of it needs a frame. So it is here, over `LocalDate`, and it is testable
@@ -152,9 +150,7 @@ private fun ttDaysInMonth(date: LocalDate): Int =
 fun ttShiftMonth(month: LocalDate, months: Int): LocalDate =
     LocalDate(month.year, month.month, 1).plus(months, DateTimeUnit.MONTH)
 
-// ---------------------------------------------------------------------------------------------
-// The window of years the picker will show, and the clamp that keeps navigation inside it
-// ---------------------------------------------------------------------------------------------
+// MARK: The window of years the picker will show, and the clamp that keeps navigation inside it
 
 /**
  * How many years either side of today the year grid offers.
@@ -332,9 +328,7 @@ fun ttDateLabel(date: LocalDate): String =
 fun ttDateLabelWithoutYear(date: LocalDate): String =
     "${date.day} ${ttMonthName(date.month)}"
 
-// ---------------------------------------------------------------------------------------------
-// The grid
-// ---------------------------------------------------------------------------------------------
+// MARK: The grid
 
 /**
  * A month of days, with the week above it and the month above that.
@@ -620,9 +614,7 @@ private fun MonthStepGlyph(
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// The field
-// ---------------------------------------------------------------------------------------------
+// MARK: The field
 
 /**
  * A date input: the current date, and a grid to change it.
@@ -1011,9 +1003,7 @@ internal fun ttCentredPopupOffset(window: IntSize, content: IntSize): IntOffset 
 internal val dateFieldPopupWidth: Dp =
     ttSpacing.iconButtonSize * TT_MONTH_GRID_COLUMNS + ttSpacing.xl * 2
 
-// ---------------------------------------------------------------------------------------------
-// Tags
-// ---------------------------------------------------------------------------------------------
+// MARK: Tags
 
 const val TTDateFieldTag = "design.dateField"
 const val TTDateFieldLabelTag = "design.dateField.label"

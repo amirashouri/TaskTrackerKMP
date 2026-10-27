@@ -6,41 +6,41 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-actual fun DeviceMotion(): DeviceMotionController {
+actual fun PlatformDeviceMotion(): DeviceMotionController {
     val context = LocalContext.current
-    val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as SensorManager }
-    return remember { AndroidDeviceMotion(sensorManager) }
+    return remember(context) { AndroidDeviceMotion(context) }
 }
 
-private class AndroidDeviceMotion(
-    private val sensorManager: SensorManager,
-) : DeviceMotionController, SensorEventListener {
+private class AndroidDeviceMotion(context: Context) : DeviceMotionController, SensorEventListener {
 
+    private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val _roll = mutableStateOf(0f)
     private val _pitch = mutableStateOf(0f)
-    
-    @Composable
-    override fun roll(): Float = _roll.value
-    
-    @Composable
-    override fun pitch(): Float = _pitch.value
 
-    private var rotationMatrix = FloatArray(9)
-    private var orientation = FloatArray(3)
+    override val roll: State<Float> get() = _roll
+    override val pitch: State<Float> get() = _pitch
+
+    private val rotationMatrix = FloatArray(9)
+    private val orientation = FloatArray(3)
     private var registered = false
 
-    init {
-        val rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
-        if (rotationVectorSensor != null) {
-            sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_UI)
-            registered = true
-        }
+    override fun start() {
+        if (registered) return
+        val rotationVectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR) ?: return
+        sensorManager.registerListener(this, rotationVectorSensor, SensorManager.SENSOR_DELAY_UI)
+        registered = true
+    }
+
+    override fun stop() {
+        if (!registered) return
+        sensorManager.unregisterListener(this)
+        registered = false
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -55,11 +55,4 @@ private class AndroidDeviceMotion(
     }
 
     override fun onAccuracyChanged(sensor: Sensor, accuracy: Int) {}
-
-    fun stop() {
-        if (registered) {
-            sensorManager.unregisterListener(this)
-            registered = false
-        }
-    }
 }
