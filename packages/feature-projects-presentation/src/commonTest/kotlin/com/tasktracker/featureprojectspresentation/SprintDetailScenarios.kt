@@ -60,6 +60,7 @@ object SprintDetailScenarios {
                     onRemove = {},
                     onArchive = {},
                     onEdit = onEdit,
+                    isAdmin = true,
                 )
             }
         }

@@ -88,6 +88,7 @@ fun SprintDetailScreen(
     /** Display name of the sprint owner, or null if unassigned/unresolved. */
     ownerName: String? = null,
     modifier: Modifier = Modifier,
+    isAdmin: Boolean = false,
 ) {
     val editable = detail.canEditItems
     var pendingAction by remember { mutableStateOf<SprintStatus?>(null) }
@@ -152,13 +153,15 @@ fun SprintDetailScreen(
                             color = ttLabelSecondary(),
                             modifier = Modifier.weight(1f),
                         )
-                        ttGlassIconButton(
-                            image = ttActionIcons.edit,
-                            contentDescription = stringResource(Res.string.sprint_edit),
-                            onClick = onEdit,
-                            enabled = !isBusy,
-                            modifier = Modifier.testTag(SprintDetailEditTag),
-                        )
+                        if (isAdmin) {
+                            ttGlassIconButton(
+                                image = ttActionIcons.edit,
+                                contentDescription = stringResource(Res.string.sprint_edit),
+                                onClick = onEdit,
+                                enabled = !isBusy,
+                                modifier = Modifier.testTag(SprintDetailEditTag),
+                            )
+                        }
                     }
                     detail.sprint.goal?.let { goal ->
                         ttText(
@@ -245,18 +248,20 @@ fun SprintDetailScreen(
                                 )
                             }
                             SprintStatus.Finished -> {
-                                ttGlassButton(
-                                    label = stringResource(Res.string.sprint_archive),
-                                    onClick = { pendingAction = SprintStatus.Finished },
-                                    enabled = !isBusy,
-                                    modifier = Modifier.testTag(SprintDetailArchiveTag),
-                                )
-                                if (detail.hasSummaryToShow) {
+                                if (isAdmin) {
                                     ttGlassButton(
-                                        label = stringResource(Res.string.sprint_view_summary),
-                                        onClick = onViewSummary,
-                                        modifier = Modifier.testTag(SprintDetailSummaryTag),
+                                        label = stringResource(Res.string.sprint_archive),
+                                        onClick = { pendingAction = SprintStatus.Finished },
+                                        enabled = !isBusy,
+                                        modifier = Modifier.testTag(SprintDetailArchiveTag),
                                     )
+                                    if (detail.hasSummaryToShow) {
+                                        ttGlassButton(
+                                            label = stringResource(Res.string.sprint_view_summary),
+                                            onClick = onViewSummary,
+                                            modifier = Modifier.testTag(SprintDetailSummaryTag),
+                                        )
+                                    }
                                 }
                             }
                             SprintStatus.Archived -> {}

@@ -405,7 +405,7 @@ fun NavigationHost(
                 // same guard the editor's `onDismiss` below uses: the lambda runs
                 // after the gesture, on a stack that may have moved.
                 BackHandler(
-                    enabled = path.size > 1,
+                    enabled = path.size > 1 || path.lastOrNull() is AppRoute.WorkItemEditor,
                     onBack = {
                         val currentPath = router.path(tab)
                         val editorRoute = currentPath.lastOrNull() as? AppRoute.WorkItemEditor
@@ -413,11 +413,10 @@ fun NavigationHost(
                             if (currentPath.size > 1) {
                                 router.setPath(currentPath.dropLast(1), tab)
                             }
-                        } else if (!dismissEditor(editorRoute) && currentPath.size > 1) {
-                            // `dismissEditor` declined because the editor is already playing
-                            // its exit: a second back press pops now rather than queueing
-                            // behind the first one's delay.
-                            router.setPath(currentPath.dropLast(1), tab)
+                        } else {
+                            if (!dismissEditor(editorRoute)) {
+                                router.setPath(currentPath.dropLast(1), tab)
+                            }
                         }
                     },
                 )
@@ -1682,6 +1681,7 @@ private fun SprintDetailDestination(
 ) {
     val currentUserID by preferences.currentUserID.collectAsState()
     val currentUserName by preferences.currentUserName.collectAsState()
+    val isAdmin = preferences.currentUserRole.collectAsState().value == UserRole.Admin
     val model = remember(sprintID, environment, preferences, currentUserID) {
         SprintDetailModel(
             sprintID = sprintID,
@@ -1754,6 +1754,7 @@ private fun SprintDetailDestination(
         },
         onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
         ownerName = ownerName,
+        isAdmin = isAdmin,
     )
 
     // The editor over this sprint, opened by the card's edit button. Unlike
