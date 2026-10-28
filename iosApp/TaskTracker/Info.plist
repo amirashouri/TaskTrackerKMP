@@ -29,6 +29,26 @@
 	<key>TaskTrackerApiBaseUrl</key>
 	<string>$(TASKTRACKER_API_BASE_URL)</string>
 
+	<!-- A plain-HTTP LAN server — the default `lan` provider's deployment — must be
+	     reachable, the way it already is from the desktop client. `NSAllowsLocalNetworking`
+	     lifts ATS for local resources (RFC1918, link-local, `.local`) only: cleartext to a
+	     public host stays blocked here, matching the client-wide policy in
+	     `validateServerAddress`, which refuses a public `http://` root at save time on
+	     every platform. The tailscale provider's root is an `https://…ts.net` name and
+	     needs no exception. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+
+	<!-- Without a purpose string, iOS 14+ denies local-network connections without
+	     showing the prompt, and the failure looks like an ordinary transport timeout.
+	     The prompt itself is system-driven on the first local connection; there is no
+	     request API to call. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TaskTracker connects to your team's self-hosted TaskTracker server on your local network.</string>
+
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 

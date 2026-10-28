@@ -82,6 +82,35 @@ Open the project in Android Studio, select the **`androidApp`** run configuratio
 ./gradlew :androidApp:installDebug
 ```
 
+#### Physical device
+
+The build reads the API root from `tasktracker.apiBaseUrl` in `local.properties`
+(gitignored), so the Run/Debug button needs no command-line flag:
+
+```properties
+tasktracker.apiBaseUrl=http://192.168.1.42:8080
+```
+
+A physical phone differs from the emulator in two ways:
+
+* **The server must be published on the LAN.** The server repository's developer compose
+  publishes `8080` on `127.0.0.1` only (by design, `specs/t9.3-server-bind.md`), so the
+  app reports `Failed to connect to /<lan-ip>:8080` even though the phone is on the same
+  network. Use `tt expose --provider=lan`, or add a local (never committed)
+  `docker-compose.override.yml` to the server checkout:
+
+  ```yaml
+  services:
+    server-pg:
+      ports: !override
+        - "0.0.0.0:8080:8080"
+  ```
+
+* **No `ACCESS_LOCAL_NETWORK` prompt is expected below Android 17 (API 37).** The permission
+  exists only on the platform that enforces local-network protection; on an older device
+  `INTERNET` is enough and the app asks for nothing. A missing prompt there is not the
+  failure.
+
 ### iOS
 Generate the `.xcodeproj` file and open it in Xcode:
 ```bash

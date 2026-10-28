@@ -86,19 +86,22 @@ class MainActivity : ComponentActivity() {
     /**
      * Asks for local-network access when the build's root is on the local network.
      *
-     * Only from Android 16 onward: that is where the permission exists, and on anything
-     * older it is implicitly granted with `INTERNET`, so asking would be a prompt for a
-     * permission the platform does not have. Only for a local root: a deployment pointed at
-     * a public hostname never touches the local network, and a "nearby devices" prompt there
-     * would be access the app cannot use. See [apiRootRequiresLocalNetworkAccess] for the
-     * classification and the measured failure it exists to prevent.
+     * Only from Android 17 (API 37) onward: `ACCESS_LOCAL_NETWORK` was added there (the SDK's
+     * `api-versions.xml` pins it at `since="37.0"`), and on anything older it is not a
+     * permission the platform knows. On an Android 16 device the request below would launch
+     * for a permission that does not exist and resolve as denied without a dialog, which is
+     * why the guard is 37 and not the earlier `BAKLAVA` (36) codename. Only for a local root:
+     * a deployment pointed at a public hostname never touches the local network, and a
+     * "nearby devices" prompt there would be access the app cannot use. See
+     * [apiRootRequiresLocalNetworkAccess] for the classification and the measured failure it
+     * exists to prevent.
      *
      * The constants are only *named* below the API guard, which is what makes the inlined
      * strings safe on an older device: lint cannot see through the early return.
      */
     @SuppressLint("InlinedApi")
     private fun requestLocalNetworkAccessIfNeeded(apiBaseUrl: String) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.CINNAMON_BUN) return
         if (!apiRootRequiresLocalNetworkAccess(apiBaseUrl)) return
 
         val granted = ContextCompat.checkSelfPermission(
