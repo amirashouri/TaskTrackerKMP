@@ -1,6 +1,6 @@
 # android-local-network-permission — let the Android client reach a local API root
 
-- **status:** in-progress
+- **status:** done
 - **priority:** P0
 - **plan:** no active `docs/PLAN.md` entry — found from an emulator's sign-in failure rather than
   picked off the roadmap, so this file *is* the record. It is a prerequisite for this repo's
@@ -90,16 +90,26 @@ DNS traffic to a local DNS server on port 53.
 ## Handoff
 
 - **Done:** the rule and its tests, the manifest declaration, the launch-time request, the
-  `Application` API-root accessor, and the docs (`Project.md`, `specs/6.1-…`).
-- **Pending:** the device acceptance in the contract above, then the full gate and the
-  regenerated baseline. Not attempted in this change: a prompt at *pairing* time for §6.3's
-  runtime URL — that task owns the `/healthz` probe and should report a blocked address there.
-- **Next step:** run the two commands in Validation, then verify on the emulator.
+  `Application` API-root accessor, and the docs (`Project.md`, `specs/6.1-…`). Device
+  acceptance (2026-10-28, API 37 `Pixel_10_Pro`, server on `0.0.0.0:8080`): first launch
+  with the default `10.0.2.2` root prompts once; granted, `POST /v1/auth/login 200`
+  appears in the Go server's log and the uid mode leaves `ignore`; denied, **no** request
+  reaches the server and the sign-in form shows the ordinary retryable
+  `AppError.Transport` ("Connect timeout has expired", naming the URL); a relaunch
+  re-asks and a grant then signs in. The full gate (`scripts/check.sh full`) is green on
+  all three hosts with the committed baseline.
+- **Pending:** nothing for this task. Real-hardware confirmation and the iOS-device
+  analogue are tracked by [`mobile-lan-plain-http.md`](mobile-lan-plain-http.md), which
+  also superseded this spec's "cleartext is still the second gate" note — the Android
+  transport gate is now open and `validateServerAddress` is the policy layer.
+- **Next step:** none; pick up the pending device items under `mobile-lan-plain-http`.
 - **Gotchas:** the classifier is deliberately blind to a **hostname that resolves** to a local
   address (`nas.tailnet.ts.net`): resolving it would be a network round trip, not a pure rule.
   Such a root is classified remote and its first request times out. That is the documented
   boundary, and why §6.3's probe matters. Do not "fix" it by asking for the permission on every
   launch — a public-server deployment would get a nearby-devices prompt it cannot use.
+  On the emulator, a routed LAN IP (`192.168.31.x`) is *not* blocked by a denial — only
+  on-link addresses (`10.0.2.2`) are; on a real phone the LAN IP is on-link.
 
 ## Risks / notes
 
@@ -110,10 +120,10 @@ DNS traffic to a local DNS server on port 53.
 - **`100.64.0.0/10` covers Tailscale**, so this is not only a developer concern: once a
   customer points the app at a tailnet address, the permission is the difference between a
   working sync and a timeout.
-- **Cleartext is still the second gate** for a LAN root (`network_security_config.xml` allows
-  only `localhost` and `10.0.2.2`), and it is a separate decision recorded in
-  `docs/PLAN-ARCHIVE.md`
-  §6. This change does not widen it.
+- **Cleartext was the second gate** for a LAN root (`network_security_config.xml` allowed
+  only `localhost` and `10.0.2.2`) at the time of this change. It was later opened by
+  [`mobile-lan-plain-http.md`](mobile-lan-plain-http.md); the permission documented here is
+  unchanged and still required either way.
 - Android 16 enforces the same idea under `NEARBY_WIFI_DEVICES`; the manifest declares the
   Android 17 permission only, because that is where this app's `targetSdk` sits. An app whose
   target moves below 37 must drop the declaration *and* the request, per Android's split

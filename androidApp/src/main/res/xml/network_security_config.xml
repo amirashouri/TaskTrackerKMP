@@ -1,21 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Cleartext HTTP is denied by default, which is the right posture for a self-hosted app: a
-    real deployment should reach its server over HTTPS, and the value it is given through
-    `tasktracker.apiBaseUrl` will be an `https://` URL.
+    The transport gate is open: the platform permits cleartext HTTP to any host, so a
+    plain-HTTP LAN server — the default `lan` provider's deployment — is reachable from
+    this app the same way it is from the desktop client.
 
-    The exceptions are the local development server, which speaks plain HTTP on port 8080.
-    `10.0.2.2` is the address an Android emulator uses to reach the machine running it, and
-    `localhost` covers a `adb reverse tcp:8080 tcp:8080` port-forward. Without these entries the
-    default API root would be blocked by the platform and the first request would fail with a
-    `CleartextNotPermittedException` that names neither the setting nor this file.
+    There is deliberately no domain list here. The policy lives in
+    `validateServerAddress` (packages/feature-settings-domain), which gates every entry
+    point — the Settings field and the `tasktracker://connect` prefill — on every
+    platform: `https` anywhere, `http` only for loopback, RFC1918, link-local,
+    CGNAT/Tailscale, `.local`, and single-label names. A public host over `http` is
+    refused there at save time, so this file carries no rule of its own to keep in sync.
 
-    A deployment whose server is genuinely plain HTTP must add its host here; that is a
-    deliberate decision rather than a silent default.
+    Loopback and the emulator's `10.0.2.2` need no entry: they were always inside the
+    policy, and this config no longer excludes anything it permits.
 -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

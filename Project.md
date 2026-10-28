@@ -75,8 +75,8 @@ The resolver `platformApiBaseUrl` in `:composition-root` resolves the server roo
 | **Android** | Manifest `<meta-data android:name="com.tasktracker.API_BASE_URL">` | Gradle property `-Ptasktracker.apiBaseUrl=https://...` |
 
 * **Offline Fallback:** When unset, defaults to `http://localhost:8080` (or `http://10.0.2.2:8080` on Android emulator).
-* **Cleartext Guard:** Android blocks cleartext HTTP by default. `androidApp/src/main/res/xml/network_security_config.xml` permits HTTP only for `localhost` and `10.0.2.2`.
-* **Android 17 Local Network Permission:** Access to LAN/mDNS addresses requires runtime `ACCESS_LOCAL_NETWORK`. The app requests this automatically when the API root is local (`apiRootRequiresLocalNetworkAccess`). Without it, requests silently time out.
+* **Cleartext Posture:** The platform transport gates are open on all three hosts — Android's `network_security_config.xml` permits cleartext (`<base-config>`), and iOS ATS allows local networking (`NSAllowsLocalNetworking`). The policy is `validateServerAddress` in `feature-settings-domain`: `https` anywhere, `http` only for loopback, RFC1918, link-local, CGNAT/Tailscale, `.local`, and single-label names; a public `http://` root is refused at save time on every platform. iOS additionally keeps ATS blocking non-local cleartext at the transport layer.
+* **Android 17 Local Network Permission:** Access to LAN/mDNS addresses requires runtime `ACCESS_LOCAL_NETWORK`. The app requests this automatically when the API root is local (`apiRootRequiresLocalNetworkAccess`). Without it, requests silently time out. iOS asks once via the system Local Network prompt (`NSLocalNetworkUsageDescription` in `Info.plist`).
 
 ---
 
