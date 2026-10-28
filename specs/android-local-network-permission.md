@@ -40,8 +40,8 @@ connection from its uid to `10.0.2.2` — the Android fallback API root — was 
 - `androidApp/src/main/kotlin/com/tasktracker/android/TaskTrackerApplication.kt` — exposes the
   API root it already computes, so the activity does not read the manifest a second time.
 - `androidApp/src/main/kotlin/com/tasktracker/android/MainActivity.kt` — requests the
-  permission on create, from API 36 up, only when the root is local and the permission is not
-  already granted.
+  permission on create, from API 37 (`CINNAMON_BUN`, where `ACCESS_LOCAL_NETWORK` was added)
+  up, only when the root is local and the permission is not already granted.
 - `test-baseline.json` — regenerated: the new class lives in `commonTest`, so its tests run on
   all three hosts and every total moves.
 
@@ -110,6 +110,11 @@ DNS traffic to a local DNS server on port 53.
   launch — a public-server deployment would get a nearby-devices prompt it cannot use.
   On the emulator, a routed LAN IP (`192.168.31.x`) is *not* blocked by a denial — only
   on-link addresses (`10.0.2.2`) are; on a real phone the LAN IP is on-link.
+  **Guard corrected 2026-10-28:** `MainActivity` gated the request on `BAKLAVA` (API 36), but
+  the SDK's `api-versions.xml` pins `ACCESS_LOCAL_NETWORK` at `since="37.0"`;
+  an Android 16 device was asked for a permission it does not have and resolved as denied
+  without a dialog. It now uses `CINNAMON_BUN` (API 37). The full matrix gate is re-run by
+  [`mobile-lan-plain-http.md`](mobile-lan-plain-http.md) before that branch merges.
 
 ## Risks / notes
 

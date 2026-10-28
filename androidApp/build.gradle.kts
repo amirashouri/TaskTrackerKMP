@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
@@ -29,6 +31,29 @@ plugins {
 // `strings.commonMain.cvr` qualifier is correct for Android: it is the *common* set,
 // and there is no Android-specific one to prefer.
 // ---------------------------------------------------------------------------
+/**
+ * Reads `tasktracker.apiBaseUrl` from `local.properties` (gitignored, machine-specific).
+ *
+ * Used to pick up the server address for local development against a physical device without
+ * committing the address to `gradle.properties` or passing it on every command line. Returns
+ * `null` when the file or the key is absent, which is the normal state on CI.
+ *
+ * Parsed with [java.util.Properties] because `local.properties` is a Java properties file, and
+ * the `tasktracker.apiBaseUrl = value` spelling with whitespace is legal there. A hand-rolled
+ * `startsWith("tasktracker.apiBaseUrl=")` match silently ignored it and fell through to the
+ * emulator default (`10.0.2.2`), which reads on a phone as "could not reach the server" with
+ * no sign that the configured address was never used.
+ */
+fun localPropertiesApiBaseUrl(): String? {
+    val file = rootProject.file("local.properties")
+    if (!file.exists()) return null
+    val properties = Properties()
+    file.inputStream().use(properties::load)
+    return properties.getProperty("tasktracker.apiBaseUrl")
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+}
+
 val composeResourceOwner = project(":packages:design-system")
 val generatedComposeAssets = layout.buildDirectory.dir("generated/composeAssets")
 
@@ -68,11 +93,24 @@ android {
         // deployment with `-Ptasktracker.apiBaseUrl=https://server.example.com` (or a
         // `tasktracker.apiBaseUrl` entry in `gradle.properties`).
         //
+        // For local development against a physical device, add the same key to
+        // `local.properties` (gitignored) so Android Studio's Run/Debug button picks it up
+        // without a command-line flag or a committed machine-specific address:
+        //
+        //     tasktracker.apiBaseUrl=http://192.168.1.42:8080
+        //
+        // `local.properties` is read here but not by `findProperty`, so it is merged in
+        // explicitly as a second-priority source — command-line `-P` wins, then
+        // `local.properties`, then nothing (the Kotlin fallback).
+        //
         // Deliberately empty when unset, so the fallback is the Kotlin default in
         // `PlatformApiBaseUrl.android.kt` and not a second copy of the same address here: a
         // value baked in at this layer would drift from the one the resolver's tests pin.
         manifestPlaceholders["tasktrackerApiBaseUrl"] =
-            (findProperty("tasktracker.apiBaseUrl") as String?).orEmpty()
+            (findProperty("tasktracker.apiBaseUrl") as String?)
+                ?.takeIf { it.isNotBlank() }
+                ?: localPropertiesApiBaseUrl()
+                ?: ""
     }
 
     buildTypes {
@@ -85,10 +123,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
 
-    kotlin {
-        jvmToolchain(25)
-    }
+kotlin {
+    jvmToolchain(25)
 }
 
 /**

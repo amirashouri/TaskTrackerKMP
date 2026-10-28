@@ -8,7 +8,8 @@
 
 ## Scope
 
-Config and docs only: no Kotlin source change, no module change, no public signature, no
+Config and docs, plus one permission-guard correction found during real-device validation: no
+module change, no public signature, no
 wire-format change, no server code. The 6.3 validator already implements the product
 policy — `https` anywhere; `http` only for loopback, RFC1918, link-local,
 CGNAT/Tailscale (`100.64.0.0/10`), `.local`, and single-label names — and gates every
@@ -84,10 +85,11 @@ Server (docs only; no Go change, so no server spec):
       fired by intent opens Settings with the address prefilled; Save runs 6.3's probe
       (`GET /healthz 200` in the server log) and persists the root. Desktop's flow is
       unchanged.
-- [x] No `.kt` file changes (`git diff --name-only` shows only the config, plist, and
-      docs); 6.3's validator tests pass untouched; `scripts/check.sh full` green on all
-      three hosts (JVM 2083 / iOS 2021 / Android 1715, 0 failures) with `test-baseline.json`
-      unmoved.
+- [x] The only `.kt` change is `MainActivity`'s permission guard (`BAKLAVA` → `CINNAMON_BUN`):
+      `ACCESS_LOCAL_NETWORK` is API 37 (`api-versions.xml` pins it at `since="37.0"`), so an
+      Android 16 device was being asked for a permission that did not exist. 6.3's validator
+      tests pass untouched; `scripts/check.sh full` green on all three hosts (JVM 2083 /
+      iOS 2021 / Android 1715, 0 failures) with `test-baseline.json` unmoved.
 - [x] Grep for the old claim ("Android client blocks cleartext", "phones need a TLS
       provider") returns no active doc asserting it; PLAN-ARCHIVE history keeps its
       addendum instead of being edited.
@@ -111,7 +113,7 @@ Server (docs only; no Go change, so no server spec):
 - iOS: a real-device build from Xcode pointed at the Mac's LAN IP; the prompt-and-grant
   flow is not observable on the simulator.
 - `scripts/check.sh full` before merge (PR gate); expected: no count movement — there is
-  no test change and no Kotlin change.
+  no test change and one Kotlin guard edit (`MainActivity`, API-37 permission).
 - Server: docs-only, so no Go test and no release-gate run.
 
 ## Handoff
@@ -120,14 +122,31 @@ Server (docs only; no Go change, so no server spec):
   `Project.md` posture bullet, the full server docs sweep (INSTALL, SELF-HOSTING, PLAN
   preamble, PLAN-ARCHIVE addendum) and the workspace `AGENTS.md` §7 reversal. Emulator
   acceptance complete: LAN-root login 200, prompt/grant/deny/re-ask flows, pairing
-  deep-link → prefill → probe → save. `scripts/check.sh full` green on all three hosts,
-  baseline unmoved, no `.kt` changed.
-- **Pending:** iOS real-device validation (prompt + LAN sign-in) and an optional
-  real-Android-device confirmation — both blocked on hardware, not on code. Then push
-  and MR.
+  deep-link → prefill → probe → save. `scripts/check.sh full` green on all three hosts for
+  the config-only diff, baseline unmoved. The only `.kt` change is the API-37 permission
+  guard (`BAKLAVA` → `CINNAMON_BUN`), found while validating the real device and exercised
+  only by compiling and installing on the API 33 phone.
+- **Pending:** re-run `scripts/check.sh full` before merge for the permission-guard edit (the
+  earlier green run predates it); iOS real-device validation (prompt + LAN sign-in) and a
+  full real-Android-device sign-in with valid credentials — the latter two blocked on
+  hardware/accounts, not on code. Then push and MR.
 - **Next step:** validate on real devices when available; push `feat/mobile-lan-plain-http`
   and open the PR.
 - **Gotchas:**
+  - **Real-device probe (2026-10-28, SM-G780F, Android 13 / API 33):** the installed APK
+    carried `http://192.168.31.140:8080` from `local.properties` (verified with
+    `aapt2 dump xmltree`), and the app's own `POST /v1/auth/login` reached the server (401 on
+    a deliberately wrong password). No `ACCESS_LOCAL_NETWORK` prompt appeared, and none is
+    expected: the permission is only enforced from Android 17 (API 37). The initial
+    `Failed to connect to /192.168.31.140:8080` was the *server*, not the client — the
+    developer compose publishes on `127.0.0.1` only (T9.3), so the phone was refused while
+    `curl` on the host worked. Publishing `0.0.0.0:${SERVER_PORT:-8080}:8080` through a local
+    `docker-compose.override.yml` made `GET /healthz` from the device return 200. This is the
+    expected cost of the loopback default, not an Android config defect; see the README's
+    "Physical device" note.
+  - Do not "fix" a real-device connection failure by loosening the permission or cleartext
+    config first — check `lsof -nP -iTCP:8080 -sTCP:LISTEN` and
+    `adb shell nc -w 5 <host-ip> 8080` before touching either.
   - On the emulator, a **routed** LAN address (`192.168.31.x`, reached through the
     guest's NAT) is *not* gated by a denied `ACCESS_LOCAL_NETWORK` — sign-in succeeds
     even after denial. The block is only observable against an **on-link** address
