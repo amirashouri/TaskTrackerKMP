@@ -6,10 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -162,8 +166,9 @@ fun WorkItemEditorScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(ttSpacing.screenGutterLarge)
+            .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = LocalTabBarScrollUnderInset.current)
+            .padding(bottom = LocalTabBarScrollUnderInset.current + 100.dp)
             .testTag(WorkItemEditorScreenTag),
     )
 }
@@ -389,6 +394,7 @@ private fun ProjectsEditorFullScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = ttSpacing.screenGutterLarge, vertical = ttSpacing.md)
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
         ) {
@@ -553,14 +559,22 @@ private fun ProjectsEditorFullScreen(
                 pendingAttachments = pendingAttachments,
                 onRemovePending = onRemovePending,
             )
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(120.dp + tabBarInset))
         }
+
+        val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = ttSpacing.screenGutterLarge)
-                .padding(bottom = tabBarInset + ttSpacing.md)
+                .then(
+                    if (keyboardVisible) {
+                        Modifier.imePadding().padding(bottom = ttSpacing.md)
+                    } else {
+                        Modifier.padding(bottom = tabBarInset + ttSpacing.md)
+                    }
+                )
                 .ttGlassCard()
                 .background(Color.Transparent)
                 .pointerInput(Unit) { }
