@@ -512,7 +512,7 @@ fun SettingsScreen(
                         .weight(1f)
                         .fillMaxHeight(),
                     contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xxl),
                 ) {
                     profileFailure?.let {
                         item {
@@ -547,7 +547,7 @@ fun SettingsScreen(
                         .weight(1f)
                         .fillMaxHeight(),
                     contentPadding = PaddingValues(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xxl),
                 ) {
                     item { appearanceSection() }
                     item { signOutSection() }
@@ -573,7 +573,7 @@ fun SettingsScreen(
                     top = LocalStatusBarScrollUnderInset.current + ttSpacing.xl,
                     bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current,
                 ),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxl),
             ) {
                 profileFailure?.let {
                     item {

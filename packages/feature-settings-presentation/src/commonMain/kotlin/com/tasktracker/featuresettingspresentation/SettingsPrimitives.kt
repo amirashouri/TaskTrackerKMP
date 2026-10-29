@@ -47,7 +47,7 @@ internal fun SettingsSection(
         modifier = Modifier
             .fillMaxWidth()
             .ttGlassSurface(shape = RoundedCornerShape(ttRadius.surface))
-            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.xs),
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         content = { content() },
     )
 }
@@ -66,7 +66,7 @@ internal fun SettingsIconRow(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
-            .padding(vertical = ttSpacing.xs),
+            .padding(vertical = ttSpacing.md),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
