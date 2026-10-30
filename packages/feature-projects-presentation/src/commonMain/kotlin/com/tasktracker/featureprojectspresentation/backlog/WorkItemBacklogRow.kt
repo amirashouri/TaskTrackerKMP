@@ -44,7 +44,12 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Full-width task row used across Backlog, Kanban, Archive, and Sprint views.
- * Action buttons adapt to context: Backlog (Put on Board, Archive), Kanban (Archive), Archive (Reopen), Sprint (Remove).
+ * Action buttons adapt to context: Backlog (Put on Board, Archive), Kanban (Archive), Archive
+ * (Reopen), Sprint (Remove).
+ *
+ * A terminal row (`Done` or `Closed`) never offers "File away" — it is already filed away, and
+ * `ArchiveWorkItem` refuses the write. Where a reopen handler is supplied it offers Reopen
+ * instead, so the only way out of the archive is the one that works.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -136,14 +141,16 @@ fun WorkItemBacklogRow(
                         testTag = BacklogPutOnBoardTag(item),
                     )
                 }
-                if (item.status == WorkItemStatus.Closed && onUnarchive != null) {
+                // Terminal items are already filed away, so "File away" would only ever be
+                // refused; a done task's way back is Reopen, the same as a closed one's.
+                if (item.status.isTerminal && onUnarchive != null) {
                     BacklogAction(
                         label = stringResource(Res.string.archive_reopen),
                         isBusy = isBusy,
                         onClick = onUnarchive,
                         testTag = BacklogUnarchiveTag(item),
                     )
-                } else if (item.status != WorkItemStatus.Closed) {
+                } else if (!item.status.isTerminal) {
                     BacklogAction(
                         label = stringResource(Res.string.work_item_archive),
                         isBusy = isBusy,

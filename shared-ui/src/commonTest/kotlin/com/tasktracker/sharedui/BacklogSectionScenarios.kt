@@ -112,15 +112,16 @@ object BacklogSectionScenarios {
     }
 
     /**
-     * The archived section lists only closed items and in the order they were filed.
+     * The archived section lists every finished task — done and closed — newest first.
      *
-     * The archived section is closed-only, newest first, and this scenario asserts the list
-     * contains exactly the closed items the fixture gave it, in that order, and nothing from the
-     * backlog section leaked in.
+     * The archive is finished work, not the `Closed` status alone: `Done` is a board lane *and*
+     * history, so it is filed away the moment it is finished. This scenario gives the archive a
+     * done row and asserts it is drawn, because a done task the archive omits is a task the user
+     * cannot find after "file away" has already refused it as filed away.
      */
-    val theArchivedSectionListsOnlyClosedItemsNewestFirst: suspend ComposeUiTest.() -> Unit = {
+    val theArchivedSectionListsFiledAwayItemsNewestFirst: suspend ComposeUiTest.() -> Unit = {
         val backlog = backlogItems(2)
-        val archived = closedItems()
+        val archived = archivedItems()
         backlogShowing(backlog = backlog, archived = archived)
 
         onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_archived)))
@@ -371,6 +372,32 @@ object BacklogSectionScenarios {
     }
 
     /**
+     * A done row offers no "File away", because it is already filed away.
+     *
+     * The reported bug: the Kanban section drew "File away" on the done lane, and pressing it
+     * answered "already filed away in done" — an error for an action that could never succeed.
+     * The board's own cards and the editor already hide the action for a terminal item; this
+     * holds the row to the same rule, and holds a live row to still offering it so the fix
+     * cannot be "hide the button everywhere".
+     */
+    val aDoneKanbanRowOffersNoFileAway: suspend ComposeUiTest.() -> Unit = {
+        val board = boardItems()
+        val done = board.first { it.status == WorkItemStatus.Done }
+        val live = board.first { it.status == WorkItemStatus.Todo }
+        val filed = mutableListOf<WorkItemID>()
+        backlogShowing(board = board, onFileAway = { filed += it })
+
+        onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_kanban)))
+            .performClick()
+        waitForIdle()
+
+        onNodeWithTag(WorkItemBacklogRowTag(done)).assertIsDisplayed()
+        onNodeWithTag(BacklogFileAwayTag(done)).assertDoesNotExist()
+        onNodeWithTag(BacklogFileAwayTag(live)).assertIsDisplayed()
+        assertTrue(filed.isEmpty(), "no file-away may fire from a row that offers none")
+    }
+
+    /**
      * The Kanban section's empty state is its own sentence.
      *
      * A triaged project can have a full archive and an empty board, so the board's emptiness is
@@ -576,6 +603,19 @@ private fun backlogItems(count: Int = 9): List<WorkItem> =
 private fun closedItems(): List<WorkItem> = listOf(
     shellWorkItem(number = 90, status = WorkItemStatus.Closed),
     shellWorkItem(number = 91, status = WorkItemStatus.Closed),
+)
+
+/**
+ * The archive's fixture: finished work of both terminal statuses, in the order the list shows it.
+ *
+ * `Done` and `Closed` are both archived — a done task is filed away when it is finished, and
+ * only `Closed` is archive-only — so the fixture carries one of each. They share the fixture
+ * clock, and the list's sort is stable, so the reading order is this order.
+ */
+private fun archivedItems(): List<WorkItem> = listOf(
+    shellWorkItem(number = 90, status = WorkItemStatus.Done),
+    shellWorkItem(number = 91, status = WorkItemStatus.Closed),
+    shellWorkItem(number = 92, status = WorkItemStatus.Closed),
 )
 
 /**

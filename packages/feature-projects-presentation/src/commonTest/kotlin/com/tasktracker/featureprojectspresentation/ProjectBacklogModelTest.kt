@@ -212,6 +212,34 @@ class ProjectBacklogModelTest {
         assertNotNull(model.errorMessage)
     }
 
+    /**
+     * A done task is refused a second filing *and* is already in the archive.
+     *
+     * The reported bug in one place: "file away" on a `Done` task is refused because `Done` is
+     * terminal, and that refusal is only honest if the archive section is showing the task. An
+     * archive filtered on `Closed` refused the press and drew nothing, so the task looked lost
+     * from both sections at once. Asserted on the projection the screen draws rather than on the
+     * store, because that is the surface that was wrong.
+     */
+    @Test
+    fun `a done task is refused a second filing and is already in the archive`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Done)
+        repository.seed(item)
+
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertFalse(model.fileAway(item.id))
+        assertNotNull(model.errorMessage)
+        assertEquals(listOf("AP-1"), model.projection.archived.map { it.key.toString() })
+        // The done lane still holds it: one task, read in two sections, counted once.
+        assertEquals(1, model.projection.totalItemCount)
+    }
+
     @Test
     fun `dismissing the error clears it`() = runTest {
         val repository = FakeProjectRepository()

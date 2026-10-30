@@ -76,6 +76,16 @@ enum class BacklogSection {
 
 /**
  * Sectioned backlog projection containing backlog, kanban board, and archive items.
+ *
+ * The three sections are the same pile of work read three ways, and two of them overlap on
+ * purpose: `Done` is both a board lane and archived work (see [WorkItemStatus.appearsOnBoard]),
+ * so a finished task is filed away the moment it is finished rather than needing a second press
+ * to become history. Only `Closed` is archive-only.
+ *
+ * That overlap is why the archive reads [WorkItemStatus.isTerminal] rather than `Closed` alone:
+ * `ArchiveWorkItem` refuses to file a terminal item — a `Done` task really is already filed
+ * away — so an archive that filtered on `Closed` would refuse the write *and* show nothing,
+ * which reads to the user as a task that vanished.
  */
 data class BacklogSectionedProjection(
     val project: Project?,
@@ -84,7 +94,7 @@ data class BacklogSectionedProjection(
     val backlog: List<WorkItem> = WorkItemGrouping.untriaged(items)
     fun backlogIn(order: BacklogSortOrder): List<WorkItem> = WorkItemGrouping.untriaged(items, order)
     val archived: List<WorkItem> = items
-        .filter { it.status == WorkItemStatus.Closed }
+        .filter { it.status.isTerminal }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
     val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items).flatMap { it.items }
@@ -93,7 +103,14 @@ data class BacklogSectionedProjection(
     val backlogItemCount: Int get() = backlog.size
     val kanbanItemCount: Int get() = kanban.size
     val archivedItemCount: Int get() = archived.size
-    val totalItemCount: Int get() = backlogItemCount + kanbanItemCount + archivedItemCount
+
+    /**
+     * How many items the project holds — counted once each.
+     *
+     * Deliberately not the sum of the three sections: a `Done` item is in two of them, so adding
+     * them would count it twice and make the total disagree with [items].
+     */
+    val totalItemCount: Int get() = items.size
     val backlogIsEmpty: Boolean get() = backlog.isEmpty()
     val kanbanIsEmpty: Boolean get() = kanban.isEmpty()
     val archivedIsEmpty: Boolean get() = archived.isEmpty()

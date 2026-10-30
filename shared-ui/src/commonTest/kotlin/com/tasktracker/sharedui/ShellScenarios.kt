@@ -5067,7 +5067,7 @@ object ShellScenarios {
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
         BacklogSectionScenarios.switchingToArchivedShowsTheArchivedSection,
         BacklogSectionScenarios.switchingBackToBacklogShowsTheBacklogSection,
-        BacklogSectionScenarios.theArchivedSectionListsOnlyClosedItemsNewestFirst,
+        BacklogSectionScenarios.theArchivedSectionListsFiledAwayItemsNewestFirst,
         BacklogSectionScenarios.theBacklogSectionRemainsWhenSwitchingAway,
         BacklogSectionScenarios.theArchivedSectionShowsItsOwnEmptyState,
         BacklogSectionScenarios.theBacklogSectionShowsItsOwnEmptyState,
@@ -5079,6 +5079,7 @@ object ShellScenarios {
         BacklogSectionScenarios.theKanbanSectionShowsItsOwnEmptyState,
         BacklogSectionScenarios.tappingABacklogRowOpensTheTask,
         BacklogSectionScenarios.theSortChipsCombineIntoAnOrderedPair,
+        BacklogSectionScenarios.aDoneKanbanRowOffersNoFileAway,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
