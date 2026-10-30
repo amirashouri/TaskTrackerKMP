@@ -49,6 +49,19 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Backlog screen: renders untriaged work, active kanban tasks, and archived items in 3 tabs.
  * The header floats over the list; list top content padding is dynamically derived from header height.
+ *
+ * ## The sort order is the host's, and the screen only reports taps
+ *
+ * [sortOrder] seeds the selection and [onSortOrderChanged] reports every change to it. That
+ * pair exists because the ordering is a *preference* rather than screen state: a `remember`
+ * here died with the destination, so leaving the tab and coming back — or relaunching —
+ * silently reset the list to priority-first. The host owns the value (the shell's
+ * `ShellPreferences` keeps it in memory and on disk) and hands it down; this screen keeps a
+ * local copy only so the list re-reads in the same frame as the tap, and re-seeds from the
+ * parameter whenever the host hands back a different one.
+ *
+ * Both are defaulted, so a caller that does not persist anything — a preview, a focused
+ * screen test — still gets a working, self-contained list.
  */
 @Composable
 fun ProjectBacklogScreen(
@@ -66,10 +79,14 @@ fun ProjectBacklogScreen(
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
     onAddTask: (() -> Unit)? = null,
+    sortOrder: BacklogSortOrder = BacklogSortOrder(),
+    onSortOrderChanged: (BacklogSortOrder) -> Unit = {},
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
-    var sortOrder by remember { mutableStateOf(BacklogSortOrder()) }
+    // Keyed on the parameter so a restored or externally changed order replaces this copy,
+    // while a tap's own echo back from the host is an equal value and leaves it alone.
+    var currentSortOrder by remember(sortOrder) { mutableStateOf(sortOrder) }
 
     // Measured dynamically to accommodate conditional banners and variable typography scaling
     var headerHeightPx by remember { mutableIntStateOf(0) }
@@ -85,7 +102,7 @@ fun ProjectBacklogScreen(
             when (currentSection) {
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = projection,
-                    sortOrder = sortOrder,
+                    sortOrder = currentSortOrder,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     onSelect = onSelect,
@@ -175,8 +192,15 @@ fun ProjectBacklogScreen(
                 )
                 if (currentSection == BacklogSection.Backlog) {
                     BacklogSortControls(
-                        order = sortOrder,
-                        onToggle = { sortOrder = sortOrder.toggled(it) },
+                        order = currentSortOrder,
+                        onToggle = { basis ->
+                            // Update first, report second: the list has to re-read in the same
+                            // frame as the tap, and the report is what remembers it, which may
+                            // outlive this screen.
+                            val next = currentSortOrder.toggled(basis)
+                            currentSortOrder = next
+                            onSortOrderChanged(next)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

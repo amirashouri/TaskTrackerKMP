@@ -47,6 +47,18 @@ enum class DefaultsKey(val wireValue: String) {
     HasSeenSyncHint("sync.hasSeenHint"),
 
     /**
+     * The backlog's chosen ordering, as a list of `basis:direction` tokens (see
+     * `BacklogSortCodec` in `:shared-ui`, which owns the encoding).
+     *
+     * A UI preference, not work state, so it lives here rather than in the database: it is
+     * one person's way of reading one list, and nothing on the server has an opinion about
+     * it. Inside the enum on purpose — [UserDefaultsStore.removeAll] wipes it on sign-out
+     * along with [LastSeenProject], because the next account on this device should start
+     * from the default ordering rather than inherit a stranger's.
+     */
+    BacklogSort("backlog.sortOrder"),
+
+    /**
      * Debug-only fault injection, persisted so the simulator can be put into an offline
      * state and stay there across launches.
      */

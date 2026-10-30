@@ -4,6 +4,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.UserID
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featuresettingsdomain.UserDetails
@@ -35,6 +36,19 @@ class ShellPreferences(
     private val _forceOffline = MutableStateFlow(false)
     val forceOffline: StateFlow<Boolean> = _forceOffline.asStateFlow()
 
+    /**
+     * How the backlog list is ordered, remembered across launches and across leaving the tab.
+     *
+     * Held here rather than in [com.tasktracker.featureprojectspresentation.ProjectBacklogScreen]
+     * because the screen's own `remember` dies with the destination: switching to another tab
+     * and back rebuilt it at the default ordering, which is the bug this exists to fix. One
+     * value for the whole app, not one per project — the choice is a reading habit ("I read
+     * this list by priority"), and a per-project copy would make the same habit have to be
+     * re-taught on every project.
+     */
+    private val _backlogSortOrder = MutableStateFlow(BacklogSortOrder())
+    val backlogSortOrder: StateFlow<BacklogSortOrder> = _backlogSortOrder.asStateFlow()
+
     private var cachedIdentity: UserIdentity? = null
 
     private val _currentUserName = MutableStateFlow<String?>(null)
@@ -65,6 +79,13 @@ class ShellPreferences(
 
         val offline = runCatching { store.value(FORCE_OFFLINE_KEY) }.getOrNull()
         _forceOffline.value = offline == TRUTHY
+
+        // `value<List<String>>` rather than an inferred type: the store's `value` is reified,
+        // and the type argument is what decides which serializer reads the entry. Naming it
+        // here also states the stored shape without the reader having to open the codec.
+        _backlogSortOrder.value = BacklogSortCodec.decode(
+            runCatching { store.value<List<String>>(DefaultsKey.BacklogSort) }.getOrNull(),
+        )
 
         val projectID = runCatching { store.value(router.lastProjectDefaultsKey) }.getOrNull()
         lastVisitedProjectID = projectID?.takeIf { it.isNotBlank() }
@@ -122,6 +143,19 @@ class ShellPreferences(
     suspend fun setForceOffline(forced: Boolean) {
         _forceOffline.value = forced
         runCatching { store.set(forced.toString(), FORCE_OFFLINE_KEY) }
+    }
+
+    /**
+     * Remembers the backlog's ordering, in memory first and on disk second.
+     *
+     * The order of the two is the same as [setThemeScheme]'s and for the same reason: the
+     * flow is what the screen reads, so publishing it before the write means a tap is visible
+     * on the next frame even if the write is slow. A write that fails leaves the session
+     * correct and the next launch at the previous order — degraded, not wrong.
+     */
+    suspend fun setBacklogSortOrder(order: BacklogSortOrder) {
+        _backlogSortOrder.value = order
+        runCatching { store.set(BacklogSortCodec.encode(order), DefaultsKey.BacklogSort) }
     }
 
     suspend fun rememberActiveProject(projectID: ProjectID?) {

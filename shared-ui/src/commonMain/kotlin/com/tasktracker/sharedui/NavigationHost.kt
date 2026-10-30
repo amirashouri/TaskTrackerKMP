@@ -866,6 +866,7 @@ private fun TabRoot(
                 router = router,
                 environment = environment,
                 scope = scope,
+                preferences = preferences,
             )
         }
 
@@ -942,6 +943,7 @@ private fun PushedRoute(
             router = router,
             environment = environment,
             scope = scope,
+            preferences = preferences,
         )
 
         is AppRoute.Archive -> ArchiveDestination(
@@ -1328,6 +1330,7 @@ private fun BacklogDestination(
     router: Router,
     environment: ProjectEnvironment,
     scope: CoroutineScope,
+    preferences: ShellPreferences,
 ) {
     val model = remember(projectID, environment) {
         ProjectBacklogModel(projectID, environment.repository, environment.dateProvider)
@@ -1364,6 +1367,11 @@ private fun BacklogDestination(
         isLoading = model.isLoading,
         errorMessage = model.errorMessage,
         busyItemID = model.busyItemID,
+        // The ordering is a preference, so it comes from the shell rather than from the
+        // screen's own `remember` — a value that lived here died with this destination, which
+        // is exactly the reset a tab switch used to cause.
+        sortOrder = preferences.backlogSortOrder.collectAsState().value,
+        onSortOrderChanged = { order -> scope.launch { preferences.setBacklogSortOrder(order) } },
         onSelect = { itemID ->
             openEditor(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
         },

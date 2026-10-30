@@ -1,5 +1,8 @@
 package com.tasktracker.sharedui
 
+import com.tasktracker.domain.BacklogSortBasis
+import com.tasktracker.domain.BacklogSortKey
+import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featuresettingsdomain.UserDetails
@@ -171,6 +174,106 @@ class ShellPreferencesTest {
             "ada",
             preferences.currentUserName.value,
             "a cleared name must fall back to the identity rather than render an empty greeting",
+        )
+    }
+
+    /**
+     * The backlog's ordering is still there after a relaunch.
+     *
+     * A second [ShellPreferences] over the same backend is the relaunch: nothing in memory is
+     * shared with the first instance, so the only way the value can come back is from disk.
+     * Without this the ordering reset to priority-first every launch, which is the "sort not
+     * saved" the preference exists to fix.
+     */
+    @Test
+    fun theBacklogSortSurvivesARelaunch() = runTest {
+        val backend = InMemoryPreferences()
+        val chosen = BacklogSortOrder(
+            listOf(
+                BacklogSortKey(BacklogSortBasis.CreatedAt, descending = false),
+                BacklogSortKey(BacklogSortBasis.Priority, descending = true),
+            ),
+        )
+
+        ShellPreferences(UserDefaultsStore(backend), Router()).setBacklogSortOrder(chosen)
+
+        val relaunched = ShellPreferences(UserDefaultsStore(backend), Router())
+        relaunched.restore()
+
+        assertEquals(
+            chosen,
+            relaunched.backlogSortOrder.value,
+            "the order read back after a relaunch differs from the one saved — leaving the tab " +
+                "or restarting the app would silently re-sort the list",
+        )
+    }
+
+    /**
+     * A device that never chose an order reads the default, not an error.
+     *
+     * `restore()` runs on the first frame of every launch, so an absent key has to be a value
+     * like any other. This is the pre-change behaviour of every existing install.
+     */
+    @Test
+    fun aDeviceWithNoSavedBacklogSortReadsTheDefault() = runTest {
+        val preferences = ShellPreferences(UserDefaultsStore(InMemoryPreferences()), Router())
+        preferences.restore()
+
+        assertEquals(
+            BacklogSortOrder(),
+            preferences.backlogSortOrder.value,
+            "a first launch must read the default order (priority, highest first)",
+        )
+    }
+
+    /**
+     * An unreadable entry falls back to the default instead of failing the launch.
+     *
+     * The bytes are poisoned at the store's own namespaced key, so this is the entry a real
+     * plist would hold after a downgrade or a half-written file — and it is read during
+     * `restore()`, before any screen exists to report an error.
+     */
+    @Test
+    fun anUnreadableBacklogSortFallsBackToTheDefault() = runTest {
+        val backend = InMemoryPreferences()
+        val store = UserDefaultsStore(backend)
+        backend.put(
+            "{not a sort order".encodeToByteArray(),
+            store.namespaced(DefaultsKey.BacklogSort),
+        )
+
+        val preferences = ShellPreferences(store, Router())
+        preferences.restore()
+
+        assertEquals(
+            BacklogSortOrder(),
+            preferences.backlogSortOrder.value,
+            "a corrupt preference must read as the default rather than crash on every launch",
+        )
+    }
+
+    /**
+     * A stored selection that names one basis twice is repaired, not thrown over.
+     *
+     * `BacklogSortOrder` rejects duplicate bases in its `init`, so a stored list that survives
+     * a future encoding bug has to be cleaned up on the way in — otherwise the `require` fires
+     * inside `restore()` and the app cannot start until the plist is cleared by hand.
+     */
+    @Test
+    fun aStoredSortThatRepeatsABasisIsRepaired() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        store.set(
+            listOf("priority:ascending", "priority:descending", "nonsense:sideways"),
+            DefaultsKey.BacklogSort,
+        )
+
+        val preferences = ShellPreferences(store, Router())
+        preferences.restore()
+
+        assertEquals(
+            BacklogSortOrder(listOf(BacklogSortKey(BacklogSortBasis.Priority, descending = false))),
+            preferences.backlogSortOrder.value,
+            "the first mention of a basis must win and the unknown token must be dropped",
         )
     }
 }

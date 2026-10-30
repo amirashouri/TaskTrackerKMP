@@ -74,6 +74,7 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
+import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
@@ -5062,6 +5063,88 @@ object ShellScenarios {
     // than by a tab. Their reach is asserted in [BacklogSectionScenarios] directly, and the
     // backlog section remains the one the tab's scroll region is measured on.
 
+    /**
+     * The order a user picks survives leaving the tab, and is on disk for the next launch.
+     *
+     * ## What it catches that a screen test cannot
+     *
+     * The chip walk in [BacklogSectionScenarios] proves the *state machine*: given a tap, what
+     * order results. It cannot see this bug, because the screen it drives is never taken out of
+     * the composition — and being taken out is the whole failure. The selection used to live in
+     * a `remember` inside [com.tasktracker.featureprojectspresentation.ProjectBacklogScreen],
+     * so switching tabs and coming back rebuilt it at priority-first with no error anywhere.
+     *
+     * ## Why the chip's state description rather than the label text
+     *
+     * Both are real, and the label is the one a sighted user reads — but this scenario runs in
+     * the shell, where the backlog screen's resource strings are not what is being asserted,
+     * and the direction is already published to accessibility (`stateDescription`) by the chip
+     * itself. Comparing the description before and after the round trip also proves the tap did
+     * something, which an assertion against a hardcoded string would not: a chip that never
+     * changed would satisfy "equals the string for ascending" only if the default were wrong.
+     *
+     * The store read at the end is the second half of the claim and cannot be inferred from the
+     * screen: memory surviving a tab switch would still lose the choice on a relaunch.
+     */
+    val theBacklogSortSurvivesLeavingTheTab: suspend ComposeUiTest.() -> Unit = {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        val repository = FakeProjectRepository()
+        val seeded = seedOverflowingLists(repository)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = repository,
+            settings = FakeShellSettingsPort(),
+            preferences = store,
+        )
+        waitForIdle()
+        openSeededProject(seeded)
+
+        onNodeWithTag(TabButtonTag(AppTab.Backlog)).performClick()
+        waitForIdle()
+
+        val defaultDirection = sortDirectionOf(BacklogSortPriorityTag)
+        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        waitForIdle()
+        val chosenDirection = sortDirectionOf(BacklogSortPriorityTag)
+        assertTrue(
+            chosenDirection != defaultDirection,
+            "tapping the priority chip left it saying \"$chosenDirection\", the same direction " +
+                "it had before the tap — the scenario cannot tell a saved order from a lost one",
+        )
+
+        // The round trip: away to another tab, and back. This is the sequence that used to
+        // reset the list, and it is the reason the preference is held by the shell.
+        onNodeWithTag(TabButtonTag(AppTab.Board)).performClick()
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Backlog)).performClick()
+        waitForIdle()
+
+        assertEquals(
+            chosenDirection,
+            sortDirectionOf(BacklogSortPriorityTag),
+            "the backlog reads \"${sortDirectionOf(BacklogSortPriorityTag)}\" after leaving the " +
+                "tab and coming back, but the user chose \"$chosenDirection\" — the selection is " +
+                "being rebuilt at the default instead of read from the preference",
+        )
+
+        assertEquals(
+            listOf("priority:ascending"),
+            store.value<List<String>>(DefaultsKey.BacklogSort),
+            "the chosen order is not on disk, so it would be lost on the next launch",
+        )
+    }
+
+    /**
+     * The direction a sort chip announces, read from its semantics.
+     *
+     * `stateDescription` is what `BacklogSortControls` publishes for a screen reader, and it is
+     * the only per-chip signal of *which way* a key is sorted — `selected` is true for both
+     * directions, so asserting that alone would pass for an order that had been reversed.
+     */
+    private fun ComposeUiTest.sortDirectionOf(tag: String): String =
+        onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+
     // Append to this list, never insert: TaskTrackerAppScenarios reaches these by index, so a
     // scenario dropped in the middle silently renames every test below it.
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
@@ -5080,6 +5163,9 @@ object ShellScenarios {
         BacklogSectionScenarios.tappingABacklogRowOpensTheTask,
         BacklogSectionScenarios.theSortChipsCombineIntoAnOrderedPair,
         BacklogSectionScenarios.aDoneKanbanRowOffersNoFileAway,
+        // Appended, never inserted: the indices above are reached by name from
+        // TaskTrackerAppScenarios, and this one is `[15]`.
+        theBacklogSortSurvivesLeavingTheTab,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

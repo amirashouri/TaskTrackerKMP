@@ -292,6 +292,8 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun aDoneKanbanRowOffersNoFileAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[14])
     @Test
+    fun theBacklogSortSurvivesLeavingTheTab() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[15])
+    @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test
     fun everyTabIsNamedAndCarriesTheTabRole() = runComposeUiTest(block = ShellScenarios.everyTabIsNamedAndCarriesTheTabRole)
