@@ -187,8 +187,15 @@ class ProjectionsTest {
 
     // MARK: Sectioned backlog
 
+    /**
+     * The three sections are the pile read three ways, and `Done` is in two of them.
+     *
+     * `Done` is a board lane *and* finished history — the overlap `WorkItemStatus.appearsOnBoard`
+     * documents — so the archive holds it alongside `Closed` from the moment it is finished. The
+     * backlog is the only section that is disjoint from both.
+     */
     @Test
-    fun `the sectioned backlog splits backlog board and closed into three disjoint partitions`() {
+    fun `the sectioned backlog splits backlog board and archive with done in two of them`() {
         val projection = BacklogSectionedProjection(
             project = null,
             items = listOf(
@@ -203,10 +210,11 @@ class ProjectionsTest {
 
         assertEquals(listOf("TT-1"), keys(projection.backlog))
         assertEquals(listOf("TT-2", "TT-3", "TT-4", "TT-5"), keys(projection.kanban))
-        assertEquals(listOf("TT-6"), keys(projection.archived))
+        assertEquals(listOf("TT-5", "TT-6"), keys(projection.archived))
         assertEquals(1, projection.backlogItemCount)
         assertEquals(4, projection.kanbanItemCount)
-        assertEquals(1, projection.archivedItemCount)
+        assertEquals(2, projection.archivedItemCount)
+        // Six items, not seven: the total counts the pile, and `Done` is one item in two sections.
         assertEquals(6, projection.totalItemCount)
         assertFalse(projection.backlogIsEmpty)
         assertFalse(projection.kanbanIsEmpty)
@@ -215,7 +223,38 @@ class ProjectionsTest {
         assertTrue(projection.hasAnyContent)
         assertTrue(projection.backlog.intersect(projection.kanban).isEmpty())
         assertTrue(projection.backlog.intersect(projection.archived).isEmpty())
-        assertTrue(projection.kanban.intersect(projection.archived).isEmpty())
+        assertEquals(
+            listOf("TT-5"),
+            keys(projection.kanban.intersect(projection.archived).toList()),
+            "the done lane and the archive share exactly the finished task",
+        )
+    }
+
+    /**
+     * Finishing a task files it away; it does not need a second press to become history.
+     *
+     * The regression this holds: the archive filtered on `Closed` alone, so `ArchiveWorkItem`
+     * refused a `Done` task — "already filed away in done" — while the archive section drew
+     * nothing. The task was neither accepted nor visible. `Done` is terminal, so terminal is
+     * archive membership; a `Done` item that arrived from the server without a `resolvedAt` is
+     * filed by when it was last heard, rather than dropped until someone moves it again.
+     */
+    @Test
+    fun `a done task is in the archive without being filed away again`() {
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Done, updatedAt = atNoon(2026, 3, 1)),
+                item("TT-2", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 1, 5)),
+            ),
+        )
+
+        assertEquals(listOf("TT-1", "TT-2"), keys(projection.archived))
+        assertEquals(2, projection.archivedItemCount)
+        // And it is still on the board's done lane, which is the intended overlap rather than
+        // the same item counted twice.
+        assertEquals(listOf("TT-1"), keys(projection.kanban))
+        assertEquals(2, projection.totalItemCount)
     }
 
     @Test
@@ -239,10 +278,11 @@ class ProjectionsTest {
             listOf("TT-4", "TT-2", "TT-1", "TT-3"),
             keys(projection.kanban),
         )
-        // The untriaged and the archived partitions neither gain nor reorder on-board items:
-        // the three partitions are the same pile seen three ways, not three separate listings.
+        // The untriaged partition neither gains nor reorders on-board items, and the archive
+        // keeps the board's own order for the finished work it shares with it: the three
+        // partitions are the same pile seen three ways, not three separate listings.
         assertEquals(listOf("TT-5"), keys(projection.backlog))
-        assertEquals(listOf("TT-6"), keys(projection.archived))
+        assertEquals(listOf("TT-3", "TT-6"), keys(projection.archived))
     }
 
     @Test

@@ -27,8 +27,9 @@ class ProjectBacklogModel(
     private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
 
     /**
-     * Backlog (`Backlog`) and archived (`Closed`) sections.
-     * Strictly disjoint by status; neither contains in-flight cards present on the board.
+     * Backlog (`Backlog`) and archived (terminal: `Done` and `Closed`) sections.
+     * The backlog section is strictly disjoint from the other two; the archive deliberately
+     * overlaps the board, because a finished task is both a `Done` lane and history.
      */
     var projection: BacklogSectionedProjection by mutableStateOf(
         BacklogSectionedProjection(project = null, items = emptyList()),

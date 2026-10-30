@@ -266,7 +266,7 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun switchingBackToTheBacklogSectionShowsBacklogRowsAgain() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[1])
     @Test
-    fun theArchivedSectionListsOnlyClosedItemsNewestFirst() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[2])
+    fun theArchivedSectionListsFiledAwayItemsNewestFirst() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[2])
     @Test
     fun theBacklogSectionRemainsWhenSwitchingAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[3])
     @Test
@@ -289,6 +289,10 @@ abstract class TaskTrackerAppScenarios {
     fun tappingABacklogRowOpensTheTask() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[12])
     @Test
     fun theSortChipsCombineIntoAnOrderedPair() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[13])
+    @Test
+    fun aDoneKanbanRowOffersNoFileAway() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[14])
+    @Test
+    fun theBacklogSortSurvivesLeavingTheTab() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[15])
     @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test
