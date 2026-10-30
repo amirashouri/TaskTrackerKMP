@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -17,6 +18,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -75,6 +77,8 @@ class ProjectionsTest {
         key: String,
         status: WorkItemStatus,
         rank: Int = 0,
+        priority: Priority = Priority.Medium,
+        createdOffsetSeconds: Long = 0,
         updatedAt: Instant = origin,
         resolvedAt: Instant? = null,
     ) = WorkItem(
@@ -82,8 +86,9 @@ class ProjectionsTest {
         key = WorkItemKey(key),
         title = key,
         status = status,
+        priority = priority,
         rank = rank,
-        createdAt = origin,
+        createdAt = origin + createdOffsetSeconds.seconds,
         updatedAt = updatedAt,
         resolvedAt = resolvedAt,
     )
@@ -131,20 +136,26 @@ class ProjectionsTest {
     }
 
     @Test
-    fun `untriaged work comes back in the same order the board would rank it`() {
-        // One order for every listing. A backlog that sorted independently would hand the
-        // user the same cards in a different sequence from the board the moment a card was
-        // triaged out of it.
+    fun `untriaged work orders by priority then oldest rather than by board rank`() {
+        // The backlog is not a column, so manual rank there is only insertion order. Priority
+        // is what a user is triaging by, and creation time breaks a priority tie the same way
+        // a board lane does once rank is equal.
         val projection = BacklogProjection(
             project = null,
             items = listOf(
-                item("TT-3", WorkItemStatus.Backlog, rank = 3),
-                item("TT-1", WorkItemStatus.Backlog, rank = 1),
-                item("TT-2", WorkItemStatus.Backlog, rank = 2),
+                item("TT-3", WorkItemStatus.Backlog, rank = 3, priority = Priority.Low),
+                item(
+                    "TT-1",
+                    WorkItemStatus.Backlog,
+                    rank = 1,
+                    priority = Priority.Critical,
+                    createdOffsetSeconds = 60,
+                ),
+                item("TT-2", WorkItemStatus.Backlog, rank = 2, priority = Priority.Critical),
             ),
         )
 
-        assertEquals(listOf("TT-1", "TT-2", "TT-3"), keys(projection.untriaged))
+        assertEquals(listOf("TT-2", "TT-1", "TT-3"), keys(projection.untriaged))
     }
 
     // MARK: Sectioned backlog

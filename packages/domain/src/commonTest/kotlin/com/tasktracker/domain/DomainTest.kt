@@ -261,6 +261,7 @@ class WorkItemGroupingTest {
         status: WorkItemStatus,
         priority: Priority = Priority.Medium,
         rank: Int = 0,
+        createdOffsetSeconds: Long = 0,
         resolvedOffsetSeconds: Long? = null,
     ) = WorkItem(
         projectID = projectID,
@@ -269,8 +270,8 @@ class WorkItemGroupingTest {
         status = status,
         priority = priority,
         rank = rank,
-        createdAt = now,
-        updatedAt = now,
+        createdAt = now + createdOffsetSeconds.seconds,
+        updatedAt = now + createdOffsetSeconds.seconds,
         resolvedAt = resolvedOffsetSeconds?.let { now + it.seconds },
     )
 
@@ -318,6 +319,27 @@ class WorkItemGroupingTest {
         )
         // Same rank, priority and creation instant, so the key tie-break decides.
         assertEquals(listOf("TT-1"), untriaged.map { it.key.rawValue })
+    }
+
+    @Test
+    fun theBacklogOrdersByPriorityThenOldestRatherThanInsertionRank() {
+        val untriaged = WorkItemGrouping.untriaged(
+            listOf(
+                item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low, rank = 0),
+                item("TT-2", WorkItemStatus.Backlog, priority = Priority.Critical, rank = 5),
+                item(
+                    "TT-3",
+                    WorkItemStatus.Backlog,
+                    priority = Priority.Critical,
+                    rank = 2,
+                    createdOffsetSeconds = -60,
+                ),
+            ),
+        )
+
+        // Rank would put TT-1 first and TT-3 before TT-2; priority puts both critical items
+        // ahead of low, and the older critical item ahead of the newer one.
+        assertEquals(listOf("TT-3", "TT-2", "TT-1"), untriaged.map { it.key.rawValue })
     }
 
     @Test
