@@ -2,6 +2,10 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.BacklogSortBasis
+import com.tasktracker.domain.BacklogSortKey
+import com.tasktracker.domain.BacklogSortOrder
+import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -17,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -75,6 +80,8 @@ class ProjectionsTest {
         key: String,
         status: WorkItemStatus,
         rank: Int = 0,
+        priority: Priority = Priority.Medium,
+        createdOffsetSeconds: Long = 0,
         updatedAt: Instant = origin,
         resolvedAt: Instant? = null,
     ) = WorkItem(
@@ -82,8 +89,9 @@ class ProjectionsTest {
         key = WorkItemKey(key),
         title = key,
         status = status,
+        priority = priority,
         rank = rank,
-        createdAt = origin,
+        createdAt = origin + createdOffsetSeconds.seconds,
         updatedAt = updatedAt,
         resolvedAt = resolvedAt,
     )
@@ -131,20 +139,50 @@ class ProjectionsTest {
     }
 
     @Test
-    fun `untriaged work comes back in the same order the board would rank it`() {
-        // One order for every listing. A backlog that sorted independently would hand the
-        // user the same cards in a different sequence from the board the moment a card was
-        // triaged out of it.
+    fun `untriaged work orders by priority rather than by board rank`() {
+        // The backlog is not a column, so manual rank there is only insertion order. The ranks
+        // below are inverted against priority on purpose: honouring them would put the low
+        // item first, which is exactly the bug this ordering exists to avoid.
         val projection = BacklogProjection(
             project = null,
             items = listOf(
-                item("TT-3", WorkItemStatus.Backlog, rank = 3),
-                item("TT-1", WorkItemStatus.Backlog, rank = 1),
-                item("TT-2", WorkItemStatus.Backlog, rank = 2),
+                item("TT-3", WorkItemStatus.Backlog, rank = 0, priority = Priority.Low),
+                item(
+                    "TT-1",
+                    WorkItemStatus.Backlog,
+                    rank = 1,
+                    priority = Priority.Critical,
+                    createdOffsetSeconds = 60,
+                ),
+                item("TT-2", WorkItemStatus.Backlog, rank = 2, priority = Priority.Critical),
             ),
         )
 
         assertEquals(listOf("TT-1", "TT-2", "TT-3"), keys(projection.untriaged))
+    }
+
+    @Test
+    fun `the sectioned backlog can be reordered by the selection the screen passes in`() {
+        // The screen holds the sort selection and asks the projection for the list in it; the
+        // projection's own default is what the first frame shows, so the two have to be able to
+        // disagree.
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low, createdOffsetSeconds = 60),
+                item("TT-2", WorkItemStatus.Backlog, priority = Priority.Critical),
+            ),
+        )
+
+        assertEquals(listOf("TT-2", "TT-1"), keys(projection.backlog))
+        assertEquals(
+            listOf("TT-1", "TT-2"),
+            keys(
+                projection.backlogIn(
+                    BacklogSortOrder(listOf(BacklogSortKey(BacklogSortBasis.CreatedAt))),
+                ),
+            ),
+        )
     }
 
     // MARK: Sectioned backlog

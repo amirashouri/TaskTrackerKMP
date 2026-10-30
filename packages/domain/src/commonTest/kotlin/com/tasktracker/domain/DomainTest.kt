@@ -261,6 +261,7 @@ class WorkItemGroupingTest {
         status: WorkItemStatus,
         priority: Priority = Priority.Medium,
         rank: Int = 0,
+        createdOffsetSeconds: Long = 0,
         resolvedOffsetSeconds: Long? = null,
     ) = WorkItem(
         projectID = projectID,
@@ -269,10 +270,21 @@ class WorkItemGroupingTest {
         status = status,
         priority = priority,
         rank = rank,
-        createdAt = now,
-        updatedAt = now,
+        createdAt = now + createdOffsetSeconds.seconds,
+        updatedAt = now + createdOffsetSeconds.seconds,
         resolvedAt = resolvedOffsetSeconds?.let { now + it.seconds },
     )
+
+    /**
+     * A sort key, spelled short so a two-key expectation stays readable on one line.
+     *
+     * Defaults to descending because that is what a basis reads in when it is first switched
+     * on, so a test that only cares about *which* keys are active does not have to say it.
+     */
+    private fun key(basis: BacklogSortBasis, descending: Boolean = true) =
+        BacklogSortKey(basis, descending)
+
+    private fun order(vararg keys: BacklogSortKey) = BacklogSortOrder(keys.toList())
 
     @Test
     fun boardColumnsCoverEveryBoardStatusInOrderEvenWhenEmpty() {
@@ -318,6 +330,207 @@ class WorkItemGroupingTest {
         )
         // Same rank, priority and creation instant, so the key tie-break decides.
         assertEquals(listOf("TT-1"), untriaged.map { it.key.rawValue })
+    }
+
+    @Test
+    fun theBacklogOrdersByPriorityRatherThanInsertionRank() {
+        val untriaged = WorkItemGrouping.untriaged(
+            listOf(
+                item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low, rank = 0),
+                item("TT-2", WorkItemStatus.Backlog, priority = Priority.Critical, rank = 5),
+                item(
+                    "TT-3",
+                    WorkItemStatus.Backlog,
+                    priority = Priority.Critical,
+                    rank = 2,
+                    createdOffsetSeconds = 60,
+                ),
+            ),
+        )
+
+        // Rank would put TT-1 first and TT-3 before TT-2. The default order is the one key the
+        // backlog opens with — priority — so the two critical items tie and fall to the key
+        // tie-break. A tie-break by creation time is a second key the user has to switch on,
+        // which is what aSecondKeyOnlyBreaksTheTiesTheLeaderLeaves covers.
+        assertEquals(listOf("TT-2", "TT-3", "TT-1"), untriaged.map { it.key.rawValue })
+    }
+
+    @Test
+    fun aSecondKeyOnlyBreaksTheTiesTheLeaderLeaves() {
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Backlog, priority = Priority.Critical),
+            item(
+                "TT-2",
+                WorkItemStatus.Backlog,
+                priority = Priority.Critical,
+                createdOffsetSeconds = 60,
+            ),
+            item(
+                "TT-3",
+                WorkItemStatus.Backlog,
+                priority = Priority.Low,
+                createdOffsetSeconds = 120,
+            ),
+        )
+
+        // Priority alone leaves the two critical items tied, and the key tie-break then reads
+        // TT-1 first. Adding creation time as the second key is what flips that pair.
+        assertEquals(
+            listOf("TT-1", "TT-2", "TT-3"),
+            WorkItemGrouping.untriaged(items, order(key(BacklogSortBasis.Priority)))
+                .map { it.key.rawValue },
+        )
+        assertEquals(
+            listOf("TT-2", "TT-1", "TT-3"),
+            WorkItemGrouping.untriaged(
+                items,
+                order(key(BacklogSortBasis.Priority), key(BacklogSortBasis.CreatedAt)),
+            ).map { it.key.rawValue },
+        )
+    }
+
+    @Test
+    fun lowestPriorityFirstKeepsItsTieBreakWhenItLeads() {
+        val untriaged = WorkItemGrouping.untriaged(
+            listOf(
+                item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low),
+                item("TT-2", WorkItemStatus.Backlog, priority = Priority.Critical),
+                item(
+                    "TT-3",
+                    WorkItemStatus.Backlog,
+                    priority = Priority.Critical,
+                    createdOffsetSeconds = 60,
+                ),
+            ),
+            order = order(
+                key(BacklogSortBasis.Priority, descending = false),
+                key(BacklogSortBasis.CreatedAt),
+            ),
+        )
+
+        // Reversing the leader reverses only the leader: within equal priority the tie-breaker
+        // still reads newest first, so TT-3 stays above TT-2.
+        assertEquals(listOf("TT-1", "TT-3", "TT-2"), untriaged.map { it.key.rawValue })
+    }
+
+    @Test
+    fun createdOrderPutsNewestFirstThenBreaksTiesByPriority() {
+        // TT-2 and TT-3 share an instant, and the key tie-break would put TT-2 first. Priority
+        // is the second key, so the critical item has to come first for the tie-break to be
+        // doing anything at all.
+        val items = listOf(
+            item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low),
+            item(
+                "TT-2",
+                WorkItemStatus.Backlog,
+                priority = Priority.Medium,
+                createdOffsetSeconds = 120,
+            ),
+            item(
+                "TT-3",
+                WorkItemStatus.Backlog,
+                priority = Priority.Critical,
+                createdOffsetSeconds = 120,
+            ),
+        )
+
+        assertEquals(
+            listOf("TT-3", "TT-2", "TT-1"),
+            WorkItemGrouping.untriaged(
+                items,
+                order(key(BacklogSortBasis.CreatedAt), key(BacklogSortBasis.Priority)),
+            ).map { it.key.rawValue },
+        )
+        assertEquals(
+            listOf("TT-1", "TT-3", "TT-2"),
+            WorkItemGrouping.untriaged(
+                items,
+                order(
+                    key(BacklogSortBasis.CreatedAt, descending = false),
+                    key(BacklogSortBasis.Priority),
+                ),
+            ).map { it.key.rawValue },
+        )
+    }
+
+    @Test
+    fun tappingAnInactiveBasisPutsItInFrontAtItsDefaultDirection() {
+        assertEquals(
+            listOf(key(BacklogSortBasis.CreatedAt), key(BacklogSortBasis.Priority)),
+            BacklogSortOrder().toggled(BacklogSortBasis.CreatedAt).keys,
+        )
+        // The key that loses the lead keeps the direction it was already reading in: a tap on
+        // one chip is not a request to reverse the other.
+        assertEquals(
+            listOf(
+                key(BacklogSortBasis.CreatedAt),
+                key(BacklogSortBasis.Priority, descending = false),
+            ),
+            order(key(BacklogSortBasis.Priority, descending = false))
+                .toggled(BacklogSortBasis.CreatedAt)
+                .keys,
+        )
+    }
+
+    @Test
+    fun tappingTheLeadingBasisReversesItThenSwitchesItOff() {
+        val both = BacklogSortOrder().toggled(BacklogSortBasis.CreatedAt)
+        val reversed = both.toggled(BacklogSortBasis.CreatedAt)
+
+        assertEquals(
+            listOf(key(BacklogSortBasis.CreatedAt, descending = false), key(BacklogSortBasis.Priority)),
+            reversed.keys,
+        )
+        // Reversing it twice leaves nothing to reverse, so the second tap is the way back to a
+        // single-key order — and the tie-breaker takes the lead.
+        assertEquals(
+            listOf(key(BacklogSortBasis.Priority)),
+            reversed.toggled(BacklogSortBasis.CreatedAt).keys,
+        )
+    }
+
+    @Test
+    fun tappingTheTieBreakerPromotesItAndKeepsItsDirection() {
+        val both = BacklogSortOrder().toggled(BacklogSortBasis.CreatedAt)
+
+        assertEquals(
+            listOf(key(BacklogSortBasis.Priority), key(BacklogSortBasis.CreatedAt)),
+            both.toggled(BacklogSortBasis.Priority).keys,
+        )
+        assertEquals(
+            listOf(
+                key(BacklogSortBasis.Priority, descending = false),
+                key(BacklogSortBasis.CreatedAt),
+            ),
+            order(key(BacklogSortBasis.CreatedAt), key(BacklogSortBasis.Priority, descending = false))
+                .toggled(BacklogSortBasis.Priority)
+                .keys,
+        )
+    }
+
+    @Test
+    fun theLastRemainingKeyCyclesItsDirectionInsteadOfSwitchingOff() {
+        // A list has to be ordered by something, so a lone key never reaches the off state.
+        assertEquals(
+            listOf(key(BacklogSortBasis.Priority, descending = false)),
+            BacklogSortOrder().toggled(BacklogSortBasis.Priority).keys,
+        )
+        assertEquals(
+            listOf(key(BacklogSortBasis.Priority)),
+            BacklogSortOrder()
+                .toggled(BacklogSortBasis.Priority)
+                .toggled(BacklogSortBasis.Priority)
+                .keys,
+        )
+    }
+
+    @Test
+    fun aBasisCannotAppearTwiceInTheOrder() {
+        // Two keys for one basis would make one of them dead weight and the comparator's chain
+        // meaningless, so the type refuses it rather than sorting by it twice.
+        assertFailsWith<IllegalArgumentException> {
+            order(key(BacklogSortBasis.Priority), key(BacklogSortBasis.Priority, descending = false))
+        }
     }
 
     @Test

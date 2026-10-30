@@ -332,6 +332,36 @@
     <string name="backlog_put_on_board">Put on board</string>
 
     <!--
+      The backlog's two sort keys and the direction each one currently reads in.
+
+      The chips carry no visible text, so the row's label is the only place the current ordering
+      is stated: "Sort by priority", "Sort by priority and newly added". Two formats rather than
+      "Sort by" concatenated with the names, because the joining word is part of the sentence and
+      does not survive translation as a separate string. The pair form names both keys because
+      the second one is only a tie-breaker — a label naming the leader alone would hide a choice
+      the user made.
+
+      The direction is carried by the noun rather than by an arrow: "newly added" is newest
+      first and "oldest added" is oldest first, so the label reads as a sentence instead of
+      asking the user to interpret a glyph.
+    -->
+    <string name="backlog_sort_label_one">Sort by %1$s</string>
+    <string name="backlog_sort_label_pair">Sort by %1$s and %2$s</string>
+    <string name="backlog_sort_by_priority">Sort by priority</string>
+    <string name="backlog_sort_by_created">Sort by created date</string>
+    <string name="backlog_sort_highest_first">Highest first</string>
+    <string name="backlog_sort_lowest_first">Lowest first</string>
+    <string name="backlog_sort_newest_first">Newest first</string>
+    <string name="backlog_sort_oldest_first">Oldest first</string>
+    <!-- Spoken for a chip that is not part of the order: the list is not sorted by it at all. -->
+    <string name="backlog_sort_off">Not sorting</string>
+    <!-- Short names used in the dynamic "Sort by …" label -->
+    <string name="backlog_sort_label_priority_desc">priority</string>
+    <string name="backlog_sort_label_priority_asc">lowest priority</string>
+    <string name="backlog_sort_label_created_desc">newly added</string>
+    <string name="backlog_sort_label_created_asc">oldest added</string>
+
+    <!--
       The backlog tab's three sections. One label names the pile that has not been triaged,
       another names the board sitting inside the tab, and the third names the pile that is
       already filed away — so a user who lands here does not have to guess which side of the

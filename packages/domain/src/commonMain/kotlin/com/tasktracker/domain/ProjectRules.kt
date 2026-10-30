@@ -156,10 +156,18 @@ object WorkItemGrouping {
      * was not done, which quietly included items already sitting in a board column — so
      * the backlog and the board listed the same cards. "Not yet on a board" is the rule,
      * and [WorkItemStatus.appearsOnBoard] is what states it.
+     *
+     * Ordered by [order] rather than by the board's [WorkItem.orderingKey]: nothing can
+     * reorder a card inside the backlog, so its rank is only insertion order and would hide
+     * the field the user chose to sort by. The default is priority, then newest first, which
+     * is the same chain a board lane uses once rank ties.
      */
-    fun untriaged(items: List<WorkItem>): List<WorkItem> =
+    fun untriaged(
+        items: List<WorkItem>,
+        order: BacklogSortOrder = BacklogSortOrder(),
+    ): List<WorkItem> =
         items.filter { it.status == WorkItemStatus.Backlog }
-            .sortedBy { it.orderingKey }
+            .sortedWith(order.comparator())
 
     /**
      * Everything finished or closed, most recently resolved first.

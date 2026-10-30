@@ -5062,6 +5062,8 @@ object ShellScenarios {
     // than by a tab. Their reach is asserted in [BacklogSectionScenarios] directly, and the
     // backlog section remains the one the tab's scroll region is measured on.
 
+    // Append to this list, never insert: TaskTrackerAppScenarios reaches these by index, so a
+    // scenario dropped in the middle silently renames every test below it.
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
         BacklogSectionScenarios.switchingToArchivedShowsTheArchivedSection,
         BacklogSectionScenarios.switchingBackToBacklogShowsTheBacklogSection,
@@ -5076,6 +5078,7 @@ object ShellScenarios {
         BacklogSectionScenarios.filingAwayFromAKanbanRowCallsFileAway,
         BacklogSectionScenarios.theKanbanSectionShowsItsOwnEmptyState,
         BacklogSectionScenarios.tappingABacklogRowOpensTheTask,
+        BacklogSectionScenarios.theSortChipsCombineIntoAnOrderedPair,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

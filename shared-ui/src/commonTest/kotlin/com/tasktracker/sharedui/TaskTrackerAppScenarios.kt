@@ -288,6 +288,8 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun tappingABacklogRowOpensTheTask() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[12])
     @Test
+    fun theSortChipsCombineIntoAnOrderedPair() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[13])
+    @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test
     fun everyTabIsNamedAndCarriesTheTabRole() = runComposeUiTest(block = ShellScenarios.everyTabIsNamedAndCarriesTheTabRole)

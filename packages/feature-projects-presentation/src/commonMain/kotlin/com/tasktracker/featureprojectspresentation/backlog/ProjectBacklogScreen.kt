@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.Dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
@@ -68,6 +69,7 @@ fun ProjectBacklogScreen(
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
+    var sortOrder by remember { mutableStateOf(BacklogSortOrder()) }
 
     // Measured dynamically to accommodate conditional banners and variable typography scaling
     var headerHeightPx by remember { mutableIntStateOf(0) }
@@ -83,6 +85,7 @@ fun ProjectBacklogScreen(
             when (currentSection) {
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = projection,
+                    sortOrder = sortOrder,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     onSelect = onSelect,
@@ -170,6 +173,13 @@ fun ProjectBacklogScreen(
                         }
                     }
                 )
+                if (currentSection == BacklogSection.Backlog) {
+                    BacklogSortControls(
+                        order = sortOrder,
+                        onToggle = { sortOrder = sortOrder.toggled(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
         }
     }
@@ -178,6 +188,7 @@ fun ProjectBacklogScreen(
 @Composable
 private fun BacklogSectionList(
     projection: BacklogSectionedProjection,
+    sortOrder: BacklogSortOrder,
     busyItemID: WorkItemID?,
     isLoading: Boolean,
     onSelect: (WorkItemID) -> Unit,
@@ -188,7 +199,8 @@ private fun BacklogSectionList(
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
 ) {
-    if (!isLoading && projection.backlogIsEmpty) {
+    val backlog = remember(projection.items, sortOrder) { projection.backlogIn(sortOrder) }
+    if (!isLoading && backlog.isEmpty()) {
         EmptyBacklogSection(
             modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyBacklogTag),
         )
@@ -201,7 +213,7 @@ private fun BacklogSectionList(
             ),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
-            items(projection.backlog, key = { it.id.stringValue }) { item ->
+            items(backlog, key = { it.id.stringValue }) { item ->
                 WorkItemBacklogRow(
                     item = item,
                     onPutOnBoard = { onPutOnBoard(item.id) },
