@@ -4,6 +4,9 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.semantics.SemanticsActions
@@ -13,6 +16,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.WorkItem
@@ -20,6 +24,9 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectspresentation.BacklogFileAwayTag
 import com.tasktracker.featureprojectspresentation.BacklogPutOnBoardTag
+import com.tasktracker.featureprojectspresentation.BacklogSortCreatedTag
+import com.tasktracker.featureprojectspresentation.BacklogSortLabelTag
+import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogArchivedListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyArchivedTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyBacklogTag
@@ -32,9 +39,16 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
+import com.tasktracker.resources.backlog_sort_label_created_asc
+import com.tasktracker.resources.backlog_sort_label_created_desc
+import com.tasktracker.resources.backlog_sort_label_one
+import com.tasktracker.resources.backlog_sort_label_pair
+import com.tasktracker.resources.backlog_sort_label_priority_asc
+import com.tasktracker.resources.backlog_sort_label_priority_desc
 import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /**
@@ -375,6 +389,122 @@ object BacklogSectionScenarios {
         assertIsDisplayedButNot(ProjectBacklogEmptyArchivedTag)
     }
 
+    /**
+     * The two sort chips combine into an ordered pair, and the label names the pair it built.
+     *
+     * Priority, creation time and the key prefix are deliberately all in different orders, so
+     * every state below has a distinct first two rows: which key leads, which direction it
+     * reads in, and whether the other key is on at all are each visible in the list, not just
+     * in the chips' selected flags. The label is asserted alongside them because it is the only
+     * text on the row — the chips are glyphs — so a state the label cannot describe is a state
+     * a user cannot read.
+     *
+     * The walk is the whole cycle: turn the second key on (it leads), hand the lead back,
+     * take it again, reverse it, switch it off, then reverse the last key and wrap it. Reading
+     * the first two rows rather than all three keeps the assertion independent of how much each
+     * host's viewport composes.
+     */
+    val theSortChipsCombineIntoAnOrderedPair: suspend ComposeUiTest.() -> Unit = {
+        val criticalOld = shellWorkItem(
+            number = 1,
+            status = WorkItemStatus.Backlog,
+            priority = Priority.Critical,
+        )
+        val mediumNew = shellWorkItem(
+            number = 2,
+            status = WorkItemStatus.Backlog,
+            priority = Priority.Medium,
+            createdOffsetSeconds = 120,
+        )
+        val lowMiddle = shellWorkItem(
+            number = 3,
+            status = WorkItemStatus.Backlog,
+            priority = Priority.Low,
+            createdOffsetSeconds = 60,
+        )
+        backlogShowing(backlog = listOf(mediumNew, criticalOld, lowMiddle))
+
+        val priority = getString(Res.string.backlog_sort_label_priority_desc)
+        val lowestPriority = getString(Res.string.backlog_sort_label_priority_asc)
+        val newest = getString(Res.string.backlog_sort_label_created_desc)
+        val oldest = getString(Res.string.backlog_sort_label_created_asc)
+        suspend fun label(first: String, second: String? = null): String = if (second == null) {
+            getString(Res.string.backlog_sort_label_one, first)
+        } else {
+            getString(Res.string.backlog_sort_label_pair, first, second)
+        }
+        // Priority alone leads, so the label names one key and the other chip is off.
+        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
+        onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
+        assertFirstRowsAre(criticalOld, mediumNew)
+
+        // Tapping the off chip turns it on in front: newest leads, priority breaks its ties.
+        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortCreatedTag).assertIsSelected()
+        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(newest, priority))
+        assertFirstRowsAre(mediumNew, lowMiddle)
+
+        // Tapping the tie-breaker hands the lead back without reversing it, so the pair stays
+        // on in the same directions and only their order in the sentence changes.
+        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority, newest))
+        assertFirstRowsAre(criticalOld, mediumNew)
+
+        // And the other way: the tie-breaker can take the lead too.
+        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(newest, priority))
+        assertFirstRowsAre(mediumNew, lowMiddle)
+
+        // Tapping the leader reverses it.
+        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(oldest, priority))
+        assertFirstRowsAre(criticalOld, lowMiddle)
+
+        // Tapping it once more switches it off, and priority takes the lead back.
+        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
+        assertFirstRowsAre(criticalOld, mediumNew)
+
+        // The last key cannot be switched off, so its second tap wraps the direction.
+        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(lowestPriority))
+        assertFirstRowsAre(lowMiddle, mediumNew)
+
+        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
+        assertFirstRowsAre(criticalOld, mediumNew)
+    }
+
+    private fun ComposeUiTest.assertFirstRowsAre(first: WorkItem, second: WorkItem) {
+        val tops = listOf(first, second).mapNotNull { item ->
+            onAllNodesWithTag(WorkItemBacklogRowTag(item), useUnmergedTree = true)
+                .fetchSemanticsNodes()
+                .firstOrNull()
+                ?.boundsInRoot
+                ?.top
+        }
+        assertEquals(
+            2,
+            tops.size,
+            "expected both ${first.key} and ${second.key} to be composed to check their order",
+        )
+        assertTrue(
+            tops[0] < tops[1],
+            "expected ${first.key} above ${second.key}, but their tops were ${tops[0]} and ${tops[1]}",
+        )
+    }
+
     private fun ComposeUiTest.assertIsDisplayedButNot(tag: String): Unit {
         try {
             onNodeWithTag(tag).assertIsDisplayed()
@@ -473,15 +603,18 @@ private fun shellWorkItem(
     number: Int,
     status: WorkItemStatus,
     rank: Int = 0,
+    priority: Priority = Priority.Medium,
+    createdOffsetSeconds: Long = 0,
 ): WorkItem = WorkItem(
     id = WorkItemID(fixedWorkItemID(number)),
     projectID = KANBAN_PROJECT.id,
     key = ProjectRules.workItemKey(KANBAN_PROJECT.keyPrefix, number),
     title = "A task $number",
     status = status,
+    priority = priority,
     rank = rank,
-    createdAt = KANBAN_INSTANT,
-    updatedAt = KANBAN_INSTANT,
+    createdAt = KANBAN_INSTANT + createdOffsetSeconds.seconds,
+    updatedAt = KANBAN_INSTANT + createdOffsetSeconds.seconds,
     resolvedAt = if (status.isTerminal) KANBAN_INSTANT else null,
 )
 

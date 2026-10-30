@@ -2,6 +2,9 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.BacklogSortBasis
+import com.tasktracker.domain.BacklogSortKey
+import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
@@ -136,14 +139,14 @@ class ProjectionsTest {
     }
 
     @Test
-    fun `untriaged work orders by priority then oldest rather than by board rank`() {
-        // The backlog is not a column, so manual rank there is only insertion order. Priority
-        // is what a user is triaging by, and creation time breaks a priority tie the same way
-        // a board lane does once rank is equal.
+    fun `untriaged work orders by priority rather than by board rank`() {
+        // The backlog is not a column, so manual rank there is only insertion order. The ranks
+        // below are inverted against priority on purpose: honouring them would put the low
+        // item first, which is exactly the bug this ordering exists to avoid.
         val projection = BacklogProjection(
             project = null,
             items = listOf(
-                item("TT-3", WorkItemStatus.Backlog, rank = 3, priority = Priority.Low),
+                item("TT-3", WorkItemStatus.Backlog, rank = 0, priority = Priority.Low),
                 item(
                     "TT-1",
                     WorkItemStatus.Backlog,
@@ -155,7 +158,31 @@ class ProjectionsTest {
             ),
         )
 
-        assertEquals(listOf("TT-2", "TT-1", "TT-3"), keys(projection.untriaged))
+        assertEquals(listOf("TT-1", "TT-2", "TT-3"), keys(projection.untriaged))
+    }
+
+    @Test
+    fun `the sectioned backlog can be reordered by the selection the screen passes in`() {
+        // The screen holds the sort selection and asks the projection for the list in it; the
+        // projection's own default is what the first frame shows, so the two have to be able to
+        // disagree.
+        val projection = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog, priority = Priority.Low, createdOffsetSeconds = 60),
+                item("TT-2", WorkItemStatus.Backlog, priority = Priority.Critical),
+            ),
+        )
+
+        assertEquals(listOf("TT-2", "TT-1"), keys(projection.backlog))
+        assertEquals(
+            listOf("TT-1", "TT-2"),
+            keys(
+                projection.backlogIn(
+                    BacklogSortOrder(listOf(BacklogSortKey(BacklogSortBasis.CreatedAt))),
+                ),
+            ),
+        )
     }
 
     // MARK: Sectioned backlog

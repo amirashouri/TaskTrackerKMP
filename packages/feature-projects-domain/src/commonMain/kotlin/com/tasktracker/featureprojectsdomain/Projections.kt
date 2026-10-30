@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.ProjectID
+import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
@@ -81,6 +82,7 @@ data class BacklogSectionedProjection(
     val items: List<WorkItem>,
 ) {
     val backlog: List<WorkItem> = WorkItemGrouping.untriaged(items)
+    fun backlogIn(order: BacklogSortOrder): List<WorkItem> = WorkItemGrouping.untriaged(items, order)
     val archived: List<WorkItem> = items
         .filter { it.status == WorkItemStatus.Closed }
         .sortedByDescending { it.archivedOn.epochSeconds }

@@ -494,6 +494,42 @@ object ttActionIcons {
         solidRoundRect(9.0f, 16.0f, 15.0f, 18.5f, radius = 1.0f)
     }
 
+    /**
+     * A flag on a pole, for "sort by priority".
+     *
+     * One contour rather than a pole plus a pennant: the two would overlap at the pole, and
+     * this file fills even-odd, so the shared band would cancel and leave the flag floating.
+     * The notch at x = 14 is what separates a flag from a solid rectangle.
+     */
+    val priority: ImageVector = icon("Priority") {
+        moveTo(6.0f, 3.0f)
+        lineTo(7.5f, 3.0f)
+        lineTo(7.5f, 4.0f)
+        lineTo(20.0f, 4.0f)
+        lineTo(14.0f, 8.0f)
+        lineTo(20.0f, 12.0f)
+        lineTo(7.5f, 12.0f)
+        lineTo(7.5f, 21.0f)
+        lineTo(6.0f, 21.0f)
+        close()
+    }
+
+    /**
+     * A calendar, for "sort by created date".
+     *
+     * The body is an outline and the two binder tabs sit clear of it rather than overlapping:
+     * this file fills even-odd, so a tab drawn across the body's top stroke would erase the
+     * stroke where it crossed. The three filled squares are date marks inside the cut-out.
+     */
+    val createdAt: ImageVector = icon("CreatedAt") {
+        outlinedRoundRect(3.5f, 6.5f, 20.5f, 20.5f, radius = 2.0f, stroke = 1.6f)
+        solidRoundRect(6.5f, 3.0f, 9.0f, 6.2f, radius = 1.0f)
+        solidRoundRect(15.0f, 3.0f, 17.5f, 6.2f, radius = 1.0f)
+        solidRoundRect(7.5f, 10.5f, 10.5f, 12.8f, radius = 0.8f)
+        solidRoundRect(13.5f, 10.5f, 16.5f, 12.8f, radius = 0.8f)
+        solidRoundRect(7.5f, 14.5f, 10.5f, 16.8f, radius = 0.8f)
+    }
+
     /** A compact person silhouette for filtering by assignee. */
     val person: ImageVector = icon("Person") {
         solidRoundRect(7.5f, 3.5f, 16.5f, 10.5f, radius = 3.5f)
@@ -562,7 +598,10 @@ object ttActionIcons {
     }
 
     /** Every action glyph, for shared geometry checks. */
-    val all: List<ImageVector> = listOf(add, close, edit, trash, remove, archive, copy, chevronDown, expand, collapse, sort, person, link)
+    val all: List<ImageVector> = listOf(
+        add, close, edit, trash, remove, archive, copy, chevronDown, expand, collapse,
+        sort, priority, createdAt, person, link,
+    )
 }
 
 /**

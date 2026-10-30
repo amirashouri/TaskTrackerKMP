@@ -758,24 +758,6 @@ data class WorkItem(
             createdAt = createdAt,
             tieBreaker = key.rawValue,
         )
-
-    /**
-     * The board's ordering with manual [rank] left out.
-     *
-     * The backlog is not a column: nothing can drag a card to a position inside it, so its
-     * rank carries no intent — it is only the order cards happened to be created in, with
-     * each new card taking the top. Sorting by it would bury a critical item beneath every
-     * ordinary one filed after it. Priority then creation time is the same tie-break the
-     * board's own [orderingKey] uses once rank is equal, so the two listings still agree
-     * about everything a user can actually control.
-     */
-    val backlogOrderingKey: WorkItemOrderingKey
-        get() = WorkItemOrderingKey(
-            rank = 0,
-            priority = priority,
-            createdAt = createdAt,
-            tieBreaker = key.rawValue,
-        )
 }
 
 /**
