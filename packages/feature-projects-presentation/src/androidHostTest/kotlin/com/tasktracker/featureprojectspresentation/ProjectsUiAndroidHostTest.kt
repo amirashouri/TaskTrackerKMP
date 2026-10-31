@@ -398,4 +398,28 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun eachBucketSegmentReadsItsOwnBucket() = runComposeUiTest(block = AdminProjectsListScenarios.eachBucketSegmentReadsItsOwnBucket)
+
+    @Test
+    fun theBoardNarrowsToTheMatchingCard() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardNarrowsToTheMatchingCard)
+
+    @Test
+    fun theBoardKeepsEveryLaneWhileSearching() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardKeepsEveryLaneWhileSearching)
+
+    @Test
+    fun theBoardWaitsForTheDebounce() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardWaitsForTheDebounce)
+
+    @Test
+    fun theBoardShowsTheNoResultsState() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardShowsTheNoResultsState)
+
+    @Test
+    fun clearingTheSearchRestoresTheListAtOnce() = runComposeUiTest(block = WorkItemSearchScenarios.clearingTheSearchRestoresTheListAtOnce)
+
+    @Test
+    fun theBacklogNarrowsTheSelectedSegment() = runComposeUiTest(block = WorkItemSearchScenarios.theBacklogNarrowsTheSelectedSegment)
+
+    @Test
+    fun aSegmentWithNoMatchesSaysSo() = runComposeUiTest(block = WorkItemSearchScenarios.aSegmentWithNoMatchesSaysSo)
+
+    @Test
+    fun switchingSegmentsKeepsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.switchingSegmentsKeepsTheQuery)
 }

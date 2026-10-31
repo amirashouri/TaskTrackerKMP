@@ -340,6 +340,65 @@ object ttActionIcons {
     }
 
     /**
+     * A magnifying glass: a lens ring with a handle at the lower right.
+     *
+     * ## Why the ring is two contours
+     *
+     * An outline in this file is a shape with a smaller one cut out of it, and the file's
+     * even-odd rule is what makes that a fact about the path rather than a fact about the order
+     * the contours were added in. Each contour is two half-circle arcs, the same three members
+     * [gear]'s hole uses: `isMoreThanHalf` is what makes each arc a half rather than a quarter,
+     * because an arc between two antipodal points otherwise takes the short way round and the
+     * "circle" becomes a lens.
+     *
+     * ## Why the handle is a closed polygon and not a line
+     *
+     * A `moveTo`/`lineTo` pair is a valid path with **no area**, and a filled path with no area
+     * paints nothing — the same silent blank that a missing fill brush causes, arrived at from
+     * the other direction. So the handle is a shape: two edges parallel to the diagonal, a flat
+     * butt that lands exactly tangent to the ring (flush, never overlapping — see [link] on what
+     * an overlap costs under even-odd), and a round tip.
+     */
+    val search: ImageVector = icon("Search") {
+        val centre = searchLensCentre
+        val outer = searchLensRadius
+        val inner = outer - searchRingStroke
+
+        // The ring: an outer contour and a smaller one inside it.
+        moveTo(centre - outer, centre)
+        arcTo(outer, outer, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = centre + outer, y1 = centre)
+        arcTo(outer, outer, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = centre - outer, y1 = centre)
+        close()
+
+        moveTo(centre - inner, centre)
+        arcTo(inner, inner, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = centre + inner, y1 = centre)
+        arcTo(inner, inner, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = centre - inner, y1 = centre)
+        close()
+
+        // The handle. A 45-degree diagonal, so the perpendicular offset is the half-width
+        // resolved onto both axes — the same number in x and y, which is why one constant does.
+        val butt = centre + outer * SEARCH_DIAGONAL
+        val tip = searchHandleTip
+        val across = searchHandleHalfWidth * SEARCH_DIAGONAL
+
+        moveTo(butt + across, butt - across)
+        lineTo(tip + across, tip - across)
+        // The tip is a semicircle: the two corners are a diameter apart, and `isPositiveArc`
+        // picks the half that bulges away from the lens rather than back into it.
+        arcTo(
+            searchHandleHalfWidth,
+            searchHandleHalfWidth,
+            0f,
+            isMoreThanHalf = true,
+            isPositiveArc = true,
+            x1 = tip - across,
+            y1 = tip + across,
+        )
+        lineTo(butt - across, butt + across)
+        close()
+    }
+
+    /**
      * A lidded archive box: a lid bar over an outlined body, with a label slot inside it.
      *
      * The verb this stands in for is *file away*, and it is the one action here that moves work
@@ -599,7 +658,7 @@ object ttActionIcons {
 
     /** Every action glyph, for shared geometry checks. */
     val all: List<ImageVector> = listOf(
-        add, close, edit, trash, remove, archive, copy, chevronDown, expand, collapse,
+        add, close, edit, trash, remove, search, archive, copy, chevronDown, expand, collapse,
         sort, priority, createdAt, person, link,
     )
 }
@@ -621,6 +680,30 @@ private const val linkStroke = 2.0f
 
 private const val linkBarTop = 10.5f
 private const val linkBarHeight = 3.0f
+
+/**
+ * [ttActionIcons.search]'s measurements, on the file's 24-unit grid.
+ *
+ * The lens sits up and to the left and the handle runs from its lower-right edge, which is how
+ * a magnifier reads at a glance; the two are chosen together so the glyph's extremes land on
+ * 4..20 — the span the other action glyphs occupy — rather than anywhere inside the viewport.
+ *
+ * [searchRingStroke] is also the handle's width: a handle thinner than the ring it grows out of
+ * reads as a scratch rather than as a handle.
+ */
+private const val searchLensCentre = 10.5f
+private const val searchLensRadius = 6.5f
+private const val searchRingStroke = 2.0f
+private const val searchHandleHalfWidth = searchRingStroke / 2f
+private const val searchHandleTip = 19.2f
+
+/**
+ * `cos(45°)`, to seven places: the handle is the only diagonal in the file, so this is the one
+ * place a direction is resolved onto both axes. Named rather than written out at the call site
+ * because it appears three times there and a digit dropped from one of them is a handle that is
+ * very slightly bent.
+ */
+private const val SEARCH_DIAGONAL = 0.7071068f
 
 /** Icon dimensions, named for the same reason [ttSpacing] and [ttRadius] are. */
 @Immutable

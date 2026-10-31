@@ -338,7 +338,8 @@ private class MemberPickerDropdownPositionProvider(
     }
 }
 
-private const val SEARCH_DEBOUNCE_MILLIS = 250L
+// `SEARCH_DEBOUNCE_MILLIS` is shared with the board and backlog search rather than declared
+// here: two 250s that happen to agree today are how the two searches drift apart tomorrow.
 private val MEMBER_PICKER_MENU_MAX_HEIGHT = 240.dp
 
 fun MemberPickerFieldTag(title: String): String = "projects.picker.$title.field"

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -54,6 +56,7 @@ import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSearchField
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -67,6 +70,9 @@ import com.tasktracker.resources.board_my_tasks
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
+import com.tasktracker.resources.work_item_search_empty_body
+import com.tasktracker.resources.work_item_search_empty_title
+import com.tasktracker.resources.work_item_search_placeholder
 import kotlin.math.floor
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
@@ -74,6 +80,15 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * Renders the project board as a horizontally scrolling row of columns.
  * Eagerly composes all columns to ensure consistent lane heights and stable drag gestures.
+ *
+ * ## Search narrows the cards, not the board
+ *
+ * The field sits under the header and filters what the model already handed over — the sprint
+ * filter and My Tasks have run before this screen sees the projection, so a query composes with
+ * them as an intersection and neither resets the other. What the query changes is the *cards*:
+ * the six lanes, their order and the horizontal snap geometry stay exactly as they are, and the
+ * header's assignee stack still reads the unfiltered items, because typing does not change who
+ * the board belongs to.
  */
 @Composable
 fun ProjectBoardScreen(
@@ -103,6 +118,17 @@ fun ProjectBoardScreen(
     canAddTask: Boolean = true,
 ) {
     val dragState = remember { BoardDragState() }
+
+    // Screen state, not a preference: both shells render this same screen, so the query belongs
+    // where the destination is rather than in `ShellPreferences`. Leaving the board and coming
+    // back starts from an empty field, which is what a search box on a tab is expected to do.
+    var query by remember { mutableStateOf("") }
+    val appliedQuery = rememberDebouncedQuery(query)
+    // Keyed on the projection *instance* as well as the query: the model replaces the projection
+    // on every reload and on every My Tasks toggle, and a filter remembered against the query
+    // alone would keep showing the previous load's cards.
+    val shown = remember(projection, appliedQuery) { projection.matching(appliedQuery) }
+    val focusManager = LocalFocusManager.current
 
     ClipboardCopyHost(modifier = modifier) { onCopy ->
         Column(
@@ -159,6 +185,24 @@ fun ProjectBoardScreen(
                 )
             }
 
+            // Only with a project on screen: a field over "no project selected" would filter
+            // nothing and offer a control whose list does not exist yet. Immediately under the
+            // header row and above the banner, so the header's own order is identity first,
+            // then the control over the list it filters.
+            if (projection.project != null) {
+                ttSearchField(
+                    value = query,
+                    onValueChange = { query = it },
+                    hint = stringResource(Res.string.work_item_search_placeholder),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalGutter()
+                        .testTag(ProjectBoardSearchFieldTag),
+                    fieldModifier = Modifier.testTag(ProjectBoardSearchInputTag),
+                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                )
+            }
+
             errorMessage?.let { message ->
                 ttBanner(
                     message = message,
@@ -173,9 +217,18 @@ fun ProjectBoardScreen(
                     body = stringResource(Res.string.board_no_project_body),
                     modifier = Modifier.horizontalGutter(),
                 )
+            } else if (appliedQuery.isNotBlank() && shown.isEmpty) {
+                // A query that matches nothing replaces the lane row rather than emptying it:
+                // six empty lanes read as "this board is empty", which is a different and false
+                // statement. With a blank query the lanes are untouched, empty ones included.
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.work_item_search_empty_title),
+                    body = stringResource(Res.string.work_item_search_empty_body),
+                    modifier = Modifier.horizontalGutter().testTag(ProjectBoardEmptySearchTag),
+                )
             } else {
                 val scrollState = rememberScrollState()
-                val laneCount = projection.columns.size
+                val laneCount = shown.columns.size
                 val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
                 val density = LocalDensity.current
                 val gutterPx = with(density) { ttSpacing.xxl.toPx() }
@@ -195,7 +248,7 @@ fun ProjectBoardScreen(
                     val index = floor(contentX / stridePx).toInt()
                     if (index !in 0 until laneCount) return null
                     return if (contentX - index * stridePx <= laneWidthPx) {
-                        projection.columns[index].status
+                        shown.columns[index].status
                     } else {
                         null
                     }
@@ -262,7 +315,7 @@ fun ProjectBoardScreen(
                         verticalAlignment = Alignment.Top,
                     ) {
                         LaneRowSpacer(ttSpacing.xxl)
-                        projection.columns.forEachIndexed { index, column ->
+                        shown.columns.forEachIndexed { index, column ->
                             if (index > 0) LaneRowSpacer(ttSpacing.md)
                             BoardColumnView(
                                 column = column,
@@ -481,6 +534,9 @@ const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
 const val ProjectBoardMyTasksTag = "board.myTasks"
 const val ProjectBoardTitleTag = "board.title"
+const val ProjectBoardSearchFieldTag = "board.search"
+const val ProjectBoardSearchInputTag = "board.search.input"
+const val ProjectBoardEmptySearchTag = "board.emptySearch"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 

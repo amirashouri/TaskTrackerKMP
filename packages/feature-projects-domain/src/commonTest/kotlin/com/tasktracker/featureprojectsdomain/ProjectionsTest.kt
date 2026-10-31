@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
@@ -623,6 +624,127 @@ class ProjectionsTest {
             onBoard.union(untriaged).union(filed).size,
             "an item that appears in no listing at all is a hole, not a design",
         )
+    }
+
+    // MARK: Search
+
+    /**
+     * A blank query is the projection itself, not an equal copy.
+     *
+     * The screens call `matching` on every recomposition while nobody is searching, and the
+     * board keys its lane snap geometry on the projection *instance*. An equal-but-different
+     * copy would invalidate that on every frame, which is a stutter rather than a bug — and one
+     * nobody would trace back to a filter.
+     */
+    @Test
+    fun `a blank query returns the same projection instance`() {
+        val items = listOf(item("TT-1", WorkItemStatus.Todo))
+        val board = BoardProjection(project = null, items = items)
+        val sectioned = BacklogSectionedProjection(project = null, items = items)
+
+        assertSame(board, board.matching(""))
+        assertSame(sectioned, sectioned.matching("   "), "whitespace is blank")
+    }
+
+    /**
+     * The board narrows to the cards it matches and keeps all six lanes.
+     *
+     * The lanes are the board's *shape* — a drag target exists because the lane exists — so a
+     * query removes cards, never columns. And the count comes off the filtered list, because a
+     * lane heading that counts cards it is not drawing is the one number on screen the user can
+     * check by looking.
+     */
+    @Test
+    fun `a query narrows the board without removing a lane`() {
+        val board = BoardProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Todo),
+                item("TT-2", WorkItemStatus.Todo),
+                item("TT-3", WorkItemStatus.InProgress),
+            ),
+        ).matching("TT-2")
+
+        assertEquals(WorkItemStatus.boardOrder, board.columns.map { it.status })
+        assertEquals(listOf("TT-2"), keys(board.columns.flatMap { it.items }))
+        assertEquals(
+            1,
+            board.columns.single { it.status == WorkItemStatus.Todo }.count,
+            "the lane counts what it is drawing",
+        )
+        assertEquals(1, board.itemCount)
+    }
+
+    /**
+     * One query, three sections — and it is the same query in each.
+     *
+     * A query that matches one untriaged item must not drag a board card or a finished task in
+     * with it. This is the assertion that a filter applied per section (three filters, three
+     * chances to forget one) fails, because the *rule* is shared and only the section is not.
+     */
+    @Test
+    fun `a query that matches one backlog item leaves the other sections empty`() {
+        val sectioned = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog),
+                item("TT-2", WorkItemStatus.Todo),
+                item("TT-3", WorkItemStatus.Done, resolvedAt = atNoon(2026, 3, 2)),
+            ),
+        ).matching("TT-1")
+
+        assertEquals(listOf("TT-1"), keys(sectioned.backlog))
+        assertTrue(sectioned.kanbanIsEmpty, "a board card the query does not name must not appear")
+        assertTrue(sectioned.archivedIsEmpty, "and neither must a finished one")
+        assertFalse(sectioned.allSectionsEmpty)
+    }
+
+    /**
+     * The archive keeps its own order inside the matches.
+     *
+     * Filtering narrows a list; it does not re-sort it. The archive reads newest-resolved-first
+     * because that is the direction history is read in, and a filtered archive that fell back to
+     * input order would silently disagree with the unfiltered one above it.
+     */
+    @Test
+    fun `the archive keeps newest-resolved-first order among the matches`() {
+        val sectioned = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 1, 10)),
+                item("TT-2", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 3, 1)),
+                item("TT-3", WorkItemStatus.Closed, resolvedAt = atNoon(2026, 2, 15)),
+                // A different key prefix, so "TT-" cannot match it by accident: the assertion
+                // below is about the archive's order, and an untriaged item that also matched
+                // would make the backlog half of it vacuous.
+                item("BILL-1", WorkItemStatus.Backlog),
+            ),
+        ).matching("TT-")
+
+        assertEquals(listOf("TT-2", "TT-3", "TT-1"), keys(sectioned.archived))
+        assertTrue(sectioned.backlog.isEmpty(), "the untriaged item does not match the query")
+    }
+
+    /**
+     * A query nothing matches empties every section, which is what the no-results state is for.
+     *
+     * Distinct from a project that is genuinely empty: `allSectionsEmpty` is true in both, so
+     * the screen decides between "Nothing here yet" and "No matching tasks" by the query, not by
+     * the projection.
+     */
+    @Test
+    fun `a query that matches nothing empties every section`() {
+        val sectioned = BacklogSectionedProjection(
+            project = null,
+            items = listOf(
+                item("TT-1", WorkItemStatus.Backlog),
+                item("TT-2", WorkItemStatus.Todo),
+                item("TT-3", WorkItemStatus.Done, resolvedAt = atNoon(2026, 3, 2)),
+            ),
+        ).matching("billing")
+
+        assertTrue(sectioned.allSectionsEmpty)
+        assertEquals(0, sectioned.totalItemCount)
     }
 
     // MARK: ProjectSummary

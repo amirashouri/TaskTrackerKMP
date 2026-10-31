@@ -157,8 +157,15 @@ fun ttTextField(
     }
 }
 
-/** The accent wash behind a focused field: visible as a tint, not as a colour. */
-private const val FocusWashAlpha = 0.06f
+/**
+ * The accent wash behind a focused field: visible as a tint, not as a colour.
+ *
+ * Shared with [ttSearchField] rather than repeated there. The two fields are separate
+ * implementations of separate controls, but "focused" is one state of one design system, and a
+ * second literal is how a focused search field ends up a slightly different accent from a
+ * focused text field next to it.
+ */
+internal const val FocusWashAlpha = 0.06f
 
 /**
  * 1.5dp — the focus and error ring.
@@ -167,4 +174,4 @@ private const val FocusWashAlpha = 0.06f
  * glass's own rim, which it is drawn over; at hairline width the two read as one stroke and
  * the field looks unfocused.
  */
-private val FocusRingWidth = 1.5.dp
+internal val FocusRingWidth = 1.5.dp

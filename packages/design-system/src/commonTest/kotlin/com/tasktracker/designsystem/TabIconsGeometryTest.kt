@@ -111,6 +111,53 @@ class TabIconsGeometryTest {
     }
 
     @Test
+    fun `the search glyph's ring is a ring`() {
+        // The magnifier is the glyph whose fill-rule mistake is silent. Both directions are
+        // covered, but *not* by the split this comment first claimed — measured, not assumed:
+        //
+        //  - drop the inner contour and the lens is a solid disc, which still paints ink, so
+        //    `TabIconsRenderTest` cannot see it. The width assertions below can.
+        //  - draw the inner contour *identical* to the outer one and the two cancel under
+        //    even-odd, painting nothing. The widths are then equal, so the assertion below
+        //    fires too and names the cancellation. Verified by setting `searchRingStroke` to
+        //    zero: this test fails with "the lens's inner contour is as wide as the ring's
+        //    outer one".
+        //
+        // So this file catches both shape mistakes, and what the render test uniquely adds is
+        // the cause neither can see from path data: a path added with no fill brush, which
+        // draws nothing while every coordinate stays correct. That was the original tab-glyph
+        // bug, and it is why `search` is listed in the ink probe as well.
+        //
+        // The first shipped version of this glyph was the cancelling kind: it compiled, sat
+        // inside the viewport, and drew nothing — at a time when this case did not exist yet.
+        val contours = ttActionIcons.search.contours()
+        assertEquals(3, contours.size, "the magnifier is a ring, its hole, and a handle")
+
+        // Widths rather than containment, because both lens contours are drawn from arcs: the
+        // test's walker records an arc's endpoint and not its extremes, so a circle's bounds
+        // collapse to a line and an `isInside` comparison between two of them can only fail.
+        // The diameters are still the honest measurement — they are what the drawing is.
+        val bounds = contours.map { it.bounds() }.sortedByDescending { it.width }
+        val outer = bounds[0]
+        val hole = bounds[1]
+
+        assertTrue(
+            hole.width > 0f,
+            "the lens's inner contour has no width, so the ring is not drawn at all",
+        )
+        assertTrue(
+            hole.width < outer.width,
+            "the lens's inner contour is as wide as the ring's outer one (${outer.width}), " +
+                "so the two cancel under even-odd and the lens paints nothing",
+        )
+        assertTrue(
+            bounds[2].right > outer.right,
+            "the handle (right ${bounds[2].right}) should reach past the lens " +
+                "(${outer.right}), or it is drawn inside the ring rather than out of it",
+        )
+    }
+
+    @Test
     fun `the tray's bars are inside its frame`() {
         // The other glyph making an "inside" claim. Two bars drawn in an outline that overshoots
         // them read as a tray with something spilling out of it, which is a different icon.

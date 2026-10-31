@@ -795,4 +795,10 @@
     <string name="tag_icon_flag">Flag</string>
     <string name="tag_icon_book">Book</string>
     <string name="tag_icon_bell">Bell</string>
+
+    <!-- Search: the field's own clear label, then the copy the screens put in it. -->
+    <string name="work_item_search_clear">Clear search</string>
+    <string name="work_item_search_placeholder">Search tasks</string>
+    <string name="work_item_search_empty_title">No matching tasks</string>
+    <string name="work_item_search_empty_body">Try a different word, or clear the search to see everything.</string>
 </resources>

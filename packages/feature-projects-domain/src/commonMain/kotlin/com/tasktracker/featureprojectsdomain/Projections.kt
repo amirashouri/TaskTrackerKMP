@@ -6,6 +6,7 @@ import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemGrouping
+import com.tasktracker.domain.WorkItemSearch
 import com.tasktracker.domain.WorkItemStatus
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -24,6 +25,23 @@ data class BoardProjection(
     val columns: List<BoardColumn> = WorkItemGrouping.boardColumns(items)
     val isEmpty: Boolean get() = columns.all { it.items.isEmpty() }
     val itemCount: Int get() = columns.sumOf { it.items.size }
+
+    /**
+     * The board narrowed to [query], or this projection when there is nothing to narrow by.
+     *
+     * A `copy` rather than a second field, so the lanes, their counts and their order all come
+     * from the same filtered list the cards do — a count read off the unfiltered items would
+     * claim cards the lane is not showing.
+     *
+     * Blank returns `this` and not an equal copy: the board calls this on every recomposition,
+     * and an equal-but-different instance would invalidate every `remember(projection)` below
+     * it, including the lane snap geometry.
+     */
+    fun matching(query: String): BoardProjection {
+        val needle = query.trim()
+        if (needle.isEmpty()) return this
+        return copy(items = WorkItemSearch.filter(items, needle))
+    }
 }
 
 /**
@@ -116,6 +134,24 @@ data class BacklogSectionedProjection(
     val archivedIsEmpty: Boolean get() = archived.isEmpty()
     val allSectionsEmpty: Boolean get() = backlogIsEmpty && kanbanIsEmpty && archivedIsEmpty
     val hasAnyContent: Boolean get() = !(backlogIsEmpty && kanbanIsEmpty && archivedIsEmpty)
+
+    /**
+     * The same three sections over the items that match [query].
+     *
+     * One query, three sections: narrowing the *items* rather than each section means a query
+     * cannot be applied to the backlog and forgotten by the archive, which is the shape the
+     * screen would otherwise take — three lists, three filters, three chances to disagree.
+     *
+     * Each section is then derived exactly as it is unfiltered, so the order the user chose
+     * still holds inside the narrowed set: the backlog still sorts by the selected basis and the
+     * archive still reads newest-resolved-first. Blank returns `this`, for the reason
+     * [BoardProjection.matching] gives.
+     */
+    fun matching(query: String): BacklogSectionedProjection {
+        val needle = query.trim()
+        if (needle.isEmpty()) return this
+        return copy(items = WorkItemSearch.filter(items, needle))
+    }
 }
 
 /**

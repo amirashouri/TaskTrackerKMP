@@ -49,6 +49,7 @@ class TabIconsRenderTest {
             "board" to ttTabIcons.board,
             "backlog" to ttTabIcons.backlog,
             "settings" to ttTabIcons.settings,
+            "search" to ttActionIcons.search,
         )
 
         setContent {
@@ -72,8 +73,11 @@ class TabIconsRenderTest {
             assertTrue(
                 ink > 0,
                 "ttTabIcons.'$name' painted nothing: $ink ink pixels in a ${SWATCH} box on " +
-                    "white. A glyph with path nodes but no fill brush occupies its layout and " +
-                    "draws nothing, which is exactly what this assertion exists to catch",
+                    "white. Two causes reach this line and both look identical on screen: a " +
+                    "path with no fill brush is never drawn, and two identical contours " +
+                    "cancel each other under PathFillType.EvenOdd. Either way the glyph " +
+                    "occupies its layout and paints nothing, which is what this assertion " +
+                    "exists to catch — the cause is for you to find, the count is the fact",
             )
         }
     }
