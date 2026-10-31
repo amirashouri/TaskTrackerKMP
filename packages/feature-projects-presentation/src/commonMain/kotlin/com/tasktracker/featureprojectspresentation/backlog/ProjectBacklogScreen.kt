@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -29,9 +30,11 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
+import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSearchField
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.BacklogSection
@@ -47,8 +50,10 @@ import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
 import com.tasktracker.resources.board_add_task
+import com.tasktracker.resources.work_item_search_close
 import com.tasktracker.resources.work_item_search_empty_body
 import com.tasktracker.resources.work_item_search_empty_title
+import com.tasktracker.resources.work_item_search_open
 import com.tasktracker.resources.work_item_search_placeholder
 import org.jetbrains.compose.resources.stringResource
 
@@ -99,6 +104,9 @@ fun ProjectBacklogScreen(
     // backlog sort is remembered because it is a preference about how the user likes to read a
     // list; a query is about right now.
     var query by remember { mutableStateOf("") }
+    // Closed by default and screen state, like the query: a list is mostly read, and the field
+    // returns closed on the next visit rather than remembering that it was open once.
+    var searchOpen by remember { mutableStateOf(false) }
     val appliedQuery = rememberDebouncedQuery(query)
     // Keyed on the projection instance as well as the query: the model replaces the projection
     // on every reload, and a filter remembered against the query alone would keep showing the
@@ -165,39 +173,69 @@ fun ProjectBacklogScreen(
                     .padding(top = ttSpacing.screenGutterLarge),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
             ) {
-                onOpenSwitcher?.let { openSwitcher ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                    ) {
+                // One row whether or not there is a switcher to fill its left side: the search
+                // toggle has to be reachable either way, and the + keeps the trailing edge it
+                // has always had, so the toggle is inserted before it rather than after.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                ) {
+                    if (onOpenSwitcher != null) {
                         ProjectSwitcherButton(
                             project = projection.project,
-                            onClick = openSwitcher,
+                            onClick = onOpenSwitcher,
                             modifier = Modifier.weight(1f),
                             projects = projects,
                             onSelectProject = onSelectProject,
                         )
-                        onAddTask?.let { addTask ->
-                            ttGlassIconButton(
-                                image = ttActionIcons.add,
-                                contentDescription = stringResource(Res.string.board_add_task),
-                                onClick = addTask,
-                                modifier = Modifier.testTag(BacklogAddTaskTag),
-                            )
-                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
+                    ttGlassIconButton(
+                        image = ttActionIcons.search,
+                        contentDescription = stringResource(
+                            if (searchOpen) {
+                                Res.string.work_item_search_close
+                            } else {
+                                Res.string.work_item_search_open
+                            },
+                        ),
+                        onClick = {
+                            searchOpen = !searchOpen
+                            // Closing resets the query too, for the reason the board's doc gives:
+                            // a filter that outlives its field leaves rows missing with nothing
+                            // on screen to say why.
+                            if (!searchOpen) {
+                                query = ""
+                                focusManager.clearFocus()
+                            }
+                        },
+                        tint = if (searchOpen) ttAccent() else ttLabel(),
+                        modifier = Modifier.testTag(ProjectBacklogSearchToggleTag),
+                    )
+                    onAddTask?.let { addTask ->
+                        ttGlassIconButton(
+                            image = ttActionIcons.add,
+                            contentDescription = stringResource(Res.string.board_add_task),
+                            onClick = addTask,
+                            modifier = Modifier.testTag(BacklogAddTaskTag),
+                        )
                     }
                 }
                 // Inside the measured column, so the list's top inset grows with the field and
-                // the first row still starts below the header rather than behind it.
-                ttSearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    hint = stringResource(Res.string.work_item_search_placeholder),
-                    modifier = Modifier.fillMaxWidth().testTag(ProjectBacklogSearchFieldTag),
-                    fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                )
+                // the first row still starts below the header rather than behind it. The reveal
+                // is the reason the inset is measured at all: it changes while the field unfolds.
+                SearchReveal(visible = searchOpen) {
+                    ttSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        hint = stringResource(Res.string.work_item_search_placeholder),
+                        modifier = Modifier.fillMaxWidth().testTag(ProjectBacklogSearchFieldTag),
+                        fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    )
+                }
                 errorMessage?.let { message ->
                     ttBanner(message = message, onDismiss = onDismissError)
                 }
@@ -440,6 +478,7 @@ const val ProjectBacklogEmptyKanbanTag = "backlog.emptyKanban"
 const val ProjectBacklogEmptyArchivedTag = "backlog.emptyArchived"
 const val ProjectBacklogEmptySearchTag = "backlog.emptySearch"
 const val ProjectBacklogSearchFieldTag = "backlog.search"
+const val ProjectBacklogSearchToggleTag = "backlog.search.toggle"
 const val ProjectBacklogSearchInputTag = "backlog.search.input"
 const val BacklogAddTaskTag = "backlog.addTask"
 

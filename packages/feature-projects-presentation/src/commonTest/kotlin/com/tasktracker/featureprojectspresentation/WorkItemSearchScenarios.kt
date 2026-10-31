@@ -1,14 +1,19 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.TTSearchFieldClearTag
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
@@ -16,10 +21,20 @@ import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_kanban
+import com.tasktracker.resources.work_item_search_close
+import com.tasktracker.resources.work_item_search_open
 import org.jetbrains.compose.resources.getString
+import kotlin.test.assertTrue
 
 /**
  * Typing in the board's and the backlog's search field, as scenarios.
+ *
+ * ## The field starts closed
+ *
+ * Both screens reveal the field from a header toggle, so a scenario that types has to open it
+ * first. [typeInBoardSearch] and [typeInBacklogSearch] do that themselves; the two scenarios
+ * that drive the clock by hand open the field *before* stopping it, because a reveal that is
+ * mid-animation is still a composed field but its height is still moving.
  *
  * ## The clock is advanced by hand, on purpose
  *
@@ -39,9 +54,163 @@ import org.jetbrains.compose.resources.getString
 @OptIn(ExperimentalTestApi::class)
 object WorkItemSearchScenarios {
 
-    /** One key typed into the board narrows the lanes to the card it names. */
-    val theBoardNarrowsToTheMatchingCard: suspend ComposeUiTest.() -> Unit = {
+    /**
+     * The field is closed until it is asked for, and the toggle says which way the tap will go.
+     *
+     * Both halves matter. A field that is merely absent would also pass a check that never looks
+     * for the toggle, and a toggle whose label never changes tells a screen reader the opposite
+     * of what tapping it does — so the label is read in both states.
+     */
+    val theBoardHidesTheSearchUntilAsked: suspend ComposeUiTest.() -> Unit = {
         boardShowing()
+
+        assertTagCount(ProjectBoardSearchFieldTag, 0)
+        onNodeWithTag(ProjectBoardSearchToggleTag)
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals(getString(Res.string.work_item_search_open))
+
+        openBoardSearch()
+
+        onNodeWithTag(ProjectBoardSearchFieldTag).assertIsDisplayed()
+        onNodeWithTag(ProjectBoardSearchToggleTag)
+            .assertContentDescriptionEquals(getString(Res.string.work_item_search_close))
+    }
+
+    /**
+     * Closing the field is also a reset: the full lanes come back.
+     *
+     * A query that outlived its field would leave the board short of cards with nothing on screen
+     * to explain why, which is the state this asserts against.
+     */
+    val closingTheBoardSearchClearsTheQuery: suspend ComposeUiTest.() -> Unit = {
+        boardShowing()
+
+        typeInBoardSearch("TT-3")
+        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "1", useUnmerged = true)
+
+        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+        waitForIdle()
+
+        assertTagCount(ProjectBoardSearchFieldTag, 0)
+        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
+    }
+
+    /**
+     * The field unfolds instead of snapping, and the lanes below move with it.
+     *
+     * The assertion is the *position of the lane row*, not the field's own height: the field is
+     * clipped by the reveal, so its measured bounds can report full height while almost none of
+     * it is visible. The row below has no such ambiguity — if the field is unfolding, the row is
+     * somewhere between where it sits closed and where it sits open, and a jump would put it at
+     * one end or the other.
+     *
+     * The clock is stopped so that "half way through" is a real sample rather than a guess about
+     * how fast the machine is.
+     */
+    val theFieldUnfoldsRatherThanSnapping: suspend ComposeUiTest.() -> Unit = {
+        boardShowing()
+
+        val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        openBoardSearch()
+        val openTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        assertTrue(
+            openTop > closedTop,
+            "the open field must push the lanes down ($openTop should be below $closedTop), " +
+                "or it is overlaying them rather than taking space in the column",
+        )
+
+        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+        mainClock.advanceTimeBy(SEARCH_REVEAL_MILLIS / 2L)
+        mainClock.advanceTimeByFrame()
+
+        val midwayTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        assertTrue(
+            midwayTop > closedTop && midwayTop < openTop,
+            "half way through the reveal the lanes should sit between $closedTop and $openTop " +
+                "but were at $midwayTop: the field snapped into place instead of unfolding",
+        )
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /**
+     * Reduced motion changes the travel, not the outcome.
+     *
+     * The field still appears — suppressing it would be a worse accessibility result than the
+     * jump the animation exists to avoid — it simply arrives without unfolding.
+     *
+     * The measurement is the *settled* height, not "somewhere below the closed position". An
+     * earlier version of this scenario only asserted the lanes had moved down at all, and it
+     * passed against a build that ignored the flag entirely: one frame of a 200ms unfold is
+     * already a little taller than closed. So the comparison has to be against the position the
+     * field reaches when the reveal is over, which a travelling field cannot be at on frame one.
+     */
+    val reducedMotionRevealsTheFieldWithoutTravel: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(reducedMotion = true)
+        val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+
+        openBoardSearch()
+        val settledTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        val fullTravel = settledTop - closedTop
+        assertTrue(fullTravel > 0.dp, "the open field must take space even without motion")
+
+        // Close, then reopen with the clock stopped, so "the first frame" is a real sample.
+        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+        mainClock.advanceTimeByFrame()
+
+        onNodeWithTag(ProjectBoardSearchFieldTag).assertExists()
+        val travelled = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top - closedTop
+        assertTrue(
+            travelled >= fullTravel - 0.5.dp,
+            "with reduced motion the field should be at its full height on the first frame " +
+                "(${fullTravel} of travel), but had only travelled $travelled — the platform " +
+                "setting is being ignored and the reveal is animating anyway",
+        )
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /** The backlog hides it the same way, so the two screens do not drift. */
+    val theBacklogHidesTheSearchUntilAsked: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing()
+
+        assertTagCount(ProjectBacklogSearchFieldTag, 0)
+        onNodeWithTag(ProjectBacklogSearchToggleTag)
+            .assertIsDisplayed()
+            .assertContentDescriptionEquals(getString(Res.string.work_item_search_open))
+
+        openBacklogSearch()
+
+        onNodeWithTag(ProjectBacklogSearchFieldTag).assertIsDisplayed()
+    }
+
+    /** And closing it there restores the rows it was narrowing. */
+    val closingTheBacklogSearchClearsTheQuery: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(projection = twoUntriagedBacklog)
+
+        typeInBacklogSearch("offline")
+        onNested(WorkItemBacklogRowTag(untriagedItem)).assertIsDisplayed()
+        assertTagCount(WorkItemBacklogRowTag(otherUntriagedItem), 0, useUnmerged = true)
+
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+
+        assertTagCount(ProjectBacklogSearchFieldTag, 0)
+        onNested(WorkItemBacklogRowTag(otherUntriagedItem)).assertIsDisplayed()
+    }
+
+    /** One key typed into the board narrows the lanes to the card it names. */
+    val theBoardNarrowsToTheMatchingCard: suspend ComposeUiTest.() -> Unit = {        boardShowing()
         assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
 
         typeInBoardSearch("TT-3")
@@ -79,6 +248,9 @@ object WorkItemSearchScenarios {
      */
     val theBoardWaitsForTheDebounce: suspend ComposeUiTest.() -> Unit = {
         boardShowing()
+        // Opened while the clock still runs, so the reveal has finished and the field is at its
+        // final height before the first reading.
+        openBoardSearch()
 
         mainClock.autoAdvance = false
         onNodeWithTag(ProjectBoardSearchInputTag).performTextInput("TT-3")
@@ -125,6 +297,7 @@ object WorkItemSearchScenarios {
      */
     val clearingTheSearchRestoresTheListAtOnce: suspend ComposeUiTest.() -> Unit = {
         boardShowing()
+        openBoardSearch()
 
         mainClock.autoAdvance = false
         onNodeWithTag(ProjectBoardSearchInputTag).performTextInput("TT-3")
@@ -243,19 +416,22 @@ private val doneItem = ViewPreviewData.workItems.first { it.key.rawValue == "TT-
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.boardShowing(
     projection: BoardProjection = ViewPreviewData.boardProjection(),
+    reducedMotion: Boolean = false,
 ) {
     setContent {
-        Themed {
-            ProjectBoardScreen(
-                projection = projection,
-                isLoading = false,
-                errorMessage = null,
-                movingItemID = null,
-                onSelect = {},
-                onFileAway = {},
-                onMove = { _, _ -> },
-                onDismissError = {},
-            )
+        CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
+            Themed {
+                ProjectBoardScreen(
+                    projection = projection,
+                    isLoading = false,
+                    errorMessage = null,
+                    movingItemID = null,
+                    onSelect = {},
+                    onFileAway = {},
+                    onMove = { _, _ -> },
+                    onDismissError = {},
+                )
+            }
         }
     }
 }
@@ -282,19 +458,40 @@ private fun ComposeUiTest.backlogShowing(
 }
 
 /**
+ * Open the field from its header toggle, and let the reveal finish.
+ *
+ * `waitForIdle` is what finishes it: the animation is driven by the test clock, which is running
+ * here, so the field is at its final height when this returns. A scenario that stops the clock
+ * first has to call this *before* it does, or it measures a field mid-unfold.
+ */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.openBoardSearch() {
+    onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
+    waitForIdle()
+}
+
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.openBacklogSearch() {
+    onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+    waitForIdle()
+}
+
+/**
  * Type, then let the window pass.
  *
  * The field updates on the keystroke; the list is what waits, so every scenario that asserts a
- * *narrowed* list goes through here.
+ * *narrowed* list goes through here. Opening the field is part of it, because it starts closed.
  */
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.typeInBoardSearch(text: String) {
+    openBoardSearch()
     onNodeWithTag(ProjectBoardSearchInputTag).performTextInput(text)
     settleDebounce()
 }
 
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.typeInBacklogSearch(text: String) {
+    openBacklogSearch()
     onNodeWithTag(ProjectBacklogSearchInputTag).performTextInput(text)
     settleDebounce()
 }

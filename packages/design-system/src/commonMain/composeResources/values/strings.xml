@@ -801,4 +801,9 @@
     <string name="work_item_search_placeholder">Search tasks</string>
     <string name="work_item_search_empty_title">No matching tasks</string>
     <string name="work_item_search_empty_body">Try a different word, or clear the search to see everything.</string>
+    <!-- The toggle that reveals the field. Two labels, not one: a toggle should announce the
+         action it performs, so it must not say "Search" both when the field is hidden and when
+         it is showing. -->
+    <string name="work_item_search_open">Search tasks</string>
+    <string name="work_item_search_close">Close search</string>
 </resources>

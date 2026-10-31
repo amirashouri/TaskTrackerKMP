@@ -70,8 +70,10 @@ import com.tasktracker.resources.board_my_tasks
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
+import com.tasktracker.resources.work_item_search_close
 import com.tasktracker.resources.work_item_search_empty_body
 import com.tasktracker.resources.work_item_search_empty_title
+import com.tasktracker.resources.work_item_search_open
 import com.tasktracker.resources.work_item_search_placeholder
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -89,6 +91,11 @@ import org.jetbrains.compose.resources.stringResource
  * the six lanes, their order and the horizontal snap geometry stay exactly as they are, and the
  * header's assignee stack still reads the unfiltered items, because typing does not change who
  * the board belongs to.
+ *
+ * The field is closed by default and revealed by the header's search toggle, which is why the
+ * board can be read without spending a row on a box most visits never use. Closing it clears the
+ * query as well as hiding the field: the alternative leaves the lanes short of cards with no
+ * visible control to explain why.
  */
 @Composable
 fun ProjectBoardScreen(
@@ -123,6 +130,11 @@ fun ProjectBoardScreen(
     // where the destination is rather than in `ShellPreferences`. Leaving the board and coming
     // back starts from an empty field, which is what a search box on a tab is expected to do.
     var query by remember { mutableStateOf("") }
+    // Closed by default, and screen state for the same reason the query is: a board is mostly
+    // read, not searched, so an always-open field spends a row of the header on the rarer
+    // activity. Leaving the destination and coming back starts closed, which matches the empty
+    // query it starts with.
+    var searchOpen by remember { mutableStateOf(false) }
     val appliedQuery = rememberDebouncedQuery(query)
     // Keyed on the projection *instance* as well as the query: the model replaces the projection
     // on every reload and on every My Tasks toggle, and a filter remembered against the query
@@ -176,13 +188,47 @@ fun ProjectBoardScreen(
                         modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
                     )
                 }
-                ttGlassIconButton(
-                    image = ttActionIcons.person,
-                    contentDescription = stringResource(Res.string.board_my_tasks),
-                    onClick = onToggleMyTasks,
-                    tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
-                    modifier = Modifier.testTag(ProjectBoardMyTasksTag),
-                )
+                // The trailing controls keep their order: the search toggle is inserted *before*
+                // My Tasks rather than after it, so the button that was already here does not
+                // move when this one appears. No toggle without a project — it would reveal a
+                // field over "no project selected", which filters a list that does not exist.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (projection.project != null) {
+                        ttGlassIconButton(
+                            image = ttActionIcons.search,
+                            contentDescription = stringResource(
+                                if (searchOpen) {
+                                    Res.string.work_item_search_close
+                                } else {
+                                    Res.string.work_item_search_open
+                                },
+                            ),
+                            onClick = {
+                                searchOpen = !searchOpen
+                                // Closing is also a reset. A query that outlives its field would
+                                // leave the board filtered by a control that is no longer on
+                                // screen, with the lanes simply missing cards and nothing to
+                                // explain why.
+                                if (!searchOpen) {
+                                    query = ""
+                                    focusManager.clearFocus()
+                                }
+                            },
+                            tint = if (searchOpen) ttAccent() else ttLabel(),
+                            modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
+                        )
+                    }
+                    ttGlassIconButton(
+                        image = ttActionIcons.person,
+                        contentDescription = stringResource(Res.string.board_my_tasks),
+                        onClick = onToggleMyTasks,
+                        tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                        modifier = Modifier.testTag(ProjectBoardMyTasksTag),
+                    )
+                }
             }
 
             // Only with a project on screen: a field over "no project selected" would filter
@@ -190,17 +236,19 @@ fun ProjectBoardScreen(
             // header row and above the banner, so the header's own order is identity first,
             // then the control over the list it filters.
             if (projection.project != null) {
-                ttSearchField(
-                    value = query,
-                    onValueChange = { query = it },
-                    hint = stringResource(Res.string.work_item_search_placeholder),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalGutter()
-                        .testTag(ProjectBoardSearchFieldTag),
-                    fieldModifier = Modifier.testTag(ProjectBoardSearchInputTag),
-                    keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                )
+                SearchReveal(visible = searchOpen) {
+                    ttSearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        hint = stringResource(Res.string.work_item_search_placeholder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalGutter()
+                            .testTag(ProjectBoardSearchFieldTag),
+                        fieldModifier = Modifier.testTag(ProjectBoardSearchInputTag),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                    )
+                }
             }
 
             errorMessage?.let { message ->
@@ -533,6 +581,7 @@ const val ProjectBoardScreenTag = "board.screen"
 const val ProjectBoardHeaderTag = "board.header"
 const val ProjectBoardColumnsTag = "board.columns"
 const val ProjectBoardMyTasksTag = "board.myTasks"
+const val ProjectBoardSearchToggleTag = "board.search.toggle"
 const val ProjectBoardTitleTag = "board.title"
 const val ProjectBoardSearchFieldTag = "board.search"
 const val ProjectBoardSearchInputTag = "board.search.input"

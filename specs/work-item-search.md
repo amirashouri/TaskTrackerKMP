@@ -190,6 +190,10 @@ Proposed Phase 1 plan — confirm or re-`ACK` before implementation.
   `verifyModuleImports`. `test-baseline.json` was regenerated from that run and
   `scripts/check-baseline.sh` passes; the committed baseline had been stale by 49 tests per
   host (30 from these two specs, 19 pre-existing drift).
+- **Superseded in one detail:** this spec puts the field on both screens and leaves it visible.
+  [`search-field-toggle.md`](search-field-toggle.md) later made it closed by default, revealed by
+  a header toggle, and clearing the query when it closes. The matching rule, the projections, the
+  debounce and the no-results states are unchanged.
 - **Next step:** none outstanding. Commit is the user's call.
 - **Gotchas:**
   - `assertTextEquals("2", "explanation")` is **not** a message — the second string is a

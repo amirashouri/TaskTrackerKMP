@@ -372,4 +372,22 @@ class ProjectsUiIosTest {
 
     @Test
     fun switchingSegmentsKeepsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.switchingSegmentsKeepsTheQuery)
+
+    @Test
+    fun theBoardHidesTheSearchUntilAsked() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardHidesTheSearchUntilAsked)
+
+    @Test
+    fun closingTheBoardSearchClearsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.closingTheBoardSearchClearsTheQuery)
+
+    @Test
+    fun theFieldUnfoldsRatherThanSnapping() = runComposeUiTest(block = WorkItemSearchScenarios.theFieldUnfoldsRatherThanSnapping)
+
+    @Test
+    fun reducedMotionRevealsTheFieldWithoutTravel() = runComposeUiTest(block = WorkItemSearchScenarios.reducedMotionRevealsTheFieldWithoutTravel)
+
+    @Test
+    fun theBacklogHidesTheSearchUntilAsked() = runComposeUiTest(block = WorkItemSearchScenarios.theBacklogHidesTheSearchUntilAsked)
+
+    @Test
+    fun closingTheBacklogSearchClearsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.closingTheBacklogSearchClearsTheQuery)
 }
