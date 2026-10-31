@@ -51,6 +51,7 @@ import com.tasktracker.resources.settings_activity_syncing
 import com.tasktracker.resources.settings_activity_up_to_date
 import com.tasktracker.resources.settings_activity_waiting
 import com.tasktracker.resources.settings_change_password
+import com.tasktracker.resources.settings_connection_section
 import com.tasktracker.resources.settings_connectivity_needs_connection
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
@@ -386,7 +387,7 @@ fun SettingsScreen(
     val connectivitySection: @Composable () -> Unit = {
         SettingsSection {
             SettingsIconRow(
-                label = stringResource(Res.string.settings_status_label),
+                label = stringResource(Res.string.settings_connection_section),
                 value = connectivityLabel(connectivity),
                 icon = ttSettingsIcons.connectivity,
             )
