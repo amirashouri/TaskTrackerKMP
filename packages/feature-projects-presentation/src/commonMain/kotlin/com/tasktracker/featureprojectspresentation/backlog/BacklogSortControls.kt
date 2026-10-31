@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,8 +17,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -49,6 +52,11 @@ import org.jetbrains.compose.resources.stringResource
  * wearing the accent.
  *
  * The tap semantics live in [BacklogSortOrder.toggled]; this file only reports the state.
+ *
+ * The row wears a glass surface for the reason the board's column header does: it sits in the
+ * backlog's floating header, and the list scrolls underneath it. Without a fill the caption and
+ * the gap between the two chips are a window onto moving rows, which reads as text printed on
+ * top of the cards rather than a control above them.
  */
 @Composable
 fun BacklogSortControls(
@@ -57,7 +65,10 @@ fun BacklogSortControls(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+            .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
