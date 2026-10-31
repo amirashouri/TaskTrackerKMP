@@ -26,6 +26,17 @@ import androidx.compose.ui.res.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
+ * The name Desktop shows in the macOS menu bar and the window title bar.
+ *
+ * The window title reads the same value through `Res.string.app_name`; this constant exists
+ * only because [main] has to set the AWT property before any composition can resolve a
+ * resource. Keep the two in step — `ResourceStringsScenarios` pins the resource, and
+ * `runDesktop`/`nativeDistributions.macOS.dockName` name the same string for the packaged
+ * launch.
+ */
+private const val DesktopDisplayName = "Task Tracker"
+
+/**
  * The Desktop entry point.
  *
  * Modeled on `MainViewController.kt`, the same shape iOS already uses: the
@@ -45,21 +56,27 @@ import org.jetbrains.compose.resources.stringResource
  * wrong dependency direction. The graph is owned in Kotlin, exactly as
  * `TaskTrackerApplication` owns it on Android and `IosGraph` owns it on iOS.
  */
-fun main() = startDesktopProcess {
-    setDockIcon()
-    val resolver = DesktopGraph.resolver
-    application {
-        val windowState = rememberWindowState(
-            size = desktopWindowSize(WindowGeometryDefaults.load()),
-        )
-        Window(
-            onCloseRequest = ::exitApplication,
-            title = stringResource(Res.string.app_name),
-            state = windowState,
-            icon = painterResource("AppIcon.png"),
-        ) {
-            RememberWindowGeometry(windowState)
-            DesktopContent(resolver = resolver)
+fun main() {
+    // Before anything initialises AWT: `setDockIcon()` below is the first call that does, and
+    // macOS reads the menu-bar name at that point. `runDesktop` also passes this as a `-D`
+    // argument; this assignment is what covers the IDE's `hotRunJvm` and a packaged launch.
+    System.setProperty("apple.awt.application.name", DesktopDisplayName)
+    startDesktopProcess {
+        setDockIcon()
+        val resolver = DesktopGraph.resolver
+        application {
+            val windowState = rememberWindowState(
+                size = desktopWindowSize(WindowGeometryDefaults.load()),
+            )
+            Window(
+                onCloseRequest = ::exitApplication,
+                title = stringResource(Res.string.app_name),
+                state = windowState,
+                icon = painterResource("AppIcon.png"),
+            ) {
+                RememberWindowGeometry(windowState)
+                DesktopContent(resolver = resolver)
+            }
         }
     }
 }

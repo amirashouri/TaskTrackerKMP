@@ -42,7 +42,7 @@ object ResourceStringsScenarios {
 
     val theGeneratedAccessorsResolveToTheDeclaredText: suspend () -> Unit = {
         assertEquals(
-            "TaskTracker",
+            "Task Tracker",
             getString(Res.string.app_name),
             "app_name is declared translatable=false and must still resolve",
         )

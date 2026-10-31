@@ -145,6 +145,10 @@ compose.desktop {
             packageVersion = desktopPackageVersion
             macOS {
                 iconFile = file("src/jvmMain/resources/AppIcon.icns")
+                // jpackage's --mac-package-name: the name in the macOS menu bar and Dock.
+                // Kept separate from `packageName` above, which names the .app bundle and the
+                // .dmg/.msi/.deb artifacts and must stay one word for those file names.
+                dockName = "Task Tracker"
             }
             windows {
             }
@@ -170,4 +174,10 @@ tasks.register<JavaExec>("runDesktop") {
     mainClass.set("com.tasktracker.sharedui.DesktopMainKt")
     classpath = sourceSets.named("jvmMain").get().runtimeClasspath
     standardInput = System.`in`
+    // The macOS menu bar takes its title from this JVM property, and AWT reads it at
+    // initialisation. Passed as a launch argument (rather than only set from `main`) so it is
+    // in place before the process opens its first AWT window. `DesktopMain` sets the same
+    // property for launch paths that do not go through this task, such as the IDE's
+    // `hotRunJvm`. The value matches `nativeDistributions.macOS.dockName` above.
+    jvmArgs("-Dapple.awt.application.name=Task Tracker")
 }

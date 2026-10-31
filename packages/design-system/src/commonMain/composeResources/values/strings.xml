@@ -36,7 +36,7 @@
   evidence that the strings are missing.
 -->
 <resources>
-    <string name="app_name" translatable="false">TaskTracker</string>
+    <string name="app_name" translatable="false">Task Tracker</string>
 
     <!-- Work item status. The six names a user reads, in board order. -->
     <string name="status_backlog">Backlog</string>
