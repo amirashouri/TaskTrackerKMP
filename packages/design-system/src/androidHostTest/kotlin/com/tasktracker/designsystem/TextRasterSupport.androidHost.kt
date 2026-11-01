@@ -3,9 +3,13 @@ package com.tasktracker.designsystem
 import org.junit.Assume
 
 /**
- * The Android host cannot host a Compose frame at all: its `android.jar` is a stub, Compose's
- * idling strategy dereferences a null `Build` field, and the tests in `commonTest` reach this
- * target without a Robolectric runner. See the common declaration for the whole of it.
+ * False, and not because the host cannot compose.
+ *
+ * The Android host rasterises under Robolectric — `SearchFieldAndroidHostTest` and its
+ * siblings prove that with the same page. This is false because the pixel tests stay in
+ * `commonTest` with no Robolectric entry point, and because the thresholds they assert are
+ * calibrated to Skia, which Robolectric's native rasteriser is measured to disagree with
+ * about strokes and coverage. See the common declaration for the whole of it.
  */
 internal actual fun thisHostRasterisesText(): Boolean = false
 
@@ -18,8 +22,9 @@ internal actual fun thisHostRasterisesText(): Boolean = false
  */
 internal actual fun assumeHostRasterisesText() {
     Assume.assumeTrue(
-        "the Android host cannot rasterise a Compose frame: Build.FINGERPRINT is null under " +
-            "the stub android.jar and commonTest runs without a Robolectric runner",
+        "this pixel test has no Robolectric entry point, and Robolectric's rasteriser is " +
+            "measured to disagree with Skia about strokes and coverage, so a frame measured " +
+            "here would not mean what the JVM's and iOS's do",
         false,
     )
 }

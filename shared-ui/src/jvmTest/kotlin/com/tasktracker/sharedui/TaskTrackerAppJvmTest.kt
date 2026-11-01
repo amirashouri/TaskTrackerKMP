@@ -19,22 +19,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 class TaskTrackerAppJvmTest : TaskTrackerAppScenarios()
 
 /**
- * The JVM host carries a 1000dp shell, so the wide-layout scenarios run here.
- *
- * This host is also the Desktop app's own suite — `:shared-ui`'s `jvmTest` *is* the Desktop test
- * host — so "the rail exists at desktop widths" is asserted on the same host that runs the
- * Desktop app, which is the only arrangement in which that claim is worth anything.
- */
-internal actual fun thisHostExpressesDesktopWidth(): Boolean = true
-
-/**
  * The JVM host presses through the synthetic input on the dispatcher the shell registers with, so
  * the scenario's back assertions run here.
  */
 internal actual fun thisHostDeliversSystemBack(): Boolean = true
-
-/** No-op: this host expresses a desktop width, so there is nothing to skip. */
-internal actual fun assumeHostExpressesDesktopWidth() = Unit
 
 /** No-op: this host delivers a system back press, so there is nothing to skip. */
 internal actual fun assumeHostDeliversSystemBack() = Unit

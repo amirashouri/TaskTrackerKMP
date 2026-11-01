@@ -5,11 +5,14 @@ import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlin.test.Test
 
 /**
- * Every shell scenario, as test methods the three hosts inherit.
+ * The compact shell scenarios, as test methods the three hosts inherit.
+ *
+ * The wide-layout scenarios are in [TaskTrackerWideScenarios], because they need a viewport the
+ * phone host cannot provide — see that class for the split.
  *
  * ## Why a base class
  *
- * The same 62 entry points used to be copied by hand into `TaskTrackerAppJvmTest`,
+ * The same 66 entry points used to be copied by hand into `TaskTrackerAppJvmTest`,
  * `TaskTrackerAppIosTest` and `TaskTrackerAppAndroidHostTest`. Nothing connected the three
  * lists: a scenario body could be written, referenced from one host, and never run on the
  * other two, and the only symptom was a test count nobody read. Inheriting the methods from
@@ -87,30 +90,6 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheBarAndNoRail)
 
     @Test
-    fun aWideShellDrawsTheRailAndNoBar() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheRailAndNoBar)
-
-    @Test
-    fun theRailIsALeadingColumnRatherThanAStretchedOne() =
-        runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
-
-    @Test
-    fun shrinkingTheWindowPastTheThresholdShedsTheRailInset() =
-        runComposeUiTest(block = ShellScenarios.shrinkingTheWindowPastTheThresholdShedsTheRailInset)
-
-    @Test
-    fun growingTheWindowPastTheThresholdDropsTheBarInset() =
-        runComposeUiTest(block = ShellScenarios.growingTheWindowPastTheThresholdDropsTheBarInset)
-
-    @Test
-    fun aWideShellDrawsTheSprintListAndDetailSideBySide() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheSprintListAndDetailSideBySide)
-
-    @Test
-    fun aWideShellOpensTheNewSprintFormBesideTheList() =
-        runComposeUiTest(block = ShellScenarios.aWideShellOpensTheNewSprintFormBesideTheList)
-
-    @Test
     fun aNarrowShellReplacesTheSprintListWithTheDetail() =
         runComposeUiTest(block = ShellScenarios.aNarrowShellReplacesTheSprintListWithTheDetail)
 
@@ -119,60 +98,24 @@ abstract class TaskTrackerAppScenarios {
         runComposeUiTest(block = ShellScenarios.aNarrowShellStillOpensTheNewSprintFormAsASheet)
 
     @Test
-    fun choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack() =
-        runComposeUiTest(block = ShellScenarios.choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack)
-
-    @Test
-    fun aWideShellShowsAPlaceholderWhenNothingIsSelected() =
-        runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
-
-    @Test
-    fun aWideBacklogHasNoDetailPaneUntilARowIsChosen() =
-        runComposeUiTest(block = ShellScenarios.aWideBacklogHasNoDetailPaneUntilARowIsChosen)
-
-    @Test
-    fun aWideBacklogPutsTheChosenItemBesideTheList() =
-        runComposeUiTest(block = ShellScenarios.aWideBacklogPutsTheChosenItemBesideTheList)
-
-    @Test
     fun theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt() =
         runComposeUiTest(block = ShellScenarios.theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt)
-
-    @Test
-    fun aWideShellDrawsTheMembersListAndTheAddFormSideBySide() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheMembersListAndTheAddFormSideBySide)
 
     @Test
     fun aNarrowShellDrawsTheMemberFormOverTheList() =
         runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheMemberFormOverTheList)
 
     @Test
-    fun aSelectedAdminProjectOpensTheEditorBesideTheList() =
-        runComposeUiTest(block = ShellScenarios.aSelectedAdminProjectOpensTheEditorBesideTheList)
-
-    @Test
     fun theAdminProjectsRowOpensTheProjectsSection() =
         runComposeUiTest(block = ShellScenarios.theAdminProjectsRowOpensTheProjectsSection)
-
-    @Test
-    fun aWideShellDrawsTheProjectsListAndTheCreateFormSideBySide() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheProjectsListAndTheCreateFormSideBySide)
 
     @Test
     fun aNarrowShellDrawsTheProjectFormOverTheAdminList() =
         runComposeUiTest(block = ShellScenarios.aNarrowShellDrawsTheProjectFormOverTheAdminList)
 
     @Test
-    fun aWideShellCentresTheSheetLikeAWindow() =
-        runComposeUiTest(block = ShellScenarios.aWideShellCentresTheSheetLikeAWindow)
-
-    @Test
     fun aNarrowShellAnchorsTheSheetToTheBottomEdge() =
         runComposeUiTest(block = ShellScenarios.aNarrowShellAnchorsTheSheetToTheBottomEdge)
-
-    @Test
-    fun aWideShellDropsTheEditorWindowAtOnce() =
-        runComposeUiTest(block = ShellScenarios.aWideShellDropsTheEditorWindowAtOnce)
 
     @Test
     fun aNarrowShellHoldsTheEditorOnThePathWhileItsSlideFinishes() =
@@ -181,66 +124,6 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun anAdminSeesTheLiveCatalogWhenTheLocalRowHasNone() =
         runComposeUiTest(block = ShellScenarios.anAdminSeesTheLiveCatalogWhenTheLocalRowHasNone)
-
-    @Test
-    fun exactlyOneRailDestinationIsMarkedSelected() =
-        runComposeUiTest(block = ShellScenarios.exactlyOneRailDestinationIsMarkedSelected)
-
-    @Test
-    fun aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar() =
-        runComposeUiTest(block = ShellScenarios.aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar)
-
-    @Test
-    fun theSidebarIsALeadingColumnRatherThanAStretchedOne() =
-        runComposeUiTest(block = ShellScenarios.theSidebarIsALeadingColumnRatherThanAStretchedOne)
-
-    @Test
-    fun resizingSidebarToRailAndBackShedsBothInsets() =
-        runComposeUiTest(block = ShellScenarios.resizingSidebarToRailAndBackShedsBothInsets)
-
-    @Test
-    fun exactlyOneSidebarDestinationIsMarkedSelected() =
-        runComposeUiTest(block = ShellScenarios.exactlyOneSidebarDestinationIsMarkedSelected)
-
-    @Test
-    fun everySidebarDestinationIsNamedAndCarriesTheTabRole() =
-        runComposeUiTest(block = ShellScenarios.everySidebarDestinationIsNamedAndCarriesTheTabRole)
-
-    @Test
-    fun theSidebarListsProjectsInTheSwitchersOrder() =
-        runComposeUiTest(block = ShellScenarios.theSidebarListsProjectsInTheSwitchersOrder)
-
-    @Test
-    fun tappingASidebarProjectOpensItOnBoard() =
-        runComposeUiTest(block = ShellScenarios.tappingASidebarProjectOpensItOnBoard)
-
-    @Test
-    fun switchingProjectFromSettingsLandsOnBoard() =
-        runComposeUiTest(block = ShellScenarios.switchingProjectFromSettingsLandsOnBoard)
-
-    @Test
-    fun theSidebarKeepsItsDestinationsWhenTheProjectListScrolls() =
-        runComposeUiTest(
-            block = ShellScenarios.theSidebarKeepsItsDestinationsWhenTheProjectListScrolls,
-        )
-
-    @Test
-    fun anEmptySidebarSwitcherStillCarriesEveryDestination() =
-        runComposeUiTest(
-            block = ShellScenarios.anEmptySidebarSwitcherStillCarriesEveryDestination,
-        )
-
-    @Test
-    fun theSidebarFollowsAProjectChosenFromTheProjectsList() =
-        runComposeUiTest(
-            block = ShellScenarios.theSidebarFollowsAProjectChosenFromTheProjectsList,
-        )
-
-    @Test
-    fun creatingAProjectShowsItInTheSidebarWithoutARelaunch() =
-        runComposeUiTest(
-            block = ShellScenarios.creatingAProjectShowsItInTheSidebarWithoutARelaunch,
-        )
 
 
     @Test

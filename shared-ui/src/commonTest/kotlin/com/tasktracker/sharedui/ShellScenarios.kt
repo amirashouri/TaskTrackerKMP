@@ -144,7 +144,6 @@ import com.tasktracker.sharedui.ShellScenarios.PHONE_WIDTH
 import com.tasktracker.sharedui.ShellScenarios.SIDEBAR_DENSITY
 import com.tasktracker.sharedui.ShellScenarios.SIDEBAR_WIDTH
 import com.tasktracker.sharedui.ShellScenarios.assertBottomMostRowClearsTheBar
-import com.tasktracker.sharedui.ShellScenarios.desktopWidthIsExpressible
 import com.tasktracker.sharedui.ShellScenarios.selectedRailDestinations
 import com.tasktracker.sharedui.ShellScenarios.selectedSidebarDestinations
 import com.tasktracker.sharedui.ShellScenarios.selectedTabs
@@ -1898,19 +1897,17 @@ object ShellScenarios {
         setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
         waitForIdle()
 
-        if (desktopWidthIsExpressible(DESKTOP_WIDTH)) {
-            onNodeWithTag(NavigationRailTag).assertExists(
-                "at ${DESKTOP_WIDTH.value}dp, which is past the " +
-                    "${ShellExpandedMinimumWidth.value}dp threshold, the shell should be drawing " +
-                    "a navigation rail",
-            )
-            assertNothingTagged(
-                TabBarTag,
-                "at ${DESKTOP_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
-                    "rail. The bar is the shape this section exists to replace: five segments of " +
-                    "${DESKTOP_WIDTH.value / 5}dp each, with the tabs marooned inside them",
-            )
-        }
+        onNodeWithTag(NavigationRailTag).assertExists(
+            "at ${DESKTOP_WIDTH.value}dp, which is past the " +
+                "${ShellExpandedMinimumWidth.value}dp threshold, the shell should be drawing " +
+                "a navigation rail",
+        )
+        assertNothingTagged(
+            TabBarTag,
+            "at ${DESKTOP_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
+                "rail. The bar is the shape this section exists to replace: five segments of " +
+                "${DESKTOP_WIDTH.value / 5}dp each, with the tabs marooned inside them",
+        )
     }
 
     /**
@@ -1929,11 +1926,9 @@ object ShellScenarios {
      * to keep true — the same reasoning the tab bar's own KDoc gives for not restating the
      * edge inset it does not own.
      */
-    val theRailIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = rail@{
+    val theRailIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@rail
 
         val rail = onNodeWithTag(NavigationRailTag).getBoundsInRoot()
         val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
@@ -2132,15 +2127,13 @@ object ShellScenarios {
      * anonymous, so a node inside it is the only thing that can show whether the inset reached the
      * pixels. Under `Compact` that edge should sit on the shell's own leading edge.
      */
-    val shrinkingTheWindowPastTheThresholdShedsTheRailInset: suspend ComposeUiTest.() -> Unit = shrink@{
+    val shrinkingTheWindowPastTheThresholdShedsTheRailInset: suspend ComposeUiTest.() -> Unit = {
         val width = mutableStateOf(DESKTOP_WIDTH)
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             widthState = width,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@shrink
 
         // Asserted before the shrink, or this could pass on a shell that never drew the rail and
         // therefore never had an inset to shed.
@@ -2192,7 +2185,7 @@ object ShellScenarios {
      * read off the pixels rather than through a probe composable that would have to be trusted
      * separately.
      */
-    val growingTheWindowPastTheThresholdDropsTheBarInset: suspend ComposeUiTest.() -> Unit = grow@{
+    val growingTheWindowPastTheThresholdDropsTheBarInset: suspend ComposeUiTest.() -> Unit = {
         val repository = FakeProjectRepository()
         val seeded = seedOverflowingLists(repository)
         val width = mutableStateOf(PHONE_WIDTH)
@@ -2202,8 +2195,6 @@ object ShellScenarios {
             widthState = width,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@grow
 
         // Narrow: the bar is up, so there is an inset for the grown shell to shed. Its height is
         // read rather than assumed, because it is what the failure message prices the leak in.
@@ -2249,7 +2240,7 @@ object ShellScenarios {
      * the app would have two leading chromes, and the rail would be the five-glyph column the
      * sidebar exists to replace.
      */
-    val aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val aSidebarWidthShellDrawsTheSidebarAndNoRailAndNoBar: suspend ComposeUiTest.() -> Unit = {
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             width = SIDEBAR_WIDTH,
@@ -2257,25 +2248,23 @@ object ShellScenarios {
         )
         waitForIdle()
 
-        if (desktopWidthIsExpressible(SIDEBAR_WIDTH)) {
-            onNodeWithTag(SidebarTag).assertExists(
-                "at ${SIDEBAR_WIDTH.value}dp, which is past the " +
-                    "${ShellSidebarMinimumWidth.value}dp threshold, the shell should be drawing " +
-                    "a sidebar",
-            )
-            assertNothingTagged(
-                NavigationRailTag,
-                "at ${SIDEBAR_WIDTH.value}dp the shell drew the navigation rail as well as the " +
-                    "sidebar. The rail is the shape this section exists to replace: five glyphs in " +
-                    "a ~100dp column, with the sidebar's labels marooned beside it",
-            )
-            assertNothingTagged(
-                TabBarTag,
-                "at ${SIDEBAR_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
-                    "sidebar. The bar is the shape the wide shell exists to replace: five segments " +
-                    "of ${SIDEBAR_WIDTH.value / 5}dp each, with the tabs marooned inside them",
-            )
-        }
+        onNodeWithTag(SidebarTag).assertExists(
+            "at ${SIDEBAR_WIDTH.value}dp, which is past the " +
+                "${ShellSidebarMinimumWidth.value}dp threshold, the shell should be drawing " +
+                "a sidebar",
+        )
+        assertNothingTagged(
+            NavigationRailTag,
+            "at ${SIDEBAR_WIDTH.value}dp the shell drew the navigation rail as well as the " +
+                "sidebar. The rail is the shape this section exists to replace: five glyphs in " +
+                "a ~100dp column, with the sidebar's labels marooned beside it",
+        )
+        assertNothingTagged(
+            TabBarTag,
+            "at ${SIDEBAR_WIDTH.value}dp the shell drew the bottom tab bar as well as the " +
+                "sidebar. The bar is the shape the wide shell exists to replace: five segments " +
+                "of ${SIDEBAR_WIDTH.value / 5}dp each, with the tabs marooned inside them",
+        )
     }
 
     /**
@@ -2292,15 +2281,13 @@ object ShellScenarios {
      * to keep true — the same reasoning the tab bar's own KDoc gives for not restating the
      * edge inset it does not own.
      */
-    val theSidebarIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val theSidebarIsALeadingColumnRatherThanAStretchedOne: suspend ComposeUiTest.() -> Unit = {
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             width = SIDEBAR_WIDTH,
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
 
         val sidebar = onNodeWithTag(SidebarTag).getBoundsInRoot()
         val shell = onNodeWithTag(SignedInShellTag).getBoundsInRoot()
@@ -2458,7 +2445,7 @@ object ShellScenarios {
      * that keeps insertion order, puts Apollo on top and fails here — so this is the assertion
      * that separates "the model's order" from "an order that happens to look plausible".
      */
-    val theSidebarListsProjectsInTheSwitchersOrder: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val theSidebarListsProjectsInTheSwitchersOrder: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val apollo = shellTestProject(
             name = "Apollo",
@@ -2480,8 +2467,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         val first = onNodeWithTag(SidebarProjectTag(zenith.id)).getBoundsInRoot()
         val second = onNodeWithTag(SidebarProjectTag(apollo.id)).getBoundsInRoot()
         assertTrue(
@@ -2510,7 +2495,7 @@ object ShellScenarios {
      * Before the tap nothing is selected, so a highlight that is born on the first row is also a
      * failure here rather than a passing coincidence.
      */
-    val tappingASidebarProjectOpensItOnBoard: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val tappingASidebarProjectOpensItOnBoard: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val apollo = shellTestProject(
             name = "Apollo",
@@ -2533,8 +2518,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         assertEquals(
             emptyList(),
             selectedSidebarProjects(candidates),
@@ -2567,7 +2550,7 @@ object ShellScenarios {
      * tab. Settings is also the tab that proves the sidebar is a project switcher rather than
      * part of the scoped views.
      */
-    val switchingProjectFromSettingsLandsOnBoard: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val switchingProjectFromSettingsLandsOnBoard: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val apollo = shellTestProject(
             name = "Apollo",
@@ -2590,8 +2573,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         onNodeWithTag(SidebarProjectTag(apollo.id)).performClick()
         waitForIdle()
         onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
@@ -2631,7 +2612,7 @@ object ShellScenarios {
      * one that overflowed.
      */
     val theSidebarKeepsItsDestinationsWhenTheProjectListScrolls:
-        suspend ComposeUiTest.() -> Unit = sidebar@{
+        suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val seeded = (1..40).map { index ->
             shellTestProject(
@@ -2649,8 +2630,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         val boardBefore = onNodeWithTag(SidebarButtonTag(AppTab.Board)).getBoundsInRoot()
         val settingsBefore = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot()
 
@@ -2695,7 +2674,7 @@ object ShellScenarios {
      * No placeholder and no empty-state copy: the chrome should not explain the absence of data.
      */
     val anEmptySidebarSwitcherStillCarriesEveryDestination:
-        suspend ComposeUiTest.() -> Unit = sidebar@{
+        suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         projects.seed(
             shellTestProject(name = "Filed Away", keyPrefix = "FA", isArchived = true),
@@ -2708,8 +2687,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         assertEquals(
             0,
             onAllNodesWithTag(SidebarProjectListTag).fetchSemanticsNodes().size,
@@ -2734,7 +2711,7 @@ object ShellScenarios {
      * board that never opened stay different failures.
      */
     val theSidebarFollowsAProjectChosenFromTheProjectsList:
-        suspend ComposeUiTest.() -> Unit = sidebar@{
+        suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val apollo = shellTestProject(
             name = "Apollo",
@@ -2757,8 +2734,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         onNodeWithTag(ProjectRowTag(ProjectSummary(viking, itemCount = 0))).performClick()
         waitForIdle()
 
@@ -2789,7 +2764,7 @@ object ShellScenarios {
      * Projects list behind the sheet.
      */
     val creatingAProjectShowsItInTheSidebarWithoutARelaunch:
-        suspend ComposeUiTest.() -> Unit = sidebar@{
+        suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
 
         setUpShell(
@@ -2799,8 +2774,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
-
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
 
@@ -2846,7 +2819,7 @@ object ShellScenarios {
      * The ordering is chosen so both crossings are exercised on one composition, because a
      * rail/sidebar that leaves the composition is never remeasured to zero.
      */
-    val resizingSidebarToRailAndBackShedsBothInsets: suspend ComposeUiTest.() -> Unit = resize@{
+    val resizingSidebarToRailAndBackShedsBothInsets: suspend ComposeUiTest.() -> Unit = {
         val width = mutableStateOf(SIDEBAR_WIDTH)
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
@@ -2854,8 +2827,6 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@resize
 
         // Asserted before the shrink, or this could pass on a shell that never drew the sidebar
         // and therefore never had an inset to shed.
@@ -2931,15 +2902,13 @@ object ShellScenarios {
      * selected" fails as loudly as "none is" — a count-only assertion would accept a sidebar that
      * lit the wrong single destination.
      */
-    val exactlyOneSidebarDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val exactlyOneSidebarDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = {
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             width = SIDEBAR_WIDTH,
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
 
         assertEquals(
             listOf(AppTab.Projects),
@@ -2987,15 +2956,13 @@ object ShellScenarios {
      * unlabelled for accessibility (the label beside each one already names it), so a missing
      * string resource would leave a tab with no name *at all*.
      */
-    val everySidebarDestinationIsNamedAndCarriesTheTabRole: suspend ComposeUiTest.() -> Unit = sidebar@{
+    val everySidebarDestinationIsNamedAndCarriesTheTabRole: suspend ComposeUiTest.() -> Unit = {
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
             width = SIDEBAR_WIDTH,
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(SIDEBAR_WIDTH)) return@sidebar
 
         AppTab.entries.forEach { tab ->
             onNodeWithTag(SidebarButtonTag(tab))
@@ -3015,41 +2982,6 @@ object ShellScenarios {
      */
     private fun ComposeUiTest.assertNothingTagged(tag: String, why: String) {
         assertEquals(0, onAllNodesWithTag(tag).fetchSemanticsNodes().size, why)
-    }
-
-    /**
-     * Whether this host can build the wide shell these desktop-layout scenarios are about.
-     *
-     * ## It is declared per host, not measured, and two mutations is why
-     *
-     * The obvious implementation measures — "did the shell get the width I asked for?" — and it is
-     * wrong twice over, both times found by mutation rather than by reading.
-     *
-     * Asking the *shell* reads the absence of the thing under test as evidence about the
-     * environment: if the shell stopped filling the box it is given, the guard reports "this host
-     * cannot do wide shells", and all three scenarios stop asserting while still reporting green —
-     * on the two hosts that are supposed to guard them.
-     *
-     * Asking the *composition root* is no better, and was found the same way: with the width hook
-     * mutated to hand out 400dp, `onRoot()` reported 400dp and the scenarios skipped. The root
-     * tracks the constrained composition, not the window, so it is not a viewport either. Nothing
-     * reachable from inside a composition reports what the host *could* have given.
-     *
-     * So the capability is **declared**, per host, exactly as `thisHostRasterisesText` declares
-     * whether a host can rasterise a frame. A declared capability cannot be moved by a change to
-     * the code under test, which is the one property the measured version lacked.
-     *
-     * The skip is reported as a **pass**, not a skip, and it prints — `kotlin.test` has no portable
-     * skip. It is recorded in `AGENTS.md` under the Android host rather than left to be found.
-     */
-    private fun ComposeUiTest.desktopWidthIsExpressible(requested: Dp): Boolean {
-        if (thisHostExpressesDesktopWidth()) return true
-        // Throws an assumption on a host that cannot build this shell, so the scenario is
-        // recorded as skipped rather than returning green having asserted nothing. A fixed width
-        // is a request rather than a guarantee — it is clamped by its parent's constraints — and
-        // a desktop window is not a configuration the Android host has.
-        assumeHostExpressesDesktopWidth()
-        return false
     }
 
     /**
@@ -3125,7 +3057,7 @@ object ShellScenarios {
      * and the only thing that changed is where they are placed. `list.right < detail.left` is the
      * claim that they are actually beside each other.
      */
-    val aWideShellDrawsTheSprintListAndDetailSideBySide: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellDrawsTheSprintListAndDetailSideBySide: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3141,8 +3073,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id, inTab = AppTab.Board)
         waitForIdle()
         onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
@@ -3186,7 +3116,7 @@ object ShellScenarios {
      * Cancel then closes it, which is also what proves the pane is the surface: there is no
      * scrim out here to dismiss it with, so the pane's own action row is the only way back.
      */
-    val aWideShellOpensTheNewSprintFormBesideTheList: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellOpensTheNewSprintFormBesideTheList: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3202,8 +3132,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id, inTab = AppTab.Board)
         waitForIdle()
         onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
@@ -3347,7 +3275,7 @@ object ShellScenarios {
      * failure this cannot see from the router alone.
      */
     val choosingAnotherSprintChangesTheDetailWithoutGrowingTheStack:
-        suspend ComposeUiTest.() -> Unit = wide@{
+        suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3376,8 +3304,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id, inTab = AppTab.Board)
         waitForIdle()
         onNodeWithTag(NavigationRailButtonTag(AppTab.Sprints)).performClick()
@@ -3437,7 +3363,7 @@ object ShellScenarios {
      * pushed by a list that then fails to render anything, and the user's problem would be the
      * missing surface.
      */
-    val aWideBacklogHasNoDetailPaneUntilARowIsChosen: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideBacklogHasNoDetailPaneUntilARowIsChosen: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3458,8 +3384,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         // The empty stack `openProject(inTab = Backlog)` installs is the no-selection state.
         router.openProject(project.id, inTab = AppTab.Backlog)
         waitForIdle()
@@ -3495,7 +3419,7 @@ object ShellScenarios {
      * back, not to walk back through every item visited. The title is read from the editor to
      * prove the pane follows the row rather than staying on the first item.
      */
-    val aWideBacklogPutsTheChosenItemBesideTheList: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideBacklogPutsTheChosenItemBesideTheList: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3523,8 +3447,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id, inTab = AppTab.Backlog)
         waitForIdle()
 
@@ -3593,7 +3515,7 @@ object ShellScenarios {
      * switch leaves the stack empty and the shell then draws the root alone. The `[SprintList]`
      * stack is the state that has both panes and no selection.
      */
-    val aWideShellShowsAPlaceholderWhenNothingIsSelected: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellShowsAPlaceholderWhenNothingIsSelected: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -3608,8 +3530,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id, inTab = AppTab.Sprints)
         waitForIdle()
 
@@ -3776,8 +3696,6 @@ object ShellScenarios {
                 width = DESKTOP_WIDTH,
             )
             waitForIdle()
-            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
             onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
             waitForIdle()
             onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
@@ -3885,8 +3803,6 @@ object ShellScenarios {
                 width = DESKTOP_WIDTH,
             )
             waitForIdle()
-            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
             onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
             waitForIdle()
             onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
@@ -3941,8 +3857,6 @@ object ShellScenarios {
                 width = DESKTOP_WIDTH,
             )
             waitForIdle()
-            if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
             onNodeWithTag(NavigationRailButtonTag(AppTab.Settings)).performClick()
             waitForIdle()
             onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
@@ -4142,7 +4056,7 @@ object ShellScenarios {
      * directions: a shell that always anchors fails this one, a shell that always windows fails
      * that one, and neither passes by merely drawing the sheet.
      */
-    val aWideShellCentresTheSheetLikeAWindow: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellCentresTheSheetLikeAWindow: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
@@ -4151,8 +4065,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertExists()
@@ -4226,9 +4138,9 @@ object ShellScenarios {
         // JVM host's Window presentation produces for the correct code: the correct
         // code fails the bound there exactly where the mutation would. Either way the
         // scenario cannot certify the anchored placement (or expose the mutation),
-        // which is why the wide-shell scenarios gate on desktopWidthIsExpressible.
-        // Returning here keeps the test registered as a pass rather than certifying
-        // nothing.
+        // which is why the wide-layout scenarios live in their own class, where a wide
+        // viewport is a precondition. Returning here keeps the test registered as a pass
+        // rather than certifying nothing.
         return@narrow
 
         val bottomGap = root.bottom.value - form.bottom.value
@@ -4257,7 +4169,7 @@ object ShellScenarios {
      * this task neither fixes nor resteps it — what is under test here is the shell's
      * dismissal, which is the same from every entry point.
      */
-    val aWideShellDropsTheEditorWindowAtOnce: suspend ComposeUiTest.() -> Unit = wide@{
+    val aWideShellDropsTheEditorWindowAtOnce: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         val project = shellTestProject(name = "Apollo")
         projects.seed(project)
@@ -4273,8 +4185,6 @@ object ShellScenarios {
             width = DESKTOP_WIDTH,
         )
         waitForIdle()
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@wide
-
         router.openProject(project.id)
         waitForIdle()
         router.push(AppRoute.WorkItemEditor(projectID = project.id, workItemID = item.id))
@@ -4424,11 +4334,9 @@ object ShellScenarios {
      * selected" fails as loudly as "none is" — a count-only assertion would accept a rail that lit
      * the wrong single destination.
      */
-    val exactlyOneRailDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = selected@{
+    val exactlyOneRailDestinationIsMarkedSelected: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()), width = DESKTOP_WIDTH)
         waitForIdle()
-
-        if (!desktopWidthIsExpressible(DESKTOP_WIDTH)) return@selected
 
         assertEquals(
             listOf(AppTab.Projects),
@@ -5165,7 +5073,7 @@ object ShellScenarios {
         BacklogSectionScenarios.aDoneKanbanRowOffersNoFileAway,
         // Appended, never inserted: the indices above are reached by name from
         // TaskTrackerAppScenarios, and this one is `[15]`.
-        theBacklogSortSurvivesLeavingTheTab,
+        ShellScenarios.theBacklogSortSurvivesLeavingTheTab,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
@@ -5232,21 +5140,6 @@ object ShellScenarios {
 }
 
 /**
- * Whether this host can lay out a shell wider than [ShellExpandedMinimumWidth].
- *
- * True on the JVM and the iOS simulator, whose viewports carry a 1000dp shell comfortably. False
- * on the Android host, whose viewport is 320dp — which is not a defect to fix but a phone, and a
- * desktop window is not a configuration it has. See
- * [ShellScenarios.desktopWidthIsExpressible]'s note for why this is declared per host rather than
- * measured, which cost two mutation runs to establish.
- *
- * Top level because `expect` cannot be a member, and beside [ShellScenarios] rather than inside
- * it so the actuals are three one-line files next to the host entry points — the shape
- * `thisHostRasterisesText` uses in `:packages:design-system`.
- */
-internal expect fun thisHostExpressesDesktopWidth(): Boolean
-
-/**
  * Whether this host can deliver a system back press into the composition.
  *
  * True on the JVM and the iOS simulator, where [pressSystemBack] drives a synthetic input on the
@@ -5256,27 +5149,16 @@ internal expect fun thisHostExpressesDesktopWidth(): Boolean
  * scenario can work around; `systemBackPopsTheSprintDetail` is red on that host at the same
  * assertion, and this is the declaration that stops a second scenario from silently joining it.
  *
- * Declared per host for the reason [thisHostExpressesDesktopWidth] gives — the capability is a
- * property of the host, so the scenario asks rather than going red where the answer is no — and
- * top level for the same reason, since `expect` cannot be a member.
+ * Declared per host because the capability is a property of the host, so the scenario asks
+ * rather than going red where the answer is no, and top level because `expect` cannot be a
+ * member.
  */
 internal expect fun thisHostDeliversSystemBack(): Boolean
 
 /**
- * Records a scenario as skipped when this host cannot lay out the requested width.
- *
- * An assumption, not the early return [ShellScenarios.desktopWidthIsExpressible] used to make:
- * a returning scenario is recorded as a pass, and three wide-layout scenarios reporting green
- * on a phone host that never built the shell they are about is the false green this harness
- * exists to remove. The Android actual throws through `org.junit.Assume`; the JVM and iOS
- * actuals do nothing because both can express a desktop width.
- */
-internal expect fun assumeHostExpressesDesktopWidth()
-
-/**
  * Records a scenario as skipped when this host cannot deliver a system back press.
  *
- * Same contract as [assumeHostExpressesDesktopWidth], for the same reason: a scenario whose
- * whole claim is about a back press must not report green where no press can be delivered.
+ * An assumption rather than an early return: a scenario whose whole claim is about a back press
+ * must not report green where no press can be delivered.
  */
 internal expect fun assumeHostDeliversSystemBack()

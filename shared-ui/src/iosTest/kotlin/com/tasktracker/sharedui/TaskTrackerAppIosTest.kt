@@ -16,22 +16,10 @@ import androidx.compose.ui.test.ExperimentalTestApi
 class TaskTrackerAppIosTest : TaskTrackerAppScenarios()
 
 /**
- * The iOS simulator carries a 1000dp shell, so the wide-layout scenarios run here.
- *
- * Worth having on this host specifically: it is the rasteriser that disagrees with the JVM on
- * glyph coverage, so a wide shell is checked where a small glyph's stroke is drawn least
- * completely.
- */
-internal actual fun thisHostExpressesDesktopWidth(): Boolean = true
-
-/**
  * The iOS simulator presses through the same synthetic input as the JVM, so the scenario's back
  * assertions run here too.
  */
 internal actual fun thisHostDeliversSystemBack(): Boolean = true
-
-/** No-op: this host expresses a desktop width, so there is nothing to skip. */
-internal actual fun assumeHostExpressesDesktopWidth() = Unit
 
 /** No-op: this host delivers a system back press, so there is nothing to skip. */
 internal actual fun assumeHostDeliversSystemBack() = Unit

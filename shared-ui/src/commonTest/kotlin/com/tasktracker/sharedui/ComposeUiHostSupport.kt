@@ -16,10 +16,11 @@ import androidx.compose.ui.test.runComposeUiTest
  *
  * Its `android.jar` is a stub whose `Build` fields are null, and Compose's
  * `RobolectricIdlingStrategy` dereferences one unconditionally. Robolectric is on this
- * target's classpath precisely to fix that and does not fix it here: tests in `commonTest`
- * reach the Android host as plain JUnit 4 classes, and Robolectric only takes over for a class
- * naming its runner — an Android-only annotation that cannot be written from `commonTest`
- * without taking the iOS and JVM compilations down with it.
+ * target's classpath and fixes that for a class naming its runner — `TaskTrackerAppAndroidHostTest`
+ * and `TaskTrackerWideAndroidHostTest` both do. The pixel tests stay here in `commonTest`
+ * without an entry point because their thresholds are calibrated to Skia, and
+ * `:packages:feature-settings-presentation` measured Robolectric's rasteriser disagreeing
+ * about strokes and coverage; `ProjectPickerSheetRenderTest` is the one that remains here.
  *
  * `:packages:design-system` declares the same `expect` for its own pixel tests. It is
  * duplicated rather than shared because a `commonTest` declaration is not visible across

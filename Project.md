@@ -111,7 +111,10 @@ The resolver `platformApiBaseUrl` in `:composition-root` resolves the server roo
        runComposeUiTest { /* read pixels */ }
    }
    ```
-   Pixel tests skip on Android (where text rasterization is unsupported) and execute on JVM and iOS.
+   Pixel tests skip on Android and execute on JVM and iOS. The reason is *not* that the Android host cannot render — Robolectric's native rasteriser draws, and structural Compose UI tests do run there — but that these thresholds are calibrated to Skia and Robolectric's rasteriser is measured to disagree about strokes and coverage (see `feature-settings-presentation`'s `RasterSupport`).
+   Structural Compose UI behavior must have a Robolectric entry point, not a skip.
+
+   Wide-layout shell scenarios live in a separate `TaskTrackerWideScenarios` class whose Android entry point sets `@Config(qualifiers = "w1400dp-h1000dp")`; the default Android host display is 411×891dp, so it cannot lay out the 1000dp/1280dp shells.
 4. **Platform Seams / Reflection:** `jvmTest` or `androidHostTest`.
 
 ### Critical Test Invariants
