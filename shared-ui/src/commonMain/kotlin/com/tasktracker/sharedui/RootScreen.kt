@@ -1,9 +1,8 @@
 package com.tasktracker.sharedui
 
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,16 +36,17 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.FilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
-import com.tasktracker.featureteamsdomain.MemberAdminPort
-import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentView
 import com.tasktracker.featureprojectspresentation.ProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProvideProjectEnvironment
 import com.tasktracker.featuresettingsdomain.SettingsPort
+import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.routing.RootDestination
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -179,6 +179,9 @@ fun RootScreen(
                 // Not tied to the transport above: opening a file this device attached is a
                 // cache read, so a graph with no server still opens its own attachments.
                 resolver.getOrNull(AttachmentOpener::class),
+                // Null in a demo graph: the editor then offers no agent block rather
+                // than one whose every tap fails.
+                resolver.getOrNull(AgentRunsPort::class),
             )
         }
     }

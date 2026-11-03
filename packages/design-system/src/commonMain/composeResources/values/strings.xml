@@ -284,6 +284,25 @@
     <string name="work_item_repeat_yearly">Yearly</string>
     <string name="work_item_delete">Delete Task</string>
     <string name="work_item_archive">File Away</string>
+
+    <!--
+      The agent section inside the work item editor. Status labels mirror the server's
+      closed vocabulary; the event log and summary are rendered as plain text, never markup.
+    -->
+    <string name="agent_section_title">Agent</string>
+    <string name="agent_send">Send to agent</string>
+    <string name="agent_send_again">Send again</string>
+    <string name="agent_cancel">Cancel run</string>
+    <string name="agent_cancelling">Cancelling…</string>
+    <string name="agent_empty">No agent has run on this task yet.</string>
+    <string name="agent_waiting">Queued. A paired machine will pick this up.</string>
+    <string name="agent_unavailable">This run is no longer available on the server.</string>
+    <string name="agent_status_queued">Queued</string>
+    <string name="agent_status_claimed">Claimed</string>
+    <string name="agent_status_running">Running</string>
+    <string name="agent_status_succeeded">Succeeded</string>
+    <string name="agent_status_failed">Failed</string>
+    <string name="agent_status_cancelled">Cancelled</string>
     <!-- The card's copy action names what it copies, so the glyph is not the whole instruction. -->
     <string name="work_item_copy">Copy title and details</string>
     <!-- Shown transiently after a copy. It names the outcome, not the button that caused it. -->

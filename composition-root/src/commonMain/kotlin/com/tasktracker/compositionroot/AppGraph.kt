@@ -25,10 +25,12 @@ import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.AdminProjectsRepository
 import com.tasktracker.featureprojectsdata.HttpAdminProjectsRemote
+import com.tasktracker.featureprojectsdata.HttpAgentRunsRemote
 import com.tasktracker.featureprojectsdata.LocalDataSyncSink
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.BackfillUnqueuedAttachments
@@ -203,6 +205,7 @@ object AppGraph {
             registerPlatform(platforms)
             registerPersistence(platforms)
             registerProjects(platforms)
+            registerAgentRuns(platforms)
             registerTeams(platforms)
             registerAuth(platforms)
             registerSync(platforms)
@@ -471,6 +474,28 @@ object AppGraph {
                     // created stays server-side until the next cycle, and the work item
                     // editor — which reads the local row — offers them the empty state.
                     localStore = resolver.resolve(LocalDataSyncSink::class),
+                )
+            }
+        }
+    }
+
+    /**
+     * Agent runs: dispatch, poll and cancel against the server's app routes.
+     *
+     * No local store, deliberately. A run cannot progress offline and is never
+     * merged, so a cached copy would only disagree with the server about the one
+     * thing the user is watching. Bound only with a backend, like every other
+     * authenticated remote: a demo graph has no agent API, and the editor then
+     * shows no agent block rather than one that fails on every tap.
+     */
+    private fun ResolverBuilder.registerAgentRuns(platforms: PlatformBindings) {
+        platforms.apiBaseUrl?.let { url ->
+            app<AgentRunsPort> { resolver ->
+                HttpAgentRunsRemote(
+                    client = platforms.httpClient(
+                        url,
+                        listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                    ),
                 )
             }
         }

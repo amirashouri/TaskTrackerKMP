@@ -34,8 +34,8 @@ Room table. The server half is `TaskTrackerServer` Milestone 10.
 
 | Task | State | Intent | Depends on | Execution details |
 | --- | --- | --- | --- | --- |
-| 11.1 | Pending | Agent-run IDs, domain models, `AgentRunsPort`, HTTP remote, DI binding | Server `T10.3` | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
-| 11.2 | Pending | Dispatch and live progress in the work item editor | 11.1 | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
+| 11.1 | Complete | Agent-run IDs, domain models, `AgentRunsPort`, HTTP remote, DI binding | Server `T10.3` | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
+| 11.2 | Complete | Dispatch and live progress in the work item editor | 11.1 | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
 
 11.1 lands before 11.2, and both stay inside the existing `feature-projects-*`
 modules: the only surface is the work item, and an `feature-agent-*` triple is

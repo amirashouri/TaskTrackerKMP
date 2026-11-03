@@ -3,17 +3,25 @@
 
 package com.tasktracker.sharedui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
@@ -27,27 +35,16 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.backhandler.BackHandler
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -83,15 +80,16 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
-import com.tasktracker.featureteamsdomain.MemberAdminPort
-import com.tasktracker.featureteamsdomain.TeamPort
-import com.tasktracker.featureteamspresentation.MemberAdminModel
-import com.tasktracker.featureteamspresentation.MembersAdminScreen
-import com.tasktracker.featureprojectspresentation.assignableMembersFor
-import com.tasktracker.featureprojectspresentation.currentProjectEnvironment
+import com.tasktracker.featureprojectspresentation.AgentRunModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
+import com.tasktracker.featureprojectspresentation.ProjectBacklogScreen
+import com.tasktracker.featureprojectspresentation.ProjectBoardModel
+import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
+import com.tasktracker.featureprojectspresentation.ProjectEnvironment
+import com.tasktracker.featureprojectspresentation.ProjectPickerModel
+import com.tasktracker.featureprojectspresentation.ProjectPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintDetailModel
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholder
 import com.tasktracker.featureprojectspresentation.SprintDetailScreen
@@ -100,22 +98,21 @@ import com.tasktracker.featureprojectspresentation.SprintEditorPresentation
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
 import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
-import com.tasktracker.featureprojectspresentation.WorkItemDependencyPickerSheet
 import com.tasktracker.featureprojectspresentation.SprintListScreen
 import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
-import com.tasktracker.featureprojectspresentation.ProjectBacklogScreen
-import com.tasktracker.featureprojectspresentation.ProjectBoardModel
-import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
-import com.tasktracker.featureprojectspresentation.ProjectEnvironment
-import com.tasktracker.featureprojectspresentation.ProjectPickerModel
-import com.tasktracker.featureprojectspresentation.ProjectPickerSheet
+import com.tasktracker.featureprojectspresentation.WorkItemAgentSection
+import com.tasktracker.featureprojectspresentation.WorkItemDependencyPickerSheet
 import com.tasktracker.featureprojectspresentation.WorkItemEditorModel
 import com.tasktracker.featureprojectspresentation.WorkItemEditorSheet
+import com.tasktracker.featureprojectspresentation.assignableMembersFor
+import com.tasktracker.featureprojectspresentation.currentProjectEnvironment
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.MissingSettingsServiceView
 import com.tasktracker.featuresettingspresentation.ResetCodePanel
 import com.tasktracker.featuresettingspresentation.SettingsModel
 import com.tasktracker.featuresettingspresentation.SettingsScreen
+import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.featureteamsdomain.TeamPort
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.scoped_choose_project
 import com.tasktracker.resources.scoped_no_project_body
@@ -129,6 +126,8 @@ import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -2051,8 +2050,32 @@ private fun WorkItemEditorDestination(
         teamPort = teamPort,
     )
 
+    // The run is polled only while this sheet is composed: closing the editor cancels
+    // the effect's scope, which ends `follow`. Reopening the item reads the terminal
+    // state from `refresh` instead, so a closed app does not chase a background run.
+    val agentRunsPort = currentProjectEnvironment?.agentRunsPort
+    val agentModel = remember(workItemID, agentRunsPort) {
+        if (workItemID == null || agentRunsPort == null) null else AgentRunModel(workItemID, agentRunsPort)
+    }
+    LaunchedEffect(agentModel) {
+        agentModel?.refresh()
+        agentModel?.follow()
+    }
+    val agentSectionModel = agentModel
+
     WorkItemEditorSheet(
         title = model.title,
+        agentSection = if (agentSectionModel != null && model.status == WorkItemStatus.InProgress) {
+            {
+                WorkItemAgentSection(
+                    model = agentSectionModel,
+                    onDispatch = { scope.launch { agentSectionModel.dispatch() } },
+                    onCancel = { scope.launch { agentSectionModel.cancel() } },
+                )
+            }
+        } else {
+            null
+        },
         details = model.details,
         storyPointsText = model.storyPointsText,
         status = model.status,

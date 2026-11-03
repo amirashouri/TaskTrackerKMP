@@ -244,6 +244,10 @@ fun WorkItemEditorSheet(
     onTagToggled: (TagID) -> Unit = {},
     isAdmin: Boolean = false,
     onManageTags: (() -> Unit)? = null,
+    // Injected by the shell that owns the agent model. A slot rather than a model
+    // parameter keeps this composable free of polling: the editor only decides *where*
+    // the block appears, and only while the item is in progress.
+    agentSection: (@Composable () -> Unit)? = null,
 ) {
     ProjectsEditorFullScreen(
         title = title,
@@ -307,6 +311,7 @@ fun WorkItemEditorSheet(
         onManageTags = onManageTags,
         searchMembers = searchMembers,
         resolveSelected = resolveSelected,
+        agentSection = agentSection,
         modifier = modifier
             .fillMaxSize()
             .testTag(WorkItemEditorFullScreenTag),
@@ -381,6 +386,7 @@ private fun ProjectsEditorFullScreen(
     onTagToggled: (TagID) -> Unit = {},
     isAdmin: Boolean = false,
     onManageTags: (() -> Unit)? = null,
+    agentSection: (@Composable () -> Unit)? = null,
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var showDiscardConfirmation by remember { mutableStateOf(false) }
@@ -534,6 +540,11 @@ private fun ProjectsEditorFullScreen(
                 onRemoveBlocker = onRemoveBlocker,
                 onAddClick = onAddBlockerClick,
             )
+            // Only an item in progress can be handed to an agent, so the block is
+            // absent on everything else rather than present and disabled.
+            if (status == WorkItemStatus.InProgress) {
+                agentSection?.invoke()
+            }
             comments?.let { thread ->
                 if (!isCreating) {
                     CommentThread(

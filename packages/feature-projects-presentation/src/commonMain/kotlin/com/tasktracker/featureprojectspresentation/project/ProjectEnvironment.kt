@@ -13,15 +13,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.DateProvider
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
-import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
 import com.tasktracker.featureprojectsdomain.FilePicker
@@ -48,6 +47,8 @@ class ProjectEnvironment(
     val blobTransport: AttachmentBlobTransport? = null,
     /** Platform file opener for viewing local attachment files. */
     val opener: AttachmentOpener? = null,
+    /** Server-side agent runs; null when no backend is bound, which disables the block. */
+    val agentRunsPort: AgentRunsPort? = null,
 )
 
 val LocalProjectEnvironment = staticCompositionLocalOf<ProjectEnvironment?> { null }

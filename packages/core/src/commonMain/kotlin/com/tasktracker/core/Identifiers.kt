@@ -95,6 +95,28 @@ value class NotificationID(val rawValue: Uuid) {
 }
 
 /**
+ * One delegated agent run. A run is server-owned and polled, so this id never
+ * enters the sync envelope; it is here because the app has to name a run it wants
+ * to read or cancel.
+ */
+@Serializable
+@JvmInline
+value class AgentRunID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
+/** The machine that claimed a run. Pairing happens in `tt agent connect`. */
+@Serializable
+@JvmInline
+value class AgentRunnerID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
+/**
  * One project-defined tag.
  *
  * Project-scoped and carried on the project's catalog rather than in an entity of its
@@ -150,6 +172,12 @@ fun randomNotificationID(): NotificationID = NotificationID(Uuid.random())
 /** Generates a fresh identifier. */
 fun randomTagID(): TagID = TagID(Uuid.random())
 
+/** Generates a fresh identifier. */
+fun randomAgentRunID(): AgentRunID = AgentRunID(Uuid.random())
+
+/** Generates a fresh identifier. */
+fun randomAgentRunnerID(): AgentRunnerID = AgentRunnerID(Uuid.random())
+
 /**
  * Parses an identifier from its wire string, or returns `null` if malformed.
  *
@@ -188,3 +216,11 @@ fun parseNotificationID(raw: String): NotificationID? =
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseTagID(raw: String): TagID? = runCatching { TagID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseAgentRunID(raw: String): AgentRunID? =
+    runCatching { AgentRunID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseAgentRunnerID(raw: String): AgentRunnerID? =
+    runCatching { AgentRunnerID(Uuid.parse(raw)) }.getOrNull()
