@@ -23,3 +23,20 @@ prompt) are lifted above the unchanged 6.3 validator policy, and the pending
 | Task | State | Intent | Depends on | Execution details |
 | --- | --- | --- | --- | --- |
 | 10.1 | In progress | Mobile plain-HTTP LAN parity | android-local-network-permission | [`specs/mobile-lan-plain-http.md`](../specs/mobile-lan-plain-http.md) |
+
+## 11 — Agent runs
+
+A work item in progress can be handed to an LLM agent that runs on the machine
+holding the code (`tt agent run`). The app dispatches the run and follows its
+progress: status, latest step, event log, cancel. Agent state is server-owned and
+polled, so nothing enters the sync envelope, no DTO gains a field, and v1 adds no
+Room table. The server half is `TaskTrackerServer` Milestone 10.
+
+| Task | State | Intent | Depends on | Execution details |
+| --- | --- | --- | --- | --- |
+| 11.1 | Pending | Agent-run IDs, domain models, `AgentRunsPort`, HTTP remote, DI binding | Server `T10.3` | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
+| 11.2 | Pending | Dispatch and live progress in the work item editor | 11.1 | [`specs/11.1-agent-runs.md`](../specs/11.1-agent-runs.md) |
+
+11.1 lands before 11.2, and both stay inside the existing `feature-projects-*`
+modules: the only surface is the work item, and an `feature-agent-*` triple is
+extracted only if a standalone screen arrives.
