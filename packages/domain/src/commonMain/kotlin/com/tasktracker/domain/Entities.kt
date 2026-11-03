@@ -303,6 +303,14 @@ data class Project(
      */
     var isArchived: Boolean = false,
     /**
+     * The admin's per-project switch for whether a work item here may be dispatched to an
+     * agent. Project-scoped, not server-scoped: each project's admin decides.
+     *
+     * Defaulted so payloads from a server that predates this field still decode; a server
+     * that does not know the flag is treated as "agent not set up", which is the safe reading.
+     */
+    var agentEnabled: Boolean = false,
+    /**
      * The next work item number this project will hand out.
      *
      * Carried on the entity rather than derived by counting rows, because counting is

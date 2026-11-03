@@ -55,6 +55,20 @@ class RecordMappingTest {
         assertEquals(42, record.nextItemNumber)
         assertEquals(Moments.start, record.createdAt)
         assertEquals(Moments.later, record.updatedAt)
+        // The agent flag is admin configuration that travels with the project payload, so it
+        // gets an explicit assertion rather than being left to the equality above.
+        assertEquals(false, record.agentEnabled)
+    }
+
+    @Test
+    fun aProjectWithAgentEnabledCarriesTheFlagThroughItsRecord() {
+        // Exercises the non-default value so a converter that hard-codes `false` cannot round
+        // trip against itself the way the original's dropped columns did.
+        val project = aProject().copy(agentEnabled = true)
+        val record = project.toRecord()
+
+        assertEquals(true, record.agentEnabled)
+        assertEquals(true, record.domainValue?.agentEnabled)
     }
 
     @Test
@@ -111,6 +125,17 @@ class RecordMappingTest {
         // Identity is not the payload's to change.
         assertEquals(stored.id, updated.id)
         assertEquals(stored.createdAt, updated.createdAt)
+    }
+
+    @Test
+    fun applyingAProjectCarriesTheAgentEnabledFlagFromThePayload() {
+        // The flag is admin configuration on the project; a pull has to be able to turn it on
+        // (or off) on a device that was holding the row. `apply` copies it from the payload.
+        val stored = aProject().toRecord()
+
+        val updated = stored.apply(aProject().copy(agentEnabled = true))
+
+        assertEquals(true, updated.agentEnabled)
     }
 
     @Test

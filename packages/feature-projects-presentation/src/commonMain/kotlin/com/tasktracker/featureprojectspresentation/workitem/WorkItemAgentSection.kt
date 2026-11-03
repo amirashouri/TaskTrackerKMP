@@ -34,6 +34,7 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.agent_cancel
 import com.tasktracker.resources.agent_cancelling
 import com.tasktracker.resources.agent_empty
+import com.tasktracker.resources.agent_not_configured
 import com.tasktracker.resources.agent_section_title
 import com.tasktracker.resources.agent_send
 import com.tasktracker.resources.agent_send_again
@@ -59,6 +60,12 @@ fun WorkItemAgentSection(
     model: AgentRunModel,
     onDispatch: () -> Unit,
     onCancel: () -> Unit,
+    /**
+     * Whether an agent is set up for this project. When false the section shows the
+     * "no agent configured" message and the dispatch button is greyed out, so a run is
+     * never queued on a project the admin has not enabled agents for.
+     */
+    agentConfigured: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val run = model.run
@@ -92,16 +99,30 @@ fun WorkItemAgentSection(
             )
 
             run == null -> {
-                ttText(
-                    text = stringResource(Res.string.agent_empty),
-                    style = ttTypography.footnote,
-                    color = ttLabelSecondary(),
-                )
-                ttGlassButton(
-                    label = stringResource(Res.string.agent_send),
-                    onClick = { if (!model.isDispatching) onDispatch() },
-                    modifier = Modifier.testTag(WorkItemAgentSendTag),
-                )
+                if (agentConfigured) {
+                    ttText(
+                        text = stringResource(Res.string.agent_empty),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                    ttGlassButton(
+                        label = stringResource(Res.string.agent_send),
+                        onClick = { if (!model.isDispatching) onDispatch() },
+                        modifier = Modifier.testTag(WorkItemAgentSendTag),
+                    )
+                } else {
+                    ttText(
+                        text = stringResource(Res.string.agent_not_configured),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                    ttGlassButton(
+                        label = stringResource(Res.string.agent_send),
+                        enabled = false,
+                        onClick = {},
+                        modifier = Modifier.testTag(WorkItemAgentSendTag),
+                    )
+                }
             }
 
             else -> {
@@ -141,6 +162,7 @@ fun WorkItemAgentSection(
                     }
                     ttGlassButton(
                         label = stringResource(Res.string.agent_send_again),
+                        enabled = agentConfigured,
                         onClick = { if (!model.isDispatching) onDispatch() },
                         modifier = Modifier.testTag(WorkItemAgentSendTag),
                     )

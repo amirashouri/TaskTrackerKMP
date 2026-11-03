@@ -82,10 +82,10 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
     // 5: the attachments table grew `project_id`, `blob_ref` and `uploaded_at` columns.
     // 6: projects grew `tags`; work items grew `tag_ids`.
     // 7: sprints grew `is_locked`, the explicit replacement for the start-date edit lock.
-    // Bumped so an existing dev store is dropped and recreated by [open]'s destructive
-    // fallback instead of failing schema validation on the missing columns — see the
-    // class KDoc on when the reset story ends.
-    version = 7,
+    // 8: projects grew `agent_enabled`, the admin's per-project agent switch. Bumped so an
+    // existing dev store is dropped and recreated by [open]'s destructive fallback instead of
+    // failing schema validation on the missing column — see the class KDoc on when the reset ends.
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

@@ -297,6 +297,7 @@
     <string name="agent_empty">No agent has run on this task yet.</string>
     <string name="agent_waiting">Queued. A paired machine will pick this up.</string>
     <string name="agent_unavailable">This run is no longer available on the server.</string>
+    <string name="agent_not_configured">No agent has been set up for this project. You can ask your admin to set it up.</string>
     <string name="agent_status_queued">Queued</string>
     <string name="agent_status_claimed">Claimed</string>
     <string name="agent_status_running">Running</string>

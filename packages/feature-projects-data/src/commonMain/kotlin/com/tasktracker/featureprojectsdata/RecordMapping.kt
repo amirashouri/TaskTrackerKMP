@@ -81,6 +81,7 @@ internal fun Project.toRecord(): ProjectRecord = ProjectRecord(
     tags = tags.toTagColumn(),
     memberIDs = memberIDs.joinToString(",") { it.stringValue },
     isArchived = isArchived,
+    agentEnabled = agentEnabled,
     nextItemNumber = nextItemNumber,
     createdAt = createdAt,
     updatedAt = updatedAt,
@@ -145,6 +146,7 @@ internal fun ProjectRecord.apply(value: Project): ProjectRecord = copy(
     tags = value.tags.toTagColumn(),
     memberIDs = value.memberIDs.joinToString(",") { it.stringValue },
     isArchived = value.isArchived,
+    agentEnabled = value.agentEnabled,
     updatedAt = value.updatedAt,
     nextItemNumber = maxOf(nextItemNumber, value.nextItemNumber),
 )
@@ -168,6 +170,7 @@ internal val ProjectRecord.domainValue: Project?
             tags = tags.toTags(),
             memberIDs = memberIDs.split(',').mapNotNull(::parseUserID),
             isArchived = isArchived,
+            agentEnabled = agentEnabled,
             nextItemNumber = nextItemNumber,
             createdAt = createdAt,
             updatedAt = updatedAt,

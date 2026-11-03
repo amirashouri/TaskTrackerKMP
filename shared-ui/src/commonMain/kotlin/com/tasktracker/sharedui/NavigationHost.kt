@@ -2071,6 +2071,7 @@ private fun WorkItemEditorDestination(
                     model = agentSectionModel,
                     onDispatch = { scope.launch { agentSectionModel.dispatch() } },
                     onCancel = { scope.launch { agentSectionModel.cancel() } },
+                    agentConfigured = currentProject?.agentEnabled ?: true,
                 )
             }
         } else {

@@ -72,6 +72,7 @@ class RecordCompletenessTest {
             nextItemNumber = 42,
             createdAt = Moments.start,
             updatedAt = Moments.later,
+            agentEnabled = false,
         )
 
         assertEquals(expected, project.toRecord())
@@ -189,6 +190,7 @@ class RecordCompletenessTest {
             nextItemNumber = 42,
             createdAt = Moments.start,
             updatedAt = Moments.later,
+            agentEnabled = false,
         )
 
         val incoming = aProject(
@@ -214,6 +216,7 @@ class RecordCompletenessTest {
             nextItemNumber = 99,
             createdAt = stored.createdAt,
             updatedAt = Moments.muchLater,
+            agentEnabled = false,
         )
 
         assertEquals(expected, stored.apply(incoming))
@@ -368,6 +371,7 @@ class RecordCompletenessTest {
             nextItemNumber = 42,
             createdAt = Moments.start,
             updatedAt = Moments.later,
+            agentEnabled = false,
         )
 
         assertEquals(aProject(), record.domainValue)

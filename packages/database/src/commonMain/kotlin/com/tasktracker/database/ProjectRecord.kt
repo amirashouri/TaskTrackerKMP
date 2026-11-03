@@ -52,6 +52,12 @@ data class ProjectRecord(
     @ColumnInfo(defaultValue = "''") val memberIDs: String = "",
     val isArchived: Boolean,
     /**
+     * The admin's per-project switch for whether a work item here may be dispatched to an
+     * agent. Mirrors [Project.agentEnabled]; a project with it off greys out the editor's
+     * "Send to agent" button so a run is never queued on a project that has no agent.
+     */
+    val agentEnabled: Boolean,
+    /**
      * The next number to hand out for a work item key.
      *
      * Stored rather than derived by counting rows, and the reason is not performance:
