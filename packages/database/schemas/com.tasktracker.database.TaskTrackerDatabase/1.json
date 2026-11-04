@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "7c10389606054ed6f2b2c31b09c34197",
+    "identityHash": "864b9eb48580de8eae737138586afa5e",
     "entities": [
       {
         "tableName": "outbox",
@@ -166,7 +166,7 @@
       },
       {
         "tableName": "projects",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `keyPrefix` TEXT NOT NULL, `name` TEXT NOT NULL, `details` TEXT NOT NULL, `memberIDs` TEXT NOT NULL DEFAULT '', `isArchived` INTEGER NOT NULL, `nextItemNumber` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `keyPrefix` TEXT NOT NULL, `name` TEXT NOT NULL, `details` TEXT NOT NULL, `tags` TEXT NOT NULL DEFAULT '', `memberIDs` TEXT NOT NULL DEFAULT '', `isArchived` INTEGER NOT NULL, `agentEnabled` INTEGER NOT NULL, `nextItemNumber` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -193,6 +193,13 @@
             "notNull": true
           },
           {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
             "fieldPath": "memberIDs",
             "columnName": "memberIDs",
             "affinity": "TEXT",
@@ -202,6 +209,12 @@
           {
             "fieldPath": "isArchived",
             "columnName": "isArchived",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "agentEnabled",
+            "columnName": "agentEnabled",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -233,7 +246,7 @@
       },
       {
         "tableName": "work_items",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectID` TEXT NOT NULL, `key` TEXT NOT NULL, `title` TEXT NOT NULL, `details` TEXT NOT NULL, `statusRaw` TEXT NOT NULL, `priorityRaw` INTEGER NOT NULL, `assigneeID` TEXT, `dueDate` INTEGER, `rank` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `resolvedAt` INTEGER, `storyPoints` INTEGER, `blockedByIDs` TEXT, `recurrenceRaw` TEXT, `recurrenceUntil` INTEGER, `sprintID` TEXT, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectID` TEXT NOT NULL, `key` TEXT NOT NULL, `title` TEXT NOT NULL, `details` TEXT NOT NULL, `statusRaw` TEXT NOT NULL, `priorityRaw` INTEGER NOT NULL, `assigneeID` TEXT, `dueDate` INTEGER, `rank` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `resolvedAt` INTEGER, `storyPoints` INTEGER, `blockedByIDs` TEXT, `tagIDs` TEXT, `recurrenceRaw` TEXT, `recurrenceUntil` INTEGER, `sprintID` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -318,6 +331,11 @@
           {
             "fieldPath": "blockedByIDs",
             "columnName": "blockedByIDs",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tagIDs",
+            "columnName": "tagIDs",
             "affinity": "TEXT"
           },
           {
@@ -453,7 +471,7 @@
       },
       {
         "tableName": "sprints",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectID` TEXT NOT NULL, `name` TEXT NOT NULL, `goalStoryPoints` INTEGER NOT NULL, `goal` TEXT, `startDate` INTEGER NOT NULL, `endDate` INTEGER NOT NULL, `ownerID` TEXT, `isFinished` INTEGER NOT NULL, `finishedAt` INTEGER, `isArchived` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `projectID` TEXT NOT NULL, `name` TEXT NOT NULL, `goalStoryPoints` INTEGER NOT NULL, `goal` TEXT, `startDate` INTEGER NOT NULL, `endDate` INTEGER NOT NULL, `ownerID` TEXT, `isFinished` INTEGER NOT NULL, `finishedAt` INTEGER, `isArchived` INTEGER NOT NULL DEFAULT 0, `isLocked` INTEGER NOT NULL DEFAULT 0, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -520,6 +538,13 @@
             "defaultValue": "0"
           },
           {
+            "fieldPath": "isLocked",
+            "columnName": "isLocked",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
             "fieldPath": "createdAt",
             "columnName": "createdAt",
             "affinity": "INTEGER",
@@ -549,11 +574,268 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_sprints_projectID` ON `${TABLE_NAME}` (`projectID`)"
           }
         ]
+      },
+      {
+        "tableName": "comments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sequence` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `id` TEXT NOT NULL, `workItemID` TEXT NOT NULL, `authorID` TEXT NOT NULL, `body` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `parentID` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workItemID",
+            "columnName": "workItemID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "authorID",
+            "columnName": "authorID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentID",
+            "columnName": "parentID",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_comments_workItemID",
+            "unique": false,
+            "columnNames": [
+              "workItemID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_comments_workItemID` ON `${TABLE_NAME}` (`workItemID`)"
+          },
+          {
+            "name": "index_comments_id",
+            "unique": true,
+            "columnNames": [
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_comments_id` ON `${TABLE_NAME}` (`id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "attachments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sequence` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `id` TEXT NOT NULL, `workItemID` TEXT NOT NULL, `projectID` TEXT NOT NULL, `fileName` TEXT NOT NULL, `mimeType` TEXT, `sizeBytes` INTEGER NOT NULL, `blobPath` TEXT NOT NULL, `blobRef` TEXT, `uploadedAt` INTEGER, `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "workItemID",
+            "columnName": "workItemID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectID",
+            "columnName": "projectID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "blobPath",
+            "columnName": "blobPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "blobRef",
+            "columnName": "blobRef",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "uploadedAt",
+            "columnName": "uploadedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_attachments_workItemID",
+            "unique": false,
+            "columnNames": [
+              "workItemID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_attachments_workItemID` ON `${TABLE_NAME}` (`workItemID`)"
+          },
+          {
+            "name": "index_attachments_id",
+            "unique": true,
+            "columnNames": [
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_attachments_id` ON `${TABLE_NAME}` (`id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sequence` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `id` TEXT NOT NULL, `userID` TEXT NOT NULL, `kind` TEXT NOT NULL, `payload` TEXT NOT NULL, `isRead` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "sequence",
+            "columnName": "sequence",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userID",
+            "columnName": "userID",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "payload",
+            "columnName": "payload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isRead",
+            "columnName": "isRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "sequence"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_notifications_userID",
+            "unique": false,
+            "columnNames": [
+              "userID"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notifications_userID` ON `${TABLE_NAME}` (`userID`)"
+          },
+          {
+            "name": "index_notifications_id",
+            "unique": true,
+            "columnNames": [
+              "id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_notifications_id` ON `${TABLE_NAME}` (`id`)"
+          },
+          {
+            "name": "index_notifications_createdAt",
+            "unique": false,
+            "columnNames": [
+              "createdAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_notifications_createdAt` ON `${TABLE_NAME}` (`createdAt`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7c10389606054ed6f2b2c31b09c34197')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '864b9eb48580de8eae737138586afa5e')"
     ]
   }
 }

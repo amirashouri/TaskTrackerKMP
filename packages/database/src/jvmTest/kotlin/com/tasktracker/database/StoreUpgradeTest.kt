@@ -30,9 +30,9 @@ class StoreUpgradeTest {
     private val now = Instant.fromEpochSeconds(1_700_000_000)
 
     /**
-     * A table that no current entity owns, standing in for the ones versions 2–9 declared
-     * and later dropped. It is what makes the *kind* of destruction visible: see
-     * [assertAStoreAtVersionIsRecreated].
+     * A table that no current entity owns, standing in for one an earlier dev build
+     * declared and later dropped. It is what makes the *kind* of destruction visible:
+     * see [assertAStoreAtVersionIsRecreated].
      */
     private val obsoleteTable = "obsolete_from_an_earlier_build"
 
@@ -62,8 +62,8 @@ class StoreUpgradeTest {
      * drops every table the current schema knows about, so a "the old rows are gone"
      * assertion passes under both flags and would certify the weaker one — a store that is
      * emptied but keeps whatever a previous schema left behind, which Room's own KDoc warns
-     * "could leave obsolete data". `TaskTrackerDatabase`'s KDoc dates exactly that history
-     * to schemas 2–9, so it is not a hypothetical: the flag has to be `true`, and this is
+     * "could leave obsolete data". Earlier dev schemas did declare tables the current
+     * build does not, so it is not a hypothetical: the flag has to be `true`, and this is
      * the assertion that says so.
      */
     private suspend fun assertAStoreAtVersionIsRecreated(version: Int) {

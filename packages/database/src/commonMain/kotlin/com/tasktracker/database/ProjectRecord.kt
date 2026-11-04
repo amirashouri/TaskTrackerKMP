@@ -48,7 +48,7 @@ data class ProjectRecord(
      * Empty is the empty string, so an old row and a new project read the same way.
      */
     @ColumnInfo(defaultValue = "''") val tags: String = "",
-    /** Comma-separated stable UUIDs; the migration default leaves existing projects unassigned. */
+    /** Comma-separated stable UUIDs; the column default leaves a project unassigned. */
     @ColumnInfo(defaultValue = "''") val memberIDs: String = "",
     val isArchived: Boolean,
     /**

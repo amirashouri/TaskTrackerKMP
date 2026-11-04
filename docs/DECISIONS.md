@@ -1,6 +1,6 @@
 # Architecture & Design Decisions
 
-Permanent architectural invariants and design constraints. A rule lives here only if violating it has caused bugs. Operational test workflows live in `docs/TESTING.md`.
+Permanent architectural invariants and design constraints. A rule lives here only if violating it has caused bugs. Operational test workflows live in [`Project.md`](../Project.md#2-verification-loops) §2 and §5.
 
 ## 1. Structural Invariants
 * **Navigation:** Hand-rolled `Router` in `:packages:routing` (pure state, no Compose dependency). Rendered exclusively by `:shared-ui`. No third-party nav libraries.
@@ -37,3 +37,133 @@ Permanent architectural invariants and design constraints. A rule lives here onl
 * **Single Local Store:** Outbox rows carry `userID`, but local Room entities are shared across accounts on the same device.
 * **Dark Mode:** Tints accent colors only; glass surfaces remain semantic tokens.
 * **Verification Matrix:** The full 3-host test suite is optimized (`scripts/check.sh full` completes in <10m) and serves as the release and multiplatform gate. Routine code edits use the sub-minute focused JVM loop.
+
+## 6. Notes kept from completed task specs
+
+The per-task specs that produced these decisions were removed before the first
+release. Only constraints a future change could silently violate are kept here;
+validation runs, counts, handoffs and per-task file lists were deliberately
+dropped. Sections 1–5 above remain authoritative for the structural invariants.
+
+### Wire format and configuration
+
+- **One response convention.** Client–server response keys are `camelCase` and
+  timestamps are ISO-8601 UTC whole seconds. Go `json:"…"` and Kotlin
+  `@SerialName` must match exactly. Enum *values* (`in_progress`), SQL column
+  names, the agent runner's `last_seen_at` and third-party LLM request keys are
+  not response keys and keep their own spelling.
+- **Strict decoding is the contract.** `JSONCoding` leaves `ignoreUnknownKeys`
+  off: a response may not gain, lose or rename a key unless the client ships
+  first with a default. Every optional DTO field needs a default; enabling
+  `ignoreUnknownKeys` globally is not a substitute.
+- **The connect link is one shared grammar.**
+  `tasktracker://connect?url=<QueryEscape(the whole verified URL)>` is rendered
+  by `tt install` and percent-decoded exactly once by the client. Escape the
+  whole URL, including `&` and `%`, or an existing `%2F` becomes a different
+  address. It only prefills a field the user confirms — a custom scheme can be
+  claimed by another app and is never a trust decision.
+- **Plain HTTP is local-only.** `https` is valid for any parseable host; plain
+  `http` is accepted only for local addresses (loopback, RFC1918, link-local,
+  CGNAT, `.local`, single-label). A public `http://` root is refused at save
+  time. This policy is deliberately wider than Android's cleartext allow-list;
+  do not narrow it to satisfy a platform gate.
+- **The API root resolves once.** `platformApiBaseUrl` runs before the graph
+  exists and uses `runBlocking` to choose which HTTP clients to bind; an
+  unreadable store falls back to the build-time value. Clients are bound once,
+  so a saved URL takes effect only after a restart. The URL is a raw preference
+  key, not a `DefaultsKey`, because sign-out's `removeAll()` would erase it —
+  it is a device property, not a credential.
+
+### Domain and sync
+
+- **Terminal means `Done` or `Closed`.** `WorkItemStatus.isTerminal` is the one
+  definition of finished work. Any new listing of finished items must read it,
+  not filter on `Closed`, or it disagrees with `ArchiveWorkItem` and the Archive
+  tab. A `Done` item is in both the board's done lane and the archive; counts
+  must be `items.size`, never the sum of the sections.
+- **A preference is shell state.** A feature `presentation` module may not see
+  `:packages:user-defaults`, so a screen takes a value plus a change callback
+  and `:shared-ui` holds it in `ShellPreferences`. `remember` inside a
+  destination dies on a tab switch. Store *choices*, not screen state: the
+  search query is screen-scoped, while backlog sort order is a preference.
+- **Agent runs are server-owned.** No Room table, no offline queue, no field on
+  the `workItem` envelope. State is polled with `afterSeq` and recovered with
+  `GET /v1/agent/runs?workItemId=…`; a run that outlives the app is normal.
+  "Stop" is the server's claim gate, not a process kill.
+- **Tags ride the project entity.** The catalog needs no sync entity, outbox
+  scope or Room table, and is written only through the admin project API.
+  Deleting a tag never rewrites work items: readers drop ids the catalog no
+  longer defines. `availableTags == null` means the read failed, not "no tags";
+  collapsing it to `emptyList()` loses tags whenever a read is slow.
+- **Sprint lock replaces the clock.** An explicit reversible `isLocked` flag,
+  not the start date, freezes window, cap and membership. A locked sprint still
+  accepts name/goal/owner edits; a finished sprint is frozen either way.
+  `windowLocked` is `isLocked || isFinished`, and anything using "active" as a
+  proxy for "committed" must read the flag.
+- **Directory policy is server-side.** A blank user search lists addable
+  accounts while a typed search includes deleted authors. The client filters
+  what it receives and must not "fix" that asymmetry; `RoomTeamRepository`
+  stays the offline fallback that owns the signed-in identity.
+- **Never swallow `CancellationException`.** Rethrow it, do not record a
+  cancellation as a failure or raise a notice for a screen that is gone. A
+  failed profile PATCH restores the last server-confirmed snapshot rather than
+  re-reading `port.userDetails()`, which is a networked read-through.
+
+### Architecture and models
+
+- **The architecture graph is an allow-list.** Edits to
+  `build-logic/.../tasktracker.architecture.gradle.kts` require an ACK, and a
+  forbidden edge compiles and passes focused tests — only `verifyArchitectureGraph`
+  at the release gate catches it. Prefer a design that needs no table edit.
+- **Every model lives in its feature's `presentation` module.** Screens are
+  functions of their arguments and own no async. Observation is the caller's
+  scope, and a "has loaded" flag must be set by an answer, not an attempt, so a
+  failed or cancelled load is retried.
+- **Platform seams are all-or-nothing.** A new `expect` needs `jvm`, `ios` and
+  `android` actuals in the same change; introducing one is a cross-module change
+  requiring an ACK.
+- **Shell scenarios are indexed.** `ShellScenarios.<group>Scenarios` lists are
+  reached as `projectBacklogScenarios[7]`. Inserting mid-list silently renames
+  every test below it — append and add the next index.
+
+### UI, rendering and tests
+
+- **Measure the sibling that moves.** `AnimatedVisibility` + `expandVertically`
+  clips its child, so the child's own bounds are a bad measurement. Measure a
+  sibling below it, and compare against the *settled* position — one frame of a
+  tween already satisfies "`> closed`" even when the animation is ignored.
+- **Drive animations with the Compose clock.** Use `mainClock.autoAdvance = false`
+  and `advanceTimeBy(...)`; `Thread.sleep` passes on a fast JVM and flakes on CI.
+  `LocalReducedMotion` means "snap to the target", not "skip the change".
+- **Silent rendering failures.** `ImageVector.Builder.addPath` draws nothing
+  without a `Brush` fill, and equal contours cancel under even-odd just as
+  silently. A gradient with `endY = Float.POSITIVE_INFINITY` interpolates at ~0
+  everywhere, so its fade constants become dead code.
+- **Baseline drift is not your regression.** `test-baseline.json` is regenerated
+  only from `scripts/check.sh full` and can be stale on `main`. Compare the delta
+  against the number of `@Test` lines you added before assuming you broke it.
+- **A comment claiming "test X cannot see Y" is unverified.** Two guards can
+  overlap completely; mutate the behaviour, run both, and write down which one
+  goes red. That is the only way to know a pair of tests is complementary.
+
+### Product limits
+
+- **The project owns no infrastructure.** No wildcard domain, provisioning
+  endpoint, hosted relay, static IP, port forwarding or DDNS. A customer's
+  exposure is a provider *they* hold an account with, and `tt` never phones
+  home. `lan` is the default provider and serves desktop, Android and iOS over
+  plain HTTP; `tailscale` and `cloudflare` are additive behind one flag.
+- **Android Local Network Protection fails silently.** On API 37 a blocked TCP
+  connect to a local address times out rather than being refused. The app needs
+  `ACCESS_LOCAL_NETWORK` declared and requested at runtime unless the root is
+  loopback; deciding by hostname instead would put a nearby-devices prompt in
+  front of public-server users. `100.64.0.0/10` covers Tailscale.
+- **License terms.** MIT + Commons Clause + a no-rebranding term: source-available
+  (not OSI), forbids selling and redistributing under another name. Both repos
+  must keep `LICENSE` byte-identical or the terms drift.
+- **Real backdrop blur is a non-goal.** The painted material ships because the
+  alternatives were a third-party dependency in a package every module compiles
+  against, or UIKit interop that replaces the Compose-drawn rim on iOS.
+- **Never log or render untrusted content.** Prefer user-facing `AppError.message`
+  in log lines, never append tokens, and render the agent event log as plain
+  text — never as markup or a link the model chose.

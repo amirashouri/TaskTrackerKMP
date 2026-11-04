@@ -2,8 +2,10 @@
 
 - **status:** pending
 - **priority:** P1
-- **plan:** proposed (no `docs/PLAN.md` entry yet). Companion server spec:
-  `../TaskTrackerServer/specs/attachment-server-storage.md`. **Dual-repo wire change** —
+- **plan:** proposed (no `docs/PLAN.md` entry yet). The server half is complete
+  and its decisions are retained in
+  [`TaskTrackerServer/docs/ARCHITECTURE.md`](../../TaskTrackerServer/docs/ARCHITECTURE.md#decisions-retained-from-completed-task-specs).
+  **Dual-repo wire change** —
   the `attachment` sync entity and `/v1/.../attachments/:id/blob` endpoints are shared
   contract and require the parent `AGENTS.md` §1 ACK before implementation.
 
@@ -92,7 +94,7 @@ and invisible to teammates.
 
 ## Handoff
 
-- **Done:** server half merged & green (`attachment-server-storage.md` T1–T4): `attachment`
+- **Done:** server half merged & green (`attachment` T1–T4): `attachment`
   sync entity, blob file API, config. Wire contract (`attachment` entity, `/v1/.../blob`
   endpoints, 25 MiB cap) is fixed.
 - **Done (T5 + T6):** client data model + enqueue/sink.

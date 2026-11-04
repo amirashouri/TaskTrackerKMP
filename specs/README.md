@@ -1,32 +1,32 @@
 # specs/
 
-One file per unit of work, read one at a time.
+One file per unit of work in progress, read one at a time.
 
 ## Why this exists
 
-`docs/PLAN.md` is the concise active roadmap; `docs/PLAN-ARCHIVE.md` preserves
-the detailed plan and completed-work history. A task spec avoids loading the
-archive to understand one task and is the **portable handoff unit**: task state
-survives a change of agent, tool, or session.
+`docs/PLAN.md` is the concise active roadmap. A task spec is the **portable
+handoff unit**: it records one task's scope, contract, validation, and handoff
+so work survives a change of agent, tool, or session. Completed specs are not
+kept — only their durable, non-obvious decisions are promoted into
+[`docs/DECISIONS.md`](../docs/DECISIONS.md#6-notes-kept-from-completed-task-specs).
 
 ## The documents, and what each one is authoritative for
 
 | Document | Holds | Authoritative for |
 | --- | --- | --- |
 | `docs/PLAN.md` | active roadmap, task states, dependencies, and spec links | *what* to work on next and in what order |
-| `docs/PLAN-ARCHIVE.md` | detailed roadmap history and context for active tasks without specs | historical context and task detail until moved to a spec |
-| `specs/<id>-<slug>.md` | one task's scope, contract, validation, and handoff | *how one task is done, checked, and resumed* |
+| `specs/<id>-<slug>.md` | one in-progress task's scope, contract, validation, and handoff | *how one task is done, checked, and resumed* |
+| `docs/DECISIONS.md` | permanent invariants, including notes retained from completed tasks | *why the system is the way it is* |
 | `Project.md` | architecture, the host matrix, standing caveats | *the system*, not any one task |
 | `test-baseline.json` | the host totals, generated from the build | *the current counts* |
 
 A spec does **not** restate the roadmap entry — it links to it and adds the
-checkable scope, acceptance, validation, and `## Handoff`. When a task has no
-spec, consult only its archive section and create one before implementation.
+checkable scope, acceptance, validation, and `## Handoff`. A completed task has
+no spec: the diff and commit history are its verification record.
 
 ## Lifecycle
 
-1. Select roadmap work from `docs/PLAN.md`. If it has no spec, read only its
-   section in `docs/PLAN-ARCHIVE.md`.
+1. Select roadmap work from `docs/PLAN.md`.
 2. Copy `_template.md` to `<plan-id>-<slug>.md` and fill it in with
    `status: pending`.
 3. Phase 1 (the ACK'd plan when required) supplies the spec's **Files** section.
@@ -34,9 +34,10 @@ spec, consult only its archive section and create one before implementation.
    `status: in-progress` before implementation.
 4. Implement and verify. Keep the status `in-progress` while implementation,
    validation, or review remains. Update the handoff at the end of each session.
-5. After the contract and required checks pass and diff review is approved, set
-   `status: done` in the final task-branch update before merge. Update the active
-   PLAN status in the same change. Keep the spec as the verification record.
+5. Once the contract and required checks pass and diff review is approved,
+   update the active PLAN status, promote any durable non-obvious decisions into
+   `docs/DECISIONS.md`, and **delete the spec** in the final task-branch update
+   before merge. Do not leave a `status: done` spec behind.
 
 `2.3-search-across-projects.md` is a worked example — a roadmap entry distilled
 into the spec format. `_template.md` is the blank one.
@@ -45,8 +46,8 @@ into the spec format. `_template.md` is the blank one.
 
 When choosing work, read `AGENTS.md` and the concise `docs/PLAN.md`. When
 working on task *X*, read `AGENTS.md`, its spec, and the files that spec names.
-If no spec exists, read only task *X*'s archive section and create a spec before
-implementation. Do not read unrelated specs or archive sections.
+If no spec exists, create one before implementation. Do not read unrelated
+specs or completed-task history.
 
 ## Counts
 

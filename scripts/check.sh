@@ -4,7 +4,7 @@
 #
 # Development runs focused unit tests, not this script: one class or package per
 # touched module via `./gradlew :packages:<module>:jvmTest --tests <pattern>`.
-# See `AGENTS.md` → "Verification" and `docs/TESTING.md`; this file is the gate a
+# See `AGENTS.md` → "Verification" and `Project.md` §2; this file is the gate a
 # release is cut against.
 #
 # `AGENTS.md`, `Project.md` and `README.md` used to each spell out the JAVA_HOME

@@ -193,7 +193,7 @@ private fun priorityFor(rank: Int): Priority = Priority.entries.getOrElse(rank) 
  * Encodes a blocker list for [WorkItemRecord.blockedByIDs].
  *
  * Comma-joined UUID strings, `null` for none — the same encoding `memberIDs` uses. `null`
- * rather than `""` so the migration default and the empty state are one value, and an
+ * rather than `""` so the column default and the empty state are one value, and an
  * empty split never has to be defended against.
  */
 internal fun List<WorkItemID>.toBlockedByColumn(): String? =

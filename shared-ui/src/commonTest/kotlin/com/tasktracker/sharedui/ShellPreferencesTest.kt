@@ -26,8 +26,8 @@ import kotlinx.coroutines.test.runTest
  *
  * ## Why it exists at all
  *
- * `docs/TEST-HOSTS.md` records that no test seeded a `CachedProfile` and read it back, so the
- * body of [ShellPreferences.refreshCurrentUser] could be deleted with the suite unchanged. The
+ * No test seeded a `CachedProfile` and read it back, so the body of
+ * [ShellPreferences.refreshCurrentUser] could be deleted with the suite unchanged. The
  * admin-only Settings section now takes its gate from that read, which makes the gap the
  * difference between "an admin sees the management screens" and "nobody ever does".
  *

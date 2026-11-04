@@ -53,8 +53,7 @@ data class SprintRecord(
      */
     val goalStoryPoints: Int = 0,
     /**
-     * The goal in prose, nullable — "no goal" and "cleared" are one state, and nullable is
-     * also what makes the 4 → 5 auto-migration additive rather than a rebuild.
+     * The goal in prose, nullable — "no goal" and "cleared" are one state.
      */
     val goal: String? = null,
     val startDate: Instant,
@@ -63,7 +62,7 @@ data class SprintRecord(
      * Who owns the sprint, as a `UserID` string, or `null` for unowned.
      *
      * A rename, not a reuse of the old free-text column: names do not resolve to
-     * identities, and the 8 → 9 migration drops the old column.
+     * identities.
      */
     val ownerID: String? = null,
     val isFinished: Boolean,
@@ -80,9 +79,8 @@ data class SprintRecord(
     /**
      * Whether the owner has locked the sprint against window, cap and task edits.
      *
-     * Mirrors [Sprint.isLocked]. A `NOT NULL DEFAULT 0` column so the additive migration
-     * leaves every existing sprint unlocked; see [SprintRecord]'s class KDoc on why the
-     * store drops rather than migrates a dev database at version 7.
+     * Mirrors [Sprint.isLocked]. A `NOT NULL DEFAULT 0` column, so a row written without
+     * the switch reads as unlocked.
      */
     @androidx.room.ColumnInfo(defaultValue = "0")
     val isLocked: Boolean = false,

@@ -1,6 +1,6 @@
 # Project.md
 
-Operational manual for building, running, testing, and debugging TaskTrackerKMP. Design rationale and invariants live in [`docs/DECISIONS.md`](docs/DECISIONS.md); testing policy lives in [`docs/TESTING.md`](docs/TESTING.md).
+Operational manual for building, running, testing, and debugging TaskTrackerKMP. Design rationale and invariants live in [`docs/DECISIONS.md`](docs/DECISIONS.md); testing policy lives in [§2 below](#2-verification-loops), [§5 below](#5-testing--source-set-structure) and [`AGENTS.md`](AGENTS.md) §§3–4.
 
 ---
 

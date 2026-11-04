@@ -58,9 +58,10 @@ is the order the list reads in, the second only breaks the ties the first leaves
 - [ ] Do not change board-column ordering or drag behaviour; `rank` remains the primary key
       there.
 - [ ] ~~Do not persist the selection across app launches — it is screen state, like the tab.~~
-      **Reversed** by [`backlog-sort-persists.md`](backlog-sort-persists.md): the selection is
-      the user's choice, and losing it on every tab switch and relaunch was the bug. It is now
-      a `ShellPreferences` value stored under `backlog.sortOrder`.
+      **Reversed:** the selection is the user's choice, and losing it on every
+      tab switch and relaunch was the bug. It is now a `ShellPreferences` value
+      stored under `backlog.sortOrder` — see
+      [`docs/DECISIONS.md` §6](../docs/DECISIONS.md#6-notes-kept-from-completed-task-specs).
 - [ ] Do not reorder the Archived tab, which is intentionally newest-first.
 
 ## Validation
@@ -98,5 +99,6 @@ is the order the list reads in, the second only breaks the ties the first leaves
   saw in the backlog is not preserved by the move. That is existing board behaviour and out of
   scope here.
 - The selection used to live in `remember`, so leaving the screen reset it to priority. It is
-  persisted now — see [`backlog-sort-persists.md`](backlog-sort-persists.md), which also
-  records why the "it is screen state" answer was wrong.
+  persisted now — see
+  [`docs/DECISIONS.md` §6](../docs/DECISIONS.md#6-notes-kept-from-completed-task-specs),
+  which records why the "it is screen state" answer was wrong.

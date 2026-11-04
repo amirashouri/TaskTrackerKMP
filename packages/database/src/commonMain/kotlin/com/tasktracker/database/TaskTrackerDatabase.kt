@@ -54,16 +54,15 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
 /**
  * The app's single store, at schema version 1 with no migration history.
  *
- * The store shipped versions 2 through 9 of its schema during development, each with an
- * auto-migration and a test suite that carried rows across. Nothing has ever shipped to
- * production, so that history is weight rather than a contract: the migration chain, its
- * hand-written schema literals, its drift guard and its on-disk fixtures were all deleted
- * in one change, and the version was reset to 1. [open]'s destructive fallback is the
- * upgrade story now — an old dev store is dropped and recreated, never migrated.
+ * Development took the schema as far as version 8 through auto-migrations and a suite
+ * that carried rows across. Nothing has shipped, so that history was weight rather than
+ * a contract: the migration chain, the exported schemas for 2–8 and their drift guard
+ * were deleted and the version reset to 1. [open]'s destructive fallback is the whole
+ * upgrade story — a store left by an earlier dev build is dropped and recreated, never
+ * migrated. [exportSchema] stays on so a schema change is still visible in review.
  *
- * The version is still bumped (and [exportSchema] still on) for every future schema
- * change that happens *after* the first production release; that is the point at which
- * this paragraph stops being true and a migration suite becomes worth its weight again.
+ * Bump the version for every schema change *after* the first production release; that
+ * is when real migrations become necessary and this paragraph stops being true.
  */
 @ConstructedBy(TaskTrackerDatabaseConstructor::class)
 @Database(
@@ -79,13 +78,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         AttachmentRecord::class,
         NotificationRecord::class,
     ],
-    // 5: the attachments table grew `project_id`, `blob_ref` and `uploaded_at` columns.
-    // 6: projects grew `tags`; work items grew `tag_ids`.
-    // 7: sprints grew `is_locked`, the explicit replacement for the start-date edit lock.
-    // 8: projects grew `agent_enabled`, the admin's per-project agent switch. Bumped so an
-    // existing dev store is dropped and recreated by [open]'s destructive fallback instead of
-    // failing schema validation on the missing column — see the class KDoc on when the reset ends.
-    version = 8,
+    version = 1,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

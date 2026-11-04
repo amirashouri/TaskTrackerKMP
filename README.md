@@ -94,7 +94,7 @@ tasktracker.apiBaseUrl=http://192.168.1.42:8080
 A physical phone differs from the emulator in two ways:
 
 * **The server must be published on the LAN.** The server repository's developer compose
-  publishes `8080` on `127.0.0.1` only (by design, `specs/t9.3-server-bind.md`), so the
+  publishes `8080` on `127.0.0.1` only (by design, server task `T9.3`), so the
   app reports `Failed to connect to /<lan-ip>:8080` even though the phone is on the same
   network. Use `tt expose --provider=lan`, or add a local (never committed)
   `docker-compose.override.yml` to the server checkout:
@@ -159,7 +159,7 @@ Generate native installers:
 * [`Project.md`](Project.md) — Operational manual, iOS linking invariants, and detailed request flows.
 * [`AGENTS.md`](AGENTS.md) — Engineering rules, execution boundaries, and test mutation protocol.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md) — Design record and structural architectural invariants.
-* [`docs/TESTING.md`](docs/TESTING.md) — Full test command and host reference.
+* [`Project.md` §5](Project.md#5-testing--source-set-structure) — Full test command and host reference.
 * [`docs/PLAN.md`](docs/PLAN.md) — Active roadmap and upcoming features.
 
 ---

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fail when a scenario has no entry point on a host that should run it.
 
-The contract this enforces is [docs/TESTING.md]'s: a scenario body lives in a `commonTest`
+The contract this enforces is [Project.md §5]'s: a scenario body lives in a `commonTest`
 `…Scenarios` object, and every host that runs Compose UI tests reaches it either directly
 (`FooScenarios.bar`), by inheriting a `commonTest` base class that does, or through an
 indexed alias list (`ShellScenarios.projectBacklogScenarios[12]`) whose members it names.

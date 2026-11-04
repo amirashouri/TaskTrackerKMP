@@ -128,6 +128,7 @@ class LocalStoreEraserTest {
         name = "Alpha",
         details = "",
         isArchived = false,
+        agentEnabled = false,
         nextItemNumber = 1,
         createdAt = Instant.fromEpochSeconds(1),
         updatedAt = Instant.fromEpochSeconds(1),

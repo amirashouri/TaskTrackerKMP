@@ -22,8 +22,8 @@ pending permission acceptance:
 2. iOS: no ATS exception is declared, and `NSLocalNetworkUsageDescription` is absent —
    so on iOS 14+ the local-network prompt cannot even appear and local connections are
    denied.
-3. `android-local-network-permission.md` is code-complete but its device acceptance is
-   pending. Completing it is part of this task.
+3. The Android local-network permission guard is code-complete but its device
+   acceptance is pending. Completing that acceptance is part of this task.
 
 The server needs nothing: T9.3 binds and publishes `0.0.0.0`, and T9.8's pairing QR
 already emits `http://<LAN-IP>:<port>`.
@@ -44,8 +44,8 @@ Client:
   local connections without prompting. The plist is hand-written
   (`GENERATE_INFOPLIST_FILE: NO`), so no `project.yml` change.
 - `Project.md` — the "Cleartext Guard" bullet states the new posture.
-- `specs/android-local-network-permission.md` — its pending device acceptance moves into
-  this task's validation; update its Handoff when it completes.
+- Android local-network permission — its pending device acceptance is folded into
+  this task's validation; no separate spec remains for it.
 - `docs/PLAN.md`, this file — index and status.
 
 Server (docs only; no Go change, so no server spec):
@@ -56,8 +56,8 @@ Server (docs only; no Go change, so no server spec):
 - `TaskTrackerServer/docs/SELF-HOSTING.md` — §8's Android caveat becomes the mobile note.
 - `TaskTrackerServer/docs/PLAN.md` — the Milestone 9 preamble sentence claiming phones
   need a remote HTTPS provider.
-- `TaskTrackerServer/docs/PLAN-ARCHIVE.md` — a dated addendum to the T9.8 rationale;
-  history is not rewritten.
+- `TaskTrackerServer/docs/ARCHITECTURE.md` — the retained-decisions section records
+  the plain-HTTP LAN posture instead of a dated archive addendum.
 - `/TaskTracker/AGENTS.md` §7 — the "`lan` does not serve the Android client over plain
   HTTP" sentence records the reversal. The file itself warns that edits there are not
   reviewable; the sentence is a cross-repo rule and must not keep asserting the old
@@ -75,7 +75,7 @@ Server (docs only; no Go change, so no server spec):
       launch against the LAN root prompts `ACCESS_LOCAL_NETWORK` once; granted, the login
       POST appears in the server log; denied, the screen stays usable with the ordinary
       retryable `AppError.Transport` ("Connect timeout has expired", naming the URL), and
-      a relaunch re-asks. Completes `android-local-network-permission.md`'s pending
+      a relaunch re-asks. Completes the Android local-network permission's pending
       device acceptance. Real-device confirmation stays pending below.
 - [ ] iOS, real device: the Local Network prompt appears on the first local connection;
       after granting, `http://<mac-LAN-IP>:<port>` (or a `*.local` name) signs in. A
@@ -91,8 +91,8 @@ Server (docs only; no Go change, so no server spec):
       tests pass untouched; `scripts/check.sh full` green on all three hosts (JVM 2083 /
       iOS 2021 / Android 1715, 0 failures) with `test-baseline.json` unmoved.
 - [x] Grep for the old claim ("Android client blocks cleartext", "phones need a TLS
-      provider") returns no active doc asserting it; PLAN-ARCHIVE history keeps its
-      addendum instead of being edited.
+      provider") returns no active doc asserting it; the reversal is recorded in the
+      workspace `AGENTS.md` §7 and in this spec.
 
 ## Non-goal
 
@@ -120,7 +120,7 @@ Server (docs only; no Go change, so no server spec):
 
 - **Done:** both config changes (Android `base-config`, iOS ATS + purpose string),
   `Project.md` posture bullet, the full server docs sweep (INSTALL, SELF-HOSTING, PLAN
-  preamble, PLAN-ARCHIVE addendum) and the workspace `AGENTS.md` §7 reversal. Emulator
+  preamble) and the workspace `AGENTS.md` §7 reversal. Emulator
   acceptance complete: LAN-root login 200, prompt/grant/deny/re-ask flows, pairing
   deep-link → prefill → probe → save. `scripts/check.sh full` green on all three hosts for
   the config-only diff, baseline unmoved. The only `.kt` change is the API-37 permission

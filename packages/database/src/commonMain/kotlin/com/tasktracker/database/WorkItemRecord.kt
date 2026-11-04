@@ -60,9 +60,8 @@ data class WorkItemRecord(
      * Who the item is assigned to, as a `UserID` string, or `null` for unassigned.
      *
      * Named `assigneeID` rather than `assignee` because the free-text column it replaced
-     * is gone, not reused: a row written before the change held a display name that
-     * cannot resolve to an identity, and carrying it across would keep two meanings in
-     * one column. The 8 → 9 migration drops it.
+     * is gone, not reused: an old row held a display name that cannot resolve to an
+     * identity, and carrying it across would keep two meanings in one column.
      */
     val assigneeID: String?,
     val dueDate: Instant?,

@@ -98,6 +98,7 @@ enum class DefaultsKey(val wireValue: String) {
  * - It is a URL, not a credential, so it stays in preferences rather than the keychain.
  *
  * The value is the whole API root (`https://tasks.example.com`), not a host name. It is
- * read once at graph start by `platformApiBaseUrl`; see `specs/6.1-runtime-api-root.md`.
+ * read once at graph start by `platformApiBaseUrl`; see `docs/DECISIONS.md` §6,
+ * "The API root resolves once".
  */
 public const val API_BASE_URL_PREFERENCE_KEY: String = "com.tasktracker.server.apiBaseUrl"
