@@ -94,7 +94,11 @@ internal fun NavigationSidebar(
                     ambientColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
                     spotColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
                 )
-                .ttGlassSurface(shape = RoundedCornerShape(ttRadius.surface))
+                .ttGlassSurface(
+                    shape = RoundedCornerShape(ttRadius.surface),
+                    tint = ttAccent().copy(alpha = 0.84f),
+                    thickness = ttGlass.GlassThickness.THIN,
+                )
                 .padding(ttSpacing.hairlineInset)
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),

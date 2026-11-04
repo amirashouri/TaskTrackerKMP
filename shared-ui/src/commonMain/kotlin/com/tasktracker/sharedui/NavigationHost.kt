@@ -55,6 +55,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalLeadingChromeScrollUnderInset
 import com.tasktracker.designsystem.LocalSheetPresentation
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.SheetPresentation
@@ -303,6 +304,11 @@ fun NavigationHost(
             0.dp
         } else {
             tabBarInset.value
+        },
+        LocalLeadingChromeScrollUnderInset provides if (layoutClass.isWide) {
+            leadingChromeInset.value
+        } else {
+            0.dp
         },
         // What a modal does follows the same class the chrome follows: anchored and sliding
         // under `Compact`, a centred window under `Expanded`. Derived here from the one read

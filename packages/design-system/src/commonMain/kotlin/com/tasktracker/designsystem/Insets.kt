@@ -60,6 +60,14 @@ val LocalTabBarScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLoc
  */
 val LocalStatusBarScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
 
+/**
+ * How much of the leading edge of the current screen the shell's navigation sidebar or rail covers.
+ *
+ * Published by `NavigationHost` when wide layout is active and consumed by scrollable views
+ * that allow content to slide horizontally under the leading glass chrome.
+ */
+val LocalLeadingChromeScrollUnderInset: ProvidableCompositionLocal<Dp> = compositionLocalOf { 0.dp }
+
 /** Sets the system status bar icon appearance (light vs dark) based on the active theme. */
 @Composable
 expect fun SystemBarAppearance(isDark: Boolean)

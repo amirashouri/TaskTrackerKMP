@@ -34,6 +34,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -47,6 +48,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
+import com.tasktracker.designsystem.LocalLeadingChromeScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -275,11 +277,13 @@ fun ProjectBoardScreen(
                     modifier = Modifier.horizontalGutter().testTag(ProjectBoardEmptySearchTag),
                 )
             } else {
+                val leadingChromeInset = LocalLeadingChromeScrollUnderInset.current
+                val gutterDp = ttSpacing.xxl + leadingChromeInset
                 val scrollState = rememberScrollState()
                 val laneCount = shown.columns.size
                 val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
                 val density = LocalDensity.current
-                val gutterPx = with(density) { ttSpacing.xxl.toPx() }
+                val gutterPx = with(density) { gutterDp.toPx() }
                 val stridePx = with(density) { boardLaneStride.toPx() }
                 val laneWidthPx = with(density) { columnWidth.toPx() }
                 val edgePx = with(density) { 56.dp.toPx() }
@@ -352,6 +356,23 @@ fun ProjectBoardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
+                        .then(
+                            if (leadingChromeInset > 0.dp) {
+                                Modifier.layout { measurable, constraints ->
+                                    val extraWidth = leadingChromeInset.roundToPx()
+                                    val placeable = measurable.measure(
+                                        constraints.copy(
+                                            maxWidth = constraints.maxWidth + extraWidth,
+                                        ),
+                                    )
+                                    layout(placeable.width - extraWidth, placeable.height) {
+                                        placeable.placeRelative(-extraWidth, 0)
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clipToBounds()
                         .onGloballyPositioned { viewport = it.boundsInRoot() },
                 ) {
@@ -362,7 +383,7 @@ fun ProjectBoardScreen(
                             .testTag(ProjectBoardColumnsTag),
                         verticalAlignment = Alignment.Top,
                     ) {
-                        LaneRowSpacer(ttSpacing.xxl)
+                        LaneRowSpacer(gutterDp)
                         shown.columns.forEachIndexed { index, column ->
                             if (index > 0) LaneRowSpacer(ttSpacing.md)
                             BoardColumnView(
