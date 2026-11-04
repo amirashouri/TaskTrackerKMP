@@ -35,11 +35,11 @@ class HttpAuthRemoteTest {
 
     private val envelope: ByteArray = """
         {
-          "access_token": "access-1",
-          "refresh_token": "refresh-1",
-          "user_id": "3F2504E0-4F89-41D3-9A0C-0305E82C3301",
+          "accessToken": "access-1",
+          "refreshToken": "refresh-1",
+          "userId": "3F2504E0-4F89-41D3-9A0C-0305E82C3301",
           "email": "ada@example.com",
-          "display_name": "Ada"
+          "displayName": "Ada"
         }
     """.trimIndent().encodeToByteArray()
 
@@ -109,11 +109,11 @@ class HttpAuthRemoteTest {
     }
 
     /**
-     * The snake_case key is the whole reason `RefreshRequestBody` carries a `@SerialName`,
-     * and a decoder with the wrong strategy would fail at runtime against a real server only.
+     * The camelCase key is the one `RefreshRequestBody` declares via `@SerialName`; a decoder
+     * expecting a different spelling would fail at runtime against a real server only.
      */
     @Test
-    fun refreshSendsTheTokenUnderTheServersSnakeCaseKey() = runTest {
+    fun refreshSendsTheTokenUnderTheServersCamelCaseKey() = runTest {
         val client = StubHttpClient(envelope)
         remote(client).refresh(refreshToken = "refresh-1")
 
@@ -122,10 +122,10 @@ class HttpAuthRemoteTest {
         val object_ = JSONCoding.json.parseToJsonElement(
             assertNotNull(request.body).decodeToString(),
         ) as kotlinx.serialization.json.JsonObject
-        assertEquals("refresh-1", object_["refresh_token"].toString().trim('"'))
+        assertEquals("refresh-1", object_["refreshToken"].toString().trim('"'))
         assertNull(
-            object_["refreshToken"],
-            "the camelCase spelling must not reach the wire",
+            object_["refresh_token"],
+            "the snake_case spelling must not reach the wire",
         )
     }
 
@@ -147,7 +147,7 @@ class HttpAuthRemoteTest {
     @Test
     fun anEnvelopeWithoutIdentityFieldsStillDecodes() = runTest {
         val client = StubHttpClient(
-            """{"access_token":"a","refresh_token":"r"}""".encodeToByteArray(),
+            """{"accessToken":"a","refreshToken":"r"}""".encodeToByteArray(),
         )
 
         val tokens = remote(client).signIn(email = "ada@example.com", password = "hunter2")
@@ -186,8 +186,8 @@ class HttpAuthRemoteTest {
         val client = StubHttpClient(
             """
             {
-              "access_token": "access-1",
-              "refresh_token": "refresh-1",
+              "accessToken": "access-1",
+              "refreshToken": "refresh-1",
               "token_type": "Bearer",
               "expires_in": 3600
             }

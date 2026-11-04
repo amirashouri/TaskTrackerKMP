@@ -16,33 +16,32 @@ import kotlin.time.Instant
  * Shared by the admin member API and the collaborator directory: both read the same
  * payload, and a second copy would be a second place for a `@SerialName` to drift.
  *
- * ## `created_at` is declared and then dropped
+ * ## `createdAt` is declared and then dropped
  *
- * The server puts `created_at` on every user payload. With `ignoreUnknownKeys` off, leaving it
+ * The server puts `createdAt` on every user payload. With `ignoreUnknownKeys` off, leaving it
  * out of this type would fail every member list rather than skip the field — so it is declared
  * to be decodable and then not carried into the domain `User`, which has no such property.
- * `HttpAuthRemote` does the same with the `user_id`/`email`/`display_name` trio in its token
+ * `HttpAuthRemote` does the same with the `userId`/`email`/`displayName` trio in its token
  * envelope.
  *
- * ## The timestamps are epoch millis, not the sync envelope's ISO-8601
+ * ## The timestamps are ISO-8601 UTC, like the sync envelope
  *
- * A user is never synced, and this is its only wire shape, so the server sends
- * `last_seen`/`created_at` as plain epoch millis (`entities/models.go`). That is why these are
- * `Long`s converted with [Instant.fromEpochMilliseconds] rather than `Instant` properties
- * carrying `InstantWireSerializer` — the latter would be the sync format and would fail to
- * parse a number.
+ * A user is never synced, but the project unified its wire format: `lastSeen`/`createdAt` are
+ * whole-second ISO-8601 strings, identical to the sync entities. They are `String`s parsed with
+ * [Instant.parse] rather than `Long`s, so a number on the wire would be a decode failure — which
+ * is what `ignoreUnknownKeys` off is meant to catch.
  */
 @Serializable
 internal data class MemberResponse(
     val id: String,
     val email: String,
-    @SerialName("display_name") val displayName: String? = null,
+    @SerialName("displayName") val displayName: String? = null,
     val position: String? = null,
-    @SerialName("avatar_id") val avatarId: String? = null,
+    @SerialName("avatarId") val avatarId: String? = null,
     val status: String? = null,
     val role: String? = null,
-    @SerialName("last_seen") val lastSeen: Long? = null,
-    @SerialName("created_at") val createdAt: Long,
+    @SerialName("lastSeen") val lastSeen: String? = null,
+    @SerialName("createdAt") val createdAt: String,
 )
 
 /**
@@ -60,7 +59,7 @@ internal fun MemberResponse.toUser(): User = User(
     position = position,
     status = UserStatus.fromWireValue(status),
     role = MemberRole.fromWire(role),
-    lastSeen = lastSeen?.let(Instant::fromEpochMilliseconds),
+    lastSeen = lastSeen?.let { Instant.parse(it) },
 )
 
 /**

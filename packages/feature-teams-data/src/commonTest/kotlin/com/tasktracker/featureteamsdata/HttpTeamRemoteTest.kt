@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
  * The properties worth pinning are invisible in a response: the path, the `q` parameter, and
  * `requiresAuth` — the route is open to any signed-in member but rejects an anonymous call.
  * The decode half covers the DTO's `@SerialName` list, because `JSONCoding` leaves
- * `ignoreUnknownKeys` off and a missing `created_at` declaration would fail the whole list.
+ * `ignoreUnknownKeys` off and a missing `createdAt` declaration would fail the whole list.
  */
 class HttpTeamRemoteTest {
 
@@ -33,18 +33,18 @@ class HttpTeamRemoteTest {
         avatarId: String? = null,
         status: String? = "active",
         role: String? = "admin",
-        lastSeen: Long? = 1_700_000_000_000L,
-        createdAt: Long = 1_600_000_000_000L,
+        lastSeen: String? = "2023-11-14T22:13:20Z",
+        createdAt: String = "2020-09-13T12:26:40Z",
     ): JsonObject = buildJsonObject {
         put("id", id)
         put("email", email)
-        if (displayName != null) put("display_name", displayName)
+        if (displayName != null) put("displayName", displayName)
         if (position != null) put("position", position)
-        if (avatarId != null) put("avatar_id", avatarId)
+        if (avatarId != null) put("avatarId", avatarId)
         if (status != null) put("status", status)
         if (role != null) put("role", role)
-        if (lastSeen != null) put("last_seen", lastSeen)
-        put("created_at", createdAt)
+        if (lastSeen != null) put("lastSeen", lastSeen)
+        put("createdAt", createdAt)
     }
 
     private fun memberArray(entries: List<JsonObject>): String =

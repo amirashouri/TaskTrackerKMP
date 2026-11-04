@@ -46,8 +46,8 @@ class ServerTeamRepositoryTest {
                 buildJsonObject {
                     put("id", id)
                     put("email", email)
-                    put("display_name", name)
-                    put("created_at", 1_600_000_000_000L)
+                    put("displayName", name)
+                    put("createdAt", "2020-09-13T12:26:40Z")
                 },
             )
         }.toString()
@@ -59,8 +59,8 @@ class ServerTeamRepositoryTest {
                     buildJsonObject {
                         put("id", id)
                         put("email", nameAndEmail.second)
-                        put("display_name", nameAndEmail.first)
-                        put("created_at", 1_600_000_000_000L)
+                        put("displayName", nameAndEmail.first)
+                        put("createdAt", "2020-09-13T12:26:40Z")
                     },
                 )
             }

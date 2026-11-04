@@ -67,7 +67,7 @@ class MemberAdminRepositoryTest {
     fun creatingGoesToTheServer() = runTest {
         val client = RecordingHttpClient()
         client.respondWith(
-            """{"id":"${randomUserID()}","email":"ada@example.com","role":"admin","created_at":1}""",
+            """{"id":"${randomUserID()}","email":"ada@example.com","role":"admin","createdAt":"1970-01-01T00:00:00Z"}""",
         )
         val repo = MemberAdminRepository(HttpMemberAdminRemote(client), StubTeamPort())
 
@@ -101,7 +101,7 @@ class MemberAdminRepositoryTest {
         val member = aMember(status = UserStatus.Active)
         val client = RecordingHttpClient()
         client.respondWith(
-            """{"id":"${member.id.stringValue}","email":"ada@example.com","status":"active","created_at":1}""",
+            """{"id":"${member.id.stringValue}","email":"ada@example.com","status":"active","createdAt":"1970-01-01T00:00:00Z"}""",
         )
         val repo = MemberAdminRepository(HttpMemberAdminRemote(client), StubTeamPort(known = listOf(member)))
 

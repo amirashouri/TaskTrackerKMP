@@ -22,10 +22,10 @@ private const val ADMIN_USERS: String = "/v1/admin/users"
 /**
  * The wire shapes the admin member API speaks.
  *
- * Private to the data layer, and `@SerialName`-annotated on every snake_case key: a Go
- * `encoding/json` tag and a Kotlin property name agree only by accident, and `JSONCoding`
- * leaves `ignoreUnknownKeys` off, so a key this file does not name is not skipped — it is a
- * decoding failure. That strictness is the reason `created_at` is declared here at all.
+ * Private to the data layer, and `@SerialName`-annotated on every key: a Go `encoding/json`
+ * tag and a Kotlin property name agree only by accident, and `JSONCoding` leaves
+ * `ignoreUnknownKeys` off, so a key this file does not name is not skipped — it is a
+ * decoding failure. That strictness is the reason `createdAt` is declared here at all.
  */
 @Serializable
 private data class CreateMemberRequestBody(
@@ -203,7 +203,7 @@ class HttpMemberAdminRemote(private val client: HttpClient) {
     /**
      * Mints a reset code and returns it verbatim.
      *
-     * The response's `expires_at` is declared — `JSONCoding` leaves `ignoreUnknownKeys` off,
+     * The response's `expiresAt` is declared — `JSONCoding` leaves `ignoreUnknownKeys` off,
      * so a key this DTO does not name fails the decode — but the value is not carried into the
      * domain: the TTL is a server fact the dialog states as a fixed "24 hours", and a second
      * source of it here would be a copy that could drift from the one the server enforces.
@@ -224,5 +224,5 @@ class HttpMemberAdminRemote(private val client: HttpClient) {
 @Serializable
 private data class ResetCodeResponse(
     @SerialName("code") val code: String = "",
-    @SerialName("expires_at") val expiresAt: Long = 0,
+    @SerialName("expiresAt") val expiresAt: String = "",
 )

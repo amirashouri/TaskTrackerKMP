@@ -53,18 +53,18 @@ class HttpMemberAdminRemoteTest {
         avatarId: String? = null,
         status: String? = "active",
         role: String? = "admin",
-        lastSeen: Long? = 1_700_000_000_000L,
-        createdAt: Long = 1_600_000_000_000L,
+        lastSeen: String? = "2023-11-14T22:13:20Z",
+        createdAt: String = "2020-09-13T12:26:40Z",
     ): JsonObject = buildJsonObject {
         put("id", id)
         put("email", email)
-        if (displayName != null) put("display_name", displayName)
+        if (displayName != null) put("displayName", displayName)
         if (position != null) put("position", position)
-        if (avatarId != null) put("avatar_id", avatarId)
+        if (avatarId != null) put("avatarId", avatarId)
         if (status != null) put("status", status)
         if (role != null) put("role", role)
-        if (lastSeen != null) put("last_seen", lastSeen)
-        put("created_at", createdAt)
+        if (lastSeen != null) put("lastSeen", lastSeen)
+        put("createdAt", createdAt)
     }
 
     private fun memberArray(entries: List<JsonObject>): String =
@@ -144,7 +144,7 @@ class HttpMemberAdminRemoteTest {
         assertEquals("ada@example.com", members[0].email)
         assertEquals(UserStatus.Active, members[0].status)
         assertEquals(MemberRole.Admin, members[0].role)
-        // `inactive` is a state a live row carries, and an absent position/last_seen read as
+        // `inactive` is a state a live row carries, and an absent position/lastSeen read as
         // their defaults rather than failing the decode.
         assertEquals(UserStatus.Inactive, members[1].status)
         assertEquals(MemberRole.Member, members[1].role)
@@ -153,15 +153,15 @@ class HttpMemberAdminRemoteTest {
     }
 
     /**
-     * The three translations that a domain type could not make for itself: the snake_case keys,
-     * the epoch-millis `last_seen` becoming an [Instant] (the sync envelope's ISO-8601 is a
-     * different contract), and `created_at` — which the server always sends, the domain `User`
-     * has no field for, and the strict decoder would reject if the DTO omitted it.
+     * The two things the DTO is load-bearing for: the camelCase keys the server puts on the
+     * wire, and the ISO-8601 `lastSeen` becoming an [Instant] (a plain string at whole-second
+     * resolution). `createdAt` the server always sends, the domain `User` has no field for, and
+     * the strict decoder would reject if the DTO omitted it.
      */
     @Test
-    fun aMemberPayloadCarriesTheServerKeysAndEpochMillis() = runTest {
+    fun aMemberPayloadCarriesTheServerKeysAndIsoTimestamps() = runTest {
         val client = RecordingHttpClient()
-        client.respondWith(memberArray(listOf(memberObject(avatarId = "avatar-9", lastSeen = 1_700_000_000_000L))))
+        client.respondWith(memberArray(listOf(memberObject(avatarId = "avatar-9", lastSeen = "2023-11-14T22:13:20Z"))))
 
         val user = remote(client).members(UserStatus.Active).single()
 
@@ -169,7 +169,7 @@ class HttpMemberAdminRemoteTest {
         assertEquals("Ada", user.displayName)
         assertEquals("Lead", user.position)
         assertEquals("avatar-9", user.avatarId)
-        assertEquals(Instant.fromEpochMilliseconds(1_700_000_000_000L), user.lastSeen)
+        assertEquals(Instant.parse("2023-11-14T22:13:20Z"), user.lastSeen)
     }
 
     @Test
@@ -190,7 +190,7 @@ class HttpMemberAdminRemoteTest {
     @Test
     fun anUndeclaredKeyInAMemberPayloadIsADecodingFailure() = runTest {
         val client = RecordingHttpClient()
-        client.respondWith("""[{"id":"$MEMBER_ID","email":"a@b.c","tenant_id":"acme","created_at":1}]""")
+        client.respondWith("""[{"id":"$MEMBER_ID","email":"a@b.c","tenant_id":"acme","createdAt":"1970-01-01T00:00:00Z"}]""")
 
         assertFailsWith<AppError.Decoding> {
             remote(client).members(UserStatus.Active)
@@ -219,7 +219,7 @@ class HttpMemberAdminRemoteTest {
         assertTrue(body.contains("\"password\":\"hunter2\""), body)
         assertTrue(body.contains("\"role\":\"admin\""), body)
         assertTrue(body.contains("\"position\":\"Lead\""), body)
-        assertFalse(body.contains("display_name"), "the create form sends no display name")
+        assertFalse(body.contains("displayName"), "the create form sends no display name")
     }
 
     /**
@@ -340,13 +340,13 @@ class HttpMemberAdminRemoteTest {
     /**
      * The mint is a bare POST: the member is named by the route, so there is no body to
      * disagree with the path about. The response's two keys are the whole contract — `code` is
-     * the credential handed back to the admin, and `expires_at` is declared so the strict
+     * the credential handed back to the admin, and `expiresAt` is declared so the strict
      * decoder does not reject it — and the code is what comes back out.
      */
     @Test
     fun mintingAResetCodePostsToTheMembersPathAndReturnsTheCode() = runTest {
         val client = RecordingHttpClient()
-        client.respondWith("""{"code":"one-time-code","expires_at":1700000000000}""")
+        client.respondWith("""{"code":"one-time-code","expiresAt":"2023-11-14T22:13:20Z"}""")
 
         val code = remote(client).generateResetCode(UserID(MEMBER_ID))
 
@@ -379,7 +379,7 @@ class HttpMemberAdminRemoteTest {
         client.respondWith(memberObject().toString())
         client.respondWith(ByteArray(0))
         client.respondWith(memberObject().toString())
-        client.respondWith("""{"code":"one-time-code","expires_at":1700000000000}""")
+        client.respondWith("""{"code":"one-time-code","expiresAt":"2023-11-14T22:13:20Z"}""")
 
         val target = UserID(MEMBER_ID)
         val admin = remote(client)

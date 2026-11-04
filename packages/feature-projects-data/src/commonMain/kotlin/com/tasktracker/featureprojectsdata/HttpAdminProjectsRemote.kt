@@ -107,7 +107,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
      *
      * `version` is the compare-and-swap the caller saves against next time; it is not part of
      * [Project], so [toAdminProject] pairs the two rather than dropping it — the same thing
-     * `MemberResponse` does with `created_at`, except the caller needs this one back.
+     * `MemberResponse` does with `createdAt`, except the caller needs this one back.
      */
     @Serializable
     private data class ProjectResponseBody(

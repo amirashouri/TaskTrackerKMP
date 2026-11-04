@@ -16,7 +16,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * The wire shapes for signing in.
  *
  * Private to the data layer: nothing outside it should care that the server happens to
- * answer with an `access_token` / `refresh_token` envelope rather than camelCase. That
+ * answer with an `accessToken` / `refreshToken` envelope rather than snake_case. That
  * translation is the remote's whole job, and it is also a reason these types are not the
  * domain's [AuthTokens] — a type that crosses a module boundary because it is convenient
  * rather than because the two layers agree on it is a type that will drift.
@@ -29,7 +29,7 @@ private data class SignInRequestBody(
 
 @Serializable
 private data class RefreshRequestBody(
-    @SerialName("refresh_token") val refreshToken: String,
+    @SerialName("refreshToken") val refreshToken: String,
 )
 
 /**
@@ -102,11 +102,11 @@ private class SignOutEndpoint(private val payload: RefreshRequestBody) : Endpoin
  */
 @Serializable
 private data class AuthTokenResponse(
-    @SerialName("access_token") val accessToken: String,
-    @SerialName("refresh_token") val refreshToken: String,
-    @SerialName("user_id") val userID: String? = null,
+    @SerialName("accessToken") val accessToken: String,
+    @SerialName("refreshToken") val refreshToken: String,
+    @SerialName("userId") val userID: String? = null,
     val email: String? = null,
-    @SerialName("display_name") val displayName: String? = null,
+    @SerialName("displayName") val displayName: String? = null,
 ) {
     fun tokens(): AuthTokens = AuthTokens(accessToken = accessToken, refreshToken = refreshToken)
 }

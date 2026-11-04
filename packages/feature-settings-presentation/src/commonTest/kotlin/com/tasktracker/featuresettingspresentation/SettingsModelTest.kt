@@ -543,7 +543,7 @@ class SettingsModelTest {
 
         // The pair is the contract: the credential the sheet was filled with *and* the password
         // it authorises. A port that received only one of them could not speak the wire format
-        // the server declares — one body, two keys, `old_password_or_code` + `new_password`.
+        // the server declares — one body, two keys, `oldPasswordOrCode` + `newPassword`.
         assertEquals(
             listOf("brand new secret" to "correct horse battery"),
             port.passwordChangeCalls,

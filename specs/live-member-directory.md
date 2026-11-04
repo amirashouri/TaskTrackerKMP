@@ -65,7 +65,7 @@ with the existing `userResponse` shape. No new dependency.
       throwing or showing an empty, unusable picker. The failing-transport test
       asserts the signed-in user is still returned and searchable.
 - [x] The shared `MemberResponse` still carries every field the server sends,
-      including `created_at`, because `JSONCoding` leaves `ignoreUnknownKeys`
+      including `createdAt`, because `JSONCoding` leaves `ignoreUnknownKeys`
       off. The decode test round-trips a full row and an omitted-optionals row.
 - [x] `FakeMemberDirectory` has no remaining references outside `.git` and IDE
       state.
@@ -104,7 +104,7 @@ with the existing `userResponse` shape. No new dependency.
   resolution into a request storm; the blank-query fetch is what notices new
   members. The repository caches a `List<User>` without a mutex, so the current
   callers must stay on the same dispatcher; adding a third concurrent caller
-  should bring back a lock, not a second cache. Keep `created_at` declared:
+  should bring back a lock, not a second cache. Keep `createdAt` declared:
   turning on `ignoreUnknownKeys` globally is not a substitute.
 
 ## Risks / notes

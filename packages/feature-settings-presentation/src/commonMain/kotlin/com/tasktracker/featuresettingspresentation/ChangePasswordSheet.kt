@@ -54,7 +54,7 @@ import org.jetbrains.compose.resources.stringResource
  *
  * The two halves of the forgot-password contract, as one choice: identity is either the
  * password the member already had or the one-time code an admin just minted for them. The
- * server reads whichever arrives in `old_password_or_code` — this enum only decides which
+ * server reads whichever arrives in `oldPasswordOrCode` — this enum only decides which
  * field the sheet draws and what it tells the model the credential *is*.
  *
  * ## [GenerateCode] is the third entry, and it is the administrator's side of the same segment

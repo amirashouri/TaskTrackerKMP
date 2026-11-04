@@ -51,5 +51,5 @@ internal fun StatusTextEditor(
     )
 }
 
-/** The server's `presence_note` limit, shared with the field so an overrun fails locally. */
+/** The server's `presenceNote` limit, shared with the field so an overrun fails locally. */
 private const val MaxStatusTextLength = 280

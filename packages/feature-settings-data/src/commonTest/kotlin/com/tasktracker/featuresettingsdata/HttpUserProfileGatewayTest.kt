@@ -47,11 +47,11 @@ class HttpUserProfileGatewayTest {
             {
               "id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
               "email": "ada@example.com",
-              "display_name": "Ada Lovelace",
+              "displayName": "Ada Lovelace",
               "position": "Product owner",
-              "avatar_id": "7",
+              "avatarId": "7",
               "presence": "be_right_back",
-              "presence_note": "Back in ten minutes"
+              "presenceNote": "Back in ten minutes"
             }
             """.trimIndent(),
         )
@@ -105,7 +105,7 @@ class HttpUserProfileGatewayTest {
     @Test
     fun updateSendsOnlyTheFieldsThatChanged() = runTest {
         val (gateway, client) = gateway(
-            """{"id":"u1","email":"ada@example.com","display_name":"Ada Lovelace","presence":"away","presence_note":"At the dentist"}""",
+            """{"id":"u1","email":"ada@example.com","displayName":"Ada Lovelace","presence":"away","presenceNote":"At the dentist"}""",
         )
 
         gateway.update(
@@ -123,18 +123,18 @@ class HttpUserProfileGatewayTest {
         assertTrue(request.effectiveIdempotency, "an absolute-value PATCH is safe to replay")
 
         val body = Json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
-        assertEquals(setOf("display_name", "presence", "presence_note"), body.keys)
-        assertEquals(JsonPrimitive("Ada Lovelace"), body["display_name"])
+        assertEquals(setOf("displayName", "presence", "presenceNote"), body.keys)
+        assertEquals(JsonPrimitive("Ada Lovelace"), body["displayName"])
         assertEquals(JsonPrimitive("away"), body["presence"])
-        assertEquals(JsonPrimitive("At the dentist"), body["presence_note"])
+        assertEquals(JsonPrimitive("At the dentist"), body["presenceNote"])
         assertFalse("position" in body)
-        assertFalse("avatar_id" in body)
+        assertFalse("avatarId" in body)
     }
 
     @Test
     fun updateSpellsPositionAsALabelAndAvatarAsADigitString() = runTest {
         val (gateway, client) = gateway(
-            """{"id":"u1","email":"ada@example.com","position":"Product owner","avatar_id":"7","presence":"active"}""",
+            """{"id":"u1","email":"ada@example.com","position":"Product owner","avatarId":"7","presence":"active"}""",
         )
 
         gateway.update(
@@ -145,9 +145,9 @@ class HttpUserProfileGatewayTest {
         )
 
         val body = Json.parseToJsonElement(client.requests.single().body!!.decodeToString()).jsonObject
-        assertEquals(setOf("position", "avatar_id"), body.keys)
+        assertEquals(setOf("position", "avatarId"), body.keys)
         assertEquals(JsonPrimitive("Product owner"), body["position"])
-        assertEquals(JsonPrimitive("7"), body["avatar_id"])
+        assertEquals(JsonPrimitive("7"), body["avatarId"])
     }
 
     @Test
@@ -170,7 +170,7 @@ class HttpUserProfileGatewayTest {
     @Test
     fun changePasswordPostsBothKeysToOnePasswordRoute() = runTest {
         val (gateway, client) = gateway(
-            """{"id":"u1","email":"ada@example.com","display_name":"Ada Lovelace","password_hash":"hashed"}""",
+            """{"id":"u1","email":"ada@example.com","displayName":"Ada Lovelace","passwordHash":"hashed"}""",
         )
 
         gateway.changePassword(
@@ -184,9 +184,9 @@ class HttpUserProfileGatewayTest {
         assertTrue(request.requiresAuth)
 
         val body = Json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
-        assertEquals(setOf("old_password_or_code", "new_password"), body.keys)
-        assertEquals(JsonPrimitive("correct horse battery"), body["old_password_or_code"])
-        assertEquals(JsonPrimitive("brand new secret"), body["new_password"])
+        assertEquals(setOf("oldPasswordOrCode", "newPassword"), body.keys)
+        assertEquals(JsonPrimitive("correct horse battery"), body["oldPasswordOrCode"])
+        assertEquals(JsonPrimitive("brand new secret"), body["newPassword"])
 
         // Not replayable: success consumes the credential — a code is single-use and the old
         // password stops matching — so a response lost to a dropped connection cannot be

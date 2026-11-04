@@ -83,11 +83,11 @@ Client:
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "email": "jane@example.com",
-  "display_name": "Jane Doe",
+  "displayName": "Jane Doe",
   "position": "Product owner",
-  "avatar_id": "7",
+  "avatarId": "7",
   "presence": "away",
-  "presence_note": "At the dentist"
+  "presenceNote": "At the dentist"
 }
 ```
 
@@ -98,11 +98,11 @@ Client:
 | --- | --- | --- | --- |
 | `id` | string | identity check only | no |
 | `email` | string | `UserDetails.email` | **no** — account identity; no verification flow exists |
-| `display_name` | string, omitempty | `fullName` | yes, 1–120 runes |
+| `displayName` | string, omitempty | `fullName` | yes, 1–120 runes |
 | `position` | string, omitempty | `position` via `fromLabel` | yes, 0–120 runes; empty clears |
-| `avatar_id` | string, omitempty | `avatarId` (decimal `0`–`9`) | yes; empty clears |
+| `avatarId` | string, omitempty | `avatarId` (decimal `0`–`9`) | yes; empty clears |
 | `presence` | enum string | `status` via `fromPresence` | yes; one of `active`, `away`, `be_right_back`, `busy` |
-| `presence_note` | string, omitempty | `statusText` | yes, 0–280 runes; empty clears |
+| `presenceNote` | string, omitempty | `statusText` | yes, 0–280 runes; empty clears |
 
 Mapping rules:
 
@@ -115,7 +115,7 @@ Mapping rules:
   Unparseable or out-of-range values map to `null` (initials fallback).
 - **Presence** is *not* `users.status`: that column is account lifecycle
   (`active`/`inactive`/`deleted`) and is admin-owned. The new keys are backed by a new
-  `presence`/`presence_note` pair (server spec).
+  `presence`/`presenceNote` pair (server spec).
 
 ## Contract
 
@@ -130,7 +130,7 @@ Mapping rules:
       `commitUserDetails()` sends the delta. The test records zero requests after an edit and
       one after a commit.
 - [x] A commit sends only changed keys. Changing the name against a profile whose position is
-      unparseable sends `display_name` and no `position`; the pinned request body proves it.
+      unparseable sends `displayName` and no `position`; the pinned request body proves it.
 - [x] A failed PATCH restores the last server-confirmed profile and surfaces
       `profileFailure`; dismissing clears it. `SettingsModelTest` asserts the reverted row and
       the banner, and fails if the revert is removed. The model keeps the confirmed value as a

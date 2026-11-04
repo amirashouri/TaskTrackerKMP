@@ -47,13 +47,13 @@ class HttpUserProfileGateway(
 
     override suspend fun update(changes: UserProfileChanges): UserDetails {
         val payload = buildJsonObject {
-            changes.fullName?.let { put("display_name", it) }
+            changes.fullName?.let { put("displayName", it) }
             // The column holds the human label the admin form writes ("Product owner"), not
             // the enum's internal `wireValue`; `fromLabel` is the inverse of this mapping.
             changes.position?.let { put("position", it.displayName) }
-            changes.avatarId?.let { put("avatar_id", it.toString()) }
+            changes.avatarId?.let { put("avatarId", it.toString()) }
             changes.status?.let { put("presence", it.wireValue) }
-            changes.statusText?.let { put("presence_note", it) }
+            changes.statusText?.let { put("presenceNote", it) }
         }
         val body = jsonBody(payload)
             ?: throw AppError.Validation("Could not prepare the profile update.")
@@ -129,14 +129,14 @@ private class PostSelfPasswordEndpoint(
  */
 @Serializable
 private data class ChangePasswordRequestBody(
-    @SerialName("old_password_or_code") val oldPasswordOrCode: String,
-    @SerialName("new_password") val newPassword: String,
+    @SerialName("oldPasswordOrCode") val oldPasswordOrCode: String,
+    @SerialName("newPassword") val newPassword: String,
 )
 
 /**
  * The change-password response: the caller's own row, with the new hash.
  *
- * `password_hash` is declared for the same reason every other key is — `JSONCoding` leaves
+ * `passwordHash` is declared for the same reason every other key is — `JSONCoding` leaves
  * `ignoreUnknownKeys` off, so a key this DTO does not name fails the decode. The value is
  * never read: the server includes it by contract (specs/t8.1-change-password.md, the one
  * endpoint whose response carries the hash) and the client mirrors the contract rather than
@@ -146,8 +146,8 @@ private data class ChangePasswordRequestBody(
 private data class ChangePasswordResponse(
     @SerialName("id") val id: String = "",
     @SerialName("email") val email: String = "",
-    @SerialName("display_name") val displayName: String = "",
-    @SerialName("password_hash") val passwordHash: String = "",
+    @SerialName("displayName") val displayName: String = "",
+    @SerialName("passwordHash") val passwordHash: String = "",
 )
 
 /**
@@ -162,11 +162,11 @@ private data class ChangePasswordResponse(
 private data class UserProfileResponse(
     @SerialName("id") val id: String = "",
     @SerialName("email") val email: String = "",
-    @SerialName("display_name") val displayName: String = "",
+    @SerialName("displayName") val displayName: String = "",
     @SerialName("position") val position: String = "",
-    @SerialName("avatar_id") val avatarId: String = "",
+    @SerialName("avatarId") val avatarId: String = "",
     @SerialName("presence") val presence: String = "active",
-    @SerialName("presence_note") val presenceNote: String = "",
+    @SerialName("presenceNote") val presenceNote: String = "",
 )
 
 private fun UserProfileResponse.toUserDetails(): UserDetails = UserDetails(
