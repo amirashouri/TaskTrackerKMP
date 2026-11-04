@@ -3,7 +3,9 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.RetryStuckChanges
@@ -157,6 +159,25 @@ class SettingsModel(private val port: SettingsPort) {
         private set
 
     /**
+     * The signed-in account's paired agent machines and their state.
+     *
+     * Starts empty — "not set up" — so the section is honest on the first frame and
+     * in the offline demo. [reload] replaces it with the port's read-through, and a
+     * stop/start replaces it with the server's confirmed snapshot.
+     */
+    var agentOverview: AgentOverview by mutableStateOf(AgentOverview())
+        private set
+
+    /**
+     * The last agent command the server refused, or `null` when there is nothing to say.
+     *
+     * Held as the [AppError] rather than a sentence, for the reason [profileFailure]
+     * is: a model is a plain class and cannot read a resource.
+     */
+    var agentFailure: AppError? by mutableStateOf(null)
+        private set
+
+    /**
      * The last value the server confirmed, i.e. the value to fall back to when a write fails.
      *
      * Not Compose state: the screen never renders it, and it must not cause a recomposition.
@@ -227,6 +248,7 @@ class SettingsModel(private val port: SettingsPort) {
         userDetails = port.userDetails()
         confirmedUserDetails = userDetails
         serverAddress = port.serverAddress()
+        agentOverview = port.agentOverview()
     }
 
     // MARK: - Commands
@@ -396,6 +418,45 @@ class SettingsModel(private val port: SettingsPort) {
      */
     fun dismissProfileFailure() {
         profileFailure = null
+    }
+
+    // MARK: - Agent
+
+    /** Stops one paired machine: no new claims, and its live run is asked to cancel. */
+    suspend fun stopAgent(machineID: AgentRunnerID) {
+        changeAgent(machineID) { port.stopAgent(machineID) }
+    }
+
+    /** Starts one paired machine again, so it may claim work. */
+    suspend fun startAgent(machineID: AgentRunnerID) {
+        changeAgent(machineID) { port.startAgent(machineID) }
+    }
+
+    /**
+     * Runs one agent command and holds its confirmed snapshot.
+     *
+     * There is no optimistic row: the server owns the pause and answers with the
+     * machine it stored, which is what the screen renders. A failure is held rather
+     * than thrown because a tap that did nothing must not look like a tap that
+     * worked; [CancellationException] is rethrown for the reason [signOut] gives.
+     */
+    private suspend fun changeAgent(
+        machineID: AgentRunnerID,
+        command: suspend () -> AgentOverview,
+    ) {
+        agentFailure = null
+        try {
+            agentOverview = command()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            agentFailure = failure
+        }
+    }
+
+    /** Clears [agentFailure], for a user who has read the banner. */
+    fun dismissAgentFailure() {
+        agentFailure = null
     }
 
     // MARK: - Server Address

@@ -12,6 +12,8 @@ import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.core.AgentRunnerID
+import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -372,6 +374,13 @@ class FakeShellSettingsPort(
         ServerAddressValidation.Valid(input)
 
     override suspend fun resetServerAddress() = Unit
+
+    /** The shell scenarios build no backend, so there is no fleet to show. */
+    override suspend fun agentOverview(): AgentOverview = AgentOverview()
+
+    override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
+
+    override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
 }
 
 /** A signed-in state for tests, with a recognisable address. */

@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
@@ -36,6 +37,7 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttTabIcons
+import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -169,6 +171,19 @@ fun SettingsScreen(
      */
     profileFailure: AppError? = null,
     onDismissProfileFailure: () -> Unit = {},
+    /**
+     * The paired agent machines and their state.
+     *
+     * Read for every signed-in user: a member needs to know whether an agent is
+     * available before dispatching. The two commands below the block are
+     * administrator-only; [isAdmin] is the same gate the Admin section uses.
+     */
+    agentOverview: AgentOverview = AgentOverview(),
+    /** The last refused agent command, or `null` when there is nothing to report. */
+    agentFailure: AppError? = null,
+    onStopAgent: (AgentRunnerID) -> Unit = {},
+    onStartAgent: (AgentRunnerID) -> Unit = {},
+    onDismissAgentFailure: () -> Unit = {},
     signOutFailure: AppError? = null,
     onForceSignOut: () -> Unit = {},
     onDismissSignOutFailure: () -> Unit = {},
@@ -251,6 +266,10 @@ fun SettingsScreen(
     var changePasswordOpen by remember { mutableStateOf(false) }
     var forgotPasswordOpen by remember { mutableStateOf(false) }
     var startChangeWithCode by remember { mutableStateOf(false) }
+
+    // The setup instructions, in the same local register as the name editor: the
+    // sheet holds no draft, so the only state is whether it is open.
+    var agentSetupOpen by remember { mutableStateOf(false) }
 
     val identitySection: @Composable () -> Unit = {
         SettingsSection {
@@ -338,6 +357,19 @@ fun SettingsScreen(
                 )
             }
         }
+    }
+
+    val agentSection: @Composable () -> Unit = {
+        AgentOverviewSection(
+            overview = agentOverview,
+            // The pairing command names the root this process actually uses, not a
+            // saved preference the running clients have not taken.
+            serverRoot = serverAddress.inUse,
+            isAdmin = isAdmin,
+            onStop = onStopAgent,
+            onStart = onStartAgent,
+            onOpenSetup = { agentSetupOpen = true },
+        )
     }
 
     val appearanceSection: @Composable () -> Unit = {
@@ -525,10 +557,21 @@ fun SettingsScreen(
                             }
                         }
                     }
+                    agentFailure?.let {
+                        item {
+                            Box(modifier = Modifier.testTag(SettingsAgentFailureTag)) {
+                                ttBanner(
+                                    message = agentFailureLabel(),
+                                    onDismiss = onDismissAgentFailure,
+                                )
+                            }
+                        }
+                    }
                     item { identitySection() }
                     if (isAdmin) {
                         item { adminSection() }
                     }
+                    item { agentSection() }
                     item { serverSection() }
                     item { connectivitySection() }
                     item { syncSection() }
@@ -586,10 +629,21 @@ fun SettingsScreen(
                         }
                     }
                 }
+                agentFailure?.let {
+                    item {
+                        Box(modifier = Modifier.testTag(SettingsAgentFailureTag)) {
+                            ttBanner(
+                                message = agentFailureLabel(),
+                                onDismiss = onDismissAgentFailure,
+                            )
+                        }
+                    }
+                }
                 item { identitySection() }
                 if (isAdmin) {
                     item { adminSection() }
                 }
+                item { agentSection() }
                 item { appearanceSection() }
                 item { serverSection() }
                 item { connectivitySection() }
@@ -642,6 +696,18 @@ fun SettingsScreen(
                 onReset = onResetServerAddress,
                 onDismiss = onDismissServerAddress,
             )
+        }
+
+        // The agent setup instructions, in the same overlay layer. The root is
+        // re-read here so a Settings opened with no server can never raise a sheet
+        // that has no address to print.
+        if (agentSetupOpen) {
+            serverAddress.inUse?.let { root ->
+                AgentSetupSheet(
+                    serverRoot = root,
+                    onDismiss = { agentSetupOpen = false },
+                )
+            }
         }
 
         // The name editor, in the same overlay layer as the Server sheet. Saving closes it

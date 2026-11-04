@@ -1,6 +1,10 @@
 package com.tasktracker.featuresettingspresentation
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.featuresettingsdomain.AgentMachine
+import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentState
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
@@ -25,6 +29,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -584,6 +589,88 @@ class SettingsModelTest {
             "a cancelled submit is not a failed one",
         )
     }
+
+    // MARK: - Agent
+
+    @Test
+    fun openingSettingsReadsTheAgentOverview() = runTest {
+        val port = RecordingSettingsPort()
+        port.agentOverviewValue = AgentOverview(
+            machines = listOf(agentMachine()),
+            observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+        )
+        val model = SettingsModel(port)
+
+        model.reload()
+
+        // The block is a reading like every other one on the screen; a model that only
+        // loaded it inside `observe` would render the empty state until the tab was reopened.
+        assertEquals(AgentState.Running, model.agentOverview.state)
+    }
+
+    @Test
+    fun stoppingAnAgentMovesTheRowWithoutAReload() = runTest {
+        val port = RecordingSettingsPort()
+        val machine = agentMachine()
+        port.agentOverviewValue = AgentOverview(
+            machines = listOf(machine),
+            observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+        )
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.stopAgent(machine.id)
+
+        assertEquals(listOf(machine.id), port.stopAgentCalls)
+        assertEquals(AgentState.Stopped, model.agentOverview.state)
+        assertNull(model.agentFailure)
+
+        model.startAgent(machine.id)
+        assertEquals(listOf(machine.id), port.startAgentCalls)
+        assertEquals(AgentState.Running, model.agentOverview.state)
+    }
+
+    @Test
+    fun aRefusedAgentCommandHoldsTheFailureRatherThanThrowing() = runTest {
+        val port = RecordingSettingsPort()
+        val machine = agentMachine()
+        port.agentOverviewValue = AgentOverview(machines = listOf(machine))
+        port.agentCommandFailure = AppError.Server(500, "could not update the runner")
+        val model = SettingsModel(port)
+        model.reload()
+
+        model.stopAgent(machine.id)
+
+        // The row must not move on a refusal: the server kept it running, so a screen
+        // that showed it stopped would be describing a state nobody applied.
+        val failure = model.agentFailure
+        assertNotNull(failure)
+        assertTrue(failure.message.orEmpty().contains("could not update the runner"))
+        assertTrue(model.agentOverview.machines.single().isLive)
+        assertFalse(model.agentOverview.machines.single().isPaused)
+
+        model.dismissAgentFailure()
+        assertNull(model.agentFailure)
+    }
+
+    @Test
+    fun aCancelledAgentCommandIsRethrownRatherThanArmedAsAFailure() = runTest {
+        val port = RecordingSettingsPort()
+        val machine = agentMachine()
+        port.agentOverviewValue = AgentOverview(machines = listOf(machine))
+        port.agentCommandFailure = CancellationException("the screen went away")
+        val model = SettingsModel(port)
+
+        assertFailsWith<CancellationException> { model.stopAgent(machine.id) }
+        assertNull(model.agentFailure)
+    }
+
+    private fun agentMachine() = AgentMachine(
+        id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000aa"),
+        name = "dev-machine",
+        provider = "echo",
+        lastSeenAt = Instant.parse("2026-11-03T12:00:00Z"),
+    )
 }
 
 /**
@@ -776,6 +863,33 @@ class RecordingSettingsPort(
     override suspend fun resetServerAddress() {
         resetServerAddressCalls++
         serverAddressValue = serverAddressValue.copy(savedOverride = null)
+    }
+
+    /** The agent snapshot the model renders, and the commands it dispatched. */
+    var agentOverviewValue: AgentOverview = AgentOverview()
+
+    val stopAgentCalls = mutableListOf<AgentRunnerID>()
+    val startAgentCalls = mutableListOf<AgentRunnerID>()
+
+    /** When set, a stop/start throws it after recording the attempt. */
+    var agentCommandFailure: Throwable? = null
+
+    override suspend fun agentOverview(): AgentOverview = agentOverviewValue
+
+    override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = true)
+
+    override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = false)
+
+    private fun setAgentPaused(machineID: AgentRunnerID, paused: Boolean): AgentOverview {
+        if (paused) stopAgentCalls += machineID else startAgentCalls += machineID
+        agentCommandFailure?.let { throw it }
+        val machine = agentOverviewValue.machines.firstOrNull { it.id == machineID }
+            ?: throw AppError.NotFound("no such agent machine")
+        val updated = machine.copy(pausedAt = if (paused) Instant.fromEpochSeconds(1) else null)
+        agentOverviewValue = agentOverviewValue.withMachine(updated, agentOverviewValue.observedAt)
+        return agentOverviewValue
     }
 }
 

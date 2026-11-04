@@ -1,6 +1,11 @@
 package com.tasktracker.featuresettingsdata
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.DateProvider
+import com.tasktracker.core.SystemDateProvider
+import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -114,6 +119,20 @@ class LiveSettingsService(
      * local preference, which is exactly what those builds already do.
      */
     private val profileGateway: UserProfileGateway? = null,
+    /**
+     * The paired-machine transport, or `null` in the offline demo.
+     *
+     * Defaulted for the same reason [profileGateway] is: every settings test that
+     * does not touch the agent block keeps compiling, and a demo build honestly
+     * shows "not set up" because nothing was ever paired to a server it has.
+     */
+    private val agentGateway: AgentSettingsGateway? = null,
+    /**
+     * Used to stamp the agent snapshot's observation time and to move a machine's
+     * row after a stop/start. The graph passes its app-scoped clock so this agrees
+     * with every other timestamp the app compares against.
+     */
+    private val dateProvider: DateProvider = SystemDateProvider(),
 ) : SettingsPort {
 
     // MARK: - Connectivity
@@ -180,6 +199,58 @@ class LiveSettingsService(
      */
     override suspend fun retryStuckChanges() {
         onRetryStuckChanges()
+    }
+
+    // MARK: - Agent
+
+    private val agentOverviewFlow = MutableStateFlow(AgentOverview())
+
+    /**
+     * The pairs are read through, and a failed read keeps the last snapshot.
+     *
+     * Settings is allowed to open with no connection, and there is no field to
+     * attach an agent read failure to — the section is a status block, not a form.
+     * The stale snapshot is honest because it carries its own [AgentOverview.observedAt],
+     * which is what turns a heartbeat that stopped arriving into "Offline".
+     */
+    override suspend fun agentOverview(): AgentOverview {
+        val gateway = agentGateway ?: return agentOverviewFlow.value
+        return try {
+            val overview = AgentOverview(
+                machines = gateway.loadMachines(),
+                observedAt = dateProvider.now(),
+            )
+            agentOverviewFlow.value = overview
+            overview
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: AppError) {
+            agentOverviewFlow.value
+        }
+    }
+
+    override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = true)
+
+    override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = false)
+
+    /**
+     * The command is forwarded and its confirmed row is folded into the snapshot.
+     *
+     * No optimistic state: the server owns the pause, and a row that moved before
+     * the response would claim a stop the worker has not observed yet. A failure
+     * is thrown so the screen can say so, unlike the read above — a tap that did
+     * nothing must not look like a tap that worked.
+     */
+    private suspend fun setAgentPaused(machineID: AgentRunnerID, paused: Boolean): AgentOverview {
+        val gateway = agentGateway ?: throw AppError.Validation(
+            "There is no server to manage the agent on.",
+        )
+        val machine = gateway.setPaused(machineID, paused)
+        val updated = agentOverviewFlow.value.withMachine(machine, dateProvider.now())
+        agentOverviewFlow.value = updated
+        return updated
     }
 
     // MARK: - Version

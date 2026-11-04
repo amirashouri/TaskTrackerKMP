@@ -40,6 +40,7 @@ import com.tasktracker.featureprojectsdomain.createFilePicker
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
 import com.tasktracker.featureprojectsdomain.UploadAttachment
+import com.tasktracker.featuresettingsdata.HttpAgentRunnersRemote
 import com.tasktracker.featuresettingsdata.HttpServerAddressProbe
 import com.tasktracker.featuresettingsdata.HttpUserProfileGateway
 import com.tasktracker.featuresettingsdata.LiveSettingsService
@@ -820,6 +821,20 @@ object AppGraph {
                         ),
                     )
                 },
+                // The agent block's wire path. Bound under the same switch as the
+                // profile: with no server there is no fleet to show, so the section
+                // honestly reads "not set up" rather than failing a request. The
+                // clock is the graph's own app-scoped one, so the freshness window
+                // agrees with every other timestamp this app compares.
+                agentGateway = platforms.apiBaseUrl?.let { url ->
+                    HttpAgentRunnersRemote(
+                        client = platforms.httpClient(
+                            url,
+                            listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                        ),
+                    )
+                },
+                dateProvider = resolver.resolve(DateProvider::class),
             )
         }
     }

@@ -826,4 +826,30 @@
          it is showing. -->
     <string name="work_item_search_open">Search tasks</string>
     <string name="work_item_search_close">Close search</string>
+
+    <!--
+      Agent. The machine that holds the code runs `tt agent run`; the server only
+      queues work for it. The words below describe that machine's state in the
+      Settings block, and the two commands are shown verbatim because they are the
+      CLI's own vocabulary, not prose to translate.
+    -->
+    <string name="settings_agent_section">Agent</string>
+    <string name="settings_agent_empty_state">Not set up</string>
+    <string name="settings_agent_running">Running</string>
+    <string name="settings_agent_offline">Offline</string>
+    <string name="settings_agent_stopped">Stopped</string>
+    <string name="settings_agent_empty">No machine has been paired yet.</string>
+    <string name="settings_agent_stop">Stop</string>
+    <string name="settings_agent_start">Start</string>
+    <string name="settings_agent_setup">Set up agent</string>
+    <string name="settings_agent_setup_title">Set up the agent</string>
+    <string name="settings_agent_setup_body">The agent runs on the machine that holds the code, not on the server. Run these commands there:</string>
+    <string name="settings_agent_setup_connect">tt agent connect --server %1$s</string>
+    <string name="settings_agent_setup_run">tt agent run</string>
+    <string name="settings_agent_setup_connect_step">Pair this machine</string>
+    <string name="settings_agent_setup_run_step">Start the worker</string>
+    <string name="settings_agent_copy_connect">Copy the connect command</string>
+    <string name="settings_agent_copy_run">Copy the run command</string>
+    <string name="settings_agent_setup_note">Stop keeps the machine paired and refuses it new work. The agent process itself is yours to run.</string>
+    <string name="settings_agent_failure">Could not change the agent. Check your connection and try again.</string>
 </resources>

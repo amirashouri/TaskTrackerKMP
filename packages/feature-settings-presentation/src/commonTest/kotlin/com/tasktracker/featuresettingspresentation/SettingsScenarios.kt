@@ -34,12 +34,15 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTToastTag
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.featuresettingsdomain.AgentMachine
+import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
@@ -63,6 +66,7 @@ import com.tasktracker.resources.settings_sync_waiting
 import org.jetbrains.compose.resources.getString
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.time.Instant
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -577,6 +581,117 @@ object SettingsScenarios {
     }
 
     /**
+     * A member sees whether an agent is available, but is offered no command: pairing and
+     * stopping a machine changes what the whole account's fleet will do.
+     */
+    val theAgentStatusIsVisibleToAMemberWithoutCommands: suspend ComposeUiTest.() -> Unit = {
+        val machine = scenarioAgentMachine()
+        screenShowing(
+            isAdmin = false,
+            agentOverview = AgentOverview(
+                machines = listOf(machine),
+                observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+            ),
+        )
+
+        onNodeWithTag(SettingsAgentRowTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(SettingsAgentStopTagPrefix + machine.id.stringValue).assertDoesNotExist()
+        onNodeWithTag(SettingsAgentSetupRowTag).assertDoesNotExist()
+    }
+
+    /** An administrator can stop the machine, and the Setup row opens the command sheet. */
+    val anAdminStopsAMachineAndCanOpenSetup: suspend ComposeUiTest.() -> Unit = {
+        val machine = scenarioAgentMachine()
+        val stopped = mutableListOf<AgentRunnerID>()
+        screenShowing(
+            isAdmin = true,
+            serverAddress = ServerAddressSettings(
+                inUse = "https://tasks.example.com",
+                savedOverride = null,
+            ),
+            agentOverview = AgentOverview(
+                machines = listOf(machine),
+                observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+            ),
+            onStopAgent = { stopped += it },
+        )
+
+        onNodeWithTag(SettingsAgentStopTagPrefix + machine.id.stringValue)
+            .performScrollTo()
+            .performClick()
+        assertEquals(listOf(machine.id), stopped, "the Stop row must dispatch that machine's id")
+
+        onNodeWithTag(SettingsAgentSetupRowTag).performScrollTo().performClick()
+        onNodeWithTag(SettingsAgentSetupSheetTag).assertIsDisplayed()
+        onNodeWithTag(SettingsAgentSetupCommandTag).assertIsDisplayed()
+        onNodeWithTag(SettingsAgentSetupCloseTag).performClick()
+        onNodeWithTag(SettingsAgentSetupSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * The setup commands are copyable text, not prose a user retypes.
+     *
+     * The sheet is mounted directly because the assertion is about what lands on the
+     * clipboard; the screen's own scenario already proves the Setup row opens it. The
+     * recording clipboard is the point: a Copy glyph that copies a different string than
+     * the one beside it is the defect here, and it is invisible to a click count.
+     */
+    val theSetupCommandsCopyTheTextTheyShow: suspend ComposeUiTest.() -> Unit = {
+        val clipboard = RecordingClipboard()
+
+        setContent {
+            Themed {
+                CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                    AgentSetupSheet(
+                        serverRoot = "https://tasks.example.com",
+                        onDismiss = {},
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(SettingsAgentSetupCopyConnectTag).performClick()
+        waitForIdle()
+        assertEquals(
+            "tt agent connect --server https://tasks.example.com",
+            clipboard.text,
+            "Copy on the pair step must put the exact command, address included, on the clipboard",
+        )
+        onNodeWithTag(TTToastTag).assertExists(
+            "the command reached the clipboard but nothing confirmed it",
+        )
+
+        onNodeWithTag(SettingsAgentSetupCopyRunTag).performClick()
+        waitForIdle()
+        assertEquals(
+            "tt agent run",
+            clipboard.text,
+            "Copy on the run step must put the command, and only the command, on the clipboard",
+        )
+    }
+
+    /** A refused stop is a dismissible banner, not a silently unchanged row. */
+    val theAgentFailureIsADismissibleBanner: suspend ComposeUiTest.() -> Unit = {
+        var dismissals = 0
+        screenShowing(
+            agentFailure = AppError.Transport("offline"),
+            onDismissAgentFailure = { dismissals++ },
+        )
+
+        onNodeWithTag(SettingsAgentFailureTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(TTBannerDismissTag).performClick()
+        assertEquals(1, dismissals)
+    }
+
+    private fun scenarioAgentMachine() = AgentMachine(
+        id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000aa"),
+        name = "dev-machine",
+        provider = "echo",
+        lastSeenAt = Instant.parse("2026-11-03T12:00:00Z"),
+    )
+
+    /**
      * The Server row shows the address the running clients are bound to.
      *
      * Scrolled to rather than asserted on mount: the row sits below User details and
@@ -1039,6 +1154,11 @@ private fun ComposeUiTest.screenShowing(
     onUserDetailsChange: (UserDetails) -> Unit = {},
     onUserDetailsCommit: () -> Unit = {},
     onDismissProfileFailure: () -> Unit = {},
+    agentOverview: AgentOverview = AgentOverview(),
+    agentFailure: AppError? = null,
+    onStopAgent: (AgentRunnerID) -> Unit = {},
+    onStartAgent: (AgentRunnerID) -> Unit = {},
+    onDismissAgentFailure: () -> Unit = {},
 ) {
     setContent {
         Themed {
@@ -1060,6 +1180,11 @@ private fun ComposeUiTest.screenShowing(
                 onUserDetailsCommit = onUserDetailsCommit,
                 profileFailure = profileFailure,
                 onDismissProfileFailure = onDismissProfileFailure,
+                agentOverview = agentOverview,
+                agentFailure = agentFailure,
+                onStopAgent = onStopAgent,
+                onStartAgent = onStartAgent,
+                onDismissAgentFailure = onDismissAgentFailure,
             )
         }
     }

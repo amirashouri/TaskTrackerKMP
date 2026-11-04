@@ -1,6 +1,14 @@
 package com.tasktracker.featuresettingsdata
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.DateProvider
+import com.tasktracker.core.SystemDateProvider
+import com.tasktracker.core.TestDateProvider
+import com.tasktracker.featuresettingsdomain.AgentMachine
+import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
+import com.tasktracker.featuresettingsdomain.AgentState
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -27,6 +35,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -97,6 +106,8 @@ class LiveSettingsServiceTest {
         checkServerAddress: CheckServerAddress = CheckServerAddress(ServerAddressProbe { true }),
         defaults: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         profileGateway: UserProfileGateway? = null,
+        agentGateway: AgentSettingsGateway? = null,
+        dateProvider: DateProvider = SystemDateProvider(),
     ) = LiveSettingsService(
         monitor = monitor,
         // Never asked to sync by the connectivity tests; see `UnusedSyncDependencies`.
@@ -108,6 +119,8 @@ class LiveSettingsServiceTest {
         checkServerAddress = checkServerAddress,
         defaults = defaults,
         profileGateway = profileGateway,
+        agentGateway = agentGateway,
+        dateProvider = dateProvider,
     )
 
     @Test
@@ -461,6 +474,112 @@ class LiveSettingsServiceTest {
 
         service.setUserDetails(local)
         assertEquals(local, service.commitUserDetails())
+    }
+
+    // MARK: - Agent
+
+    @Test
+    fun openingSettingsReadsTheFleetWithTheObservationTimeItWasJudgedAt() = runTest {
+        val gateway = FakeAgentGateway(listOf(runningMachine))
+        val clock = TestDateProvider(Instant.parse("2026-11-03T12:00:30Z"))
+        val service = service(monitor = emptyMonitor(), agentGateway = gateway, dateProvider = clock)
+
+        val overview = service.agentOverview()
+
+        assertEquals(1, gateway.loads)
+        assertEquals(AgentState.Running, overview.state)
+        // The freshness rule compares last-seen against this instant, so it has to be
+        // the read's own time rather than a default.
+        assertEquals(Instant.parse("2026-11-03T12:00:30Z"), overview.observedAt)
+    }
+
+    @Test
+    fun aFailedAgentReadKeepsTheLastSnapshot() = runTest {
+        val gateway = FakeAgentGateway(listOf(runningMachine))
+        val service = service(
+            monitor = emptyMonitor(),
+            agentGateway = gateway,
+            dateProvider = TestDateProvider(Instant.parse("2026-11-03T12:00:30Z")),
+        )
+        service.agentOverview()
+        gateway.failure = AppError.Transport("offline")
+
+        val again = service.agentOverview()
+
+        // Settings has to open offline, and the snapshot is honest because it carries
+        // the time its heartbeat was judged at.
+        assertEquals(AgentState.Running, again.state)
+        assertEquals(2, gateway.loads)
+    }
+
+    @Test
+    fun stoppingAMachineFoldsTheServersRowIntoTheSnapshot() = runTest {
+        val gateway = FakeAgentGateway(listOf(runningMachine))
+        val service = service(
+            monitor = emptyMonitor(),
+            agentGateway = gateway,
+            dateProvider = TestDateProvider(Instant.parse("2026-11-03T12:00:30Z")),
+        )
+        service.agentOverview()
+
+        val stopped = service.stopAgent(runningMachine.id)
+
+        assertEquals(listOf(runningMachine.id to true), gateway.pauses)
+        assertTrue(stopped.liveMachines.single().isPaused)
+        assertEquals(AgentState.Stopped, stopped.state)
+        // The command's response is the source of truth; a second GET would be a race
+        // with whatever else changed in between.
+        assertEquals(1, gateway.loads)
+
+        val started = service.startAgent(runningMachine.id)
+        assertFalse(started.liveMachines.single().isPaused)
+        assertEquals(AgentState.Running, started.state)
+    }
+
+    @Test
+    fun anAgentCommandWithoutAGatewayIsRefused() = runTest {
+        val service = service(monitor = emptyMonitor())
+
+        // The offline demo has nothing to manage a fleet on. A silent success would
+        // report a stop that no worker could ever observe.
+        assertFailsWith<AppError.Validation> { service.stopAgent(runningMachine.id) }
+    }
+}
+
+/** A machine the freshness window calls running at 12:00:30. */
+private val runningMachine = AgentMachine(
+    id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000aa"),
+    name = "dev-machine",
+    provider = "echo",
+    lastSeenAt = Instant.parse("2026-11-03T12:00:00Z"),
+)
+
+/** Scripted fleet answers, with the commands recorded. */
+private class FakeAgentGateway(
+    var machines: List<AgentMachine> = emptyList(),
+) : AgentSettingsGateway {
+    var loads: Int = 0
+        private set
+
+    var failure: AppError? = null
+
+    val pauses = mutableListOf<Pair<AgentRunnerID, Boolean>>()
+
+    override suspend fun loadMachines(): List<AgentMachine> {
+        loads += 1
+        failure?.let { throw it }
+        return machines
+    }
+
+    override suspend fun setPaused(machineID: AgentRunnerID, paused: Boolean): AgentMachine {
+        pauses += machineID to paused
+        failure?.let { throw it }
+        val machine = machines.first { it.id == machineID }
+        val updated = machine.copy(
+            pausedAt = if (paused) Instant.parse("2026-11-03T12:05:00Z") else null,
+        )
+        machines = machines.map { if (it.id == machineID) updated else it }
+        return updated
     }
 }
 

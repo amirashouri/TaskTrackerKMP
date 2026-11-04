@@ -5,6 +5,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.core.AgentRunnerID
+import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
 import com.tasktracker.featuresettingsdomain.ServerAddressValidation
@@ -137,6 +139,13 @@ class PreviewSettingsPort(
         ServerAddressValidation.Valid(input)
 
     override suspend fun resetServerAddress() = Unit
+
+    /** A preview has no paired machine, so the Agent block shows its empty state. */
+    override suspend fun agentOverview(): AgentOverview = AgentOverview()
+
+    override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
+
+    override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
 }
 
 

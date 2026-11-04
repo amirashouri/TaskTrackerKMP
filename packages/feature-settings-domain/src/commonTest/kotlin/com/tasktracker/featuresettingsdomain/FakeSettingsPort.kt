@@ -1,9 +1,11 @@
 package com.tasktracker.featuresettingsdomain
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlin.time.Instant
 
 /**
  * A port that answers from scripted values and counts what was asked of it.
@@ -171,4 +173,39 @@ class FakeSettingsPort(
         ServerAddressValidation.Valid(input)
 
     override suspend fun resetServerAddress() = Unit
+
+    /** The agent block's snapshot, and the commands a test can count. */
+    private var agentOverviewValue = AgentOverview()
+
+    val stoppedAgents = mutableListOf<AgentRunnerID>()
+    val startedAgents = mutableListOf<AgentRunnerID>()
+
+    /** When set, a stop/start throws it after recording the attempt. */
+    var agentCommandFailure: AppError? = null
+
+    fun seedAgentOverview(overview: AgentOverview) {
+        agentOverviewValue = overview
+    }
+
+    override suspend fun agentOverview(): AgentOverview = agentOverviewValue
+
+    override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = true)
+
+    override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview =
+        setAgentPaused(machineID, paused = false)
+
+    /**
+     * Mirrors the server's reversible pause: the same machine comes back with a
+     * `pausedAt` value or none, and the snapshot keeps its observation time.
+     */
+    private fun setAgentPaused(machineID: AgentRunnerID, paused: Boolean): AgentOverview {
+        if (paused) stoppedAgents += machineID else startedAgents += machineID
+        agentCommandFailure?.let { throw it }
+        val machine = agentOverviewValue.machines.firstOrNull { it.id == machineID }
+            ?: throw AppError.NotFound("no such agent machine")
+        val updated = machine.copy(pausedAt = if (paused) Instant.fromEpochSeconds(1) else null)
+        agentOverviewValue = agentOverviewValue.withMachine(updated, agentOverviewValue.observedAt)
+        return agentOverviewValue
+    }
 }

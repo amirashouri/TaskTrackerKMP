@@ -7,7 +7,7 @@ import kotlin.test.Test
 /**
  * Every settings scenario, as test methods the three hosts inherit.
  *
- * The same 21 entry points used to be copied by hand into `SettingsViewJvmTest`,
+ * The same entry points used to be copied by hand into `SettingsViewJvmTest`,
  * `SettingsViewIosTest` and `SettingsViewAndroidHostTest`. Nothing connected the three lists, so a
  * scenario body could be written and never run on two of the three hosts, and the only symptom was
  * a test count nobody read. Inheriting the methods from one abstract class makes that omission a
@@ -118,6 +118,22 @@ abstract class SettingsViewScenarios {
     @Test
     fun anAdminSeesTheManagementEntriesAndTheyDispatch() =
         runComposeUiTest(block = SettingsScenarios.anAdminSeesTheManagementEntriesAndTheyDispatch)
+
+    @Test
+    fun theAgentStatusIsVisibleToAMemberWithoutCommands() =
+        runComposeUiTest(block = SettingsScenarios.theAgentStatusIsVisibleToAMemberWithoutCommands)
+
+    @Test
+    fun anAdminStopsAMachineAndCanOpenSetup() =
+        runComposeUiTest(block = SettingsScenarios.anAdminStopsAMachineAndCanOpenSetup)
+
+    @Test
+    fun theSetupCommandsCopyTheTextTheyShow() =
+        runComposeUiTest(block = SettingsScenarios.theSetupCommandsCopyTheTextTheyShow)
+
+    @Test
+    fun theAgentFailureIsADismissibleBanner() =
+        runComposeUiTest(block = SettingsScenarios.theAgentFailureIsADismissibleBanner)
 
     @Test
     fun theServerRowShowsTheAddressInUse() =

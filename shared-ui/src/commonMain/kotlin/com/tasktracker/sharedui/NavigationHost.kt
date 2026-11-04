@@ -2404,6 +2404,15 @@ private fun SettingsDestination(
         onUserDetailsCommit = { scope.launch { model.saveUserDetails() } },
         profileFailure = model.profileFailure,
         onDismissProfileFailure = { model.dismissProfileFailure() },
+        // The agent block: a read-through the model already holds, and two
+        // commands that are launched like every other server write on this screen.
+        // The route is admin-gated server-side, and the section draws the rows only
+        // for an admin, so a member can read the status but has nothing to tap.
+        agentOverview = model.agentOverview,
+        agentFailure = model.agentFailure,
+        onStopAgent = { machineID -> scope.launch { model.stopAgent(machineID) } },
+        onStartAgent = { machineID -> scope.launch { model.startAgent(machineID) } },
+        onDismissAgentFailure = { model.dismissAgentFailure() },
         // The change-password sheet's pair: state read straight from the model, the submit
         // launched like every other command here, and the dismissal clearing the outcome the
         // same way the sign-out and profile banners are cleared — once read, never re-raised.

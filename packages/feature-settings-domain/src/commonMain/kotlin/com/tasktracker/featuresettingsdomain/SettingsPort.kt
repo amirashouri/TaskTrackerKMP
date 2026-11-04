@@ -1,5 +1,6 @@
 package com.tasktracker.featuresettingsdomain
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import kotlinx.coroutines.flow.Flow
 import kotlin.coroutines.cancellation.CancellationException
@@ -185,5 +186,29 @@ interface SettingsPort {
      * customer who mistypes an address, or moves off a temporary exposure, is not stranded with
      * a value only a reinstall could clear.
      */    suspend fun resetServerAddress()
+
+    /**
+     * The signed-in account's paired agent machines and whether any of them is live.
+     *
+     * A read-through like [userDetails]: with no server, or an unreachable one, the last
+     * known snapshot is returned rather than a failure, because Settings has to open offline.
+     * The returned [AgentOverview] carries the observation time its running/offline rule is
+     * measured against.
+     */
+    suspend fun agentOverview(): AgentOverview
+
+    /**
+     * Stops one paired machine: it keeps its token and claims no new work, and the run it
+     * already holds is asked to cancel.
+     *
+     * A server-side gate rather than process control — `tt agent run` executes on the
+     * customer's machine — which is why the response, not the tap, is the confirmed state.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview
+
+    /** The reversible half of [stopAgent]: the same machine begins claiming work again. */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun startAgent(machineID: AgentRunnerID): AgentOverview
 }
 
