@@ -1,25 +1,33 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
-import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
-import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttIcon
+import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
@@ -145,6 +153,8 @@ private fun SortButton(
     modifier: Modifier = Modifier,
 ) {
     val key = order.keyFor(basis)
+    val isLeading = order.isLeading(basis)
+    val isActive = key != null
     val direction = when {
         key == null -> stringResource(Res.string.backlog_sort_off)
         key.descending -> stringResource(
@@ -162,24 +172,36 @@ private fun SortButton(
             },
         )
     }
-    ttGlassIconButton(
-        image = image,
-        contentDescription = contentDescription,
-        onClick = onClick,
-        // Three weights, because the row has three states to tell apart: the key that decides
-        // the order, the key that only breaks ties, and a key that is not part of it. Tint is
-        // the only lever the glass button exposes, so the middle state takes the full label
-        // colour — present, but not the one leading.
-        tint = when {
-            order.isLeading(basis) -> ttAccent()
-            key != null -> ttLabel()
-            else -> ttLabelSecondary()
-        },
-        modifier = modifier.semantics {
-            selected = key != null
-            stateDescription = direction
-        },
-    )
+    // Three states, told apart by fill and glyph rather than by an accent-coloured glyph:
+    //  - leading key -> solid accent fill + white glyph: the accent is a *fill*, so this reads
+    //    as the key deciding the order;
+    //  - tie-breaker  -> subtle glass + white glyph: clearly active, but not the leader;
+    //  - inactive     -> subtle glass + dim secondary glyph.
+    // A white glyph is the one colour legible on the accent fill in every theme — an accent
+    // glyph on the accent fill was the reason the active button looked switched off in dark.
+    Box(
+        modifier = modifier
+            .size(ttSpacing.iconButtonSize)
+            .ttGlassSurface(
+                shape = CircleShape,
+                tint = if (isLeading) ttAccent() else null,
+                borderWidth = ttGlass.hairlineWidth,
+            )
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics {
+                this.contentDescription = contentDescription
+                selected = isActive
+                stateDescription = direction
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        ttIcon(
+            image = image,
+            contentDescription = null,
+            tint = if (isActive) ttOnAccent else ttLabelSecondary(),
+            modifier = Modifier.size(ttIconSize.tab),
+        )
+    }
 }
 
 const val BacklogSortLabelTag = "backlog.sort.label"

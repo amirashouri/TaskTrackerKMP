@@ -506,6 +506,8 @@ fun SettingsScreen(
                 label = stringResource(Res.string.settings_sign_out),
                 icon = ttSettingsIcons.account,
                 tint = ttError(),
+                labelColor = ttError(),
+                chevronTint = ttError(),
                 onClick = onSignOut,
                 modifier = Modifier.testTag(SettingsSignOutTag),
             )

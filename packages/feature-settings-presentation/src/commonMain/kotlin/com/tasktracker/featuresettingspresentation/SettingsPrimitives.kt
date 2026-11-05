@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
@@ -126,8 +127,15 @@ internal fun SettingsActionRow(
     tint: Color,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    // `null` keeps the standard legible tokens (ttLabel / ttLabelSecondary). A caller that
+    // wants to flag the row as destructive (Sign Out) passes ttError() for both, which the
+    // design system holds to the same 4.5:1 contrast bar as the accent.
+    labelColor: Color? = null,
+    chevronTint: Color? = null,
     modifier: Modifier = Modifier,
 ) {
+    val resolvedLabelColor = labelColor ?: ttLabel()
+    val resolvedChevronTint = chevronTint ?: ttLabelSecondary()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -144,11 +152,25 @@ internal fun SettingsActionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(
+            modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SettingsIconWell(icon = icon, tint = tint)
-            ttText(text = label, style = ttTypography.body, color = tint)
+            // The accent is a *fill* colour (it sits under white text in the icon well),
+            // not a foreground; painting the label in it fails the contrast bar on the
+            // mid-tone dark palettes and reads as a disabled row. Use the legible
+            // primary-text token instead, as SettingsIconRow already does.
+            ttText(text = label, style = ttTypography.body, color = resolvedLabelColor)
         }
+        // Disclosure indicator: this row navigates. A chevron reads as "tappable" in
+        // every theme and contrast level, unlike an accent-coloured label, which fails
+        // the bar on the mid-tone dark palettes (Navy Blue / Classic dark).
+        ttIcon(
+            image = ttActionIcons.chevronRight,
+            contentDescription = null,
+            tint = resolvedChevronTint,
+            modifier = Modifier.size(ttSettingsIconSize.glyph),
+        )
     }
 }
