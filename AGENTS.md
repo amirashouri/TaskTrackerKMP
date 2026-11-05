@@ -1,6 +1,8 @@
 # AGENTS.md
 
-Operating contract for TaskTrackerKMP. Facts live in `Project.md` and active backlog is in `docs/PLAN.md`.
+Operating contract for TaskTrackerKMP. Facts live in `Project.md`; `specs/` is the
+only index of work — one spec per unit, with its own `status:`. Durable decisions
+live in `docs/DECISIONS.md`.
 
 ## 1. Execution Limits & ACK Protocol
 * **Search Cap:** Max 3 consecutive exploratory searches to find a file/symbol. If not found, halt and ask the user.

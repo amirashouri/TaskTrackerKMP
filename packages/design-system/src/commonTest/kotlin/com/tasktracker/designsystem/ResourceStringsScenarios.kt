@@ -10,8 +10,8 @@ import org.jetbrains.compose.resources.getString
 /**
  * That the string table is actually packaged for each host, and decodes to what it says.
  *
- * This is the assertion `PLAN.md` 4.7 asks for, and it did not exist before: the shell
- * scenarios render `ttText(text = stringResource(...))` and pass, but they only fail on a
+ * This assertion did not exist before: the shell scenarios render
+ * `ttText(text = stringResource(...))` and pass, but they only fail on a
  * missing bundle *incidentally* — nothing in the suite ever named an expected string, so a host
  * that resolved every resource to a placeholder, or to the wrong one, stayed green.
  *

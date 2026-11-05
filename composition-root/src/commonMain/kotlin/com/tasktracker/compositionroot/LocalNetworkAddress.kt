@@ -38,9 +38,9 @@ package com.tasktracker.compositionroot
  * A hostname that *resolves* to a local address — `nas.tailnet.ts.net` over MagicDNS, say
  * — is not recognisable from its spelling, and deciding it would mean resolving the name:
  * a network round trip, not a rule. Such a root is classified as remote and its first
- * request waits for a timeout. The place that catches it is the runtime-URL validation in
- * `docs/PLAN.md` §6.3, which probes the address before saving it and so reports the
- * failure while the user is still looking at the field.
+ * request waits for a timeout. The place that catches it is the runtime-URL validation
+ * performed when the URL is saved, which probes the address and so reports the failure
+ * while the user is still looking at the field.
  */
 fun apiRootRequiresLocalNetworkAccess(apiBaseUrl: String): Boolean =
     hostOf(apiBaseUrl)?.let(::isLocalNetworkHost) ?: false

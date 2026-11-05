@@ -160,7 +160,7 @@ Generate native installers:
 * [`AGENTS.md`](AGENTS.md) — Engineering rules, execution boundaries, and test mutation protocol.
 * [`docs/DECISIONS.md`](docs/DECISIONS.md) — Design record and structural architectural invariants.
 * [`Project.md` §5](Project.md#5-testing--source-set-structure) — Full test command and host reference.
-* [`docs/PLAN.md`](docs/PLAN.md) — Active roadmap and upcoming features.
+* [`specs/`](specs/README.md) — the only task index; one spec per unit of work in progress.
 
 ---
 

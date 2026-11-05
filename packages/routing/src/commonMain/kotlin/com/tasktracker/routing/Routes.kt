@@ -98,10 +98,10 @@ sealed interface AppRoute {
      * ## Why there is no member in this route
      *
      * There is no member detail screen: the section is a list whose rows carry delete and
-     * reactivate, plus a create form. It carried a `memberID` until 2026-10-17 (`D6` in
-     * `docs/PLAN.md`), and nothing ever pushed a non-null one — a route parameter no caller can
-     * set is a claim that a screen exists behind it, and the wide arrangement spent that claim
-     * on an empty right pane.
+     * reactivate, plus a create form. It carried a `memberID` until 2026-10-17, and nothing
+     * ever pushed a non-null one — a route parameter no caller can set is a claim that a
+     * screen exists behind it, and the wide arrangement spent that claim on an empty right
+     * pane.
      *
      * The stack is still `[Settings, AdminMembers]` rather than the list being the tab root, for
      * the reason [adminMembersStack] gives.

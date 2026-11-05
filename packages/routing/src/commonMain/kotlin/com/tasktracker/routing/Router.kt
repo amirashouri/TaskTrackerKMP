@@ -501,9 +501,9 @@ fun sprintStack(projectID: ProjectID, sprintID: SprintID): List<AppRoute> =
  * ## Why this is still a function rather than a list literal
  *
  * It is a constant today, because there is no member detail to push onto it: the section is a
- * list with delete, reactivate and a create form (see [AppRoute.AdminMembers], and D6 in
- * `docs/PLAN.md`). It stays a function so that [Router.openAdminMembers] has one definition of
- * the stack to install — the path a fresh open installs and the path a test expects are then
+ * list with delete, reactivate and a create form (see [AppRoute.AdminMembers]). It stays a
+ * function so that [Router.openAdminMembers] has one definition of the stack to install —
+ * the path a fresh open installs and the path a test expects are then
  * the same value rather than two that agree today.
  */
 fun adminMembersStack(): List<AppRoute> = listOf(AppRoute.Settings, AppRoute.AdminMembers)

@@ -1,33 +1,36 @@
 # specs/
 
-One file per unit of work in progress, read one at a time.
+One file per unit of work in progress, read one at a time. **`specs/` is the only
+index of work** — there is no roadmap document.
 
 ## Why this exists
 
-`docs/PLAN.md` is the concise active roadmap. A task spec is the **portable
-handoff unit**: it records one task's scope, contract, validation, and handoff
-so work survives a change of agent, tool, or session. Completed specs are not
-kept — only their durable, non-obvious decisions are promoted into
+A task spec is the **portable handoff unit**: it records one task's status,
+scope, contract, validation, and handoff so work survives a change of agent,
+tool, or session. Each spec carries its own `status:`; the set of specs in this
+directory *is* the backlog. Completed specs are not kept — only their durable,
+non-obvious decisions are promoted into
 [`docs/DECISIONS.md`](../docs/DECISIONS.md#6-notes-kept-from-completed-task-specs).
 
 ## The documents, and what each one is authoritative for
 
 | Document | Holds | Authoritative for |
 | --- | --- | --- |
-| `docs/PLAN.md` | active roadmap, task states, dependencies, and spec links | *what* to work on next and in what order |
-| `specs/<id>-<slug>.md` | one in-progress task's scope, contract, validation, and handoff | *how one task is done, checked, and resumed* |
+| `specs/<id>-<slug>.md` | one in-progress task's status, scope, contract, validation, and handoff | *what* is being worked on, and *how one task is done, checked, and resumed* |
+| `specs/README.md` | this lifecycle | how specs are created, advanced, and retired |
 | `docs/DECISIONS.md` | permanent invariants, including notes retained from completed tasks | *why the system is the way it is* |
 | `Project.md` | architecture, the host matrix, standing caveats | *the system*, not any one task |
 | `test-baseline.json` | the host totals, generated from the build | *the current counts* |
 
-A spec does **not** restate the roadmap entry — it links to it and adds the
+A spec is self-contained: it states the *what* and the *how*, including the
 checkable scope, acceptance, validation, and `## Handoff`. A completed task has
 no spec: the diff and commit history are its verification record.
 
 ## Lifecycle
 
-1. Select roadmap work from `docs/PLAN.md`.
-2. Copy `_template.md` to `<plan-id>-<slug>.md` and fill it in with
+1. Choose work by reading the `status:` lines of the specs in `specs/`. If
+   nothing is active, create a spec before implementation.
+2. Copy `_template.md` to `<id>-<slug>.md` and fill it in with
    `status: pending`.
 3. Phase 1 (the ACK'd plan when required) supplies the spec's **Files** section.
    Confirm scope, contract, validation, and affected test hosts; set
@@ -35,16 +38,16 @@ no spec: the diff and commit history are its verification record.
 4. Implement and verify. Keep the status `in-progress` while implementation,
    validation, or review remains. Update the handoff at the end of each session.
 5. Once the contract and required checks pass and diff review is approved,
-   update the active PLAN status, promote any durable non-obvious decisions into
-   `docs/DECISIONS.md`, and **delete the spec** in the final task-branch update
-   before merge. Do not leave a `status: done` spec behind.
+   promote any durable non-obvious decisions into `docs/DECISIONS.md`, and
+   **delete the spec** in the final task-branch update before merge. Do not leave
+   a `status: done` spec behind.
 
-`2.3-search-across-projects.md` is a worked example — a roadmap entry distilled
-into the spec format. `_template.md` is the blank one.
+`2.3-search-across-projects.md` is a worked example of the format.
+`_template.md` is the blank one.
 
 ## Reading budget
 
-When choosing work, read `AGENTS.md` and the concise `docs/PLAN.md`. When
+When choosing work, read `AGENTS.md` and the `status:` lines in `specs/`. When
 working on task *X*, read `AGENTS.md`, its spec, and the files that spec names.
 If no spec exists, create one before implementation. Do not read unrelated
 specs or completed-task history.
