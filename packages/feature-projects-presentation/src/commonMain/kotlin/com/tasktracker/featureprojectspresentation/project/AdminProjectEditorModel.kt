@@ -30,6 +30,14 @@ import kotlin.uuid.Uuid
 class AdminProjectEditorModel(
     private val id: ProjectID,
     private val port: AdminProjectsPort,
+    /**
+     * The catalog an unconfigured project starts from — the built-in six, named by the caller
+     * because the names are text and text is the presentation layer's job.
+     *
+     * Defaulted to empty so a host that has no labels to offer (a test, a preview) keeps the old
+     * empty-list behaviour rather than inventing names.
+     */
+    private val defaultStatuses: List<StatusDefinition> = emptyList(),
 ) : ProjectModel() {
 
     private var seeded: AdminProject? = null
@@ -85,15 +93,22 @@ class AdminProjectEditorModel(
                 isMissing = true
                 return
             }
+            // A project that never adopted a catalog reads as empty from the server while its
+            // board draws the built-in six. Starting the draft from those six is what makes
+            // "add a stage" *append*: a draft that began empty turned the first stage an admin
+            // added into the whole catalog, and the board lost the other five lanes.
+            val catalog = found.project.statuses.ifEmpty { defaultStatuses }
             name = found.project.name
             keyPrefix = found.project.keyPrefix
             details = found.project.details
             tags = found.project.tags.map { it.copy() }
-            statuses = found.project.statuses.map { it.copy() }
+            statuses = catalog.map { it.copy() }
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
             originalTags = found.project.tags.map { it.copy() }
-            originalStatuses = found.project.statuses.map { it.copy() }
+            // The seed is the project's *effective* catalog, so inheriting it is not an edit:
+            // Save stays disabled until the admin actually changes something.
+            originalStatuses = catalog.map { it.copy() }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: AppError) {

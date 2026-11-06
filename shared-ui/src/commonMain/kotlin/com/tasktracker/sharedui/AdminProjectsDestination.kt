@@ -22,6 +22,7 @@ import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectEditorScreen
 import com.tasktracker.featureprojectspresentation.ProjectStatusesSection
 import com.tasktracker.featureprojectspresentation.ProjectTagsSection
+import com.tasktracker.featureprojectspresentation.defaultStatusCatalog
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.User
@@ -198,10 +199,13 @@ private fun AdminProjectEditor(
     onClose: () -> Unit,
     scope: CoroutineScope,
 ) {
+    // Built here, where `stringResource` lives: the model needs the labels of the built-in six
+    // to seed a project that has no catalog of its own, and it cannot call a composable.
+    val defaultStatuses = defaultStatusCatalog()
     // Keyed on the id as well as the port: a second project selected without leaving the section
     // is a different draft, and reusing the model would seed the new page from the old row.
-    val model = remember(projectID, adminProjectsPort) {
-        AdminProjectEditorModel(projectID, adminProjectsPort)
+    val model = remember(projectID, adminProjectsPort, defaultStatuses) {
+        AdminProjectEditorModel(projectID, adminProjectsPort, defaultStatuses)
     }
     LaunchedEffect(model) { model.load() }
 

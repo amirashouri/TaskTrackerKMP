@@ -46,6 +46,7 @@ import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.priority_critical
@@ -262,6 +263,38 @@ internal fun statusLabel(status: WorkItemStatus): String = when (status) {
     WorkItemStatus.InReview -> stringResource(Res.string.status_in_review)
     WorkItemStatus.Done -> stringResource(Res.string.status_done)
     WorkItemStatus.Closed -> stringResource(Res.string.status_closed)
+}
+
+/**
+ * The six built-in stages as catalog entries: what an unconfigured project already draws,
+ * turned into rows an admin can edit.
+ *
+ * Seeded into the *draft*, not written by the screen, because the catalog is what gets saved:
+ * opening a project with no catalog and adding one stage must send seven entries, not one. The
+ * names are the same labels the catalog-free fallback draws, so the board looks identical before
+ * and after the first save, and the ids are stable strings rather than fresh UUIDs so two admins
+ * seeding the same project offline do not mint six duplicate lanes each.
+ */
+@Composable
+fun defaultStatusCatalog(): List<StatusDefinition> =
+    WorkItemStatus.entries.mapIndexed { index, status ->
+        StatusDefinition(
+            id = "builtin-${status.wireValue}",
+            name = statusLabel(status),
+            category = status,
+            order = index,
+            color = status.defaultStatusColor(),
+        )
+    }
+
+/** A colour per built-in lane, so the seeded rows are told apart before anyone edits them. */
+private fun WorkItemStatus.defaultStatusColor(): TagColor = when (this) {
+    WorkItemStatus.Backlog -> TagColor.Gray
+    WorkItemStatus.Todo -> TagColor.Blue
+    WorkItemStatus.InProgress -> TagColor.Amber
+    WorkItemStatus.InReview -> TagColor.Teal
+    WorkItemStatus.Done -> TagColor.Green
+    WorkItemStatus.Closed -> TagColor.Gray
 }
 
 @Composable

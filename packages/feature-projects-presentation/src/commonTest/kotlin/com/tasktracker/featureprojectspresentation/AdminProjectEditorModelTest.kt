@@ -265,6 +265,51 @@ class AdminProjectEditorModelTest {
         assertEquals("s-build", sent.last().id, "a rename keeps the lane the board already draws")
     }
 
+    /**
+     * The regression this pins: an unconfigured project showed an empty stage list, so the first
+     * stage an admin added *became* the catalog and the board lost every other built-in lane.
+     * The draft now starts from those six, adding appends to them, and inheriting them is not an
+     * edit of its own.
+     */
+    @Test
+    fun `a project without a catalog starts from the built-in stages and adding keeps them`() = runTest {
+        val seeded = builtInStages()
+        val port = port()
+        val model = AdminProjectEditorModel(id, port, defaultStatuses = seeded)
+        model.load()
+
+        assertEquals(WorkItemStatus.entries, model.statuses.map { it.category }, "the starting point is the built-in six")
+        assertEquals(seeded.map { it.id }, model.statuses.map { it.id }, "the seed is stable, not freshly minted on open")
+        assertFalse(model.hasChanges, "inheriting the built-ins is not an edit")
+
+        assertTrue(model.addStatus("QA", WorkItemStatus.InReview, TagColor.Amber))
+
+        assertTrue(model.save())
+        val sent = port.updateCalls.single().first.statuses
+        assertEquals(
+            seeded.map { it.name } + "QA",
+            sent.map { it.name },
+            "the add appends: the built-ins survive, in order, with the new stage last",
+        )
+        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6), sent.map { it.order })
+    }
+
+    @Test
+    fun `any seeded stage can be removed and the removal reaches the server`() = runTest {
+        val seeded = builtInStages()
+        val port = port()
+        val model = AdminProjectEditorModel(id, port, defaultStatuses = seeded)
+        model.load()
+
+        model.removeStatus(model.statuses.first { it.category == WorkItemStatus.InReview }.id)
+
+        assertTrue(model.save())
+        val sent = port.updateCalls.single().first.statuses
+        assertEquals(seeded.size - 1, sent.size)
+        assertFalse(sent.any { it.category == WorkItemStatus.InReview }, "the seeded stage stays removed")
+        assertEquals(listOf(0, 1, 2, 3, 4), sent.map { it.order }, "the lane order closes the gap")
+    }
+
     @Test
     fun `removing a stage drops it from the saved catalog`() = runTest {
         val seeded = project().apply {
@@ -303,6 +348,18 @@ class AdminProjectEditorModelTest {
         assertFalse(model.addStatus("One too many", WorkItemStatus.Todo, TagColor.Red))
         assertEquals(StatusRules.MAX_PER_PROJECT, model.statuses.size)
     }
+
+    /** The six built-ins a host hands the model; names stand in for the localized labels. */
+    private fun builtInStages(): List<StatusDefinition> = listOf("Backlog", "Todo", "In progress", "In review", "Done", "Closed")
+        .mapIndexed { index, name ->
+            val category = WorkItemStatus.entries[index]
+            StatusDefinition(
+                id = "builtin-${category.wireValue}",
+                name = name,
+                category = category,
+                order = index,
+            )
+        }
 
     private companion object {
         val createdAt: Instant = Instant.fromEpochSeconds(1_700_000_000)
