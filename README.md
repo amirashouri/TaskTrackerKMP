@@ -2,170 +2,147 @@
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Amirreza%20Ashouri-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/amirreza-ashouri-229019156)
 [![Gmail](https://img.shields.io/badge/Gmail-amirashouri72%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:amirashouri72@gmail.com)
+![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Desktop-3DDC84?logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white)
 
-A cross-platform task and project tracker for **Android, iOS, and Desktop (macOS, Windows, Linux)**, built with Kotlin Multiplatform and Compose Multiplatform. One shared UI, one shared domain model, and strictly enforced Clean Architecture boundaries.
-
----
-
-## Highlights
-
-- **Work Management:** Boards with custom columns, backlog projections, sprint planning, and month-grouped archive views.
-- **Rich Work Items:** Details, statuses, priorities, story points, assignee assignments, due dates, recurrence rules, and dependency links.
-- **Offline-First Sync:** Local Room store with an outbox queue. Changes are committed locally first and reconciled with the server in the background.
-- **Native Security:** Token storage using `AndroidKeyStore` on Android, `Security.framework` on iOS, and `Security.framework` via JNA on macOS.
-- **Adaptive Liquid Glass Design:** Shared custom glassmorphism design system in `:packages:design-system` adapting across phone, tablet, and wide desktop screens.
-- **Runtime API Root:** Switch backend servers dynamically via in-app Settings or pairing links (`tasktracker://connect?url=...`) without rebuilding the app.
+> **Your tasks. Your server. Your rules.**
+> TaskTracker is an open, self-hosted task and project manager for **Android, iOS, and Desktop** — one shared UI and one shared domain model, built with Kotlin Multiplatform and Compose Multiplatform. Plan boards, run sprints, assign work, and sync across devices without handing your data to anyone. It talks to your own [TaskTracker server](../TaskTrackerServer), and it keeps working when the network does not.
 
 ---
 
-## Tech Stack
+## ✨ Highlights
 
-| Layer | Technology |
-| :--- | :--- |
-| **UI** | Compose Multiplatform 1.12.1 (shared screen tree across Android, iOS, Desktop) |
-| **Language** | Kotlin 2.3.20 (Android SDK 37 / min 26, iOS device + simulator arm64, Desktop JVM) |
-| **Architecture** | Clean Architecture (Domain / Data / Presentation separated by Gradle modules) |
-| **Database** | Room KMP (SQLite) + Outbox pattern for sync |
-| **Preferences** | `:packages:user-defaults` (Platform file/properties store for appearance & window geometry) |
-| **Key Storage** | `:packages:keychain` (Platform-backed secure credential vaults) |
-| **Networking** | Ktor 3.6.0 (OkHttp on Android/JVM, Darwin on iOS) |
-| **Serialization** | `kotlinx.serialization` (strict JSON configuration) |
-| **DI** | Koin 4.2.2 behind `:packages:di`'s `Resolver` interface |
-| **Navigation** | Hand-rolled `:packages:routing` (pure state, no Compose dependency) |
-
-Architecture boundaries are strictly validated: `./gradlew verifyArchitectureGraph verifyModuleImports` fails the build on any unauthorized dependency edge.
+- **Work management** — boards with custom columns, backlog projections, sprint planning, and month-grouped archives.
+- **Rich work items** — details, statuses, priorities, story points, assignees, due dates, recurrence, and dependencies.
+- **Offline-first** — a local Room store with an outbox queue. Changes commit locally first and reconcile with the server in the background.
+- **Native security** — tokens live in `AndroidKeyStore`, iOS `Security.framework`, and macOS `Security.framework` via JNA.
+- **Liquid Glass design** — a shared glassmorphism design system that adapts across phone, tablet, and wide desktop screens.
+- **Switchable backend** — point the app at any server in Settings or via a pairing link (`tasktracker://connect?url=...`) without rebuilding.
 
 ---
 
-## Project Structure
+## 🚀 Quick Start
 
-```
-androidApp/                  Android application shell
-iosApp/                      SwiftUI host shell (generated via XcodeGen)
-shared-ui/                   Shared Compose screen tree, navigation host & Desktop entry point
-composition-root/            Dependency injection wiring hub (binds ports to adapters)
-packages/
-  core/                      Shared identifiers, errors, loggers, JSON/Date utilities
-  domain/                    Core business vocabulary and entity rules
-  database/                  Room database schemas, DAOs, and outbox queues
-  network/                   Ktor HTTP client, interceptors, and network monitoring
-  sync/                      Offline outbox queue coordination and sync engine
-  keychain/                  Platform-specific secure credential storage
-  user-defaults/             Non-sensitive preferences and window geometry persistence
-  routing/                   Immutable router state, routes, and deep-link parsing
-  di/                        Dependency resolution interfaces
-  design-system/             Liquid Glass visual tokens, components, and Compose resources
-  feature-<name>-{domain,data,presentation}/
-                             Feature triplets: auth, projects, settings, teams, notifications
-```
+### 1. Install the toolchain
 
----
+| Requirement | Needed for | Install |
+| :--- | :--- | :--- |
+| **JDK 25** | All builds | Use Android Studio's bundled JBR (see below) |
+| **Android SDK 37** | Android | Android Studio → SDK Manager |
+| **Xcode** + **XcodeGen** | iOS | `xcodebuild -version` and `brew install xcodegen` |
 
-## Getting Started
+Every Gradle command needs JDK 25 on the path:
 
-### Prerequisites
-* **JDK 25:** Developed against Android Studio's JBR:
-  ```bash
-  export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-  ```
-* **Android SDK 37:** With a device or emulator.
-* **Xcode:** For compiling and running the iOS target.
-* **XcodeGen:** (`brew install xcodegen`) to generate the iOS project file.
-
----
-
-## Running the App
-
-### Android
-Open the project in Android Studio, select the **`androidApp`** run configuration, and run. Alternatively:
 ```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+```
+
+### 2. Clone and run
+
+```bash
+git clone https://github.com/amirashouri/TaskTrackerKMP.git
+cd TaskTrackerKMP
+```
+
+Pick a target:
+
+```bash
+# Desktop (JVM) — fastest way to see the app
+./gradlew :shared-ui:runDesktop
+
+# Android — installs on a connected device or emulator
 ./gradlew :androidApp:installDebug
 ```
 
-#### Physical device
-
-The build reads the API root from `tasktracker.apiBaseUrl` in `local.properties`
-(gitignored), so the Run/Debug button needs no command-line flag:
-
-```properties
-tasktracker.apiBaseUrl=http://192.168.1.42:8080
+```bash
+# iOS — generate the Xcode project, then build and run from Xcode
+cd iosApp && xcodegen generate && open TaskTracker.xcodeproj
 ```
 
-A physical phone differs from the emulator in two ways:
+> On iOS, Xcode links a Gradle-built framework and a `preBuildScripts` phase compiles it for you. Don't disable that phase — a stale link builds and runs but shows old behavior.
 
-* **The server must be published on the LAN.** The server repository's developer compose
-  publishes `8080` on `127.0.0.1` only (by design, server task `T9.3`), so the
-  app reports `Failed to connect to /<lan-ip>:8080` even though the phone is on the same
-  network. Use `tt expose --provider=lan`, or add a local (never committed)
-  `docker-compose.override.yml` to the server checkout:
+### 3. Start a backend
 
-  ```yaml
-  services:
-    server-pg:
-      ports: !override
-        - "0.0.0.0:8080:8080"
-  ```
+The app is offline-first but needs a server to sync. Run one locally with the [server repo](../TaskTrackerServer) (one command) and the app defaults to it:
 
-* **No `ACCESS_LOCAL_NETWORK` prompt is expected below Android 17 (API 37).** The permission
-  exists only on the platform that enforces local-network protection; on an older device
-  `INTERNET` is enough and the app asks for nothing. A missing prompt there is not the
-  failure.
+| Target | Default server |
+| :--- | :--- |
+| Desktop / iOS | `http://localhost:8080` |
+| Android emulator | `http://10.0.2.2:8080` |
 
-### iOS
-Generate the `.xcodeproj` file and open it in Xcode:
+To use a different server, set it at launch or in the app:
+
 ```bash
-cd iosApp && xcodegen generate
-open TaskTracker.xcodeproj
-```
-*Note: A build phase automatically compiles and links `ComposeApp.framework` from Gradle.*
-
-### Desktop (JVM)
-Run the desktop app directly:
-```bash
-./gradlew :shared-ui:runDesktop
-```
-To point the app to a custom backend URL at launch:
-```bash
+# Desktop — env var at launch
 TASKTRACKER_API_URL=https://api.example.com ./gradlew :shared-ui:runDesktop
 ```
 
-### Desktop Packaging
-Generate native installers:
+Or scan the pairing link/QR printed by `tt expose` on your server (`tasktracker://connect?url=...`).
+
+A physical Android device differs from the emulator: point it at your machine's LAN address via the gitignored `local.properties`, and make sure the server is published on the LAN (`tt expose --provider=lan`):
+
+```properties
+# local.properties
+tasktracker.apiBaseUrl=http://192.168.1.42:8080
+```
+
+---
+
+## 📦 Package desktop installers
+
 ```bash
 ./gradlew :shared-ui:packageDmg    # macOS (.dmg)
 ./gradlew :shared-ui:packageMsi    # Windows (.msi)
 ./gradlew :shared-ui:packageDeb    # Linux (.deb)
 ```
-*(Requires a full JDK with `jpackage` installed on the host OS).*
+
+Each target needs a full JDK with `jpackage` on the matching host OS.
 
 ---
 
-## Testing & Quality Assurance
+## 🧪 Tests
 
-* **Fast Inner Dev Loop (<1 min):** Focused JVM unit tests while writing code:
-  ```bash
-  ./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'
-  ```
-* **Full Matrix Gate (<10 min):** Release gate and multiplatform integrity check:
-  ```bash
-  scripts/check.sh full
-  ```
-  Executes JVM tests, iOS Simulator tests, Android Robolectric tests, and architecture graph validations. Failure totals and identities are strictly guarded by `test-baseline.json`.
+```bash
+# Focused JVM unit tests while developing (<1 min)
+./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'
 
----
+# Full matrix gate before a release (<10 min)
+scripts/check.sh full
+```
 
-## Documentation Index
-
-* [`Project.md`](Project.md) — Operational manual, iOS linking invariants, and detailed request flows.
-* [`AGENTS.md`](AGENTS.md) — Engineering rules, execution boundaries, and test mutation protocol.
-* [`docs/DECISIONS.md`](docs/DECISIONS.md) — Design record and structural architectural invariants.
-* [`Project.md` §5](Project.md#5-testing--source-set-structure) — Full test command and host reference.
-* [`specs/`](specs/README.md) — the only task index; one spec per unit of work in progress.
+The full gate runs JVM, iOS Simulator, and Android Robolectric tests plus architecture-graph validation.
 
 ---
 
-## License
+## 🏗 Architecture at a glance
+
+Clean Architecture, split across Gradle modules and strictly enforced — `./gradlew verifyArchitectureGraph verifyModuleImports` fails the build on any illegal dependency edge.
+
+```
+androidApp/         Android shell          iosApp/       SwiftUI host
+shared-ui/          Shared Compose UI      composition-root/  DI wiring
+packages/           core · domain · database · network · sync · keychain
+                    user-defaults · routing · di · design-system · feature-*
+```
+
+---
+
+## 📚 Documentation
+
+- [`Project.md`](Project.md) — build, test, and platform internals (backend URLs, iOS linking, request flows).
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — design record and durable architectural invariants.
+- [`AGENTS.md`](AGENTS.md) — engineering rules and boundaries.
+- [`specs/`](specs/README.md) — the task index; one spec per unit of work in progress.
+- [Install guide](../TaskTrackerServer/docs/INSTALL.md) — host the backend and get the app on a device.
+
+---
+
+## 📄 License
 
 [MIT + Commons Clause](LICENSE), plus a non-rebranding condition.
 
-You are welcome to use and modify the client and backend for personal, commercial, or team use. You may not resell the code or repackage it under your own name and brand. See [`LICENSE`](LICENSE) for full details.
+Use and modify the client and backend for personal, commercial, or team work. You may not resell the code or repackage it under your own name and brand. See [`LICENSE`](LICENSE) for full details.
+
+---
+
+*Made by [Amirreza Ashouri](https://www.linkedin.com/in/amirreza-ashouri-229019156) — stars and issues welcome.*
