@@ -119,6 +119,17 @@ fun ProjectsListScreen(
                     body = stringResource(Res.string.projects_empty_body),
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     image = ttTabIcons.projects,
+                    action = if (onNewProject != null) {
+                        {
+                            ttGlassButton(
+                                label = stringResource(Res.string.project_new),
+                                onClick = onNewProject,
+                                style = TTGlassButtonStyle(prominent = true),
+                            )
+                        }
+                    } else {
+                        null
+                    },
                 )
             } else {
                 LazyColumn(

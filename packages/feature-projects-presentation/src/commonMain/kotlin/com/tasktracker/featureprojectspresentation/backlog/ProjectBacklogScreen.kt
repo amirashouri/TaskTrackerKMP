@@ -29,10 +29,12 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.domain.BacklogSortOrder
+import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttSearchField
@@ -137,6 +139,7 @@ fun ProjectBacklogScreen(
                     onPutOnBoard = onPutOnBoard,
                     onFileAway = onFileAway,
                     onCopy = onCopy,
+                    onAddTask = onAddTask,
                     contentTopInset = firstRowInset,
                     tabBarInset = tabBarInset,
                     modifier = Modifier.fillMaxSize().padding(horizontal = ttSpacing.xxl),
@@ -149,6 +152,7 @@ fun ProjectBacklogScreen(
                     onSelect = onSelect,
                     onFileAway = onFileAway,
                     onCopy = onCopy,
+                    onAddTask = onAddTask,
                     contentTopInset = firstRowInset,
                     tabBarInset = tabBarInset,
                     modifier = Modifier.fillMaxSize().padding(horizontal = ttSpacing.xxl),
@@ -290,6 +294,7 @@ private fun BacklogSectionList(
     onPutOnBoard: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    onAddTask: (() -> Unit)?,
     contentTopInset: Dp,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
@@ -303,6 +308,7 @@ private fun BacklogSectionList(
         } else {
             EmptyBacklogSection(
                 modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyBacklogTag),
+                onAddTask = onAddTask,
             )
         }
     } else {
@@ -338,6 +344,7 @@ private fun KanbanSectionList(
     onSelect: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    onAddTask: (() -> Unit)?,
     contentTopInset: Dp,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
@@ -350,6 +357,7 @@ private fun KanbanSectionList(
         } else {
             EmptyKanbanSection(
                 modifier = modifier.padding(top = contentTopInset).testTag(ProjectBacklogEmptyKanbanTag),
+                onAddTask = onAddTask,
             )
         }
     } else {
@@ -442,23 +450,50 @@ private fun EmptySearchSection(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
+private fun EmptyBacklogSection(
+    modifier: Modifier = Modifier,
+    onAddTask: (() -> Unit)? = null,
+) {
     ProjectsEmptyState(
         title = stringResource(Res.string.backlog_empty_title),
         body = stringResource(Res.string.backlog_empty_body),
         modifier = modifier,
         image = ttTabIcons.backlog,
+        action = addTaskAction(onAddTask),
     )
 }
 
 @Composable
-private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
+private fun EmptyKanbanSection(
+    modifier: Modifier = Modifier,
+    onAddTask: (() -> Unit)? = null,
+) {
     ProjectsEmptyState(
         title = stringResource(Res.string.backlog_kanban_empty_title),
         body = stringResource(Res.string.backlog_kanban_empty_body),
         modifier = modifier,
         image = ttTabIcons.board,
+        action = addTaskAction(onAddTask),
     )
+}
+
+/**
+ * The one thing an empty backlog can offer: the create sheet the header's `+` already opens.
+ *
+ * A `@Composable` function rather than a lambda at each call site, because the action slot is
+ * nullable and both sections need the identical button; a null [onAddTask] stays null, so a
+ * host that locked creation (an archived project) gets no button rather than a dead one.
+ */
+@Composable
+private fun addTaskAction(onAddTask: (() -> Unit)?): (@Composable () -> Unit)? {
+    val addTask = onAddTask ?: return null
+    return {
+        ttGlassButton(
+            label = stringResource(Res.string.board_add_task),
+            onClick = addTask,
+            style = TTGlassButtonStyle(prominent = true),
+        )
+    }
 }
 
 @Composable

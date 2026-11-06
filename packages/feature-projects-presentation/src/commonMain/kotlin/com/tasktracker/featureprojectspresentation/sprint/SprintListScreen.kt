@@ -20,9 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
+import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
@@ -118,6 +120,13 @@ fun SprintListScreen(
                         title = stringResource(Res.string.sprint_list_empty_title),
                         body = stringResource(Res.string.sprint_list_empty_body),
                         image = ttTabIcons.sprints,
+                        action = {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_list_new),
+                                onClick = onNewSprint,
+                                style = TTGlassButtonStyle(prominent = true),
+                            )
+                        },
                     )
                 } else {
                     Column(
@@ -144,6 +153,13 @@ fun SprintListScreen(
                         title = stringResource(Res.string.sprint_list_empty_title),
                         body = stringResource(Res.string.sprint_list_empty_body),
                         image = ttTabIcons.sprints,
+                        action = {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_list_new),
+                                onClick = onNewSprint,
+                                style = TTGlassButtonStyle(prominent = true),
+                            )
+                        },
                     )
                 } else {
                     SprintSectionList(

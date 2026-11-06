@@ -175,6 +175,12 @@ internal fun ProjectsTextField(
  * [image] is nullable because some callers (the project picker, the archive screen) have no
  * glyph of their own; they keep the same layout without a badge rather than growing a second
  * empty-state component.
+ *
+ * [action] is the one thing the screen exists to offer when it has nothing to show — "New
+ * Project" on an empty list, "Add task" on an empty backlog. A slot rather than a label and an
+ * `onClick`, so the caller keeps the wording of its own screen and the component stays about
+ * layout; nullable, because a filtered list ("no matching tasks") has no single action to
+ * offer.
  */
 @Composable
 internal fun ProjectsEmptyState(
@@ -182,6 +188,7 @@ internal fun ProjectsEmptyState(
     body: String,
     modifier: Modifier = Modifier,
     image: ImageVector? = null,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -223,6 +230,9 @@ internal fun ProjectsEmptyState(
             color = ttBodyLabel(),
             textAlign = TextAlign.Center,
         )
+        action?.let { button ->
+            Box(modifier = Modifier.padding(top = ttSpacing.md)) { button() }
+        }
     }
 }
 
