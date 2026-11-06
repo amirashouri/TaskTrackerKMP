@@ -6,7 +6,7 @@
 ![Kotlin](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin&logoColor=white)
 
 > **Your tasks. Your server. Your rules.**
-> TaskTracker is an open, self-hosted task and project manager for **Android, iOS, and Desktop** — one shared UI and one shared domain model, built with Kotlin Multiplatform and Compose Multiplatform. Plan boards, run sprints, assign work, and sync across devices without handing your data to anyone. It talks to your own [TaskTracker server](../TaskTrackerServer), and it keeps working when the network does not.
+> TaskTracker is an open, self-hosted task and project manager for **Android, iOS, and Desktop** — one shared UI and one shared domain model, built with Kotlin Multiplatform and Compose Multiplatform. Plan boards, run sprints, assign work, and sync across devices without handing your data to anyone. It talks to your own [TaskTracker server](https://github.com/amirashouri/TaskTracker), and it keeps working when the network does not.
 
 ---
 
@@ -63,7 +63,7 @@ cd iosApp && xcodegen generate && open TaskTracker.xcodeproj
 
 ### 3. Start a backend
 
-The app is offline-first but needs a server to sync. Run one locally with the [server repo](../TaskTrackerServer) (one command) and the app defaults to it:
+The app is offline-first but needs a server to sync. Run one locally with the [server repo](https://github.com/amirashouri/TaskTracker) (one command) and the app defaults to it:
 
 | Target | Default server |
 | :--- | :--- |
@@ -133,7 +133,7 @@ packages/           core · domain · database · network · sync · keychain
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — design record and durable architectural invariants.
 - [`AGENTS.md`](AGENTS.md) — engineering rules and boundaries.
 - [`specs/`](specs/README.md) — the task index; one spec per unit of work in progress.
-- [Install guide](../TaskTrackerServer/docs/INSTALL.md) — host the backend and get the app on a device.
+- [Install guide](https://github.com/amirashouri/TaskTracker/blob/main/docs/INSTALL.md) — host the backend and get the app on a device.
 
 ---
 
