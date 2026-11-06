@@ -35,6 +35,28 @@ interface AdminProjectsPort {
 
     @Throws(AppError::class, CancellationException::class)
     suspend fun updateProject(project: Project, version: String): AdminProject
+
+    /**
+     * How many of the project's work items are not finished (done or closed).
+     *
+     * The admin list needs this before it can offer the right action: a project with open
+     * work is archived rather than deleted, exactly as the member list treats one. It is a
+     * separate read because the count is not part of the project object — adding a key there
+     * would be a decoding failure on every installed client.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun openItemCount(id: ProjectID): Int
+
+    /**
+     * Removes the project and everything under it.
+     *
+     * Admin-authorized rather than membership-authorized, because the admin may not be a
+     * member of the project they are administering. Members learn about it on their next
+     * pull, which delivers the delete so their store retires the project instead of
+     * keeping a row the server no longer has.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun deleteProject(id: ProjectID)
 }
 
 /**

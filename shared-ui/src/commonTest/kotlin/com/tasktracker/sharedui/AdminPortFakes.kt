@@ -107,8 +107,13 @@ class FakeAdminProjectsPort(
 
     private val byID = seeded.associateBy { it.project.id }.toMutableMap()
 
+    private val deleted = mutableSetOf<ProjectID>()
+
     override suspend fun projects(status: ProjectAdminStatus): List<AdminProject> =
-        (seeded + created).filter { it.project.isArchived == (status == ProjectAdminStatus.Archived) }
+        (seeded + created).filter {
+            it.project.id !in deleted &&
+                it.project.isArchived == (status == ProjectAdminStatus.Archived)
+        }
 
     override suspend fun project(id: ProjectID): AdminProject? = byID[id]
 
@@ -135,6 +140,23 @@ class FakeAdminProjectsPort(
      */
     override suspend fun updateProject(project: Project, version: String): AdminProject =
         AdminProject(project, version)
+
+    /**
+     * Answers zero: the shell's scenarios are about the section rendering and creating, and
+     * the archive-instead branch is covered where the count can be seeded.
+     */
+    override suspend fun openItemCount(id: ProjectID): Int = 0
+
+    /**
+     * Forgets the row, the way the server does, so the list a screen re-reads no longer
+     * contains it. The section re-reads after a delete rather than dropping the row in
+     * place, so a fake that kept it would leave the old row on screen and the scenario
+     * green for the wrong reason.
+     */
+    override suspend fun deleteProject(id: ProjectID) {
+        deleted += id
+        byID.remove(id)
+    }
 }
 
 /** One project as the admin API hands it back, on the shell's fixed clock. */

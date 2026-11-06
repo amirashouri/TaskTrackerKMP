@@ -122,6 +122,17 @@ compose.desktop {
     application {
         mainClass = "com.tasktracker.sharedui.DesktopMainKt"
 
+        // `jpackage` ships with a full JDK, and the toolchain this build compiles
+        // with is Android Studio's bundled JBR, which does not carry it. Naming a
+        // JDK here lets `createDistributable` / `packageDmg` run on that machine
+        // without changing the JDK the sources are compiled against:
+        //
+        //   ./gradlew :shared-ui:packageDmg -PtasktrackerJdkHome="$(/usr/libexec/java_home -v 25)"
+        //
+        // Unset, the plugin keeps using the toolchain, which is what a release
+        // runner with a full JDK wants.
+        (findProperty("tasktrackerJdkHome") as String?)?.let { javaHome = it }
+
         // The packaged macOS .app icon. Without this, Finder and the Dock show the
         // default Java icon instead of the TaskTracker mark. The source PNG is the
         // 1024px render from tools/generate_app_icon.py; iconutil packed it into

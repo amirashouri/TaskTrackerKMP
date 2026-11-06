@@ -132,11 +132,15 @@ public fun preferencesFile(): File {
  * file share the same directory without `user-defaults` needing to depend on it.
  *
  * `$HOME/Library/Application Support/TaskTracker` on macOS; `%APPDATA%/TaskTracker`
- * elsewhere.
+ * elsewhere. The macOS branch has to append the app folder itself: the database
+ * module's own directory stops at `Application Support`, and it is
+ * [DatabaseConfiguration] that adds `/TaskTracker` to the store path. Stopping one
+ * level short here put the preferences file in the shared `Application Support` root,
+ * beside other apps' folders rather than in the app's own.
  */
 private fun applicationSupportDirectory(): String {
     val home = System.getProperty("user.home")
         ?: throw AppError.Storage("Could not locate a home directory for the preferences file.")
     val appData = System.getenv("APPDATA")
-    return if (appData != null) "$appData/TaskTracker" else "$home/Library/Application Support"
+    return if (appData != null) "$appData/TaskTracker" else "$home/Library/Application Support/TaskTracker"
 }

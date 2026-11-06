@@ -358,6 +358,12 @@ class ProjectsUiIosTest {
     fun eachBucketSegmentReadsItsOwnBucket() = runComposeUiTest(block = AdminProjectsListScenarios.eachBucketSegmentReadsItsOwnBucket)
 
     @Test
+    fun theTrashAsksThenDeletes() = runComposeUiTest(block = AdminProjectsListScenarios.theTrashAsksThenDeletes)
+
+    @Test
+    fun openWorkIsArchivedInsteadOfDeleted() = runComposeUiTest(block = AdminProjectsListScenarios.openWorkIsArchivedInsteadOfDeleted)
+
+    @Test
     fun theBoardNarrowsToTheMatchingCard() = runComposeUiTest(block = WorkItemSearchScenarios.theBoardNarrowsToTheMatchingCard)
 
     @Test

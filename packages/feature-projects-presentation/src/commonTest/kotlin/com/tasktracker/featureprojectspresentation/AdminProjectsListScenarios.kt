@@ -15,6 +15,8 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.admin_projects_segment_active
 import com.tasktracker.resources.admin_projects_segment_archived
+import com.tasktracker.resources.project_remove_archive
+import com.tasktracker.resources.project_remove_body_outstanding
 import kotlin.test.assertEquals
 import kotlin.time.Instant
 import org.jetbrains.compose.resources.getString
@@ -115,6 +117,114 @@ object AdminProjectsListScenarios {
             .assertIsDisplayed()
         onNodeWithTag(ProjectRowTag(ProjectSummary(filed.project, itemCount = 0)))
             .assertDoesNotExist()
+    }
+
+    /**
+     * The row's trash asks before it deletes, and confirming removes that row.
+     *
+     * The button used to be a hard-coded no-op, so the assertion that carries the fix is
+     * `deleteCalls`: a screen that only closed the confirmation, or deleted a different id,
+     * would leave this empty. The row is then expected to be gone because the screen re-reads
+     * the bucket rather than editing its own list — which is what the fake's removal mirrors.
+     */
+    val theTrashAsksThenDeletes: suspend ComposeUiTest.() -> Unit = {
+        val live = adminProject(name = "Apollo", keyPrefix = "AP", isArchived = false)
+        val port = RecordingAdminProjectsPort(
+            byStatus = mapOf(ProjectAdminStatus.Active to listOf(live)),
+        )
+
+        setContent {
+            Themed {
+                AdminProjectsScreen(
+                    port = port,
+                    onProjectSelected = {},
+                    onBack = {},
+                    onOpenAddForm = {},
+                )
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(AdminProjectRemoveConfirmationTag).assertDoesNotExist()
+        onNodeWithTag(ProjectRemoveTag(ProjectSummary(live.project, itemCount = 0))).performClick()
+        waitForIdle()
+
+        onNodeWithTag(AdminProjectRemoveConfirmationTag).assertIsDisplayed()
+        assertEquals(
+            listOf(live.project.id),
+            port.openItemCountCalls,
+            "the offer depends on the unfinished count, so the screen must ask for it",
+        )
+        assertEquals(
+            emptyList(),
+            port.deleteCalls,
+            "opening the confirmation must not delete anything: the admin has not said yes yet",
+        )
+
+        onNodeWithTag(AdminProjectRemoveConfirmTag).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf(live.project.id),
+            port.deleteCalls,
+            "confirming must remove the project it named — a trash button wired to nothing is " +
+                "the reported bug",
+        )
+        onNodeWithTag(AdminProjectRemoveConfirmationTag).assertDoesNotExist()
+        onNodeWithTag(ProjectRowTag(ProjectSummary(live.project, itemCount = 0))).assertDoesNotExist()
+    }
+
+    /**
+     * A project with unfinished work is offered the archive, and confirming archives it.
+     *
+     * The failure this pins is the destructive one: a confirmation that says "Delete" over
+     * a project the member list would only archive destroys open work. Both halves are
+     * asserted — the copy the admin reads, and the call the screen actually makes.
+     */
+    val openWorkIsArchivedInsteadOfDeleted: suspend ComposeUiTest.() -> Unit = {
+        val live = adminProject(name = "Apollo", keyPrefix = "AP", isArchived = false)
+        val port = RecordingAdminProjectsPort(
+            byStatus = mapOf(ProjectAdminStatus.Active to listOf(live)),
+            openCounts = mapOf(live.project.id to 3),
+        )
+
+        setContent {
+            Themed {
+                AdminProjectsScreen(
+                    port = port,
+                    onProjectSelected = {},
+                    onBack = {},
+                    onOpenAddForm = {},
+                )
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(ProjectRemoveTag(ProjectSummary(live.project, itemCount = 0))).performClick()
+        waitForIdle()
+
+        onNodeWithText(getString(Res.string.project_remove_body_outstanding, 3)).assertIsDisplayed()
+        assertText(AdminProjectRemoveConfirmTag, getString(Res.string.project_remove_archive))
+
+        onNodeWithTag(AdminProjectRemoveConfirmTag).performClick()
+        waitForIdle()
+
+        assertEquals(
+            emptyList(),
+            port.deleteCalls,
+            "open work must never be deleted: the archive is the only safe outcome",
+        )
+        val archived = port.updateCalls.single()
+        assertEquals(
+            true,
+            archived.first.isArchived,
+            "the archive is an ordinary project edit that sets the flag",
+        )
+        assertEquals(
+            live.version,
+            archived.second,
+            "the archive must save against the version the list read",
+        )
     }
 }
 

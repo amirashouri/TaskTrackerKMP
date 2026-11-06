@@ -88,6 +88,36 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         override val isIdempotent: Boolean? = true
     }
 
+    /**
+     * `GET /v1/admin/projects/{id}/open-items`.
+     *
+     * A route of its own rather than a field on the project object: the project payload is
+     * the sync entity contract, and a response that gained a key would fail the decode of
+     * every installed client.
+     */
+    private class OpenItemsEndpoint(private val id: ProjectID) : Endpoint {
+        override val path: String = "/v1/admin/projects/${id.stringValue}/open-items"
+        override val method: HttpMethod = HttpMethod.Get
+    }
+
+    /** The count response: one key, because that is all the confirmation needs. */
+    @Serializable
+    private data class OpenItemsResponseBody(val openItemCount: Int)
+
+    /**
+     * `DELETE /v1/admin/projects/{id}`.
+     *
+     * Opted into replay: the state this call asks for is "the project is gone", so a
+     * delete replayed after a dropped connection is that same state reached twice — the
+     * server answers `404` for an already-removed id, which is success here rather than a
+     * failure to report to an admin who just asked for it.
+     */
+    private class DeleteProjectEndpoint(private val id: ProjectID) : Endpoint {
+        override val path: String = "/v1/admin/projects/${id.stringValue}"
+        override val method: HttpMethod = HttpMethod.Delete
+        override val isIdempotent: Boolean? = true
+    }
+
     /** The create body: the form's fields and the id this client minted, nothing server-owned. */
     @Serializable
     private data class CreateProjectRequestBody(
@@ -287,4 +317,33 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
             UpdateProjectEndpoint(project.id, projectRequestBody(project, version)).request,
             decoding = ProjectResponseBody.serializer(),
         ).toAdminProject()
+
+    /**
+     * The project's unfinished work-item count.
+     *
+     * A project that has one is archived instead of deleted, the same rule the member list
+     * applies, so the confirmation can name the outcome before the admin commits to it.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun openItemCount(id: ProjectID): Int = client.send(
+        OpenItemsEndpoint(id).request,
+        decoding = OpenItemsResponseBody.serializer(),
+    ).openItemCount
+
+    /**
+     * Removes a project and everything under it.
+     *
+     * A `404` is accepted as success: the caller asked for the project to be gone, and a
+     * replayed delete (or a second admin acting on a stale list) leaves exactly the state
+     * they asked for. Translating it to [AppError.NotFound] would report a failure for the
+     * outcome the caller wanted.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun deleteProject(id: ProjectID) {
+        try {
+            client.send(DeleteProjectEndpoint(id).request)
+        } catch (_: AppError.NotFound) {
+            // Already gone: the requested state, so this is not an error.
+        }
+    }
 }

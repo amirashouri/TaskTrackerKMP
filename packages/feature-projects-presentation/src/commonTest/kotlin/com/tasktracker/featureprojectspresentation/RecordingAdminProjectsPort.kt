@@ -29,16 +29,24 @@ class RecordingAdminProjectsPort(
     var created: AdminProject? = null,
     /** A `Throwable` rather than an [AppError] so a test can script cancellation too. */
     var createFailure: Throwable? = null,
+    var deleteFailure: Throwable? = null,
+    /** Unfinished work per project; a project absent from the map has none. */
+    private val openCounts: Map<ProjectID, Int> = emptyMap(),
 ) : AdminProjectsPort {
 
     val projectsCalls = mutableListOf<ProjectAdminStatus>()
     val projectCalls = mutableListOf<ProjectID>()
     val updateCalls = mutableListOf<Pair<Project, String>>()
     val createCalls = mutableListOf<CreateProjectCall>()
+    val deleteCalls = mutableListOf<ProjectID>()
+    val openItemCountCalls = mutableListOf<ProjectID>()
+
+    /** Ids this fake has been asked to remove, so a re-read no longer reports them. */
+    private val deletedIDs = mutableSetOf<ProjectID>()
 
     override suspend fun projects(status: ProjectAdminStatus): List<AdminProject> {
         projectsCalls += status
-        return byStatus[status] ?: emptyList()
+        return (byStatus[status] ?: emptyList()).filter { it.project.id !in deletedIDs }
     }
 
     override suspend fun project(id: ProjectID): AdminProject? {
@@ -60,6 +68,17 @@ class RecordingAdminProjectsPort(
     override suspend fun updateProject(project: Project, version: String): AdminProject {
         updateCalls += project to version
         return updateResult?.invoke(project, version) ?: AdminProject(project, version)
+    }
+
+    override suspend fun openItemCount(id: ProjectID): Int {
+        openItemCountCalls += id
+        return openCounts[id] ?: 0
+    }
+
+    override suspend fun deleteProject(id: ProjectID) {
+        deleteCalls += id
+        deleteFailure?.let { throw it }
+        deletedIDs += id
     }
 
     companion object {

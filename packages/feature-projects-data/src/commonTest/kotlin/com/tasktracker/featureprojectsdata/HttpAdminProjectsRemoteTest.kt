@@ -31,6 +31,45 @@ import kotlin.test.assertNull
 class HttpAdminProjectsRemoteTest {
 
     @Test
+    fun openItemCountAsksForTheProjectsUnfinishedWork() = runTest {
+        val id = randomProjectID()
+        val client = RecordingHttpClient()
+        client.respondWith("""{"openItemCount":3}""")
+
+        val count = HttpAdminProjectsRemote(client).openItemCount(id)
+
+        assertEquals(3, count)
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Get, request.method)
+        assertEquals("/v1/admin/projects/${id.stringValue}/open-items", request.path)
+        assertEquals(true, request.requiresAuth)
+    }
+
+    @Test
+    fun deleteProjectSendsADeleteForThatId() = runTest {
+        val id = randomProjectID()
+        val client = RecordingHttpClient()
+        client.respondWith("")
+
+        HttpAdminProjectsRemote(client).deleteProject(id)
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Delete, request.method)
+        assertEquals("/v1/admin/projects/${id.stringValue}", request.path)
+        assertEquals(true, request.requiresAuth)
+    }
+
+    @Test
+    fun deleteProjectTreatsAnAlreadyAbsentProjectAsRemoved() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWithFailure(AppError.NotFound("Not found (404)."))
+
+        // A replayed delete, or a second admin acting on a stale list, reaches the state
+        // the call asked for. Throwing here would report a failure for the wanted outcome.
+        HttpAdminProjectsRemote(client).deleteProject(randomProjectID())
+    }
+
+    @Test
     fun listProjectsRequestsTheActiveBucket() = runTest {
         val client = RecordingHttpClient()
         client.respondWith(listOf(projectBody(name = "Demo")).json())

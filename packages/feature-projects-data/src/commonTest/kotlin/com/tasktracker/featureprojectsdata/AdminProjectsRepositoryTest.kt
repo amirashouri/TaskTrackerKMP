@@ -71,6 +71,42 @@ class AdminProjectsRepositoryTest {
     }
 
     @Test
+    fun openItemCountForwardsTheCountItRead() = runTest {
+        val id = randomProjectID()
+        val client = RecordingHttpClient()
+        client.respondWith("""{"openItemCount":5}""")
+
+        assertEquals(5, repositoryOver(client).openItemCount(id))
+        assertEquals(
+            "/v1/admin/projects/${id.stringValue}/open-items",
+            client.requests.single().path,
+        )
+    }
+
+    @Test
+    fun deleteProjectForwardsTheDeleteForThatId() = runTest {
+        val id = randomProjectID()
+        val client = RecordingHttpClient()
+        client.respondWith("")
+
+        repositoryOver(client).deleteProject(id)
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Delete, request.method)
+        assertEquals("/v1/admin/projects/${id.stringValue}", request.path)
+    }
+
+    @Test
+    fun deleteProjectAcceptsAnAlreadyAbsentProject() = runTest {
+        val client = RecordingHttpClient()
+        client.respondWithFailure(AppError.NotFound("Not found (404)."))
+
+        // The caller asked for the project to be gone; a second delete finding it gone is
+        // that state, not a failure to report.
+        repositoryOver(client).deleteProject(randomProjectID())
+    }
+
+    @Test
     fun updateProjectForwardsTheVersionTheCallerReadAndReturnsTheStoredOne() = runTest {
         val id = randomProjectID()
         val client = RecordingHttpClient()
