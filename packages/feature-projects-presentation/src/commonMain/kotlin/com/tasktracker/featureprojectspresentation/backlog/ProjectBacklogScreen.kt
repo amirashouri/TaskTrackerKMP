@@ -40,6 +40,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.BacklogSection
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.resources.Res
+import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.backlog_archived_empty_body
 import com.tasktracker.resources.backlog_archived_empty_title
 import com.tasktracker.resources.backlog_empty_body
@@ -436,6 +437,7 @@ private fun EmptySearchSection(modifier: Modifier = Modifier) {
         title = stringResource(Res.string.work_item_search_empty_title),
         body = stringResource(Res.string.work_item_search_empty_body),
         modifier = modifier,
+        image = ttActionIcons.search,
     )
 }
 
@@ -445,6 +447,7 @@ private fun EmptyBacklogSection(modifier: Modifier = Modifier) {
         title = stringResource(Res.string.backlog_empty_title),
         body = stringResource(Res.string.backlog_empty_body),
         modifier = modifier,
+        image = ttTabIcons.backlog,
     )
 }
 
@@ -454,6 +457,7 @@ private fun EmptyKanbanSection(modifier: Modifier = Modifier) {
         title = stringResource(Res.string.backlog_kanban_empty_title),
         body = stringResource(Res.string.backlog_kanban_empty_body),
         modifier = modifier,
+        image = ttTabIcons.board,
     )
 }
 
@@ -463,6 +467,7 @@ private fun EmptyArchivedSection(modifier: Modifier = Modifier) {
         title = stringResource(Res.string.backlog_archived_empty_title),
         body = stringResource(Res.string.backlog_archived_empty_body),
         modifier = modifier,
+        image = ttActionIcons.archive,
     )
 }
 

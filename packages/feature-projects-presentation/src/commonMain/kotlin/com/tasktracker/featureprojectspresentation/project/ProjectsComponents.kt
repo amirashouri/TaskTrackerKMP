@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -20,8 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -30,6 +34,7 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttCanvas
+import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -159,23 +164,64 @@ internal fun ProjectsTextField(
     }
 }
 
-/** Empty state container rendering a title and instructional body. */
+/**
+ * The placeholder a list shows instead of a blank page.
+ *
+ * Centered, with the list's own glyph in a tinted badge where the caller has one. The copy is a
+ * statement about the whole list, so left-aligned body text under a heading reads like a row
+ * that failed to load; the badge carries the destination's own symbol, so an empty backlog
+ * looks like the backlog rather than like a generic "nothing here".
+ *
+ * [image] is nullable because some callers (the project picker, the archive screen) have no
+ * glyph of their own; they keep the same layout without a badge rather than growing a second
+ * empty-state component.
+ */
 @Composable
 internal fun ProjectsEmptyState(
     title: String,
     body: String,
     modifier: Modifier = Modifier,
+    image: ImageVector? = null,
 ) {
     Column(
-        modifier = modifier.padding(ttSpacing.xxl),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xxxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.CenterVertically),
     ) {
-        ttText(text = title, style = ttTypography.titleSmall, color = ttLabel())
-        // Uses ttBodyLabel() to satisfy WCAG contrast on light canvas
+        if (image != null) {
+            Box(
+                modifier = Modifier
+                    .padding(bottom = ttSpacing.md)
+                    .size(EMPTY_BADGE_SIZE)
+                    .clip(CircleShape)
+                    .background(ttAccent().copy(alpha = EMPTY_BADGE_ALPHA)),
+                contentAlignment = Alignment.Center,
+            ) {
+                ttIcon(
+                    image = image,
+                    // The title beside it says what the screen is; a description here would
+                    // announce the same thing twice.
+                    contentDescription = null,
+                    tint = ttAccent(),
+                    modifier = Modifier.size(EMPTY_GLYPH_SIZE),
+                )
+            }
+        }
+        ttText(
+            text = title,
+            style = ttTypography.titleSmall,
+            color = ttLabel(),
+            textAlign = TextAlign.Center,
+        )
+        // ttBodyLabel(), not ttLabelSecondary(): BodyLabelContrastTest measures this copy
+        // against the canvas, and it is the only thing an empty screen has to say.
         ttText(
             text = body,
             style = ttTypography.subheadline,
             color = ttBodyLabel(),
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -220,6 +266,9 @@ internal fun priorityLabel(priority: Priority): String = when (priority) {
 private fun String.tagSuffix(): String =
     lowercase().replace(' ', '.').filter { it.isLetterOrDigit() || it == '.' }
 
+private val EMPTY_BADGE_SIZE = 64.dp
+private val EMPTY_GLYPH_SIZE = 28.dp
+private const val EMPTY_BADGE_ALPHA = 0.12f
 private const val FOCUS_ANIMATION_MILLIS = 150
 private val FOCUSED_RING_WIDTH = 2.dp
 private val RESTING_RING_WIDTH = 1.dp

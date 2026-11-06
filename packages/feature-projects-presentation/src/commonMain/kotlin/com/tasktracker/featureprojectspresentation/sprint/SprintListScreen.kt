@@ -32,6 +32,7 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Project
 import com.tasktracker.featureprojectsdomain.SprintSection
 import com.tasktracker.resources.Res
+import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.sprint_list_empty_body
 import com.tasktracker.resources.sprint_list_empty_title
 import com.tasktracker.resources.sprint_list_new
@@ -116,6 +117,7 @@ fun SprintListScreen(
                     ProjectsEmptyState(
                         title = stringResource(Res.string.sprint_list_empty_title),
                         body = stringResource(Res.string.sprint_list_empty_body),
+                        image = ttTabIcons.sprints,
                     )
                 } else {
                     Column(
@@ -141,6 +143,7 @@ fun SprintListScreen(
                     ProjectsEmptyState(
                         title = stringResource(Res.string.sprint_list_empty_title),
                         body = stringResource(Res.string.sprint_list_empty_body),
+                        image = ttTabIcons.sprints,
                     )
                 } else {
                     SprintSectionList(

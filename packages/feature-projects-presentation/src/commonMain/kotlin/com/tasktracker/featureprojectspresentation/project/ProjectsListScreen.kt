@@ -50,6 +50,7 @@ import com.tasktracker.resources.project_remove_archive
 import com.tasktracker.resources.project_remove_body_clear
 import com.tasktracker.resources.project_remove_body_outstanding
 import com.tasktracker.resources.project_remove_title
+import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.projects_empty_body
 import com.tasktracker.resources.projects_empty_title
 import com.tasktracker.resources.tab_projects
@@ -117,6 +118,7 @@ fun ProjectsListScreen(
                     title = stringResource(Res.string.projects_empty_title),
                     body = stringResource(Res.string.projects_empty_body),
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    image = ttTabIcons.projects,
                 )
             } else {
                 LazyColumn(
