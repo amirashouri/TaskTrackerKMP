@@ -21,6 +21,25 @@
 
 ---
 
+## 📥 Download the app
+
+Prebuilt installers are published on every release tag. Grab the latest from
+[**GitHub Releases**](https://github.com/amirashouri/TaskTrackerKMP/releases/latest).
+
+| Platform | Download from the latest release |
+| :--- | :--- |
+| **Android** (mobile) | `tasktracker-android-<version>.apk` |
+| **macOS** | `TaskTracker-<version>.dmg` |
+| **Windows** | `TaskTracker-<version>.msi` |
+| **Linux** | `TaskTracker-<version>.deb` |
+| **iOS** | Build from source (Quick Start below) — no release asset yet |
+
+> The Android APK is a **debug** build; enable "Install from unknown sources" if prompted. On macOS the app is not notarized, so the first launch needs right-click → Open.
+
+Prefer to build it yourself? Jump to [Quick Start](#-quick-start) below.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Install the toolchain
