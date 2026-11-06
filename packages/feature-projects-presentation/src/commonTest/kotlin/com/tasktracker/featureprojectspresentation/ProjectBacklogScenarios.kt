@@ -34,11 +34,14 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.TTToastTag
+import com.tasktracker.domain.Project
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 @OptIn(ExperimentalTestApi::class)
 object ProjectBacklogScenarios {
@@ -244,7 +247,6 @@ object ProjectBacklogScenarios {
                 "file=$file copy=$copy",
         )
     }
-}
 
 /**
  * Half a pixel of slack for a bounds comparison.
@@ -318,6 +320,12 @@ private fun ComposeUiTest.backlogShowing(
     items: List<WorkItem>,
     onAddTask: (() -> Unit)?,
     width: Dp? = null,
+    /** Override the project so a scenario can hand the screen a catalog with board columns. */
+    project: Project = ViewPreviewData.seededProject,
+    /** Captures every "Put on board" commit: the item id and the column key the resolver chose. */
+    onPutOnBoard: (WorkItemID, String?) -> Unit = { _, _ -> },
+    /** The shell-remembered column for this project, as [ProjectBacklogScreen] reads it. */
+    putOnBoardDefaultStatusKey: String? = null,
 ) {
     setContent {
         Themed {
@@ -332,12 +340,12 @@ private fun ComposeUiTest.backlogShowing(
                 },
             ) {
                 ProjectBacklogScreen(
-                    projection = sectionedBacklogProjection(items, emptyList()),
+                    projection = BacklogSectionedProjection(project = project, items = items),
                     isLoading = false,
                     errorMessage = null,
                     busyItemID = null,
                     onSelect = {},
-                    onPutOnBoard = {},
+                    onPutOnBoard = onPutOnBoard,
                     onFileAway = {},
                     onUnarchive = {},
                     onDismissError = {},
@@ -345,11 +353,186 @@ private fun ComposeUiTest.backlogShowing(
                     projects = ViewPreviewData.pickable(),
                     onSelectProject = {},
                     onAddTask = onAddTask,
+                    putOnBoardDefaultStatusKey = putOnBoardDefaultStatusKey,
                 )
             }
         }
     }
-}
+
+    }
+
+    // ---- "Put on board" column resolver ----
+
+    /**
+     * One board column: the resolver boards into it on the tap, with no picker.
+     *
+     * The screen only opens the column sheet when it cannot decide alone, and a single lane leaves
+     * it nothing to ask — so the commit carries that lane's key and the sheet never appears.
+     */
+    val puttingOnBoardWithASingleColumnBoardsDirectly: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(singleBoardStatus.first()),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        assertEquals(1, boarded.size, "a single column should board without a prompt")
+        assertEquals(item.id, boarded.first().first)
+        assertEquals(singleBoardStatus.first().id, boarded.first().second)
+        onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * Several columns and no remembered default: the tap opens the picker instead of boarding.
+     *
+     * The resolver has more than one lane and no stored answer, so it defers — the commit must not
+     * fire until a column is chosen, which is what keeps a tap from silently dropping the task into
+     * whichever lane the model would have guessed.
+     */
+    val puttingOnBoardWithSeveralColumnsOpensThePicker: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(*pairedBoardStatuses.toTypedArray()),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        onNodeWithTag(PutOnBoardSheetTag).assertIsDisplayed()
+        assertEquals(0, boarded.size, "the picker should intercept the tap until a column is chosen")
+    }
+
+    /**
+     * Picking a column in the sheet boards into it and dismisses the sheet.
+     *
+     * A single tap on a lane is the commit — there is no separate confirm — so the choice both
+     * moves the task and reports the column back so the next boarding in this project skips the
+     * prompt. The sheet must be gone afterwards, or the picker would linger over the list.
+     */
+    val choosingAColumnInThePickerBoardsIntoIt: suspend ComposeUiTest.() -> Unit = {
+        val chosen = pairedBoardStatuses[1]
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(*pairedBoardStatuses.toTypedArray()),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        onNodeWithTag(PutOnBoardStatusRowTag(chosen)).performClick()
+        waitForIdle()
+        assertEquals(1, boarded.size, "choosing a column should commit the board move")
+        assertEquals(item.id, boarded.first().first)
+        assertEquals(chosen.id, boarded.first().second)
+        onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * A remembered default the catalog still has boards directly, no picker.
+     *
+     * The shell hands the screen the last column the user picked for this project; because that key
+     * still names a real lane, the resolver treats it as the answer and boards on the tap — the
+     * picker would be redundant for a preference the user has already expressed.
+     */
+    val aRememberedDefaultTheProjectStillHasBoardsDirectly: suspend ComposeUiTest.() -> Unit = {
+        val remembered = pairedBoardStatuses[1]
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(*pairedBoardStatuses.toTypedArray()),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+            putOnBoardDefaultStatusKey = remembered.id,
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        assertEquals(1, boarded.size, "a remembered default should board without a prompt")
+        assertEquals(remembered.id, boarded.first().second)
+        onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * A remembered default the catalog no longer contains is ignored and the picker opens.
+     *
+     * If the project dropped or renamed the stored lane, the key names nothing on the board, and the
+     * resolver must not board into a ghost column — it falls back to asking, which is the safe read of
+     * a preference that no longer describes this project.
+     */
+    val aRememberedDefaultTheCatalogDroppedOpensThePicker: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(*pairedBoardStatuses.toTypedArray()),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+            putOnBoardDefaultStatusKey = "col-gone",
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        onNodeWithTag(PutOnBoardSheetTag).assertIsDisplayed()
+        assertEquals(0, boarded.size, "a stale default must not board into a column that no longer exists")
+    }
+
+    /**
+     * A project with no catalog (no `statuses`) falls back to the legacy `Todo` lane, no picker.
+     *
+     * `boardStatuses` is empty without a catalog, so the resolver has exactly one thing to do and no
+     * column to ask about; the commit carries a null key, which the model maps onto `Todo`.
+     */
+    val puttingOnBoardWithoutACatalogBoardsToLegacyTodo: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems().first()
+        val boarded = mutableListOf<Pair<WorkItemID, String?>>()
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = ViewPreviewData.seededProject.withBoardStatuses(),
+            onPutOnBoard = { id, key -> boarded.add(id to key) },
+        )
+        waitForIdle()
+        onNested(BacklogPutOnBoardTag(item)).performClick()
+        waitForIdle()
+        assertEquals(1, boarded.size, "a catalog-free project should board without a prompt")
+        assertEquals(item.id, boarded.first().first)
+        assertEquals(null, boarded.first().second)
+        onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
+    }
+
+    }
+
+/**
+ * A project whose catalog lists the given [statuses], copied from [ViewPreviewData.seededProject]
+ * so every other field (tags, prefix, history) is unchanged and only the board columns differ.
+ *
+ * [Project.boardStatuses] is derived from `statuses` filtered by `category.appearsOnBoard`, so a
+ * scenario passes only the lanes it wants the resolver to see — one entry boards directly, several
+ * open the picker.
+ */
+private fun Project.withBoardStatuses(vararg statuses: StatusDefinition): Project =
+    copy(statuses = statuses.toList())
+
+/** Two board columns a resolver test can hand a project: a single Todo lane, and a Todo + doing pair. */
+private val singleBoardStatus = listOf(
+    StatusDefinition(id = "col-todo", name = "To Do", category = WorkItemStatus.Todo, order = 0),
+)
+private val pairedBoardStatuses = listOf(
+    StatusDefinition(id = "col-todo", name = "To Do", category = WorkItemStatus.Todo, order = 0),
+    StatusDefinition(id = "col-doing", name = "Doing", category = WorkItemStatus.InProgress, order = 1),
+)
 
 /**
  * Whether two rectangles share any area.

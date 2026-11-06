@@ -29,6 +29,8 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.domain.BacklogSortOrder
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.WorkItem
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
@@ -84,7 +86,7 @@ fun ProjectBacklogScreen(
     errorMessage: String?,
     busyItemID: WorkItemID?,
     onSelect: (WorkItemID) -> Unit,
-    onPutOnBoard: (WorkItemID) -> Unit,
+    onPutOnBoard: (WorkItemID, String?) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onUnarchive: (WorkItemID) -> Unit,
     onDismissError: () -> Unit,
@@ -95,6 +97,15 @@ fun ProjectBacklogScreen(
     onAddTask: (() -> Unit)? = null,
     sortOrder: BacklogSortOrder = BacklogSortOrder(),
     onSortOrderChanged: (BacklogSortOrder) -> Unit = {},
+    /**
+     * The shell-remembered "Put on board" target for this project, or null when none has been
+     * chosen. Defaulted so a preview or focused screen test still boards a task without the shell.
+     * See the screen's resolver: a remembered key the catalog no longer contains is treated as
+     * null and the user is re-asked.
+     */
+    putOnBoardDefaultStatusKey: String? = null,
+    /** Persists the column the user chose, so the next boarding in this project skips the prompt. */
+    onPutOnBoardDefaultStatusChosen: (String) -> Unit = {},
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
@@ -117,6 +128,42 @@ fun ProjectBacklogScreen(
     val shown = remember(projection, appliedQuery) { projection.matching(appliedQuery) }
     val focusManager = LocalFocusManager.current
 
+    // The board columns this project exposes. Empty when the project has no catalog, in which case
+    // boarding falls back to the legacy `Todo` lane with no key.
+    val boardStatuses = projection.project?.boardStatuses.orEmpty()
+
+    // The item waiting for a column choice, or null when the picker is closed. Set by the resolver
+    // below only when it cannot decide on its own — i.e. several columns and no usable default.
+    var pendingPutOnBoard by remember { mutableStateOf<WorkItem?>(null) }
+
+    fun commitPutOnBoard(item: WorkItem, definition: StatusDefinition) {
+        onPutOnBoard(item.id, definition.id)
+        onPutOnBoardDefaultStatusChosen(definition.id)
+    }
+
+    /**
+     * Decides where a backlog item lands when "Put on board" is tapped, then asks the model.
+     *
+     * - No catalog (or none of its statuses appear on the board): legacy `Todo`, null key.
+     * - Exactly one board column: that column, with no prompt.
+     * - A remembered default the catalog still contains: that column, with no prompt.
+     * - Anything else — several columns and no usable default — opens the picker for an on-tap choice.
+     *
+     * The remembered default is the shell preference [putOnBoardDefaultStatusKey]; when we commit a
+     * choice we also report it through [onPutOnBoardDefaultStatusChosen] so the shell persists it
+     * and the next boarding in this project skips the prompt.
+     */
+    fun requestPutOnBoard(item: WorkItem) {
+        when {
+            boardStatuses.isEmpty() -> onPutOnBoard(item.id, null)
+            boardStatuses.size == 1 -> commitPutOnBoard(item, boardStatuses.first())
+            putOnBoardDefaultStatusKey != null &&
+                boardStatuses.any { it.id == putOnBoardDefaultStatusKey } ->
+                commitPutOnBoard(item, boardStatuses.first { it.id == putOnBoardDefaultStatusKey })
+            else -> pendingPutOnBoard = item
+        }
+    }
+
     // Measured dynamically to accommodate conditional banners and variable typography scaling
     var headerHeightPx by remember { mutableIntStateOf(0) }
     val firstRowInset = with(LocalDensity.current) {
@@ -136,7 +183,7 @@ fun ProjectBacklogScreen(
                     isLoading = isLoading,
                     searchQuery = appliedQuery,
                     onSelect = onSelect,
-                    onPutOnBoard = onPutOnBoard,
+                    onPutOnBoard = { requestPutOnBoard(it) },
                     onFileAway = onFileAway,
                     onCopy = onCopy,
                     onAddTask = onAddTask,
@@ -279,6 +326,20 @@ fun ProjectBacklogScreen(
                     )
                 }
             }
+            // The column picker, open only while the resolver has decided it cannot board without
+            // a choice. `visible` tracks `pendingPutOnBoard`, so dismissing sets it null and the
+            // sheet animates out on its own.
+            pendingPutOnBoard?.let { item ->
+                PutOnBoardSheet(
+                    item = item,
+                    statuses = boardStatuses,
+                    onConfirm = { definition ->
+                        commitPutOnBoard(item, definition)
+                        pendingPutOnBoard = null
+                    },
+                    onDismissRequest = { pendingPutOnBoard = null },
+                )
+            }
         }
     }
 }
@@ -291,7 +352,7 @@ private fun BacklogSectionList(
     isLoading: Boolean,
     searchQuery: String,
     onSelect: (WorkItemID) -> Unit,
-    onPutOnBoard: (WorkItemID) -> Unit,
+    onPutOnBoard: (WorkItem) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
     onAddTask: (() -> Unit)?,
@@ -323,7 +384,7 @@ private fun BacklogSectionList(
             items(backlog, key = { it.id.stringValue }) { item ->
                 WorkItemBacklogRow(
                     item = item,
-                    onPutOnBoard = { onPutOnBoard(item.id) },
+                    onPutOnBoard = { onPutOnBoard(item) },
                     onFileAway = { onFileAway(item.id) },
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },

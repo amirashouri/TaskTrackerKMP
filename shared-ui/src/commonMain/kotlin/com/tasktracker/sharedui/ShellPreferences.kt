@@ -49,6 +49,21 @@ class ShellPreferences(
     private val _backlogSortOrder = MutableStateFlow(BacklogSortOrder())
     val backlogSortOrder: StateFlow<BacklogSortOrder> = _backlogSortOrder.asStateFlow()
 
+    /**
+     * The remembered "Put on board" target for each project, keyed by [ProjectID.stringValue]
+     * → the chosen `StatusDefinition.id`.
+     *
+     * A board column is project-scoped, so the choice cannot be one shared key; it is a map so
+     * a device keeps a separate remembered column per project. The screen reads the entry for the
+     * project it is showing and, when the stored key no longer names a column the project actually
+     * has (the catalog dropped or renamed it), treats the entry as absent and re-asks — see
+     * `ProjectBacklogScreen`. One map for the whole app, not one per project, because the
+     * preference is a per-device habit ("I board into To Do in this project") and a map is how a
+     * single store entry holds every project's answer.
+     */
+    private val _putOnBoardStatusKeys = MutableStateFlow<Map<String, String>>(emptyMap())
+    val putOnBoardStatusKeys: StateFlow<Map<String, String>> = _putOnBoardStatusKeys.asStateFlow()
+
     private var cachedIdentity: UserIdentity? = null
 
     private val _currentUserName = MutableStateFlow<String?>(null)
@@ -86,6 +101,12 @@ class ShellPreferences(
         _backlogSortOrder.value = BacklogSortCodec.decode(
             runCatching { store.value<List<String>>(DefaultsKey.BacklogSort) }.getOrNull(),
         )
+
+        // A `Map` of opaque ids rather than renamable tokens, so a missing or unreadable entry
+        // is dropped wholesale instead of partially decoded into a wrong column.
+        _putOnBoardStatusKeys.value =
+            runCatching { store.value<Map<String, String>>(DefaultsKey.PutOnBoardStatus) }.getOrNull()
+                ?: emptyMap()
 
         val projectID = runCatching { store.value(router.lastProjectDefaultsKey) }.getOrNull()
         lastVisitedProjectID = projectID?.takeIf { it.isNotBlank() }
@@ -156,6 +177,22 @@ class ShellPreferences(
     suspend fun setBacklogSortOrder(order: BacklogSortOrder) {
         _backlogSortOrder.value = order
         runCatching { store.set(BacklogSortCodec.encode(order), DefaultsKey.BacklogSort) }
+    }
+
+    /**
+     * Remembers that, in [projectID], "Put on board" should drop a task into [statusKey].
+     *
+     * Memory first, disk second, for the same reason [setBacklogSortOrder] does: the screen reads
+     * the flow, so publishing before the write makes the next tap land in the chosen column even
+     * if the write is slow. `statusKey` is the `StatusDefinition.id` the project's catalog owns;
+     * the screen is responsible for only persisting keys the project still contains, so a value
+     * here that names a deleted column is simply not read by that project and is left to be
+     * overwritten on the next choice.
+     */
+    suspend fun setPutOnBoardStatusKey(projectID: ProjectID, statusKey: String) {
+        val next = _putOnBoardStatusKeys.value.toMutableMap().apply { put(projectID.stringValue, statusKey) }
+        _putOnBoardStatusKeys.value = next
+        runCatching { store.set(next, DefaultsKey.PutOnBoardStatus) }
     }
 
     suspend fun rememberActiveProject(projectID: ProjectID?) {

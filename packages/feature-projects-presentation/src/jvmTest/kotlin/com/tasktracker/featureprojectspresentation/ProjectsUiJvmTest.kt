@@ -169,6 +169,36 @@ class ProjectsUiJvmTest {
     fun theBacklogListScrollsUnderTheHeader() =
         runComposeUiTest(block = ProjectBacklogScenarios.theListScrollsUnderTheHeader)
 
+    /** One board column: the resolver boards into it on the tap, with no picker. */
+    @Test
+    fun puttingOnBoardWithASingleColumnBoardsDirectly() =
+        runComposeUiTest(block = ProjectBacklogScenarios.puttingOnBoardWithASingleColumnBoardsDirectly)
+
+    /** Several columns and no remembered default: the tap opens the picker instead of boarding. */
+    @Test
+    fun puttingOnBoardWithSeveralColumnsOpensThePicker() =
+        runComposeUiTest(block = ProjectBacklogScenarios.puttingOnBoardWithSeveralColumnsOpensThePicker)
+
+    /** Picking a column in the sheet boards into it and dismisses the sheet. */
+    @Test
+    fun choosingAColumnInThePickerBoardsIntoIt() =
+        runComposeUiTest(block = ProjectBacklogScenarios.choosingAColumnInThePickerBoardsIntoIt)
+
+    /** A remembered default the catalog still has boards directly, no picker. */
+    @Test
+    fun aRememberedDefaultTheProjectStillHasBoardsDirectly() =
+        runComposeUiTest(block = ProjectBacklogScenarios.aRememberedDefaultTheProjectStillHasBoardsDirectly)
+
+    /** A remembered default the catalog no longer contains is ignored and the picker opens. */
+    @Test
+    fun aRememberedDefaultTheCatalogDroppedOpensThePicker() =
+        runComposeUiTest(block = ProjectBacklogScenarios.aRememberedDefaultTheCatalogDroppedOpensThePicker)
+
+    /** A project with no catalog falls back to the legacy Todo lane, no picker. */
+    @Test
+    fun puttingOnBoardWithoutACatalogBoardsToLegacyTodo() =
+        runComposeUiTest(block = ProjectBacklogScenarios.puttingOnBoardWithoutACatalogBoardsToLegacyTodo)
+
     @Test
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
 

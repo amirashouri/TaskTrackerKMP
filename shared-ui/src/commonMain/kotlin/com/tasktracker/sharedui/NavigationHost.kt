@@ -1385,7 +1385,7 @@ private fun BacklogDestination(
         onSelect = { itemID ->
             openEditor(AppRoute.WorkItemEditor(projectID = projectID, workItemID = itemID))
         },
-        onPutOnBoard = { itemID -> scope.launch { model.putOnBoard(itemID) } },
+        onPutOnBoard = { itemID, statusKey -> scope.launch { model.putOnBoard(itemID, statusKey) } },
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
         onUnarchive = { itemID -> scope.launch { model.unarchive(itemID) } },
         onDismissError = model::dismissError,
@@ -1400,6 +1400,15 @@ private fun BacklogDestination(
                     initialStatus = WorkItemStatus.Backlog,
                 ),
             )
+        },
+        // The remembered "Put on board" column for *this* project, or null when none has been
+        // chosen yet (or the catalog dropped/renamed it). The screen reads this to skip its
+        // column picker; committing a choice reports it back so we persist it here.
+        putOnBoardDefaultStatusKey = preferences.putOnBoardStatusKeys
+            .collectAsState()
+            .value[projectID.stringValue],
+        onPutOnBoardDefaultStatusChosen = { key ->
+            scope.launch { preferences.setPutOnBoardStatusKey(projectID, key) }
         },
     )
 }

@@ -59,6 +59,20 @@ enum class DefaultsKey(val wireValue: String) {
     BacklogSort("backlog.sortOrder"),
 
     /**
+     * The backlog's remembered "Put on board" target, per project, as a JSON
+     * `Map<projectID, statusKey>`.
+     *
+     * A board column is project-scoped: a status id is only meaningful inside the catalog
+     * that minted it, so the default cannot be one global key. It is stored as a map so a
+     * device that has chosen a column in several projects keeps each choice, and a project
+     * whose catalog loses that column simply fails to find its key and re-asks — see
+     * `ProjectBacklogScreen`'s resolver. The keys are opaque strings (random project ids and
+     * status ids), so there is no renamable token here that would need a codec the way
+     * [BacklogSort] does; [UserDefaultsStore] JSON-encodes the map like any other value.
+     */
+    PutOnBoardStatus("backlog.putOnBoardStatus"),
+
+    /**
      * Debug-only fault injection, persisted so the simulator can be put into an offline
      * state and stay there across launches.
      */

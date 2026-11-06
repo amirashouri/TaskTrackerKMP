@@ -50,9 +50,21 @@ class ProjectBacklogModel(
         )
     }
 
-    /** Moves task to Todo on the board (triage action; work begins separately as InProgress). */
-    suspend fun putOnBoard(itemID: WorkItemID): Boolean = acting(itemID) {
-        moveWorkItem(id = itemID, to = WorkItemStatus.Todo)
+    /**
+     * Boards a backlog item into the column named by [statusKey].
+     *
+     * [statusKey] is a `StatusDefinition.id` from the project's catalog. The move lands in that
+     * lane (its `category` is the coarse status the scheduling rules read). When [statusKey] is
+     * null — a project with no catalog, or the legacy path — the item goes to `Todo` with no
+     * lane key, which is exactly the pre-catalog behaviour. The screen is responsible for picking
+     * a [statusKey] that the project actually contains; this method only resolves what it is given,
+     * and ignores an unknown key by falling back to `Todo`.
+     */
+    suspend fun putOnBoard(itemID: WorkItemID, statusKey: String? = null): Boolean = acting(itemID) {
+        val project = repository.project(projectID)
+        val definition = statusKey?.let { key -> project?.statuses?.firstOrNull { it.id == key } }
+        val to = definition?.category ?: WorkItemStatus.Todo
+        moveWorkItem(id = itemID, to = to, statusKey = definition?.id)
     }
 
     /** Archives the task. Fails if the item is already terminal. */

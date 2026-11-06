@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -23,10 +24,13 @@ import kotlin.test.assertTrue
  * successes - each of them refuses on an item that has already been dealt with.
  *
  * The tab now splits into two sections - backlog and archived - but the model beneath it has
- * not changed its verbs: "put on board" still moves a backlogged task to `Todo`, and
- * "file away" still moves it to `Closed`. The sections are a view-layer split, and the only
- * model behaviour they add is that filing a backlogged task moves it from the backlog section
- * into the archived section of the same tab.
+ * not changed its verbs: "put on board" still moves a backlogged task, and "file away" still
+ * moves it to `Closed`. What changed is that boarding now takes the target column's
+ * `StatusDefinition.id`: with no catalog it lands in `Todo` as before, and with a custom catalog
+ * it lands in the named lane. The screen decides which lane (and remembers it), so the model's
+ * job here is only to place the item correctly given that key. The sections are a view-layer
+ * split, and the only model behaviour they add is that filing a backlogged task moves it from the
+ * backlog section into the archived section of the same tab.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectBacklogModelTest {
@@ -103,13 +107,78 @@ class ProjectBacklogModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertTrue(model.putOnBoard(item.id))
+        assertTrue(model.putOnBoard(item.id, null))
         advanceUntilIdle()
 
         assertTrue(repository.writes.contains("moveWorkItem:Todo"))
         assertNull(model.busyItemID)
         // And it has left the backlog section, so this tab is not showing work the board now owns.
         assertTrue(model.projection.backlogIsEmpty)
+    }
+
+    /**
+     * With a catalog, boarding to a named column lands the item in that lane, not in `Todo`.
+     *
+     * This is the behaviour the new "Put on board" prompt relies on: the screen picks a column,
+     * hands its `StatusDefinition.id` here, and the item must move to that lane's category *with*
+     * that key set — otherwise the board would file it under the wrong column or drop the key and
+     * render it uncategorised.
+     */
+    @Test
+    fun `putting work on board to a chosen column uses that column's key and category`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "todo-1", name = "To Do", category = WorkItemStatus.Todo, order = 0),
+                StatusDefinition(id = "review-1", name = "In Review", category = WorkItemStatus.InReview, order = 1),
+            ),
+        )
+        repository.seed(project)
+        val item = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        repository.seed(item)
+
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertTrue(model.putOnBoard(item.id, "review-1"))
+        advanceUntilIdle()
+
+        val moved = repository.workItem(item.id)!!
+        assertEquals(WorkItemStatus.InReview, moved.status)
+        assertEquals("review-1", moved.statusKey)
+        assertTrue(model.projection.backlogIsEmpty)
+    }
+
+    /**
+     * A key the project no longer contains is treated as "no choice", not as a crash.
+     *
+     * The screen only persists keys the catalog still has, but defence in depth here means a stale
+     * stored default (e.g. a column deleted elsewhere) cannot drive the move into a phantom lane —
+     * it falls back to the legacy `Todo` column the same as a project with no catalog at all.
+     */
+    @Test
+    fun `putting work on board with an unknown column key falls back to Todo`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "todo-1", name = "To Do", category = WorkItemStatus.Todo, order = 0),
+            ),
+        )
+        repository.seed(project)
+        val item = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        repository.seed(item)
+
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertTrue(model.putOnBoard(item.id, "does-not-exist"))
+        advanceUntilIdle()
+
+        val moved = repository.workItem(item.id)!!
+        assertEquals(WorkItemStatus.Todo, moved.status)
+        assertNull(moved.statusKey)
     }
 
     @Test
@@ -125,7 +194,7 @@ class ProjectBacklogModelTest {
         advanceUntilIdle()
 
         repository.failure = AppError.Offline
-        assertFalse(model.putOnBoard(item.id))
+        assertFalse(model.putOnBoard(item.id, null))
         advanceUntilIdle()
 
         assertEquals(AppError.Offline.message, model.errorMessage)
@@ -252,7 +321,7 @@ class ProjectBacklogModelTest {
         advanceUntilIdle()
 
         repository.failure = AppError.Offline
-        model.putOnBoard(item.id)
+        model.putOnBoard(item.id, null)
         assertNotNull(model.errorMessage)
 
         model.dismissError()

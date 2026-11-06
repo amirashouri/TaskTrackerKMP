@@ -452,7 +452,7 @@ private fun ComposeUiTest.backlogShowing(
                 errorMessage = null,
                 busyItemID = null,
                 onSelect = {},
-                onPutOnBoard = {},
+                onPutOnBoard = { _, _ -> },
                 onFileAway = {},
                 onUnarchive = {},
                 onDismissError = {},

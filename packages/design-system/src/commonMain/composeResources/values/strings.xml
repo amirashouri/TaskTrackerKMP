@@ -350,6 +350,9 @@
     <string name="backlog_empty_title">The backlog is empty</string>
     <string name="backlog_empty_body">Tasks that have not been put on a board yet collect here.</string>
     <string name="backlog_put_on_board">Put on board</string>
+    <string name="backlog_put_on_board_prompt_title">Put on board</string>
+    <string name="backlog_put_on_board_prompt_body">Choose the column to add %1$s to.</string>
+    <string name="backlog_put_on_board_confirm">Add to column</string>
 
     <!--
       The backlog's two sort keys and the direction each one currently reads in.
