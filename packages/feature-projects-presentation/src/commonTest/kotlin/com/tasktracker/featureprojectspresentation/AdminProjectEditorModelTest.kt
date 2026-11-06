@@ -7,9 +7,12 @@ import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.StatusRules
 import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.TagRules
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AdminProject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -202,6 +205,103 @@ class AdminProjectEditorModelTest {
         assertTrue(model.save())
         val sent = port.updateCalls.single().first
         assertEquals(listOf("Mobile"), sent.tags.map { it.name })
+    }
+
+    @Test
+    fun `adding a stage marks the editor dirty and the save carries the catalog`() = runTest {
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        assertFalse(model.hasChanges)
+
+        assertTrue(model.addStatus("  In build ", WorkItemStatus.InProgress, TagColor.Teal))
+
+        assertTrue(model.hasChanges, "a catalog edit is a reason to enable Save")
+        val stage = model.statuses.single()
+        assertEquals("In build", stage.name, "the name is normalised as it enters the draft")
+        assertEquals(WorkItemStatus.InProgress, stage.category)
+        assertEquals(TagColor.Teal, stage.color)
+        assertEquals(0, stage.order)
+
+        assertTrue(model.save())
+        val sent = port.updateCalls.single().first
+        assertEquals(listOf("In build"), sent.statuses.map { it.name })
+        assertEquals(WorkItemStatus.InProgress, sent.statuses.single().category)
+    }
+
+    /**
+     * Renaming, recategorising and reordering are one catalog edit, and the order that
+     * reaches the server is the list's own position - not the stale `order` the rows came
+     * in with. A save that kept the old numbers would draw the board in the old order after
+     * a reload while looking right on the editing screen.
+     */
+    @Test
+    fun `renaming and reordering stages renumbers the saved board order`() = runTest {
+        val seeded = project().apply {
+            statuses = listOf(
+                StatusDefinition("s-todo", "Todo", WorkItemStatus.Todo, order = 0),
+                StatusDefinition("s-build", "Building", WorkItemStatus.InProgress, order = 1),
+                StatusDefinition("s-done", "Done", WorkItemStatus.Done, order = 2),
+            )
+        }
+        val port = RecordingAdminProjectsPort(
+            projectByID = mapOf(id to AdminProject(seeded, "v1")),
+            updateResult = { updated, _ -> AdminProject(updated, "v2") },
+        )
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+
+        model.updateStatus("s-build", "In build", WorkItemStatus.InReview, TagColor.Amber)
+        model.reorderStatus(from = 2, to = 0)
+
+        assertTrue(model.hasChanges)
+        assertTrue(model.save())
+
+        val sent = port.updateCalls.single().first.statuses
+        assertEquals(listOf("Done", "Todo", "In build"), sent.map { it.name })
+        assertEquals(listOf(0, 1, 2), sent.map { it.order }, "list position is the board order")
+        assertEquals(WorkItemStatus.InReview, sent.last().category)
+        assertEquals(TagColor.Amber, sent.last().color)
+        assertEquals("s-build", sent.last().id, "a rename keeps the lane the board already draws")
+    }
+
+    @Test
+    fun `removing a stage drops it from the saved catalog`() = runTest {
+        val seeded = project().apply {
+            statuses = listOf(
+                StatusDefinition("s-todo", "Todo", WorkItemStatus.Todo, order = 0),
+                StatusDefinition("s-build", "In build", WorkItemStatus.InProgress, order = 1),
+            )
+        }
+        val port = RecordingAdminProjectsPort(
+            projectByID = mapOf(id to AdminProject(seeded, "v1")),
+            updateResult = { updated, _ -> AdminProject(updated, "v2") },
+        )
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+
+        model.removeStatus("s-build")
+
+        assertTrue(model.save())
+        assertEquals(listOf("Todo"), port.updateCalls.single().first.statuses.map { it.name })
+    }
+
+    @Test
+    fun `the stage composer refuses a blank duplicate or full catalog`() = runTest {
+        val model = AdminProjectEditorModel(id, port())
+        model.load()
+
+        assertFalse(model.addStatus("   ", WorkItemStatus.Todo, TagColor.Gray), "a blank stage is not a stage")
+        assertTrue(model.addStatus("Ready", WorkItemStatus.Todo, TagColor.Gray))
+        assertFalse(
+            model.addStatus(" ready ", WorkItemStatus.InProgress, TagColor.Blue),
+            "case-insensitive: two Ready lanes are indistinguishable",
+        )
+        repeat(StatusRules.MAX_PER_PROJECT - 1) { index ->
+            assertTrue(model.addStatus("Stage $index", WorkItemStatus.Todo, TagColor.Blue))
+        }
+        assertFalse(model.addStatus("One too many", WorkItemStatus.Todo, TagColor.Red))
+        assertEquals(StatusRules.MAX_PER_PROJECT, model.statuses.size)
     }
 
     private companion object {

@@ -359,6 +359,14 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = ProjectEditorScenarios.cancellingADirtyProjectSheetAsksBeforeDiscarding)
 
     @Test
+    fun theStatusCatalogSectionEditsAndRemovesStages() =
+        runComposeUiTest(block = ProjectEditorScenarios.theStatusCatalogSectionEditsAndRemovesStages)
+
+    @Test
+    fun addingAStageSendsTheComposerValues() =
+        runComposeUiTest(block = ProjectEditorScenarios.addingAStageSendsTheComposerValues)
+
+    @Test
     fun cancellingACleanWorkItemEditorClosesIt() =
         runComposeUiTest(block = WorkItemEditorScenarios.cancellingACleanEditorClosesIt)
 

@@ -796,6 +796,28 @@
     <string name="admin_project_tags_duplicate">A tag with that name already exists.</string>
     <string name="admin_project_tags_max">This project already has the maximum number of tags.</string>
 
+    <!--
+      Workflow stages. An admin renames the stages a project's board shows and picks
+      the built-in category each one belongs to; the category, not the name, is what
+      done, archive and overdue rules read.
+    -->
+    <string name="admin_project_statuses_title">Workflow stages</string>
+    <string name="admin_project_statuses_body">Define the stages this project's board shows, in order. Each stage belongs to a built-in category, so renaming one never changes whether work counts as finished or overdue.</string>
+    <string name="admin_project_statuses_empty">No custom stages yet. The built-in six are used until you add one; adding the first replaces them.</string>
+    <string name="admin_project_statuses_name">Stage name</string>
+    <string name="admin_project_statuses_category">Built-in category</string>
+    <string name="admin_project_statuses_color">Colour</string>
+    <string name="admin_project_statuses_add">Add stage</string>
+    <string name="admin_project_statuses_save">Save stage</string>
+    <string name="admin_project_statuses_cancel">Cancel</string>
+    <string name="admin_project_statuses_edit">Edit %1$s</string>
+    <string name="admin_project_statuses_remove">Remove %1$s</string>
+    <string name="admin_project_statuses_move_up">Move %1$s up</string>
+    <string name="admin_project_statuses_move_down">Move %1$s down</string>
+    <string name="admin_project_statuses_name_required">Give the stage a name.</string>
+    <string name="admin_project_statuses_duplicate">A stage with that name already exists.</string>
+    <string name="admin_project_statuses_max">This project already has the maximum number of stages.</string>
+
     <string name="tag_color_red">Red</string>
     <string name="tag_color_orange">Orange</string>
     <string name="tag_color_amber">Amber</string>

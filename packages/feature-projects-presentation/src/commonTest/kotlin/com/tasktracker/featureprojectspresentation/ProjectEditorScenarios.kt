@@ -8,11 +8,16 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import com.tasktracker.designsystem.TTBottomSheetScrimTag
 import com.tasktracker.designsystem.TTConfirmPopupCancelTag
 import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.assertEquals
 
 /**
@@ -144,6 +149,92 @@ object ProjectEditorScenarios {
 
         assertEquals(1, dismisses, "confirming the scrim discard did not dismiss the sheet")
         assertEquals(0, cancels, "the scrim's confirmation ran Cancel's callback instead")
+    }
+
+    /**
+     * The catalog section edits the stage it was given, and the callbacks carry the facts the
+     * model needs: the id that keeps the lane, the category that drives the rules, and the
+     * list position that becomes the board order.
+     *
+     * Structural, not pixel-reading: rows and controls are addressed by their tags and the
+     * assertions are the callbacks the section's buttons ran.
+     */
+    val theStatusCatalogSectionEditsAndRemovesStages: suspend ComposeUiTest.() -> Unit = {
+        val todo = StatusDefinition("s-todo", "Todo", WorkItemStatus.Todo, order = 0)
+        val build = StatusDefinition(
+            "s-build",
+            "In build",
+            WorkItemStatus.InProgress,
+            order = 1,
+            color = TagColor.Teal,
+        )
+        var updates = emptyList<Triple<String, String, WorkItemStatus>>()
+        var removes = emptyList<String>()
+        var moves = emptyList<Pair<Int, Int>>()
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                ProjectStatusesSection(
+                    statuses = listOf(todo, build),
+                    onAdd = { _, _, _ -> true },
+                    onUpdate = { id, name, category, _ ->
+                        updates = updates + Triple(id, name, category)
+                    },
+                    onRemove = { removes = removes + it },
+                    onMove = { from, to -> moves = moves + (from to to) },
+                )
+            }
+        }
+
+        onNodeWithTag(AdminProjectStatusRowTag(todo)).assertIsDisplayed()
+        onNodeWithTag(AdminProjectStatusRowTag(build)).assertIsDisplayed()
+
+        onNodeWithTag(AdminProjectStatusEditTag(build)).performClick()
+        onNodeWithTag(AdminProjectStatusNameFieldTag).performTextReplacement("Peer review")
+        onNodeWithTag(AdminProjectStatusSaveTag).performClick()
+
+        assertEquals(
+            listOf(Triple("s-build", "Peer review", WorkItemStatus.InProgress)),
+            updates,
+            "a rename keeps the stage id and category, so the lane already on cards survives",
+        )
+
+        onNodeWithTag(AdminProjectStatusMoveDownTag(todo)).performClick()
+        assertEquals(listOf(0 to 1), moves, "reorder reports the two list positions")
+
+        onNodeWithTag(AdminProjectStatusRemoveTag(todo)).performClick()
+        assertEquals(listOf("s-todo"), removes)
+    }
+
+    /** The composer refuses a blank stage without calling the model, then adds a named one. */
+    val addingAStageSendsTheComposerValues: suspend ComposeUiTest.() -> Unit = {
+        var added: Triple<String, WorkItemStatus, TagColor>? = null
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                ProjectStatusesSection(
+                    statuses = emptyList(),
+                    onAdd = { name, category, color ->
+                        added = Triple(name, category, color)
+                        true
+                    },
+                    onUpdate = { _, _, _, _ -> },
+                    onRemove = {},
+                    onMove = { _, _ -> },
+                )
+            }
+        }
+
+        onNodeWithTag(AdminProjectStatusAddTag).performClick()
+        onNodeWithTag(AdminProjectStatusErrorTag).assertIsDisplayed()
+        assertEquals(null, added, "a blank stage must not reach the model")
+
+        onNodeWithTag(AdminProjectStatusNameFieldTag).performTextInput("Ready")
+        onNodeWithTag(AdminProjectStatusAddTag).performClick()
+
+        assertEquals(
+            Triple("Ready", WorkItemStatus.Todo, TagColor.Blue),
+            added,
+            "the composer sends its name, the selected category and the selected colour",
+        )
     }
 
     @Composable

@@ -163,10 +163,11 @@ fun ProjectTagsSection(
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             ) {
                 for (color in TagColor.entries) {
-                    ColorSwatch(
+                    TagColorSwatch(
                         color = color,
                         selected = color == draftColor,
                         onClick = { draftColor = color },
+                        testTag = AdminProjectTagColorTag(color),
                     )
                 }
             }
@@ -248,8 +249,17 @@ private fun ExistingTagRow(tag: ProjectTag, onRemove: () -> Unit) {
     }
 }
 
+/**
+ * One curated tint, as a radio-style swatch. Shared with the workflow-stage composer,
+ * which draws its colours from the same contrast-checked vocabulary as tags.
+ */
 @Composable
-private fun ColorSwatch(color: TagColor, selected: Boolean, onClick: () -> Unit) {
+internal fun TagColorSwatch(
+    color: TagColor,
+    selected: Boolean,
+    onClick: () -> Unit,
+    testTag: String,
+) {
     val tint = ttTagTint(color.tint())
     Box(
         modifier = Modifier
@@ -266,7 +276,7 @@ private fun ColorSwatch(color: TagColor, selected: Boolean, onClick: () -> Unit)
             .clip(CircleShape)
             .background(tint)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .testTag(AdminProjectTagColorTag(color)),
+            .testTag(testTag),
     )
 }
 

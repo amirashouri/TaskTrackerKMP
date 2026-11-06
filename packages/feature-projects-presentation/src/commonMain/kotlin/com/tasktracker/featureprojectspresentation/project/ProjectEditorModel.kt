@@ -112,18 +112,18 @@ class ProjectEditorModel(
         if (statuses.size >= StatusRules.MAX_PER_PROJECT) return false
         val normalised = StatusRules.normaliseName(name)
         if (statuses.any { it.name.equals(normalised, ignoreCase = true) }) return false
-        statuses = statuses + StatusDefinition(
+        statuses = (statuses + StatusDefinition(
             id = Uuid.random().toString(),
             name = normalised,
             category = category,
-            order = statuses.size,
             color = color,
-        )
+        )).mapIndexed { index, status -> status.copy(order = index) }
         return true
     }
 
     fun removeStatus(id: String) {
         statuses = statuses.filterNot { it.id == id }
+            .mapIndexed { index, status -> status.copy(order = index) }
     }
 
     /** Renames or recategorises an existing status draft entry by id. */
@@ -137,13 +137,13 @@ class ProjectEditorModel(
         }
     }
 
-    /** Moves the status at [from] to [to] (both indices in the current draft order). */
+    /** Moves the status at [from] to [to] and renumbers every stage's board order. */
     fun reorderStatus(from: Int, to: Int) {
         if (from < 0 || from >= statuses.size || to < 0 || to >= statuses.size || from == to) return
         val mutable = statuses.toMutableList()
         val item = mutable.removeAt(from)
-        mutable.add(to, item.copy(order = to))
-        statuses = mutable
+        mutable.add(to, item)
+        statuses = mutable.mapIndexed { index, status -> status.copy(order = index) }
     }
 
     /** Dispatches [CreateProject] or [UpdateProject]. Returns true on success. */

@@ -106,6 +106,8 @@ internal fun ProjectsTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Test tag for the editable node itself; the default derives one from [title]. */
+    fieldTag: String? = null,
     placeholder: String? = null,
     isFocused: Boolean = false,
     isReadOnly: Boolean = false,
@@ -128,7 +130,7 @@ internal fun ProjectsTextField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth().testTag(title.tagSuffix()),
+                modifier = Modifier.fillMaxWidth().testTag(fieldTag ?: title.tagSuffix()),
                 enabled = enabled,
                 textStyle = ttTypography.body.copy(color = if (enabled) ttLabel() else ttLabelSecondary()),
                 cursorBrush = SolidColor(ttAccent()),

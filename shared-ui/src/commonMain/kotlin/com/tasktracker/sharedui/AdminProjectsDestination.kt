@@ -20,6 +20,7 @@ import com.tasktracker.featureprojectspresentation.AdminProjectsScreen
 import com.tasktracker.featureprojectspresentation.NewProjectForm
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectEditorScreen
+import com.tasktracker.featureprojectspresentation.ProjectStatusesSection
 import com.tasktracker.featureprojectspresentation.ProjectTagsSection
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -237,6 +238,19 @@ private fun AdminProjectEditor(
                 tags = model.tags,
                 onAdd = model::addTag,
                 onRemove = model::removeTag,
+                isBusy = model.isSaving,
+            )
+        },
+        // The workflow catalog is server-owned configuration, so it lives on the admin
+        // editor (which writes through the admin API with an optimistic version) and not on
+        // the member-facing project form. See ProjectEditorScreen's `statusesSection`.
+        statusesSection = {
+            ProjectStatusesSection(
+                statuses = model.statuses,
+                onAdd = model::addStatus,
+                onUpdate = model::updateStatus,
+                onRemove = model::removeStatus,
+                onMove = model::reorderStatus,
                 isBusy = model.isSaving,
             )
         },

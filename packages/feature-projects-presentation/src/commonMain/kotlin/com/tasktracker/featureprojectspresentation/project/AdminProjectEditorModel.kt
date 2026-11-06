@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalUuidApi::class)
+
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.getValue
@@ -8,12 +10,17 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.core.TagID
 import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.StatusRules
 import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.TagRules
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AdminProject
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * Presentation model for the admin project editor screen.
@@ -29,6 +36,7 @@ class AdminProjectEditorModel(
     private var originalName: String = ""
     private var originalDetails: String = ""
     private var originalTags: List<ProjectTag> = emptyList()
+    private var originalStatuses: List<StatusDefinition> = emptyList()
 
     var isLoading: Boolean by mutableStateOf(true)
         private set
@@ -53,10 +61,15 @@ class AdminProjectEditorModel(
     var tags: List<ProjectTag> by mutableStateOf(emptyList())
         private set
 
+    /** Admin-managed workflow status catalog, in board order. */
+    var statuses: List<StatusDefinition> by mutableStateOf(emptyList())
+        private set
+
     val hasChanges: Boolean
         get() = name.trim() != originalName ||
                 details.trim() != originalDetails ||
-                tags != originalTags
+                tags != originalTags ||
+                statuses != originalStatuses
 
     val canSave: Boolean
         get() = seeded != null && name.isNotBlank() && hasChanges
@@ -76,9 +89,11 @@ class AdminProjectEditorModel(
             keyPrefix = found.project.keyPrefix
             details = found.project.details
             tags = found.project.tags.map { it.copy() }
+            statuses = found.project.statuses.map { it.copy() }
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
             originalTags = found.project.tags.map { it.copy() }
+            originalStatuses = found.project.statuses.map { it.copy() }
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (failure: AppError) {
@@ -112,6 +127,53 @@ class AdminProjectEditorModel(
         tags = tags.filterNot { it.id == id }
     }
 
+    /** Validates against [StatusRules] and appends a status if its name is unique. */
+    fun addStatus(name: String, category: WorkItemStatus, color: TagColor): Boolean {
+        if (!StatusRules.isNameValid(name)) return false
+        if (statuses.size >= StatusRules.MAX_PER_PROJECT) return false
+        val normalised = StatusRules.normaliseName(name)
+        if (statuses.any { it.name.equals(normalised, ignoreCase = true) }) return false
+        statuses = renumbered(
+            statuses + StatusDefinition(
+                id = Uuid.random().toString(),
+                name = normalised,
+                category = category,
+                color = color,
+            ),
+        )
+        return true
+    }
+
+    /** Renames or recategorises an existing status draft entry by id. */
+    fun updateStatus(id: String, name: String, category: WorkItemStatus, color: TagColor) {
+        statuses = renumbered(
+            statuses.map { status ->
+                if (status.id != id) status else status.copy(
+                    name = StatusRules.normaliseName(name),
+                    category = category,
+                    color = color,
+                )
+            },
+        )
+    }
+
+    fun removeStatus(id: String) {
+        statuses = renumbered(statuses.filterNot { it.id == id })
+    }
+
+    /** Moves the status at [from] to [to] and renumbers every stage's board order. */
+    fun reorderStatus(from: Int, to: Int) {
+        if (from < 0 || from >= statuses.size || to < 0 || to >= statuses.size || from == to) return
+        val mutable = statuses.toMutableList()
+        val moved = mutable.removeAt(from)
+        mutable.add(to, moved)
+        statuses = renumbered(mutable)
+    }
+
+    /** The list position is the board order, so one renumber keeps the two from drifting. */
+    private fun renumbered(value: List<StatusDefinition>): List<StatusDefinition> =
+        value.mapIndexed { index, status -> status.copy(order = index) }
+
     /** Updates project via admin API using current optimistic lock version. Returns true on success. */
     suspend fun save(): Boolean {
         val current = seeded ?: return false
@@ -125,6 +187,10 @@ class AdminProjectEditorModel(
                         details = details.trim(),
                         tags = tags.map { it.copy(name = TagRules.normaliseName(it.name)) }
                             .filter { it.name.isNotEmpty() },
+                        statuses = renumbered(
+                            statuses.map { it.copy(name = StatusRules.normaliseName(it.name)) }
+                                .filter { it.name.isNotEmpty() },
+                        ),
                     ),
                     current.version,
                 )
@@ -134,9 +200,11 @@ class AdminProjectEditorModel(
             name = saved.project.name
             details = saved.project.details
             tags = saved.project.tags.map { it.copy() }
+            statuses = saved.project.statuses.map { it.copy() }
             originalName = saved.project.name.trim()
             originalDetails = saved.project.details.trim()
             originalTags = saved.project.tags.map { it.copy() }
+            originalStatuses = saved.project.statuses.map { it.copy() }
             return true
         } finally {
             isSaving = false
