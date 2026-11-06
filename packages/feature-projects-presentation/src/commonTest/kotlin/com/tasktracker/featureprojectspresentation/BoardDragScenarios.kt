@@ -39,7 +39,7 @@ object BoardDragScenarios {
     /** A card can be held, carried to another lane, and released there. */
     val draggingACardToAnotherLaneMovesItThere: suspend ComposeUiTest.() -> Unit = {
         val todo = todoCard()
-        val moves = mutableListOf<Pair<WorkItemID, WorkItemStatus>>()
+        val moves = mutableListOf<Pair<WorkItemID, String>>()
         boardShowing { id, status -> moves += id to status }
 
         val screenWidth = onRoot().fetchSemanticsNode().size.width
@@ -56,7 +56,7 @@ object BoardDragScenarios {
         )
 
         assertEquals(
-            listOf(todo.id to WorkItemStatus.Done),
+            listOf(todo.id to WorkItemStatus.Done.wireValue),
             moves,
             "the card should have been moved to the lane it was released over",
         )
@@ -73,7 +73,7 @@ object BoardDragScenarios {
      */
     val aShorterHoldStillLiftsTheCard: suspend ComposeUiTest.() -> Unit = {
         val todo = todoCard()
-        val moves = mutableListOf<Pair<WorkItemID, WorkItemStatus>>()
+        val moves = mutableListOf<Pair<WorkItemID, String>>()
         boardShowing { id, status -> moves += id to status }
 
         val screenWidth = onRoot().fetchSemanticsNode().size.width
@@ -87,7 +87,7 @@ object BoardDragScenarios {
         )
 
         assertEquals(
-            listOf(todo.id to WorkItemStatus.Done),
+            listOf(todo.id to WorkItemStatus.Done.wireValue),
             moves,
             "a 400ms hold is shorter than the platform long press and must still lift the card",
         )
@@ -103,7 +103,7 @@ object BoardDragScenarios {
      */
     val droppingACardOnItsOwnLaneDoesNotMoveIt: suspend ComposeUiTest.() -> Unit = {
         val todo = todoCard()
-        val moves = mutableListOf<Pair<WorkItemID, WorkItemStatus>>()
+        val moves = mutableListOf<Pair<WorkItemID, String>>()
         boardShowing { id, status -> moves += id to status }
 
         val from = onNodeWithTag(WorkItemCardTag(todo)).fetchSemanticsNode().boundsInRoot.center
@@ -123,7 +123,7 @@ object BoardDragScenarios {
      */
     val aQuickSwipeOnACardDoesNotLiftIt: suspend ComposeUiTest.() -> Unit = {
         val todo = todoCard()
-        val moves = mutableListOf<Pair<WorkItemID, WorkItemStatus>>()
+        val moves = mutableListOf<Pair<WorkItemID, String>>()
         boardShowing { id, status -> moves += id to status }
 
         val screenWidth = onRoot().fetchSemanticsNode().size.width
@@ -203,7 +203,7 @@ private const val EDGE_SCROLL_MS = 2_000L
 private const val DONE_CENTRE_FROM_RIGHT_EDGE = 166f
 
 @OptIn(ExperimentalTestApi::class)
-private fun ComposeUiTest.boardShowing(onMove: (WorkItemID, WorkItemStatus) -> Unit) {
+private fun ComposeUiTest.boardShowing(onMove: (WorkItemID, String) -> Unit) {
     setContent {
         Themed {
             ProjectBoardScreen(

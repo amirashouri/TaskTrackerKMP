@@ -24,6 +24,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintBlockingOverlap
@@ -410,12 +411,14 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project = writing({ ProjectChange(ProjectChange.Kind.Projects, id) }) {
         failIfSet()
         val existing = storedProjects.first { it.id == id }
         if (name != null) existing.name = name
         if (details != null) existing.details = details
         if (memberIDs != null) existing.memberIDs = memberIDs
+        if (statuses != null) existing.statuses = statuses
         existing.updatedAt = now
         writes += "updateProject"
         existing.copy()
@@ -447,6 +450,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -469,6 +473,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             title = title,
             details = details,
             status = status,
+            statusKey = statusKey,
             priority = priority,
             assigneeID = assigneeID,
             dueDate = dueDate,
@@ -539,6 +544,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem = writing({
@@ -548,6 +554,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         val existing = storedItems.first { it.id == id }
         val from = existing.status
         existing.status = to
+        existing.statusKey = statusKey
         existing.updatedAt = now
         if (rank != null) existing.rank = rank
         if (to.isTerminal && existing.resolvedAt == null) existing.resolvedAt = now
@@ -845,6 +852,7 @@ fun testProject(
     updatedAt: Instant = Instant.fromEpochSeconds(1_760_000_000),
     nextItemNumber: Int = 1,
     id: ProjectID = randomProjectID(),
+    statuses: List<StatusDefinition> = emptyList(),
 ): Project = Project(
     id = id,
     keyPrefix = keyPrefix,
@@ -852,6 +860,7 @@ fun testProject(
     details = details,
     isArchived = isArchived,
     nextItemNumber = nextItemNumber,
+    statuses = statuses,
     createdAt = updatedAt,
     updatedAt = updatedAt,
 )
@@ -864,6 +873,7 @@ fun testWorkItem(
     title: String = "A task",
     details: String = "",
     status: WorkItemStatus = WorkItemStatus.Todo,
+    statusKey: String? = null,
     priority: Priority = Priority.Medium,
     assigneeID: UserID? = null,
     dueDate: Instant? = null,
@@ -882,6 +892,7 @@ fun testWorkItem(
     title = title,
     details = details,
     status = status,
+    statusKey = statusKey,
     priority = priority,
     assigneeID = assigneeID,
     dueDate = dueDate,

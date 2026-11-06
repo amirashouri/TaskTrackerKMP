@@ -139,14 +139,15 @@ object WorkItemRules {
 object WorkItemGrouping {
 
     /**
-     * Items bucketed by status, each bucket in board order.
+     * Items bucketed by lane id: the item's [WorkItem.statusKey] when it names a defined
+     * status, otherwise the item's [WorkItemStatus.wireValue]. Each bucket is in board order.
      *
-     * A status with no items is simply absent from the map, and [boardColumns] turns
-     * that into an empty column. Returning empty lists for every status instead would
+     * A lane with no items is simply absent from the map, and [boardColumns] turns
+     * that into an empty column. Returning empty lists for every lane instead would
      * make "no items" and "not loaded" indistinguishable to a caller.
      */
-    fun itemsByStatus(items: List<WorkItem>): Map<WorkItemStatus, List<WorkItem>> =
-        items.groupBy { it.status }
+    fun itemsByStatus(items: List<WorkItem>): Map<String, List<WorkItem>> =
+        items.groupBy { it.statusKey ?: it.status.wireValue }
             .mapValues { (_, bucket) -> bucket.sortedBy { it.orderingKey } }
 
     /**
@@ -183,21 +184,43 @@ object WorkItemGrouping {
     /**
      * One entry per board column, in left-to-right order, including the empty ones.
      *
-     * Every column is present whether or not it has items: a board that reflows as cards
-     * move between lanes is disorienting, and a column that appears only once it has
-     * content gives the drag-and-drop no target to drop into.
+     * The lanes come from the project's [Project.boardStatuses] when a catalog exists,
+     * falling back to the six built-in [WorkItemStatus] categories otherwise. Every column
+     * is present whether or not it has items: a board that reflows as cards move between
+     * lanes is disorienting, and a column that appears only once it has content gives the
+     * drag-and-drop no target to drop into.
      */
-    fun boardColumns(items: List<WorkItem>): List<BoardColumn> {
+    fun boardColumns(items: List<WorkItem>, boardStatuses: List<StatusDefinition>): List<BoardColumn> {
+        val effective = if (boardStatuses.isEmpty()) {
+            WorkItemStatus.boardOrder.map { status ->
+                StatusDefinition(
+                    id = status.wireValue,
+                    name = "",
+                    category = status,
+                    order = status.ordinal,
+                )
+            }
+        } else {
+            boardStatuses.filter { it.category.appearsOnBoard }.sortedBy { it.order }
+        }
         val grouped = itemsByStatus(items)
-        return WorkItemStatus.boardOrder.map { status ->
-            BoardColumn(status, grouped[status].orEmpty())
+        return effective.map { definition ->
+            // An item lands in a lane by its statusKey when it names one, otherwise by the
+            // first lane whose category matches the item's coarse status — so an item that
+            // predates a catalog still finds its column.
+            val itemsInLane = grouped.values.flatten().filter { item ->
+                val key = item.statusKey
+                (key != null && key == definition.id) ||
+                        (key == null && definition.category == item.status)
+            }.sortedBy { it.orderingKey }
+            BoardColumn(definition, itemsInLane)
         }
     }
 }
 
-/** One board column: its status and the items in it, in order. */
+/** One board column: its status definition and the items in it, in order. */
 data class BoardColumn(
-    val status: WorkItemStatus,
+    val status: StatusDefinition,
     val items: List<WorkItem>,
 ) {
     /**

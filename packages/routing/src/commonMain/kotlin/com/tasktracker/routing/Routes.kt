@@ -88,6 +88,14 @@ sealed interface AppRoute {
         val workItemID: WorkItemID?,
         val initialStatus: WorkItemStatus? = null,
         val initialSprintID: SprintID? = null,
+        /**
+         * The custom lane a lane-add started from, when the project has a catalog.
+         *
+         * [initialStatus] stays the coarse category so the editor and the scheduling rules
+         * keep reading one axis; this names the exact catalog entry so a board with two
+         * lanes in one category still saves the card into the lane it was added from.
+         */
+        val initialStatusKey: String? = null,
     ) : AppRoute
 
     data object Settings : AppRoute

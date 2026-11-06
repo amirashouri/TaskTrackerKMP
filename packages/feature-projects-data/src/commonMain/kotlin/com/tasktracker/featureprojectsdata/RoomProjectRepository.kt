@@ -40,6 +40,7 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
@@ -264,6 +265,7 @@ class RoomProjectRepository(
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project {
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
         val normalisedDetails = details?.let { ProjectRules.normaliseDetails(it) }
@@ -277,6 +279,7 @@ class RoomProjectRepository(
             normalisedName?.let { project.name = it }
             normalisedDetails?.let { project.details = it }
             memberIDs?.let { project.memberIDs = it.distinct() }
+            statuses?.let { project.statuses = it }
             project.updatedAt = now
             database.projectDao().update(project.toRecord())
             // The project *is* the payload, not the record. Encoding the record instead would
@@ -707,6 +710,7 @@ class RoomProjectRepository(
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -733,6 +737,7 @@ class RoomProjectRepository(
                 title = normalisedTitle,
                 details = normalisedDetails,
                 status = status,
+                statusKey = statusKey,
                 priority = priority,
                 assigneeID = assigneeID,
                 dueDate = dueDate,
@@ -847,6 +852,7 @@ class RoomProjectRepository(
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem {
@@ -857,6 +863,7 @@ class RoomProjectRepository(
             val item = readWorkItem(id)
             val previous = item.status
             item.status = to
+            item.statusKey = statusKey
             item.rank = rank ?: bottomRankIn(item.projectID, to)
             item.updatedAt = now
             // Dates the resolution on the way into a terminal status and clears it on the way

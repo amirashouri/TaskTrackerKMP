@@ -539,7 +539,7 @@ class ProjectionsTest {
             items = listOf(item("TT-1", WorkItemStatus.Done, resolvedAt = origin)),
         )
 
-        assertEquals(WorkItemStatus.boardOrder, projection.columns.map { it.status })
+        assertEquals(WorkItemStatus.boardOrder, projection.columns.map { it.status.category })
     }
 
     @Test
@@ -549,7 +549,7 @@ class ProjectionsTest {
             items = listOf(item("TT-1", WorkItemStatus.InProgress)),
         )
 
-        val todo = projection.columns.single { it.status == WorkItemStatus.Todo }
+        val todo = projection.columns.single { it.status.category == WorkItemStatus.Todo }
         assertTrue(todo.isEmpty)
         assertEquals(0, todo.count)
         assertEquals(
@@ -570,7 +570,7 @@ class ProjectionsTest {
             ),
         )
 
-        val todo = projection.columns.single { it.status == WorkItemStatus.Todo }
+        val todo = projection.columns.single { it.status.category == WorkItemStatus.Todo }
         assertEquals(listOf("TT-1", "TT-2", "TT-3"), keys(todo.items))
         assertFalse(todo.isEmpty)
     }
@@ -665,11 +665,11 @@ class ProjectionsTest {
             ),
         ).matching("TT-2")
 
-        assertEquals(WorkItemStatus.boardOrder, board.columns.map { it.status })
+        assertEquals(WorkItemStatus.boardOrder, board.columns.map { it.status.category })
         assertEquals(listOf("TT-2"), keys(board.columns.flatMap { it.items }))
         assertEquals(
             1,
-            board.columns.single { it.status == WorkItemStatus.Todo }.count,
+            board.columns.single { it.status.category == WorkItemStatus.Todo }.count,
             "the lane counts what it is drawing",
         )
         assertEquals(1, board.itemCount)

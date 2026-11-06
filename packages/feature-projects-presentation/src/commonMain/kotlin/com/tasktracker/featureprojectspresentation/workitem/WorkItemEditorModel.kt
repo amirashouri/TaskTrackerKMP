@@ -18,6 +18,7 @@ import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -56,6 +57,9 @@ class WorkItemEditorModel(
     blobTransport: AttachmentBlobTransport? = null,
     opener: AttachmentOpener? = null,
     private val availableTags: List<ProjectTag>? = null,
+    private val availableStatuses: List<StatusDefinition> = emptyList(),
+    /** The catalog lane a create was launched from, so a lane-add keeps that exact lane. */
+    private val initialStatusKey: String? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -274,7 +278,10 @@ class WorkItemEditorModel(
     private val createBaseline: Draft = Draft(
         title = "",
         details = "",
-        status = initialStatus ?: WorkItemStatus.Backlog,
+        status = initialStatusKey?.let { key ->
+            availableStatuses.firstOrNull { it.id == key }?.category
+        } ?: initialStatus ?: WorkItemStatus.Backlog,
+        statusKey = initialStatusKey,
         priority = Priority.Medium,
         assigneeID = null,
         dueDate = null,
@@ -297,7 +304,17 @@ class WorkItemEditorModel(
         private set
 
     var status: WorkItemStatus by mutableStateOf(
-        existing?.status ?: initialStatus ?: WorkItemStatus.Backlog,
+        existing?.statusKey?.let { key ->
+            availableStatuses.firstOrNull { it.id == key }?.category
+        } ?: existing?.status
+            ?: initialStatusKey?.let { key -> availableStatuses.firstOrNull { it.id == key }?.category }
+            ?: initialStatus
+            ?: WorkItemStatus.Backlog,
+    )
+        private set
+
+    var statusKey: String? by mutableStateOf(
+        existing?.statusKey ?: if (existing == null) initialStatusKey else null,
     )
         private set
 
@@ -331,11 +348,15 @@ class WorkItemEditorModel(
 
     val isFiledAway: Boolean get() = status.isTerminal
 
-    val selectableStatuses: List<WorkItemStatus>
+    val selectableStatuses: List<StatusDefinition>
         get() = if (status == WorkItemStatus.Closed) {
             emptyList()
+        } else if (availableStatuses.isNotEmpty()) {
+            availableStatuses.filter { it.category != WorkItemStatus.Closed }
         } else {
-            WorkItemStatus.entries.filterNot { it == WorkItemStatus.Closed }
+            WorkItemStatus.entries.filterNot { it == WorkItemStatus.Closed }.map { status ->
+                StatusDefinition(id = status.wireValue, name = "", category = status, order = status.ordinal)
+            }
         }
 
     val hasChanges: Boolean
@@ -355,6 +376,7 @@ class WorkItemEditorModel(
         title = title.trim(),
         details = details.trim(),
         status = status,
+        statusKey = statusKey,
         priority = priority,
         assigneeID = assigneeID,
         dueDate = dueDate,
@@ -383,9 +405,10 @@ class WorkItemEditorModel(
         }
     }
 
-    fun onStatusChanged(value: WorkItemStatus) {
+    fun onStatusChanged(definition: StatusDefinition) {
         if (status == WorkItemStatus.Closed) return
-        status = value
+        status = definition.category
+        statusKey = definition.id
     }
 
     fun onPriorityChanged(value: Priority) {
@@ -432,6 +455,7 @@ class WorkItemEditorModel(
                 projectID = projectID,
                 title = title,
                 status = status,
+                statusKey = statusKey,
                 details = details,
                 priority = priority,
                 assigneeID = assigneeID,
@@ -474,6 +498,7 @@ class WorkItemEditorModel(
         val title: String,
         val details: String,
         val status: WorkItemStatus,
+        val statusKey: String?,
         val priority: Priority,
         val assigneeID: UserID?,
         val dueDate: Instant?,
@@ -487,6 +512,7 @@ class WorkItemEditorModel(
                 title = item.title.trim(),
                 details = item.details.trim(),
                 status = item.status,
+                statusKey = item.statusKey,
                 priority = item.priority,
                 assigneeID = item.assigneeID,
                 dueDate = item.dueDate,

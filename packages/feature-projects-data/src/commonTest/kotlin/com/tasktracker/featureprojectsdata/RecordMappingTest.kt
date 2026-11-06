@@ -4,6 +4,8 @@ import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomUserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -38,6 +40,23 @@ class RecordMappingTest {
         val project = aProject()
 
         assertEquals(project, project.toRecord().domainValue)
+    }
+
+    @Test
+    fun theWorkflowCatalogAndStatusKeySurviveTheRoundTrip() {
+        val statuses = listOf(
+            StatusDefinition(id = "s-todo", name = "To do", category = WorkItemStatus.Todo, order = 0, color = TagColor.Gray),
+            StatusDefinition(id = "s-review", name = "In review", category = WorkItemStatus.InReview, order = 1, color = TagColor.Blue),
+        )
+        val project = aProject(statuses = statuses)
+
+        assertEquals(project, project.toRecord().domainValue)
+        assertTrue(project.toRecord().statuses.isNotEmpty(), "the catalog must be stored, not dropped")
+
+        val item = aWorkItem(statusKey = "s-review")
+
+        assertEquals(item, item.toRecord().domainValue)
+        assertEquals("s-review", item.toRecord().statusKey)
     }
 
     @Test

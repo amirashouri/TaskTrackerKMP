@@ -26,6 +26,7 @@ import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemOrderingKey
 import com.tasktracker.domain.WorkItemStatus
@@ -79,6 +80,7 @@ internal fun Project.toRecord(): ProjectRecord = ProjectRecord(
     name = name,
     details = details,
     tags = tags.toTagColumn(),
+    statuses = statuses.toStatusColumn(),
     memberIDs = memberIDs.joinToString(",") { it.stringValue },
     isArchived = isArchived,
     agentEnabled = agentEnabled,
@@ -109,6 +111,28 @@ internal fun String.toTags(): List<ProjectTag> =
         emptyList()
     } else {
         runCatching { JSONCoding.json.decodeFromString(ListSerializer(ProjectTag.serializer()), this) }
+            .getOrDefault(emptyList())
+    }
+
+/**
+ * The project's workflow catalog as the JSON document [ProjectRecord.statuses] stores.
+ * Empty is the empty string, the same rule as [toTagColumn].
+ */
+internal fun List<StatusDefinition>.toStatusColumn(): String =
+    if (isEmpty()) "" else JSONCoding.json.encodeToString(ListSerializer(StatusDefinition.serializer()), this)
+
+/**
+ * Decodes [ProjectRecord.statuses], dropping a document this build cannot read.
+ *
+ * An unreadable catalog reads as empty — the built-in workflow — which is the only loss a
+ * reader can absorb: the project still opens and its board still draws. Throwing here would
+ * cost the whole project row, for the same reason [String.toTags] does not throw.
+ */
+internal fun String.toStatuses(): List<StatusDefinition> =
+    if (isEmpty()) {
+        emptyList()
+    } else {
+        runCatching { JSONCoding.json.decodeFromString(ListSerializer(StatusDefinition.serializer()), this) }
             .getOrDefault(emptyList())
     }
 
@@ -144,6 +168,7 @@ internal fun ProjectRecord.apply(value: Project): ProjectRecord = copy(
     name = value.name,
     details = value.details,
     tags = value.tags.toTagColumn(),
+    statuses = value.statuses.toStatusColumn(),
     memberIDs = value.memberIDs.joinToString(",") { it.stringValue },
     isArchived = value.isArchived,
     agentEnabled = value.agentEnabled,
@@ -168,6 +193,7 @@ internal val ProjectRecord.domainValue: Project?
             name = name,
             details = details,
             tags = tags.toTags(),
+            statuses = statuses.toStatuses(),
             memberIDs = memberIDs.split(',').mapNotNull(::parseUserID),
             isArchived = isArchived,
             agentEnabled = agentEnabled,
@@ -297,6 +323,7 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
         tagIDs = reconciled.tagIDs.toTagIDColumn(),
+        statusKey = reconciled.statusKey,
         recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
         recurrenceUntil = reconciled.recurrence?.until,
         sprintID = reconciled.sprintID?.stringValue,
@@ -335,6 +362,9 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         storyPoints = reconciled.storyPoints,
         blockedByIDs = reconciled.blockedByIDs.toBlockedByColumn(),
         tagIDs = reconciled.tagIDs.toTagIDColumn(),
+        // A pulled value like any other: a device must learn which catalog lane an item
+        // was moved into on another device, including its absence.
+        statusKey = reconciled.statusKey,
         // A pulled value like any other: a device has to be able to *learn* that a
         // card was made recurring, or that one stopped being — including its absence.
         recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
@@ -389,6 +419,7 @@ internal val WorkItemRecord.domainValue: WorkItem?
             storyPoints = storyPoints,
             blockedByIDs = blockedByIDs.toBlockedByIDs(),
             tagIDs = tagIDs.toTagIDs(),
+            statusKey = statusKey,
             recurrence = recurrenceRaw.toRecurrence(recurrenceUntil),
             sprintID = parsedSprint,
         )

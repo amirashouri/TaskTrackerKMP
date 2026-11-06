@@ -16,6 +16,7 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagRules
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemRules
@@ -66,10 +67,11 @@ class UpdateProject(
         name: String? = null,
         details: String? = null,
         memberIDs: List<UserID>? = null,
+        statuses: List<StatusDefinition>? = null,
     ): Project {
         val normalisedName = name?.let { ProjectRules.normaliseName(it) }
         val normalisedDetails = details?.let { ProjectRules.normaliseDetails(it) }
-        if (normalisedName == null && normalisedDetails == null && memberIDs == null) {
+        if (normalisedName == null && normalisedDetails == null && memberIDs == null && statuses == null) {
             return repository.project(id)
                 ?: throw AppError.Storage("That project no longer exists.")
         }
@@ -79,6 +81,7 @@ class UpdateProject(
             details = normalisedDetails,
             now = dateProvider.now(),
             memberIDs = memberIDs,
+            statuses = statuses,
         )
     }
 }
@@ -123,7 +126,7 @@ class MoveWorkItem(
 ) {
 
     @Throws(AppError::class, CancellationException::class)
-    suspend operator fun invoke(id: WorkItemID, to: WorkItemStatus): WorkItem {
+    suspend operator fun invoke(id: WorkItemID, to: WorkItemStatus, statusKey: String? = null): WorkItem {
         val current = repository.workItem(id)
             ?: throw AppError.Validation("That work item no longer exists.")
         if (!WorkItemRules.canTransition(current.status, to)) {
@@ -131,7 +134,7 @@ class MoveWorkItem(
                 "A work item cannot go from ${current.status.wireValue} to ${to.wireValue}.",
             )
         }
-        return repository.moveWorkItem(id = id, to = to, rank = null, now = dateProvider.now())
+        return repository.moveWorkItem(id = id, to = to, statusKey = statusKey, rank = null, now = dateProvider.now())
     }
 }
 
@@ -154,6 +157,7 @@ class SaveWorkItem(
         projectID: ProjectID,
         title: String,
         status: WorkItemStatus,
+        statusKey: String? = null,
         details: String = "",
         priority: Priority = Priority.Medium,
         assigneeID: UserID? = null,
@@ -175,6 +179,7 @@ class SaveWorkItem(
                 title = title,
                 details = details,
                 status = status,
+                statusKey = statusKey,
                 priority = priority,
                 assigneeID = assigneeID,
                 dueDate = dueDate,
@@ -205,7 +210,7 @@ class SaveWorkItem(
 
         if (previous?.status == status) return WorkItemSaveOutcome.Updated(updated.id, moved = false)
 
-        repository.moveWorkItem(id = id, to = status, rank = null, now = dateProvider.now())
+        repository.moveWorkItem(id = id, to = status, statusKey = statusKey, rank = null, now = dateProvider.now())
         return WorkItemSaveOutcome.Updated(updated.id, moved = true)
     }
 }

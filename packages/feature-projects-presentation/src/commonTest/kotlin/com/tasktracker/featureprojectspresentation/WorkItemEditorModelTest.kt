@@ -9,6 +9,7 @@ import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.AttachFile
 import com.tasktracker.featureprojectsdomain.PickedFile
@@ -269,7 +270,7 @@ class WorkItemEditorModelTest {
 
         val moved = FakeProjectRepository().apply { seed(item) }
         val moving = editing(item, moved)
-        moving.onStatusChanged(WorkItemStatus.InProgress)
+        moving.onStatusChanged(statusDefinition(WorkItemStatus.InProgress))
         val movedOutcome = moving.save()
         assertIs<WorkItemSaveOutcome.Updated>(movedOutcome)
         assertTrue(movedOutcome.moved, "the card changed column, so the view should say so")
@@ -287,9 +288,73 @@ class WorkItemEditorModelTest {
         val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Todo)
         val model = editing(item)
 
-        model.onStatusChanged(WorkItemStatus.InProgress)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.InProgress))
 
         assertTrue(model.hasChanges)
+    }
+
+    // MARK: Catalog statuses
+
+    /**
+     * The project's catalog is the picker, and saving keeps the chosen lane's key.
+     *
+     * Renaming a lane is the feature: the picker says "In build", not "In Progress", and the
+     * stored item keeps that lane while its coarse category still drives the scheduling
+     * rules. Closed stays out because it is reached by filing away.
+     */
+    @Test
+    fun `a project catalog drives the picker and the saved status key`() = runTest {
+        val catalog = listOf(
+            StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+            StatusDefinition(id = "s-build", name = "In build", category = WorkItemStatus.InProgress, order = 1),
+            StatusDefinition(id = "s-ship", name = "Shipped", category = WorkItemStatus.Done, order = 2),
+            StatusDefinition(id = "s-dropped", name = "Dropped", category = WorkItemStatus.Closed, order = 3),
+        )
+        val project = testProject()
+        val item = testWorkItem(projectID = project.id, status = WorkItemStatus.Todo, statusKey = "s-ready")
+        val repository = FakeProjectRepository().apply { seed(item) }
+        val model = editing(item, repository, availableStatuses = catalog)
+
+        assertEquals(
+            listOf("s-ready", "s-build", "s-ship"),
+            model.selectableStatuses.map { it.id },
+            "the catalog is the picker, minus the file-away status",
+        )
+        assertEquals(WorkItemStatus.Todo, model.status, "the item opens on the lane its key names")
+
+        model.onStatusChanged(model.selectableStatuses.first { it.id == "s-build" })
+        assertEquals(WorkItemStatus.InProgress, model.status)
+        assertNotNull(model.save())
+
+        val stored = assertNotNull(repository.workItem(item.id))
+        assertEquals("s-build", stored.statusKey)
+        assertEquals(WorkItemStatus.InProgress, stored.status)
+    }
+
+    /** A create saves into the chosen catalog lane, not merely its category. */
+    @Test
+    fun `a new item saved into a catalog lane keeps the lane key`() = runTest {
+        val catalog = listOf(
+            StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+            StatusDefinition(id = "s-review", name = "Peer review", category = WorkItemStatus.InReview, order = 1),
+        )
+        val project = testProject()
+        val repository = FakeProjectRepository().apply { seed(project) }
+        val model = WorkItemEditorModel(
+            projectID = project.id,
+            existing = null,
+            repository = repository,
+            dateProvider = TestDateProvider(),
+            availableStatuses = catalog,
+        )
+        model.onTitleChanged("Needs a second pair of eyes")
+        model.onStatusChanged(model.selectableStatuses.first { it.id == "s-review" })
+
+        assertNotNull(model.save())
+
+        val stored = repository.workItems(project.id).single()
+        assertEquals("s-review", stored.statusKey)
+        assertEquals(WorkItemStatus.InReview, stored.status)
     }
 
     // MARK: Terminal statuses
@@ -299,9 +364,9 @@ class WorkItemEditorModelTest {
     fun `closed is not offered as a status to choose`() = runTest {
         val model = newItem()
 
-        assertFalse(WorkItemStatus.Closed in model.selectableStatuses)
-        assertTrue(WorkItemStatus.Backlog in model.selectableStatuses)
-        assertTrue(WorkItemStatus.Done in model.selectableStatuses)
+        assertFalse(model.selectableStatuses.any { it.category == WorkItemStatus.Closed })
+        assertTrue(model.selectableStatuses.any { it.category == WorkItemStatus.Backlog })
+        assertTrue(model.selectableStatuses.any { it.category == WorkItemStatus.Done })
     }
 
     @Test
@@ -318,7 +383,7 @@ class WorkItemEditorModelTest {
         val item = testWorkItem(projectID = testProject().id, status = WorkItemStatus.Closed)
         val model = editing(item)
 
-        model.onStatusChanged(WorkItemStatus.Closed)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.Closed))
 
         assertEquals(WorkItemStatus.Closed, model.status)
         assertFalse(model.hasChanges)
@@ -760,7 +825,7 @@ class WorkItemEditorModelTest {
         repository.seed(item)
         val model = editing(item, repository)
 
-        model.onStatusChanged(WorkItemStatus.Done)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.Done))
         assertNotNull(model.save())
 
         val items = repository.workItems(project.id)
@@ -826,7 +891,7 @@ class WorkItemEditorModelTest {
         repository.seed(item)
         val model = editing(item, repository)
 
-        model.onStatusChanged(WorkItemStatus.InProgress)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.InProgress))
         assertNotNull(model.save())
 
         assertEquals(
@@ -850,7 +915,7 @@ class WorkItemEditorModelTest {
         repository.seed(item)
         val model = editing(item, repository)
 
-        model.onStatusChanged(WorkItemStatus.Done)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.Done))
         assertNotNull(model.save())
 
         assertEquals(1, repository.workItems(project.id).size)
@@ -865,7 +930,7 @@ class WorkItemEditorModelTest {
         model.onTitleChanged("Daily standup")
         model.onRecurrenceChanged(Recurrence.Daily())
         model.onDueDateChanged(Instant.parse("2026-01-16T12:00:00Z"))
-        model.onStatusChanged(WorkItemStatus.Done)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.Done))
 
         assertNotNull(model.save())
 
@@ -900,7 +965,7 @@ class WorkItemEditorModelTest {
         repository.createFailure = AppError.Storage("the outbox is full")
         val model = editing(item, repository)
 
-        model.onStatusChanged(WorkItemStatus.Done)
+        model.onStatusChanged(statusDefinition(WorkItemStatus.Done))
         val outcome = model.save()
 
         assertNull(outcome, "a failed expansion must keep the editor open")
@@ -1407,6 +1472,14 @@ class WorkItemEditorModelTest {
 
     // MARK: Helpers
 
+    /** A built-in status as the picker offers it when the project has no catalog. */
+    private fun statusDefinition(status: WorkItemStatus) = StatusDefinition(
+        id = status.wireValue,
+        name = "",
+        category = status,
+        order = status.ordinal,
+    )
+
     private fun newItem(repository: FakeProjectRepository = FakeProjectRepository()) =
         WorkItemEditorModel(testProject().id, null, repository, TestDateProvider())
 
@@ -1416,6 +1489,7 @@ class WorkItemEditorModelTest {
         transport: FakeAttachmentBlobTransport? = null,
         opener: FakeAttachmentOpener? = null,
         availableTags: List<ProjectTag>? = null,
+        availableStatuses: List<StatusDefinition> = emptyList(),
     ) = WorkItemEditorModel(
         item.projectID,
         item,
@@ -1424,6 +1498,7 @@ class WorkItemEditorModelTest {
         blobTransport = transport,
         opener = opener,
         availableTags = availableTags,
+        availableStatuses = availableStatuses,
     )
 
     private suspend fun seededItem(): Pair<FakeProjectRepository, com.tasktracker.domain.WorkItem> {

@@ -40,6 +40,7 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Priority
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.priority_critical
@@ -190,6 +191,10 @@ internal fun ProjectsPreview(
         }
     }
 }
+
+@Composable
+internal fun statusLabel(definition: StatusDefinition): String =
+    definition.name.takeIf { it.isNotEmpty() } ?: statusLabel(definition.category)
 
 @Composable
 internal fun statusLabel(status: WorkItemStatus): String = when (status) {

@@ -288,10 +288,13 @@ class WorkItemGroupingTest {
 
     @Test
     fun boardColumnsCoverEveryBoardStatusInOrderEvenWhenEmpty() {
-        val columns = WorkItemGrouping.boardColumns(listOf(item("TT-1", WorkItemStatus.Todo)))
-        assertEquals(WorkItemStatus.boardOrder, columns.map { it.status })
+        val columns = WorkItemGrouping.boardColumns(
+            listOf(item("TT-1", WorkItemStatus.Todo)),
+            boardStatuses = emptyList(),
+        )
+        assertEquals(WorkItemStatus.boardOrder, columns.map { it.status.category })
         assertEquals(1, columns.first().items.size)
-        assertTrue(columns.first { it.status == WorkItemStatus.Done }.items.isEmpty())
+        assertTrue(columns.first { it.status.category == WorkItemStatus.Done }.items.isEmpty())
     }
 
     @Test
@@ -301,8 +304,9 @@ class WorkItemGroupingTest {
                 item("TT-1", WorkItemStatus.Todo, priority = Priority.Low),
                 item("TT-2", WorkItemStatus.Todo, priority = Priority.Critical),
             ),
+            boardStatuses = emptyList(),
         )
-        val todo = columns.first { it.status == WorkItemStatus.Todo }
+        val todo = columns.first { it.status.category == WorkItemStatus.Todo }
         assertEquals(listOf("TT-2", "TT-1"), todo.items.map { it.key.rawValue })
     }
 
@@ -313,8 +317,41 @@ class WorkItemGroupingTest {
                 item("TT-1", WorkItemStatus.Backlog),
                 item("TT-2", WorkItemStatus.Closed, resolvedOffsetSeconds = 0),
             ),
+            boardStatuses = emptyList(),
         )
         assertTrue(columns.all { it.items.isEmpty() })
+    }
+
+    @Test
+    fun catalogStatusesDrawTheLanesAndResolveByKeyThenCategory() {
+        val statuses = listOf(
+            StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+            StatusDefinition(id = "s-build", name = "In build", category = WorkItemStatus.InProgress, order = 1),
+        )
+        val project = Project(
+            id = projectID,
+            keyPrefix = "AP",
+            name = "Apollo",
+            statuses = statuses,
+            createdAt = now,
+            updatedAt = now,
+        )
+        val keyed = item("TT-1", WorkItemStatus.InProgress).apply { statusKey = "s-build" }
+        val legacy = item("TT-2", WorkItemStatus.InProgress)
+
+        assertTrue(project.hasCustomWorkflow)
+        assertEquals(listOf("s-ready", "s-build"), project.boardStatuses.map { it.id })
+        assertEquals("s-build", project.statusFor(keyed)?.id)
+        assertEquals(
+            "s-build",
+            project.statusFor(legacy)?.id,
+            "an item created before the catalog resolves by its category rather than dropping off the board",
+        )
+
+        val catalogFree = project.copy(statuses = emptyList())
+        assertFalse(catalogFree.hasCustomWorkflow)
+        assertEquals(emptyList(), catalogFree.boardStatuses)
+        assertNull(catalogFree.statusFor(keyed), "readers fall back to the built-in six")
     }
 
     @Test
@@ -542,7 +579,10 @@ class WorkItemGroupingTest {
                 resolvedOffsetSeconds = if (status.isTerminal) 0 else null,
             )
         }
-        val onBoard = WorkItemGrouping.boardColumns(items).flatMap { it.items }.map { it.id }.toSet()
+        val onBoard = WorkItemGrouping.boardColumns(items, boardStatuses = emptyList())
+            .flatMap { it.items }
+            .map { it.id }
+            .toSet()
         val untriaged = WorkItemGrouping.untriaged(items).map { it.id }.toSet()
         assertTrue(onBoard.intersect(untriaged).isEmpty())
     }
@@ -583,8 +623,8 @@ class WorkItemGroupingTest {
                 resolvedOffsetSeconds = if (status.isTerminal) 0 else null,
             )
         }
-        val doneColumn = WorkItemGrouping.boardColumns(items)
-            .first { it.status == WorkItemStatus.Done }
+        val doneColumn = WorkItemGrouping.boardColumns(items, boardStatuses = emptyList())
+            .first { it.status.category == WorkItemStatus.Done }
             .items
             .map { it.id }
             .toSet()

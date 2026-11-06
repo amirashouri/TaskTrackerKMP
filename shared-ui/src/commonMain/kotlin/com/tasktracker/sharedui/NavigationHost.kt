@@ -530,6 +530,7 @@ fun NavigationHost(
                         workItemID = editorRoute.workItemID,
                         initialStatus = editorRoute.initialStatus,
                         initialSprintID = editorRoute.initialSprintID,
+                        initialStatusKey = editorRoute.initialStatusKey,
                         repository = environment.repository,
                         dateProvider = environment.dateProvider,
                         scope = scope,
@@ -1298,12 +1299,16 @@ private fun BoardDestination(
         onFileAway = { itemID -> scope.launch { model.fileAway(itemID) } },
         onMove = { itemID, status -> scope.launch { model.move(itemID, status) } },
         onDismissError = model::dismissError,
-        onAddTask = { status ->
+        onAddTask = { statusKey ->
+            val lane = model.projection.project?.statuses?.firstOrNull { it.id == statusKey }
             router.push(
                 AppRoute.WorkItemEditor(
                     projectID = projectID,
                     workItemID = null,
-                    initialStatus = status,
+                    initialStatus = lane?.category
+                        ?: WorkItemStatus.fromWireValue(statusKey)
+                        ?: WorkItemStatus.Backlog,
+                    initialStatusKey = statusKey,
                     // The board shows the active sprint's items only, so a task added from it
                     // joins that sprint — otherwise it saves into the store and never appears:
                     // the sprint filter silently drops it the frame after the save. `null` is
@@ -1890,6 +1895,7 @@ private fun WorkItemEditorDestination(
     workItemID: WorkItemID?,
     initialStatus: WorkItemStatus?,
     initialSprintID: SprintID?,
+    initialStatusKey: String? = null,
     repository: ProjectRepositoryPort,
     dateProvider: DateProvider,
     scope: CoroutineScope,
@@ -1989,6 +1995,7 @@ private fun WorkItemEditorDestination(
         existing,
         initialStatus,
         initialSprintID,
+        initialStatusKey,
         currentUserID,
         blobTransport,
         opener,
@@ -2006,6 +2013,8 @@ private fun WorkItemEditorDestination(
             blobTransport = blobTransport,
             opener = opener,
             availableTags = catalog,
+            availableStatuses = currentProject?.statuses.orEmpty(),
+            initialStatusKey = initialStatusKey,
         )
     }
 
@@ -2086,6 +2095,7 @@ private fun WorkItemEditorDestination(
         details = model.details,
         storyPointsText = model.storyPointsText,
         status = model.status,
+        statusKey = model.statusKey,
         priority = model.priority,
         assigneeID = model.assigneeID,
         currentUserID = currentUserID,

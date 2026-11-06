@@ -25,6 +25,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItem
@@ -244,6 +245,7 @@ internal fun aProject(
     ),
     isArchived: Boolean = true,
     nextItemNumber: Int = 42,
+    statuses: List<StatusDefinition> = emptyList(),
     createdAt: Instant = Moments.start,
     updatedAt: Instant = Moments.later,
 ): Project = Project(
@@ -252,6 +254,7 @@ internal fun aProject(
     name = name,
     details = details,
     tags = tags,
+    statuses = statuses,
     isArchived = isArchived,
     nextItemNumber = nextItemNumber,
     createdAt = createdAt,
@@ -307,6 +310,7 @@ internal fun aWorkItem(
     // dropped both. The `until` is what makes the *pair* — cadence string plus end
     // instant — the thing that has to round-trip, rather than either half alone.
     recurrence: Recurrence? = Recurrence.Weekly(3, until = Moments.muchLater),
+    statusKey: String? = null,
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -326,6 +330,7 @@ internal fun aWorkItem(
     sprintID = sprintID,
     blockedByIDs = blockedByIDs,
     tagIDs = tagIDs,
+    statusKey = statusKey,
 )
 
 /** As [aProject], for a sprint. */

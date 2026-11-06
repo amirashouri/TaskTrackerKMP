@@ -14,6 +14,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.flow.Flow
@@ -65,6 +66,7 @@ interface ProjectRepositoryPort {
         details: String?,
         now: Instant,
         memberIDs: List<UserID>? = null,
+        statuses: List<StatusDefinition>? = null,
     ): Project
 
     suspend fun setArchived(id: ProjectID, isArchived: Boolean, now: Instant): Project
@@ -116,6 +118,7 @@ interface ProjectRepositoryPort {
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String? = null,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -144,6 +147,7 @@ interface ProjectRepositoryPort {
     suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String? = null,
         rank: Int?,
         now: Instant,
     ): WorkItem

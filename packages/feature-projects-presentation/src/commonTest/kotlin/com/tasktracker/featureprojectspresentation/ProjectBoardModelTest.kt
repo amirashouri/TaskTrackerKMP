@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import kotlin.time.Duration.Companion.days
@@ -48,8 +49,81 @@ class ProjectBoardModelTest {
         assertEquals(2, model.projection.itemCount)
         assertEquals(
             listOf(WorkItemStatus.Todo, WorkItemStatus.InProgress, WorkItemStatus.InReview, WorkItemStatus.Done),
-            model.projection.columns.map { it.status },
+            model.projection.columns.map { it.status.category },
         )
+    }
+
+    // MARK: Catalogs
+
+    /**
+     * A project's catalog, not the built-in six, decides which lanes the board draws.
+     *
+     * This is the failing-on-revert pin for the feature: a lane is its admin-given name and
+     * order, and a card created before the catalog still lands in the lane matching its
+     * coarse category. Reverting the board to `WorkItemStatus.boardOrder` would show lanes
+     * called "Todo" and "In Progress" here and fail both assertions.
+     */
+    @Test
+    fun `the catalog names and orders the lanes and old cards land by category`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+                StatusDefinition(id = "s-build", name = "In build", category = WorkItemStatus.InProgress, order = 1),
+                StatusDefinition(id = "s-ship", name = "Shipped", category = WorkItemStatus.Done, order = 2),
+            ),
+        )
+        repository.seed(project)
+        repository.seed(
+            testWorkItem(
+                project.id,
+                key = "AP-1",
+                status = WorkItemStatus.InProgress,
+                statusKey = "s-build",
+            ),
+        )
+        // No key, as an item created before the project adopted a catalog: it must still
+        // find the lane whose category is its own rather than disappear from the board.
+        repository.seed(testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo, statusKey = null))
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("s-ready", "s-build", "s-ship"),
+            model.projection.columns.map { it.status.id },
+            "lanes come from the catalog, in its order",
+        )
+        assertEquals(
+            listOf("Ready", "In build", "Shipped"),
+            model.projection.columns.map { it.status.name },
+            "the lane heading is the admin's name, not the category's label",
+        )
+        assertEquals(listOf("AP-2"), model.projection.columns[0].items.map { it.key.rawValue })
+        assertEquals(listOf("AP-1"), model.projection.columns[1].items.map { it.key.rawValue })
+    }
+
+    /** Two lanes may legally share one category; each is still its own column. */
+    @Test
+    fun `two statuses in one category draw two lanes`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "s-triaged", name = "Triaged", category = WorkItemStatus.Todo, order = 0),
+                StatusDefinition(id = "s-next", name = "Next up", category = WorkItemStatus.Todo, order = 1),
+            ),
+        )
+        repository.seed(project)
+        repository.seed(testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, statusKey = "s-next"))
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertEquals(listOf("s-triaged", "s-next"), model.destinationStatuses.map { it.id })
+        assertEquals(listOf("AP-1"), model.projection.columns[1].items.map { it.key.rawValue })
+        assertTrue(model.projection.columns[0].items.isEmpty())
     }
 
     /** An empty column is still a column - the view draws a drop target for it. */
@@ -126,7 +200,7 @@ class ProjectBoardModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertTrue(model.move(item.id, WorkItemStatus.InProgress))
+        assertTrue(model.move(item.id, WorkItemStatus.InProgress.wireValue))
         advanceUntilIdle()
 
         assertTrue(repository.writes.contains("moveWorkItem:InProgress"))
@@ -135,6 +209,68 @@ class ProjectBoardModelTest {
             WorkItemStatus.InProgress,
             model.projection.items.single { it.id == item.id }.status,
         )
+    }
+
+    /**
+     * A move to a catalog lane writes both its key and the category the rules read.
+     *
+     * The board drops a card by lane id; the store's overdue and archive rules still read
+     * the coarse category. A move that wrote only one of the two would either leave the
+     * card in the wrong lane on reload or silently change whether it can be overdue.
+     */
+    @Test
+    fun `moving a card into a catalog lane writes its key and category`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+                StatusDefinition(id = "s-build", name = "In build", category = WorkItemStatus.InProgress, order = 1),
+            ),
+        )
+        repository.seed(project)
+        val item = testWorkItem(
+            project.id,
+            key = "AP-1",
+            status = WorkItemStatus.Todo,
+            statusKey = "s-ready",
+        )
+        repository.seed(item)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertTrue(model.move(item.id, "s-build"), "the lane id is the board's move target")
+        advanceUntilIdle()
+
+        val stored = assertNotNull(repository.workItem(item.id))
+        assertEquals("s-build", stored.statusKey)
+        assertEquals(WorkItemStatus.InProgress, stored.status)
+        assertEquals(
+            listOf("AP-1"),
+            model.projection.columns.single { it.status.id == "s-build" }.items.map { it.key.rawValue },
+        )
+    }
+
+    /** A lane id the project does not define is refused rather than written as a guess. */
+    @Test
+    fun `a move to an unknown lane reports failure and writes nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+            ),
+        )
+        repository.seed(project)
+        val item = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, statusKey = "s-ready")
+        repository.seed(item)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertFalse(model.move(item.id, "s-missing"))
+        assertTrue(repository.writes.isEmpty(), "an unresolvable lane must not reach the store")
     }
 
     @Test
@@ -150,7 +286,7 @@ class ProjectBoardModelTest {
         advanceUntilIdle()
 
         repository.failure = AppError.Offline
-        assertFalse(model.move(item.id, WorkItemStatus.Done))
+        assertFalse(model.move(item.id, WorkItemStatus.Done.wireValue))
         advanceUntilIdle()
 
         assertEquals(AppError.Offline.message, model.errorMessage)
@@ -246,7 +382,7 @@ class ProjectBoardModelTest {
         advanceUntilIdle()
 
         repository.failure = AppError.Offline
-        model.move(item.id, WorkItemStatus.Done)
+        model.move(item.id, WorkItemStatus.Done.wireValue)
         assertNotNull(model.errorMessage)
 
         model.dismissError()
@@ -491,7 +627,7 @@ class ProjectBoardModelTest {
             "with no active sprint the add must join no sprint",
         )
 
-        val column = board.projection.columns.single { it.status == stored.status }
+        val column = board.projection.columns.single { it.status.category == stored.status }
         assertTrue(
             column.items.any { it.id == stored.id },
             "the new task must appear on the board in the lane it was added from; columns were ${board.projection.columns}",

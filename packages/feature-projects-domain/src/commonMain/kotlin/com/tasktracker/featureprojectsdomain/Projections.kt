@@ -4,6 +4,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.Project
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemGrouping
 import com.tasktracker.domain.WorkItemSearch
@@ -21,8 +22,10 @@ import kotlin.time.Instant
 data class BoardProjection(
     val project: Project?,
     val items: List<WorkItem>,
+    /** The project's board lanes, or empty when no catalog is adopted (built-in six apply). */
+    val boardStatuses: List<StatusDefinition> = emptyList(),
 ) {
-    val columns: List<BoardColumn> = WorkItemGrouping.boardColumns(items)
+    val columns: List<BoardColumn> = WorkItemGrouping.boardColumns(items, boardStatuses)
     val isEmpty: Boolean get() = columns.all { it.items.isEmpty() }
     val itemCount: Int get() = columns.sumOf { it.items.size }
 
@@ -115,7 +118,7 @@ data class BacklogSectionedProjection(
         .filter { it.status.isTerminal }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
-    val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items).flatMap { it.items }
+    val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items, project?.boardStatuses.orEmpty()).flatMap { it.items }
 
     val currentSection: BacklogSection = BacklogSection.Backlog
     val backlogItemCount: Int get() = backlog.size

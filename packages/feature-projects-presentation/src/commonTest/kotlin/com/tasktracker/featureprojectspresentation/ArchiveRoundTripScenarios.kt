@@ -192,7 +192,7 @@ class ArchiveRoundTripTest {
         val boardItem = board.projection.items.first { it.status.appearsOnBoard }
 
         assertTrue(backlog.fileAway(backlogItem.id), "the backlog's own verb files away")
-        assertTrue(board.move(itemID = boardItem.id, to = WorkItemStatus.Closed), "the board moves to Closed")
+        assertTrue(board.move(itemID = boardItem.id, toStatusKey = WorkItemStatus.Closed.wireValue), "the board moves to Closed")
 
         val viaBacklog = backlogRepository.workItem(backlogItem.id)?.status
         val viaBoard = boardRepository.workItem(boardItem.id)?.status
@@ -212,7 +212,7 @@ class ArchiveRoundTripTest {
         board.observe(eagerScope())
         val item = board.projection.items.first { it.status.appearsOnBoard }
 
-        board.move(itemID = item.id, to = WorkItemStatus.Closed)
+        board.move(itemID = item.id, toStatusKey = WorkItemStatus.Closed.wireValue)
 
         val filed = repository.workItem(item.id)
         assertTrue(filed?.status?.isTerminal == true, "a filed-away task is terminal")

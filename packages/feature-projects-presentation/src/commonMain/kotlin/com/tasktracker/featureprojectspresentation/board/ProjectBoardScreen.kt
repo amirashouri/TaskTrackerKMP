@@ -63,6 +63,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BoardProjection
@@ -107,7 +108,7 @@ fun ProjectBoardScreen(
     movingItemID: WorkItemID?,
     onSelect: (WorkItemID) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
-    onMove: (WorkItemID, WorkItemStatus) -> Unit,
+    onMove: (WorkItemID, String) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
     onOpenSwitcher: (() -> Unit)? = null,
@@ -115,7 +116,7 @@ fun ProjectBoardScreen(
     showMoveActions: Boolean = false,
     projects: List<PickableProject> = emptyList(),
     onSelectProject: ((ProjectID) -> Unit)? = null,
-    onAddTask: ((WorkItemStatus) -> Unit)? = null,
+    onAddTask: ((String) -> Unit)? = null,
     showOnlyMyTasks: Boolean = false,
     onToggleMyTasks: () -> Unit = {},
     activeSprint: Sprint? = null,
@@ -291,8 +292,8 @@ fun ProjectBoardScreen(
 
                 var viewport by remember { mutableStateOf(Rect.Zero) }
 
-                /** Maps pointer offset to target column status, or null if outside drop boundaries. */
-                fun laneAt(pointer: Offset): WorkItemStatus? {
+                /** Maps pointer offset to target column status key, or null if outside drop boundaries. */
+                fun laneAt(pointer: Offset): String? {
                     val row = viewport
                     if (row.width <= 0f || pointer.y < row.top || pointer.y > row.bottom) return null
                     val contentX = pointer.x - row.left - gutterPx + scrollState.value
@@ -300,7 +301,7 @@ fun ProjectBoardScreen(
                     val index = floor(contentX / stridePx).toInt()
                     if (index !in 0 until laneCount) return null
                     return if (contentX - index * stridePx <= laneWidthPx) {
-                        shown.columns[index].status
+                        shown.columns[index].status.id
                     } else {
                         null
                     }
@@ -323,7 +324,13 @@ fun ProjectBoardScreen(
                         val ended = dragState.end()
                         if (ended != null) {
                             val (dragged, target) = ended
-                            if (target != null && target != dragged.status) {
+                            // The card's lane is the catalog entry it resolves to, or its
+                            // category's key on a catalog-free board: comparing against the
+                            // raw statusKey alone makes a card with no key look like it moved.
+                            val currentLane = shown.project?.statusFor(dragged)?.id
+                                ?: dragged.statusKey
+                                ?: dragged.status.wireValue
+                            if (target != null && target != currentLane) {
                                 onMove(dragged.id, target)
                             }
                         }
@@ -390,7 +397,7 @@ fun ProjectBoardScreen(
                                 column = column,
                                 onSelect = { onSelect(it.id) },
                                 onCopy = onCopy,
-                                onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status) } } else null,
+                                onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status.id) } } else null,
                                 modifier = Modifier,
                                 assigneeName = { item ->
                                     item.assigneeID?.let { assigneeNames[it] }
@@ -404,10 +411,11 @@ fun ProjectBoardScreen(
                                         showMoveActions = showMoveActions,
                                         onFileAway = onFileAway,
                                         onMove = onMove,
+                                        destinations = shown.columns.map { it.status },
                                     )
                                 },
                                 drag = drag,
-                                isDropTarget = dragState.target == column.status,
+                                isDropTarget = dragState.target == column.status.id,
                             )
                         }
                         LaneRowSpacer(ttSpacing.xxl)
@@ -440,6 +448,7 @@ fun ProjectBoardScreen(
                                     showMoveActions = showMoveActions,
                                     onFileAway = onFileAway,
                                     onMove = onMove,
+                                    destinations = shown.columns.map { it.status },
                                 )
                             },
                             assigneeName = dragged.assigneeID?.let { assigneeNames[it] },
@@ -463,7 +472,7 @@ private class BoardDragState {
         private set
     var cardSize by mutableStateOf(IntSize.Zero)
         private set
-    var target by mutableStateOf<WorkItemStatus?>(null)
+    var target by mutableStateOf<String?>(null)
         private set
 
     val isDragging: Boolean get() = item != null
@@ -481,11 +490,11 @@ private class BoardDragState {
         pointer += delta
     }
 
-    fun retarget(status: WorkItemStatus?) {
+    fun retarget(status: String?) {
         if (item != null) target = status
     }
 
-    fun end(): Pair<WorkItem, WorkItemStatus?>? {
+    fun end(): Pair<WorkItem, String?>? {
         val dragged = item ?: return null
         val at = target
         clear()
@@ -537,7 +546,8 @@ private fun BoardCardActions(
     movingItemID: WorkItemID?,
     showMoveActions: Boolean,
     onFileAway: (WorkItemID) -> Unit,
-    onMove: (WorkItemID, WorkItemStatus) -> Unit,
+    onMove: (WorkItemID, String) -> Unit,
+    destinations: List<StatusDefinition>,
 ) {
     if (item.status.isTerminal) return
     Column(
@@ -552,9 +562,9 @@ private fun BoardCardActions(
         )
         if (showMoveActions) {
             BoardMoveActions(
-                destinations = WorkItemStatus.boardOrder,
+                destinations = destinations,
                 item = item,
-                onMove = { status -> onMove(item.id, status) },
+                onMove = { key -> onMove(item.id, key) },
             )
         }
     }
@@ -578,20 +588,20 @@ internal fun BoardFileAwayAction(
 
 @Composable
 internal fun BoardMoveActions(
-    destinations: List<WorkItemStatus>,
+    destinations: List<StatusDefinition>,
     item: WorkItem,
-    onMove: (WorkItemStatus) -> Unit,
+    onMove: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier.testTag(BoardMoveActionsTag(item)),
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
     ) {
-        destinations.filter { it != item.status }.forEach { status ->
+        destinations.filter { it.id != item.statusKey }.forEach { definition ->
             ttGlassButton(
-                label = statusLabel(status),
-                onClick = { onMove(status) },
-                modifier = Modifier.testTag(BoardMoveTag(item, status)),
+                label = statusLabel(definition),
+                onClick = { onMove(definition.id) },
+                modifier = Modifier.testTag(BoardMoveTag(item, definition.id)),
                 style = TTGlassButtonStyle(tint = ttAccent()),
             )
         }
@@ -612,7 +622,7 @@ const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 
 fun BoardFileAwayTag(item: WorkItem): String = "$BoardFileAwayTagPrefix.${item.key}"
 fun BoardMoveActionsTag(item: WorkItem): String = "$BoardMoveActionsTagPrefix.${item.key}"
-fun BoardMoveTag(item: WorkItem, status: WorkItemStatus): String =
-    "${BoardMoveActionsTag(item)}.${status.wireValue}"
+fun BoardMoveTag(item: WorkItem, statusKey: String): String =
+    "${BoardMoveActionsTag(item)}.$statusKey"
 
 private val MIN_FLANGE_VELOCITY_DP = 400.dp

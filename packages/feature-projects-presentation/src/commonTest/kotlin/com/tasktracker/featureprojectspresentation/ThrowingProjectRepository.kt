@@ -15,6 +15,7 @@ import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.Patch
@@ -141,6 +142,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project = boom()
 
     override suspend fun setArchived(id: ProjectID, isArchived: Boolean, now: Instant): Project = boom()
@@ -152,6 +154,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -180,6 +183,7 @@ class ThrowingProjectRepository : ProjectRepositoryPort {
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem = boom()

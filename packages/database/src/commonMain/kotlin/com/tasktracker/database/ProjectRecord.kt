@@ -48,6 +48,14 @@ data class ProjectRecord(
      * Empty is the empty string, so an old row and a new project read the same way.
      */
     @ColumnInfo(defaultValue = "''") val tags: String = "",
+    /**
+     * The project's workflow status catalog, as a JSON array of `StatusDefinition`
+     * objects — the same shape and the same reasoning as [tags]. Empty is the empty
+     * string; a project that has not adopted a catalog and a row written before this
+     * column existed read the same way, and every reader falls back to the built-in
+     * `WorkItemStatus` categories.
+     */
+    @ColumnInfo(defaultValue = "''") val statuses: String = "",
     /** Comma-separated stable UUIDs; the column default leaves a project unassigned. */
     @ColumnInfo(defaultValue = "''") val memberIDs: String = "",
     val isArchived: Boolean,

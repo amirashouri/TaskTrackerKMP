@@ -23,6 +23,7 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogProjection
@@ -616,10 +617,12 @@ private class PreviewRepository(
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project = storedProjects.first { it.id == id }.also {
         if (name != null) it.name = name
         if (details != null) it.details = details
         if (memberIDs != null) it.memberIDs = memberIDs
+        if (statuses != null) it.statuses = statuses
         it.updatedAt = now
     }.also {
         broadcaster.send(ProjectChange(ProjectChange.Kind.Projects, id))
@@ -646,6 +649,7 @@ private class PreviewRepository(
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -675,6 +679,7 @@ private class PreviewRepository(
             createdAt = now,
             updatedAt = now,
         )
+        item.statusKey = statusKey
         project.nextItemNumber++
         storedItems += item
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems, projectID))
@@ -711,11 +716,13 @@ private class PreviewRepository(
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem = storedItems.first { it.id == id }.also { item ->
         val from = item.status
         item.status = to
+        item.statusKey = statusKey
         item.updatedAt = now
         if (rank != null) item.rank = rank
         if (to.isTerminal && item.resolvedAt == null) item.resolvedAt = now

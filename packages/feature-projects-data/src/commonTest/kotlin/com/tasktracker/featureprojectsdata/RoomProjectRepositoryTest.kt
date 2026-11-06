@@ -444,10 +444,10 @@ class RoomProjectRepositoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         val first = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val second = harness.repository.createWorkItem(
-            project.id, "Two", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Two", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals("APO-1", first.key.rawValue)
@@ -463,7 +463,7 @@ class RoomProjectRepositoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals(2, harness.repository.project(project.id)?.nextItemNumber)
@@ -508,7 +508,7 @@ class RoomProjectRepositoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
 
         val item = harness.repository.createWorkItem(
-            project.id, "Done on arrival", "", WorkItemStatus.Done, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Done on arrival", "", WorkItemStatus.Done, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals(Moments.start, item.resolvedAt)
@@ -522,11 +522,11 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val existing = harness.repository.createWorkItem(
-            project.id, "Older", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Older", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val fresh = harness.repository.createWorkItem(
-            project.id, "Newer", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.later,
+            project.id, "Newer", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.later,
         )
 
         assertTrue(fresh.rank < existing.rank)
@@ -542,7 +542,7 @@ class RoomProjectRepositoryTest {
 
         assertFailsWith<AppError.Storage> {
             harness.repository.createWorkItem(
-                randomProjectID(), "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+                randomProjectID(), "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
             )
         }
     }
@@ -554,7 +554,7 @@ class RoomProjectRepositoryTest {
 
         assertFailsWith<AppError> {
             harness.repository.createWorkItem(
-                project.id, "  ", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+                project.id, "  ", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
             )
         }
 
@@ -660,7 +660,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
         )
 
         val untouched = harness.repository.updateWorkItem(
@@ -684,7 +684,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, adaUserID, Moments.day, null, null, Moments.start,
         )
 
         val cleared = harness.repository.updateWorkItem(
@@ -707,7 +707,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val updated = harness.repository.updateWorkItem(
@@ -726,7 +726,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "Shipped", "", WorkItemStatus.Done, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Shipped", "", WorkItemStatus.Done, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val edited = harness.repository.updateWorkItem(
@@ -744,7 +744,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val before = harness.repository.statusChanges(item.id).size
 
@@ -772,7 +772,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val seen = mutableListOf<ProjectChange>()
         collecting(harness.bus.changes(), seen)
@@ -794,7 +794,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val moved = harness.repository.moveWorkItem(item.id, WorkItemStatus.Done, rank = null, now = Moments.later)
@@ -811,7 +811,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Done, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Done, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val reopened = harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, rank = null, now = Moments.later)
@@ -828,10 +828,10 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val first = harness.repository.createWorkItem(
-            project.id, "First", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "First", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val second = harness.repository.createWorkItem(
-            project.id, "Second", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Second", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         harness.repository.moveWorkItem(first.id, WorkItemStatus.Done, rank = null, now = Moments.later)
@@ -846,7 +846,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val moved = harness.repository.moveWorkItem(item.id, WorkItemStatus.InProgress, rank = 42, now = Moments.later)
@@ -859,7 +859,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         harness.repository.deleteWorkItem(item.id)
@@ -876,7 +876,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val seen = mutableListOf<ProjectChange>()
         collecting(harness.bus.changes(), seen)
@@ -904,10 +904,10 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val low = harness.repository.createWorkItem(
-            project.id, "Low", "", WorkItemStatus.Todo, Priority.Lowest, null, null, null, null, Moments.start,
+            project.id, "Low", "", WorkItemStatus.Todo, null, Priority.Lowest, null, null, null, null, Moments.start,
         )
         val high = harness.repository.createWorkItem(
-            project.id, "High", "", WorkItemStatus.Todo, Priority.Critical, null, null, null, null, Moments.start,
+            project.id, "High", "", WorkItemStatus.Todo, null, Priority.Critical, null, null, null, null, Moments.start,
         )
 
         // Both were created into an empty column, so their ranks differ by one and rank wins.
@@ -926,7 +926,7 @@ class RoomProjectRepositoryTest {
         val first = harness.repository.createProject("First", "ONE", "", Moments.start)
         val second = harness.repository.createProject("Second", "TWO", "", Moments.start)
         harness.repository.createWorkItem(
-            first.id, "Mine", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            first.id, "Mine", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         assertEquals(1, harness.repository.workItems(first.id).size)
@@ -939,11 +939,11 @@ class RoomProjectRepositoryTest {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         repeat(2) {
             harness.repository.createWorkItem(
-                project.id, "Todo $it", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+                project.id, "Todo $it", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
             )
         }
         harness.repository.createWorkItem(
-            project.id, "Done", "", WorkItemStatus.Done, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Done", "", WorkItemStatus.Done, null, Priority.Medium, null, null, null, null, Moments.start,
         )
 
         val counts = harness.repository.counts(project.id)
@@ -981,7 +981,7 @@ class RoomProjectRepositoryTest {
         val harness = Harness()
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         val good = harness.repository.createWorkItem(
-            project.id, "Good", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Good", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.database.workItemDao().insert(
             aWorkItem(id = parseWorkItemID("33333333-3333-4333-8333-333333333333")!!).toRecord()
@@ -1205,10 +1205,10 @@ class RoomSprintRepositoryTest {
             project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val first = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val second = harness.repository.createWorkItem(
-            project.id, "Two", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "Two", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         val depthBefore = harness.queueDepth()
 
@@ -1239,7 +1239,7 @@ class RoomSprintRepositoryTest {
             project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), Moments.start)
 
@@ -1271,7 +1271,7 @@ class RoomSprintRepositoryTest {
             project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
         )
         val item = harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
         harness.repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), Moments.start)
 
@@ -1583,7 +1583,7 @@ class RoomSprintRepositoryTest {
     private suspend fun anItem(harness: Harness): WorkItem {
         val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
         return harness.repository.createWorkItem(
-            project.id, "One", "", WorkItemStatus.Todo, Priority.Medium, null, null, null, null, Moments.start,
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.tasktracker.domain.BoardColumn
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import androidx.compose.ui.unit.dp
@@ -17,6 +18,10 @@ import com.tasktracker.resources.board_empty_column
 import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+/** A built-in status as the board names it when the project has no catalog. */
+private fun statusDef(status: WorkItemStatus): StatusDefinition =
+    StatusDefinition(id = status.wireValue, name = "", category = status)
 
 /**
  * How a board column behaves, as scenarios.
@@ -52,12 +57,12 @@ object BoardColumnScenarios {
             // shows two and a half of four lanes. The claim is that every lane is *drawn*, and
             // the off-viewport ones are composed and laid out — asserting display would fail on
             // a phone for a layout reason rather than a behavioural one.
-            onNodeWithTag(BoardColumnTag(status)).assertExists()
+            onNodeWithTag(BoardColumnTag(statusDef(status))).assertExists()
             // Addressed per lane: all four empty lanes say the same sentence, so the text
             // on its own matches four nodes and `onNodeWithText` would reject it.
-            assertText(BoardColumnEmptyTag(status), getString(Res.string.board_empty_column))
+            assertText(BoardColumnEmptyTag(statusDef(status)), getString(Res.string.board_empty_column))
         }
-        assertTagCount(BoardColumnEmptyTag(WorkItemStatus.Todo), expected = 1)
+        assertTagCount(BoardColumnEmptyTag(statusDef(WorkItemStatus.Todo)), expected = 1)
     }
 
     /** The lanes are exactly the board order, in it. */
@@ -81,21 +86,21 @@ object BoardColumnScenarios {
     /** The heading carries the lane's count, and it is the lane's own. */
     val theHeadingCarriesTheLanesOwnCount: suspend ComposeUiTest.() -> Unit = {
         val inProgress = ViewPreviewData.workItems.filter { it.status == WorkItemStatus.InProgress }
-        boardWith(mapOf(WorkItemStatus.InProgress to inProgress, WorkItemStatus.Todo to emptyList()))
+        boardWith(mapOf(statusDef(WorkItemStatus.InProgress) to inProgress, statusDef(WorkItemStatus.Todo) to emptyList()))
 
         // The count is read off the node that carries it. Searching for the number instead
         // found three matches, because a board full of lanes has a `0` and a `2` in several
         // places at once - the number is not a unique handle, the lane is.
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), inProgress.size.toString())
-        assertText(BoardColumnCountTag(WorkItemStatus.Todo), "0")
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), inProgress.size.toString())
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.Todo)), "0")
     }
 
     /** A card that is in the lane is in that lane. */
     val aCardAppearsInTheLaneMatchingItsStatus: suspend ComposeUiTest.() -> Unit = {
         val item = ViewPreviewData.workItems.first { it.status == WorkItemStatus.Todo }
-        boardWith(mapOf(WorkItemStatus.Todo to listOf(item)))
+        boardWith(mapOf(statusDef(WorkItemStatus.Todo) to listOf(item)))
 
-        onNodeWithTag(BoardColumnTag(WorkItemStatus.Todo)).assertIsDisplayed()
+        onNodeWithTag(BoardColumnTag(statusDef(WorkItemStatus.Todo))).assertIsDisplayed()
         onNodeWithTag(WorkItemCardTag(item)).assertIsDisplayed()
         onNodeWithText(item.title).assertIsDisplayed()
     }
@@ -108,7 +113,7 @@ object BoardColumnScenarios {
         setContent {
             Themed {
                 BoardColumnView(
-                    column = BoardColumn(WorkItemStatus.Todo, listOf(item)),
+                    column = BoardColumn(statusDef(WorkItemStatus.Todo), listOf(item)),
                     onSelect = { selected = it },
                 )
             }
@@ -121,23 +126,23 @@ object BoardColumnScenarios {
     /** Clicking the sort button cycles through sort orders (Default -> ByDate -> ByPriority). */
     val clickingSortButtonCyclesSortOrders: suspend ComposeUiTest.() -> Unit = {
         val items = ViewPreviewData.workItems.filter { it.status == WorkItemStatus.Todo }
-        boardWith(mapOf(WorkItemStatus.Todo to items))
+        boardWith(mapOf(statusDef(WorkItemStatus.Todo) to items))
 
-        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).assertIsDisplayed().performClick()
-        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).performClick()
-        onNodeWithTag(BoardColumnSortTag(WorkItemStatus.Todo)).performClick()
+        onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).assertIsDisplayed().performClick()
+        onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).performClick()
+        onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).performClick()
     }
 }
 
 /** Draws one board: a column per lane, populated from [itemsByStatus]. */
 @OptIn(ExperimentalTestApi::class)
-private fun ComposeUiTest.boardWith(itemsByStatus: Map<WorkItemStatus, List<WorkItem>>) {
+private fun ComposeUiTest.boardWith(itemsByStatus: Map<StatusDefinition, List<WorkItem>>) {
     setContent {
         Themed {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 WorkItemStatus.boardOrder.forEach { status ->
                     BoardColumnView(
-                        column = BoardColumn(status = status, items = itemsByStatus[status].orEmpty()),
+                        column = BoardColumn(status = statusDef(status), items = itemsByStatus[statusDef(status)].orEmpty()),
                         onSelect = {},
                     )
                 }

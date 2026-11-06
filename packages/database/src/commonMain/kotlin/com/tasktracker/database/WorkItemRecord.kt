@@ -100,6 +100,13 @@ data class WorkItemRecord(
      */
     val tagIDs: String? = null,
     /**
+     * The project status this item sits in, by [com.tasktracker.domain.StatusDefinition.id],
+     * or `null` when the item predates a catalog. A raw string, not a parsed type, for the
+     * same reason [statusRaw] is: an id this build cannot resolve costs one card its lane,
+     * not the whole board.
+     */
+    val statusKey: String? = null,
+    /**
      * The item's repeat rule, in [com.tasktracker.domain.Recurrence]'s wire form —
      * `daily`, `weekly:3`, `monthly:15`, `yearly:6-15` — or `null` for a one-off.
      *

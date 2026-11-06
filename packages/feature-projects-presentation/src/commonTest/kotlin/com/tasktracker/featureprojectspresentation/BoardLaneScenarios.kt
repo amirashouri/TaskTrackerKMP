@@ -19,6 +19,7 @@ import com.tasktracker.designsystem.ttAvatarStackDefaults
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.BoardProjection
@@ -53,6 +54,9 @@ import org.jetbrains.compose.resources.getString
  */
 @OptIn(ExperimentalTestApi::class)
 object BoardLaneScenarios {
+
+    private fun statusDef(status: WorkItemStatus): StatusDefinition =
+        StatusDefinition(id = status.wireValue, name = "", category = status)
 
     /** The My Tasks person filter icon button is displayed in the board header. */
     val theMyTasksFilterButtonIsDisplayed: suspend ComposeUiTest.() -> Unit = {
@@ -96,7 +100,7 @@ object BoardLaneScenarios {
         boardShowing()
 
         val row = onNodeWithTag(ProjectBoardColumnsTag).fetchSemanticsNode()
-        val todo = onNodeWithTag(BoardColumnTag(WorkItemStatus.Todo)).fetchSemanticsNode()
+        val todo = onNodeWithTag(BoardColumnTag(statusDef(WorkItemStatus.Todo))).fetchSemanticsNode()
         val gutter = densityPixels(ttSpacing.xxl)
 
         assertEquals(
@@ -299,13 +303,13 @@ object BoardLaneScenarios {
             // Existence rather than display: the lane row scrolls, so the far lanes are
             // composed and laid out but off a phone viewport. The bounds assertion below is
             // what proves the row really scrolls rather than wrapping.
-            onNodeWithTag(BoardColumnTag(status)).assertExists()
+            onNodeWithTag(BoardColumnTag(statusDef(status))).assertExists()
         }
         // Unclipped, because a lane scrolled past the viewport edge is *clipped* by the scrolling
         // row: its clipped right edge reports the viewport's edge, which says nothing about
         // whether the content is wider than the window. The unclipped right edge is the laid-out
         // position, which is the claim.
-        val lastLaneRight = onNodeWithTag(BoardColumnTag(WorkItemStatus.Done))
+        val lastLaneRight = onNodeWithTag(BoardColumnTag(statusDef(WorkItemStatus.Done)))
             .getUnclippedBoundsInRoot().right.value
         val viewportWidth = onRoot().fetchSemanticsNode().size.width.toFloat()
         assertTrue(
@@ -329,7 +333,7 @@ object BoardLaneScenarios {
         boardShowing(onAddTask = {}, activeSprint = ViewPreviewData.openSprint, canAddTask = false)
 
         WorkItemStatus.boardOrder.forEach { status ->
-            onAllNodesWithTag(BoardColumnAddTaskTag(status)).assertCountEquals(0)
+            onAllNodesWithTag(BoardColumnAddTaskTag(statusDef(status))).assertCountEquals(0)
         }
     }
 
@@ -346,7 +350,7 @@ object BoardLaneScenarios {
         boardShowing(onAddTask = {}, canAddTask = true)
 
         WorkItemStatus.boardOrder.forEach { status ->
-            onAllNodesWithTag(BoardColumnAddTaskTag(status)).assertCountEquals(1)
+            onAllNodesWithTag(BoardColumnAddTaskTag(statusDef(status))).assertCountEquals(1)
         }
     }
 }
@@ -356,7 +360,7 @@ private fun ComposeUiTest.boardShowing(
     projection: BoardProjection = ViewPreviewData.boardProjection(),
     onOpenSwitcher: (() -> Unit)? = null,
     activeSprint: Sprint? = null,
-    onAddTask: ((WorkItemStatus) -> Unit)? = null,
+    onAddTask: ((String) -> Unit)? = null,
     canAddTask: Boolean = true,
     assigneeNames: Map<UserID, String> = emptyMap(),
 ) {

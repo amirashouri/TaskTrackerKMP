@@ -57,6 +57,7 @@ import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.PickedFile
@@ -92,6 +93,7 @@ fun WorkItemEditorScreen(
     details: String,
     storyPointsText: String,
     status: WorkItemStatus,
+    statusKey: String?,
     priority: Priority,
     assigneeID: UserID?,
     currentUserID: UserID?,
@@ -102,7 +104,7 @@ fun WorkItemEditorScreen(
     repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
-    selectableStatuses: List<WorkItemStatus>,
+    selectableStatuses: List<StatusDefinition>,
     isFiledAway: Boolean,
     canSave: Boolean,
     isBusy: Boolean,
@@ -110,7 +112,7 @@ fun WorkItemEditorScreen(
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
-    onStatusChanged: (WorkItemStatus) -> Unit,
+    onStatusChanged: (StatusDefinition) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
@@ -128,11 +130,14 @@ fun WorkItemEditorScreen(
     selectedTagIDs: List<TagID> = emptyList(),
     onTagToggled: (TagID) -> Unit = {},
 ) {
+    val selectedStatusDefinition = selectableStatuses.firstOrNull { it.id == statusKey }
+        ?: selectableStatuses.firstOrNull { it.category == status }
     WorkItemEditorForm(
         title = title,
         details = details,
         storyPointsText = storyPointsText,
         status = status,
+        statusKey = statusKey,
         priority = priority,
         assigneeID = assigneeID,
         currentUserID = currentUserID,
@@ -180,6 +185,7 @@ fun WorkItemEditorSheet(
     details: String,
     storyPointsText: String,
     status: WorkItemStatus,
+    statusKey: String?,
     priority: Priority,
     assigneeID: UserID?,
     currentUserID: UserID?,
@@ -190,7 +196,7 @@ fun WorkItemEditorSheet(
     repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
-    selectableStatuses: List<WorkItemStatus>,
+    selectableStatuses: List<StatusDefinition>,
     isFiledAway: Boolean,
     canSave: Boolean,
     isBusy: Boolean,
@@ -198,7 +204,7 @@ fun WorkItemEditorSheet(
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
-    onStatusChanged: (WorkItemStatus) -> Unit,
+    onStatusChanged: (StatusDefinition) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
@@ -254,6 +260,7 @@ fun WorkItemEditorSheet(
         details = details,
         storyPointsText = storyPointsText,
         status = status,
+        statusKey = statusKey,
         priority = priority,
         assigneeID = assigneeID,
         currentUserID = currentUserID,
@@ -325,6 +332,7 @@ private fun ProjectsEditorFullScreen(
     details: String,
     storyPointsText: String,
     status: WorkItemStatus,
+    statusKey: String?,
     priority: Priority,
     assigneeID: UserID?,
     currentUserID: UserID?,
@@ -335,7 +343,7 @@ private fun ProjectsEditorFullScreen(
     repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
-    selectableStatuses: List<WorkItemStatus>,
+    selectableStatuses: List<StatusDefinition>,
     isFiledAway: Boolean,
     canSave: Boolean,
     isBusy: Boolean,
@@ -343,7 +351,7 @@ private fun ProjectsEditorFullScreen(
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
-    onStatusChanged: (WorkItemStatus) -> Unit,
+    onStatusChanged: (StatusDefinition) -> Unit,
     onPriorityChanged: (Priority) -> Unit,
     onAssigneeChanged: (UserID?) -> Unit,
     onToggleDueDate: (Boolean) -> Unit,
@@ -467,6 +475,9 @@ private fun ProjectsEditorFullScreen(
                 imeAction = ImeAction.Next,
             )
             if (selectableStatuses.size > 1) {
+                val selectedStatusDefinition = selectableStatuses.firstOrNull { it.id == statusKey }
+                    ?: selectableStatuses.firstOrNull { it.category == status }
+                    ?: selectableStatuses.first()
                 Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
                     ttText(
                         text = stringResource(Res.string.work_item_status_label),
@@ -475,7 +486,7 @@ private fun ProjectsEditorFullScreen(
                     )
                     TTGlassFlowPicker(
                         options = selectableStatuses,
-                        selection = status,
+                        selection = selectedStatusDefinition,
                         onSelect = onStatusChanged,
                         title = { statusLabel(it) },
                         modifier = Modifier.testTag(WorkItemStatusPickerTag),
@@ -645,6 +656,7 @@ private fun WorkItemEditorForm(
     details: String,
     storyPointsText: String,
     status: WorkItemStatus,
+    statusKey: String?,
     priority: Priority,
     assigneeID: UserID?,
     currentUserID: UserID?,
@@ -655,7 +667,7 @@ private fun WorkItemEditorForm(
     repeatAnchor: Instant?,
     isCreating: Boolean,
     issuedKey: WorkItemKey?,
-    selectableStatuses: List<WorkItemStatus>,
+    selectableStatuses: List<StatusDefinition>,
     isFiledAway: Boolean,
     canSave: Boolean,
     isBusy: Boolean,
@@ -663,7 +675,7 @@ private fun WorkItemEditorForm(
     onTitleChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     onStoryPointsChanged: (String) -> Unit,
-    onStatusChanged: (WorkItemStatus) -> Unit,
+    onStatusChanged: (StatusDefinition) -> Unit,
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
@@ -694,6 +706,9 @@ private fun WorkItemEditorForm(
     selectedTagIDs: List<TagID> = emptyList(),
     onTagToggled: (TagID) -> Unit = {},
 ) {
+    val selectedStatusDefinition = selectableStatuses.firstOrNull { it.id == statusKey }
+        ?: selectableStatuses.firstOrNull { it.category == status }
+        ?: selectableStatuses.first()
     Column(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.SpaceBetween,
@@ -762,7 +777,7 @@ private fun WorkItemEditorForm(
                 )
                 TTGlassFlowPicker(
                     options = selectableStatuses,
-                    selection = status,
+                    selection = selectedStatusDefinition,
                     onSelect = onStatusChanged,
                     title = { statusLabel(it) },
                     modifier = Modifier.testTag(WorkItemStatusPickerTag),

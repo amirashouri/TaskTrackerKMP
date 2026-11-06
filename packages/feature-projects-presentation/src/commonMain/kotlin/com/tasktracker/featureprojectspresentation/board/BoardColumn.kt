@@ -49,12 +49,13 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSurface
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.board_empty_column
@@ -279,11 +280,11 @@ class BoardCardDrag(
 
 const val BoardColumnTagPrefix = "board.column"
 
-fun BoardColumnTag(status: WorkItemStatus): String = "$BoardColumnTagPrefix.${status.wireValue}"
-fun BoardColumnCountTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.count"
-fun BoardColumnEmptyTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.empty"
-fun BoardColumnAddTaskTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.add"
-fun BoardColumnSortTag(status: WorkItemStatus): String = "${BoardColumnTag(status)}.sort"
+fun BoardColumnTag(status: StatusDefinition): String = "$BoardColumnTagPrefix.${status.id}"
+fun BoardColumnCountTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.count"
+fun BoardColumnEmptyTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.empty"
+fun BoardColumnAddTaskTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.add"
+fun BoardColumnSortTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.sort"
 
 /** Timeout before long press lifts card (300ms prevents collision with vertical scroll swipes). */
 internal const val BoardCardLiftTimeoutMillis = 300L

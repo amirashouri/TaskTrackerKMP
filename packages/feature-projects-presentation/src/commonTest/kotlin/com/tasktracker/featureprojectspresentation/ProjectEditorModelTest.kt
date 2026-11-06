@@ -3,6 +3,9 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.core.UserID
+import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.WorkItemStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -233,6 +236,94 @@ class ProjectEditorModelTest {
         model.save()
 
         assertEquals("AP", repository.storedProjects().single().keyPrefix)
+    }
+
+    // MARK: Status catalog
+
+    /**
+     * The admin can build an ordered catalog, and every edit counts as unsaved work.
+     *
+     * Add, rename, recategorise and reorder are the four verbs the board lane and picker
+     * features depend on; a draft that edited the list without marking the form dirty would
+     * close on Cancel without a prompt and silently discard the catalog.
+     */
+    @Test
+    fun `the status catalog can be added renamed recategorised and reordered`() = runTest {
+        val project = testProject()
+        val model = ProjectEditorModel(project, FakeProjectRepository(), TestDateProvider())
+
+        assertTrue(model.addStatus("  Ready ", WorkItemStatus.Todo, TagColor.Gray))
+        assertTrue(model.addStatus("In build", WorkItemStatus.InProgress, TagColor.Blue))
+        assertTrue(model.hasChanges)
+        assertEquals(
+            listOf("Ready", "In build"),
+            model.statuses.map { it.name },
+            "the name is trimmed and the catalog keeps creation order",
+        )
+
+        val ready = model.statuses.first { it.name == "Ready" }
+        model.updateStatus(ready.id, name = "Queued", category = WorkItemStatus.Backlog, color = TagColor.Amber)
+        val updated = model.statuses.first { it.id == ready.id }
+        assertEquals("Queued", updated.name)
+        assertEquals(WorkItemStatus.Backlog, updated.category)
+        assertEquals(TagColor.Amber, updated.color)
+
+        model.reorderStatus(from = 1, to = 0)
+        assertEquals(listOf("In build", "Queued"), model.statuses.map { it.name })
+
+        model.removeStatus(updated.id)
+        assertEquals(listOf("In build"), model.statuses.map { it.name })
+    }
+
+    /** A blank or case-insensitively duplicate name would make the board ambiguous. */
+    @Test
+    fun `a blank or duplicate status name is refused`() = runTest {
+        val model = ProjectEditorModel(testProject(), FakeProjectRepository(), TestDateProvider())
+
+        assertFalse(model.addStatus("   ", WorkItemStatus.Todo, TagColor.Gray))
+        assertTrue(model.addStatus("Ready", WorkItemStatus.Todo, TagColor.Gray))
+        assertFalse(model.addStatus(" ready ", WorkItemStatus.Todo, TagColor.Blue))
+        assertEquals(1, model.statuses.size)
+    }
+
+    @Test
+    fun `saving the catalog persists it on the project`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+
+        assertTrue(model.addStatus("Ready", WorkItemStatus.Todo, TagColor.Gray))
+        assertTrue(model.addStatus("In build", WorkItemStatus.InProgress, TagColor.Blue))
+        assertTrue(model.save())
+
+        val stored = repository.storedProjects().single()
+        assertEquals(
+            listOf(
+                StatusDefinition("x", "Ready", WorkItemStatus.Todo, order = 0, color = TagColor.Gray),
+                StatusDefinition("y", "In build", WorkItemStatus.InProgress, order = 1, color = TagColor.Blue),
+            ).map { Triple(it.name, it.category, it.order) },
+            stored.statuses.map { Triple(it.name, it.category, it.order) },
+            "the catalog, its categories and its order reach the store; ids are generated",
+        )
+    }
+
+    /** An untouched catalog is not sent, so opening and saving a project does not rewrite it. */
+    @Test
+    fun `an unchanged catalog is not part of the save`() = runTest {
+        val catalog = listOf(
+            StatusDefinition(id = "s-ready", name = "Ready", category = WorkItemStatus.Todo, order = 0),
+        )
+        val repository = FakeProjectRepository()
+        val project = testProject(statuses = catalog)
+        repository.seed(project)
+        val model = ProjectEditorModel(project, repository, TestDateProvider())
+
+        assertFalse(model.hasChanges)
+        model.onNameChanged("Apollo 2")
+        assertTrue(model.save())
+
+        assertEquals(catalog, repository.storedProjects().single().statuses)
     }
 
     // MARK: Failure

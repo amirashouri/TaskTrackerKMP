@@ -69,6 +69,8 @@ fun ProjectEditorScreen(
     isBusy: Boolean = false,
     /** Optional custom slot (e.g. admin tag management). */
     tagsSection: (@Composable () -> Unit)? = null,
+    /** Optional custom slot (e.g. admin status catalog management). */
+    statusesSection: (@Composable () -> Unit)? = null,
 ) {
     val saveEnabled = canSave && !isBusy
     var showDiscardConfirmation by remember { mutableStateOf(false) }
@@ -125,6 +127,7 @@ fun ProjectEditorScreen(
                 onImeAction = { if (saveEnabled) onSave() },
             )
             tagsSection?.invoke()
+            statusesSection?.invoke()
             if (errorMessage != null) {
                 ttText(
                     text = errorMessage,

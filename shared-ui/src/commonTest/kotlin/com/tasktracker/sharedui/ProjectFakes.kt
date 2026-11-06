@@ -19,6 +19,7 @@ import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.Patch
@@ -185,6 +186,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem = writing(
@@ -193,6 +195,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     ) {
         val existing = storedItems.first { it.id == id }
         existing.status = to
+        existing.statusKey = statusKey
         existing.updatedAt = now
         if (rank != null) existing.rank = rank
         if (to.isTerminal && existing.resolvedAt == null) existing.resolvedAt = now
@@ -363,6 +366,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project = unused("updateProject")
 
     override suspend fun deleteProject(id: ProjectID): Unit = unused("deleteProject")
@@ -372,6 +376,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,

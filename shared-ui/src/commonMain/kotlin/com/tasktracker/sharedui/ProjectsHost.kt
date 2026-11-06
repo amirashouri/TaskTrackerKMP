@@ -126,13 +126,14 @@ fun ProjectsHost(
                 // a function rather than a bare route: the host holding the closure cannot see
                 // the model, and pushing a stale or absent sprint id from here would recreate
                 // the same invisible-save the active-sprint wiring fixes.
-                onAddTask = { status, sprintID ->
+                onAddTask = { statusKey, status, sprintID ->
                     router.push(
                         AppRoute.WorkItemEditor(
                             projectID = route.projectID,
                             workItemID = null,
                             initialStatus = status,
                             initialSprintID = sprintID,
+                            initialStatusKey = statusKey,
                         ),
                         AppTab.Projects,
                     )
@@ -273,7 +274,7 @@ private fun ProjectBoardDestination(
     onSelectProject: (ProjectID) -> Unit,
     onBackToProjects: () -> Unit,
     /** The status, and the sprint a new task joins — the board model's active sprint or null. */
-    onAddTask: (WorkItemStatus, SprintID?) -> Unit,
+    onAddTask: (String, WorkItemStatus, SprintID?) -> Unit,
 ) {
     val model = remember(projectID, environment) {
         ProjectBoardModel(
@@ -311,7 +312,14 @@ private fun ProjectBoardDestination(
             onOpenSwitcher = onBackToProjects,
             projects = picker.projects,
             onSelectProject = onSelectProject,
-            onAddTask = { status -> onAddTask(status, model.activeSprint?.id) },
+            onAddTask = { statusKey ->
+                val lane = model.projection.project?.statuses?.firstOrNull { it.id == statusKey }
+                onAddTask(
+                    statusKey,
+                    lane?.category ?: WorkItemStatus.fromWireValue(statusKey) ?: WorkItemStatus.Backlog,
+                    model.activeSprint?.id,
+                )
+            },
             showOnlyMyTasks = model.showOnlyMyTasks,
             onToggleMyTasks = model::toggleShowOnlyMyTasks,
             activeSprint = model.activeSprint,

@@ -230,6 +230,7 @@ object WorkItemEditorScenarios {
                 details = "",
                 storyPointsText = "",
                 status = WorkItemStatus.Backlog,
+                statusKey = null,
                 priority = Priority.Medium,
                 assigneeID = null,
                 currentUserID = null,

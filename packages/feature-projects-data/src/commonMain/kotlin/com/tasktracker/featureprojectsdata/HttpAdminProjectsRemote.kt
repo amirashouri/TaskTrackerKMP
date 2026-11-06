@@ -12,6 +12,7 @@ import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.network.Endpoint
 import com.tasktracker.network.HttpClient
 import com.tasktracker.network.HttpMethod
@@ -117,6 +118,8 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val details: String,
         /** Admin-owned tag catalog; defaulted so a server that predates tags still decodes. */
         val tags: List<ProjectTag> = emptyList(),
+        /** Admin-owned workflow catalog; defaulted so a server that predates it still decodes. */
+        val statuses: List<StatusDefinition> = emptyList(),
         val memberIds: List<String>,
         val isArchived: Boolean,
         /** Admin's per-project agent switch; defaulted so a server that predates it still decodes. */
@@ -134,6 +137,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         name = name,
         details = details,
         tags = tags,
+        statuses = statuses,
         memberIDs = memberIds.mapNotNull { parseUserIDOrNull(it) },
         isArchived = isArchived,
         agentEnabled = agentEnabled,
@@ -170,6 +174,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val name: String,
         val details: String,
         val tags: List<ProjectTag> = emptyList(),
+        val statuses: List<StatusDefinition> = emptyList(),
         val memberIds: List<String>,
         val isArchived: Boolean,
         val agentEnabled: Boolean = false,
@@ -188,6 +193,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         name = project.name,
         details = project.details,
         tags = project.tags,
+        statuses = project.statuses,
         memberIds = project.memberIDs.map { it.stringValue },
         isArchived = project.isArchived,
         agentEnabled = project.agentEnabled,

@@ -10,6 +10,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintStatus
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
@@ -84,6 +85,7 @@ class ProjectBoardModel(
         projection = BoardProjection(
             project = projection.project,
             items = currentFilteredItems(),
+            boardStatuses = projection.project?.boardStatuses.orEmpty(),
         )
     }
 
@@ -106,15 +108,21 @@ class ProjectBoardModel(
         projection = BoardProjection(
             project = project,
             items = currentFilteredItems(),
+            boardStatuses = project?.boardStatuses.orEmpty(),
         )
     }
 
-    /** Moves a card to [to], appending it to the destination lane's rank order. */
-    suspend fun move(itemID: WorkItemID, to: WorkItemStatus): Boolean = acting(itemID) {
-        moveWorkItem(id = itemID, to = to)
+    /** Moves a card to [toStatusKey], appending it to the destination lane's rank order. */
+    suspend fun move(itemID: WorkItemID, toStatusKey: String): Boolean {
+        val definition = projection.project?.statuses?.firstOrNull { it.id == toStatusKey }
+        val to = definition?.category ?: WorkItemStatus.fromWireValue(toStatusKey) ?: return false
+        return acting(itemID) {
+            moveWorkItem(id = itemID, to = to, statusKey = toStatusKey)
+        }
     }
 
-    val destinationStatuses: List<WorkItemStatus> get() = WorkItemStatus.boardOrder
+    val destinationStatuses: List<StatusDefinition>
+        get() = projection.project?.boardStatuses.orEmpty()
 
     /** Archives the card, enforcing terminal state idempotency via [ArchiveWorkItem]. */
     suspend fun fileAway(itemID: WorkItemID): Boolean = acting(itemID) {

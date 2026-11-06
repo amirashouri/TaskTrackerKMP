@@ -15,6 +15,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.TTSearchFieldClearTag
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectsdomain.BoardProjection
@@ -54,6 +55,9 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 object WorkItemSearchScenarios {
 
+    private fun statusDef(status: WorkItemStatus): StatusDefinition =
+        StatusDefinition(id = status.wireValue, name = "", category = status)
+
     /**
      * The field is closed until it is asked for, and the toggle says which way the tap will go.
      *
@@ -86,13 +90,13 @@ object WorkItemSearchScenarios {
         boardShowing()
 
         typeInBoardSearch("TT-3")
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "1", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "1", useUnmerged = true)
 
         onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
         waitForIdle()
 
         assertTagCount(ProjectBoardSearchFieldTag, 0)
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "2", useUnmerged = true)
     }
 
     /**
@@ -211,16 +215,16 @@ object WorkItemSearchScenarios {
 
     /** One key typed into the board narrows the lanes to the card it names. */
     val theBoardNarrowsToTheMatchingCard: suspend ComposeUiTest.() -> Unit = {        boardShowing()
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "2", useUnmerged = true)
 
         typeInBoardSearch("TT-3")
 
         assertText(
-            BoardColumnCountTag(WorkItemStatus.InProgress),
+            BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)),
             "1",
             useUnmerged = true,
         )
-        assertText(BoardColumnCountTag(WorkItemStatus.Todo), "0", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.Todo)), "0", useUnmerged = true)
     }
 
     /**
@@ -235,7 +239,7 @@ object WorkItemSearchScenarios {
         typeInBoardSearch("TT-3")
 
         WorkItemStatus.boardOrder.forEach { status ->
-            onNodeWithTag(BoardColumnTag(status)).assertExists()
+            onNodeWithTag(BoardColumnTag(statusDef(status))).assertExists()
         }
     }
 
@@ -257,12 +261,12 @@ object WorkItemSearchScenarios {
         mainClock.advanceTimeBy(DEBOUNCE_FIRST_CHECK_MILLIS)
 
         // Still the unfiltered board: the query has not been still for the window yet.
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "2", useUnmerged = true)
 
         mainClock.advanceTimeBy(DEBOUNCE_MILLIS)
         mainClock.advanceTimeByFrame()
 
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "1", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "1", useUnmerged = true)
 
         mainClock.autoAdvance = true
         waitForIdle()
@@ -308,7 +312,7 @@ object WorkItemSearchScenarios {
         mainClock.advanceTimeByFrame()
 
         // The full lane, inside the window the typing would still have been waiting out.
-        assertText(BoardColumnCountTag(WorkItemStatus.InProgress), "2", useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), "2", useUnmerged = true)
 
         mainClock.autoAdvance = true
         waitForIdle()

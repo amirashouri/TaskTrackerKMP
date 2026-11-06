@@ -21,6 +21,7 @@ import com.tasktracker.core.randomCommentID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintBlockingOverlap
@@ -429,6 +430,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String?,
         now: Instant,
         memberIDs: List<UserID>?,
+        statuses: List<StatusDefinition>?,
     ): Project {
         throwIfFailing()
         return lock.withLock {
@@ -438,6 +440,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             if (name != null) project.name = name
             if (details != null) project.details = details
             if (memberIDs != null) project.memberIDs = memberIDs
+            if (statuses != null) project.statuses = statuses
             project.updatedAt = now
             publish(ProjectChange(ProjectChange.Kind.Projects, id))
             project
@@ -475,6 +478,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String,
         details: String,
         status: WorkItemStatus,
+        statusKey: String?,
         priority: Priority,
         assigneeID: UserID?,
         dueDate: Instant?,
@@ -509,6 +513,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 createdAt = now,
                 updatedAt = now,
             )
+            item.statusKey = statusKey
             // The real repository maintains the `resolvedAt` invariant on create, and the
             // fake must match it — otherwise a domain test written against the fake quietly
             // asserts a contract the store does not honour, and the archive is the one
@@ -587,6 +592,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
+        statusKey: String?,
         rank: Int?,
         now: Instant,
     ): WorkItem {
@@ -598,6 +604,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             val item = storedItems[index]
             val previous = item.status
             item.status = to
+            item.statusKey = statusKey
             if (rank != null) item.rank = rank
             item.updatedAt = now
             item.reconcileResolutionAt(now)
