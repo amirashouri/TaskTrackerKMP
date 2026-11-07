@@ -31,6 +31,7 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
@@ -68,7 +69,22 @@ fun WorkItemBacklogRow(
     projectTags: List<ProjectTag> = emptyList(),
     /** Displays workflow status badge; enabled strictly for Kanban section rows. */
     showStatusBadge: Boolean = false,
+    /**
+     * The owning project's status catalog, used to resolve a stored [WorkItem.statusKey] into the
+     * coarse [WorkItemStatus] the badge and the action controls draw. Without it (the backlog,
+     * archive and sprint rows pass none) the row falls back to the item's raw [WorkItem.status],
+     * which is the right read there — those sections key off `status` directly. The Kanban section
+     * is the one that can carry a `statusKey` whose lane disagrees with `status`, so only it passes
+     * a project, and only there can the two diverge.
+     */
+    project: Project? = null,
 ) {
+    // The same resolution the editor and the board grouping use: a stored lane id wins, the raw
+    // status is the fallback. Reading `item.status` directly — what the badge used to do — is the
+    // one path that disagreed with the editor and the board for an item whose two fields desynced.
+    val effectiveStatus = remember(item, project) {
+        project?.statusFor(item)?.category ?: item.status
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -108,7 +124,7 @@ fun WorkItemBacklogRow(
             }
             PriorityBadge(priority = item.priority)
             if (showStatusBadge) {
-                WorkItemStatusBadge(status = item.status)
+                WorkItemStatusBadge(status = effectiveStatus)
             }
         }
         item.dueDate?.let { due ->
@@ -133,7 +149,7 @@ fun WorkItemBacklogRow(
                     testTag = BacklogRemoveFromSprintTag(item),
                 )
             } else {
-                if (item.status == WorkItemStatus.Backlog) {
+                if (effectiveStatus == WorkItemStatus.Backlog) {
                     BacklogAction(
                         label = stringResource(Res.string.backlog_put_on_board),
                         isBusy = isBusy,
@@ -143,14 +159,14 @@ fun WorkItemBacklogRow(
                 }
                 // Terminal items are already filed away, so "File away" would only ever be
                 // refused; a done task's way back is Reopen, the same as a closed one's.
-                if (item.status.isTerminal && onUnarchive != null) {
+                if (effectiveStatus.isTerminal && onUnarchive != null) {
                     BacklogAction(
                         label = stringResource(Res.string.archive_reopen),
                         isBusy = isBusy,
                         onClick = onUnarchive,
                         testTag = BacklogUnarchiveTag(item),
                     )
-                } else if (!item.status.isTerminal) {
+                } else if (!effectiveStatus.isTerminal) {
                     BacklogAction(
                         label = stringResource(Res.string.work_item_archive),
                         isBusy = isBusy,

@@ -181,6 +181,10 @@ class ProjectsUiIosTest {
         runComposeUiTest(block = WorkItemBacklogRowScenarios.aRowWithoutACopyHandlerOffersNoCopyControl)
 
     @Test
+    fun aBacklogRowWithADesyncedLaneShowsTheLaneStatus() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.aRowWithADesyncedLaneShowsTheLaneStatus)
+
+    @Test
     fun copyingABacklogRowConfirmsItOnTheBoard() =
         runComposeUiTest(block = ProjectBacklogScenarios.copyingARowConfirmsItOnTheBoard)
 

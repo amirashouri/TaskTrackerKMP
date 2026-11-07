@@ -78,7 +78,7 @@ data class ArchiveProjection(
     val timeZone: TimeZone,
 ) {
     val months: List<Month> = items
-        .filter { it.status.isTerminal }
+        .filter { it.isArchived }
         .groupBy { it.archivedOn.startOfMonthIn(timeZone) }
         .map { (monthStart, monthItems) ->
             Month(monthStart, monthItems.sortedByDescending { it.archivedOn.epochSeconds })
@@ -115,7 +115,7 @@ data class BacklogSectionedProjection(
     val backlog: List<WorkItem> = WorkItemGrouping.untriaged(items)
     fun backlogIn(order: BacklogSortOrder): List<WorkItem> = WorkItemGrouping.untriaged(items, order)
     val archived: List<WorkItem> = items
-        .filter { it.status.isTerminal }
+        .filter { it.isArchived }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
     val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items, project?.boardStatuses.orEmpty()).flatMap { it.items }

@@ -3,10 +3,13 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.tasktracker.core.randomTagID
+import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItem
@@ -99,6 +102,39 @@ object WorkItemBacklogRowScenarios {
 
         onNested(BacklogCopyTag(item)).assertDoesNotExist()
     }
+
+    /**
+     * A Kanban row reads the stored lane (`statusKey`), not the raw `status`, so a desynced item
+     * agrees with the editor and the board.
+     *
+     * The bug this pins: an item with `status = Done` but `statusKey` naming an "In Progress" lane
+     * showed a "Done" badge on the board while the editor showed "In Progress". The editor and the
+     * board grouping both resolve the lane first; the badge was the only reader of `item.status`
+     * raw. Hand the row a project with an In Progress lane and that exact item, and the badge must
+     * say In Progress (never Done), and the row must offer File away rather than Reopen — the same
+     * effective status drives both, so the board and the editor can no longer disagree about it.
+     */
+    val aRowWithADesyncedLaneShowsTheLaneStatus: suspend ComposeUiTest.() -> Unit = {
+        val doing = StatusDefinition(id = "col-doing", name = "Doing", category = WorkItemStatus.InProgress, order = 0)
+        val project = ViewPreviewData.seededProject.copy(statuses = listOf(doing))
+        val item = ViewPreviewData.workItems
+            .first { it.status == WorkItemStatus.Backlog }
+            .copy(status = WorkItemStatus.Done, statusKey = doing.id)
+
+        rowShowing(
+            item = item,
+            onCopy = {},
+            project = project,
+            showStatusBadge = true,
+            onFileAway = {},
+            onUnarchive = {},
+        )
+
+        onNodeWithTag(WorkItemStatusBadgeTag(WorkItemStatus.InProgress), useUnmergedTree = true).assertIsDisplayed()
+        onNodeWithTag(WorkItemStatusBadgeTag(WorkItemStatus.Done), useUnmergedTree = true).assertDoesNotExist()
+        onNested(BacklogFileAwayTag(item)).assertIsDisplayed()
+        onNested(BacklogUnarchiveTag(item)).assertDoesNotExist()
+    }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -107,16 +143,23 @@ private fun ComposeUiTest.rowShowing(
     onCopy: ((String) -> Unit)?,
     onOpen: (() -> Unit)? = null,
     projectTags: List<ProjectTag> = emptyList(),
+    project: Project? = null,
+    showStatusBadge: Boolean = false,
+    onFileAway: (() -> Unit)? = null,
+    onUnarchive: (() -> Unit)? = null,
 ) {
     setContent {
         Themed {
             WorkItemBacklogRow(
                 item = item,
                 onPutOnBoard = {},
-                onFileAway = {},
+                onFileAway = onFileAway ?: {},
                 onOpen = onOpen,
                 onCopy = onCopy,
+                onUnarchive = onUnarchive,
                 projectTags = projectTags,
+                project = project,
+                showStatusBadge = showStatusBadge,
             )
         }
     }

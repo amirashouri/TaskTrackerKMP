@@ -178,7 +178,7 @@ object WorkItemGrouping {
      * a resolved item's rank says nothing useful, since its column no longer exists.
      */
     fun resolved(items: List<WorkItem>): List<WorkItem> =
-        items.filter { it.status.isTerminal }
+        items.filter { it.isArchived }
             .sortedByDescending { it.archivedOn }
 
     /**

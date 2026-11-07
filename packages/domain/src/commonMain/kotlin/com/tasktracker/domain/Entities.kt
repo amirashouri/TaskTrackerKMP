@@ -762,6 +762,11 @@ data class WorkItem(
      * [reconcileResolutionAt].
      */
     var resolvedAt: Instant? = null,
+    /**
+     * Whether the user has filed this item away into the archive. Terminal statuses
+     * (Done/Closed) no longer imply archival; only an explicit user action does.
+     */
+    var isArchived: Boolean = false,
 ) {
 
     init {

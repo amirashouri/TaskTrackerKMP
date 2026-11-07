@@ -440,6 +440,7 @@ private fun KanbanSectionList(
                     onCopy = onCopy,
                     projectTags = projection.project?.tags.orEmpty(),
                     showStatusBadge = true,
+                    project = projection.project,
                 )
             }
         }
