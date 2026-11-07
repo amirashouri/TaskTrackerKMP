@@ -222,6 +222,8 @@ object WorkItemEditorScenarios {
         onManageTags: (() -> Unit)? = null,
         hasUnsavedChanges: Boolean = false,
         onCancel: () -> Unit = {},
+        status: WorkItemStatus = WorkItemStatus.Backlog,
+        isFiledAway: Boolean = false,
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -229,7 +231,7 @@ object WorkItemEditorScenarios {
                 title = title,
                 details = "",
                 storyPointsText = "",
-                status = WorkItemStatus.Backlog,
+                status = status,
                 statusKey = null,
                 priority = Priority.Medium,
                 assigneeID = null,
@@ -242,7 +244,7 @@ object WorkItemEditorScenarios {
                 isCreating = isCreating,
                 issuedKey = null,
                 selectableStatuses = emptyList(),
-                isFiledAway = false,
+                isFiledAway = isFiledAway,
                 canSave = title.isNotBlank(),
                 isBusy = false,
                 errorMessage = null,
@@ -265,5 +267,24 @@ object WorkItemEditorScenarios {
                 onManageTags = onManageTags,
             )
         }
+    }
+
+    /**
+     * A filed-away item shows its status as a read-only chip, not a hidden control.
+     *
+     * ## The defect this exists for
+     *
+     * `selectableStatuses` excludes `Closed`, so a filed-away item rendered no status control
+     * at all — the Status row simply vanished, leaving the user to wonder what the item was.
+     * Now the editor shows the terminal status as a non-editable chip with a "Filed away"
+     * caption, and never offers the picker (which would let the user edit a terminal state).
+     */
+    val aFiledAwayItemShowsAReadOnlyStatusChip: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            editorSheet(isFiledAway = true, status = WorkItemStatus.Closed)
+        }
+
+        onNodeWithTag(WorkItemEditorFiledAwayStatusTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(WorkItemStatusPickerTag).assertDoesNotExist()
     }
 }

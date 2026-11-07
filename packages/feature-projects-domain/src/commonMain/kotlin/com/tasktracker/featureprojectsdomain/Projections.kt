@@ -77,8 +77,12 @@ data class ArchiveProjection(
     val items: List<WorkItem>,
     val timeZone: TimeZone,
 ) {
+    // Archive membership is `isTerminal` (Done or Closed), not the separate `isArchived` flag.
+    // `isArchived` is project-scoped and never set by the file-away path, so filtering on it would
+    // hide every filed-away task. This matches the entity invariant that `isTerminal` and archive
+    // membership are the same predicate (Entities.kt).
     val months: List<Month> = items
-        .filter { it.isArchived }
+        .filter { it.status.isTerminal }
         .groupBy { it.archivedOn.startOfMonthIn(timeZone) }
         .map { (monthStart, monthItems) ->
             Month(monthStart, monthItems.sortedByDescending { it.archivedOn.epochSeconds })
@@ -114,8 +118,10 @@ data class BacklogSectionedProjection(
 ) {
     val backlog: List<WorkItem> = WorkItemGrouping.untriaged(items)
     fun backlogIn(order: BacklogSortOrder): List<WorkItem> = WorkItemGrouping.untriaged(items, order)
+    // Same predicate as `ArchiveProjection`: archive membership is `isTerminal`, not the never-set
+    // `isArchived` flag — see the class doc and `WorkItem.isTerminal`.
     val archived: List<WorkItem> = items
-        .filter { it.isArchived }
+        .filter { it.status.isTerminal }
         .sortedByDescending { it.archivedOn.epochSeconds }
 
     val kanban: List<WorkItem> = WorkItemGrouping.boardColumns(items, project?.boardStatuses.orEmpty()).flatMap { it.items }

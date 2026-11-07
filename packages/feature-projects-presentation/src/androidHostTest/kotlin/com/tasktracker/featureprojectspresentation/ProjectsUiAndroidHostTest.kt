@@ -409,6 +409,10 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = WorkItemEditorScenarios.cancellingADirtyEditorAsksBeforeDiscarding)
 
     @Test
+    fun aFiledAwayWorkItemShowsAReadOnlyStatusChip() =
+        runComposeUiTest(block = WorkItemEditorScenarios.aFiledAwayItemShowsAReadOnlyStatusChip)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

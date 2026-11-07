@@ -474,7 +474,21 @@ private fun ProjectsEditorFullScreen(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Next,
             )
-            if (selectableStatuses.size > 1) {
+            if (isFiledAway) {
+                // A filed-away item is terminal (Closed), so its status is not editable.
+                // Show it as a read-only chip so the user can still see what it is.
+                Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
+                    ttText(
+                        text = stringResource(Res.string.work_item_status_label),
+                        style = ttTypography.captionEmphasised,
+                        color = ttLabelSecondary(),
+                    )
+                    WorkItemStatusBadge(
+                        status = status,
+                        modifier = Modifier.testTag(WorkItemEditorFiledAwayStatusTag),
+                    )
+                }
+            } else if (selectableStatuses.size > 1) {
                 val selectedStatusDefinition = selectableStatuses.firstOrNull { it.id == statusKey }
                     ?: selectableStatuses.firstOrNull { it.category == status }
                     ?: selectableStatuses.first()
@@ -768,7 +782,21 @@ private fun WorkItemEditorForm(
             keyboardType = KeyboardType.Number,
             imeAction = ImeAction.Next,
         )
-        if (selectableStatuses.size > 1) {
+        if (isFiledAway) {
+            // A filed-away item is terminal (Closed), so its status is not editable.
+            // Show it as a read-only chip so the user can still see what it is.
+            Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
+                ttText(
+                    text = stringResource(Res.string.work_item_status_label),
+                    style = ttTypography.captionEmphasised,
+                    color = ttLabelSecondary(),
+                )
+                WorkItemStatusBadge(
+                    status = status,
+                    modifier = Modifier.testTag(WorkItemEditorFiledAwayStatusTag),
+                )
+            }
+        } else if (selectableStatuses.size > 1) {
             Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
                 ttText(
                     text = stringResource(Res.string.work_item_status_label),
@@ -894,6 +922,7 @@ const val WorkItemEditorSheetTag = "workItem.editor.sheet"
 const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
 const val WorkItemBackTag = "workItem.editor.back"
 const val WorkItemStatusPickerTag = "workItem.editor.status"
+const val WorkItemEditorFiledAwayStatusTag = "workItem.editor.filedAwayStatus"
 const val WorkItemPriorityPickerTag = "workItem.editor.priority"
 const val WorkItemDueToggleTag = "workItem.editor.dueToggle"
 const val WorkItemFileAwayTag = "workItem.editor.fileAway"
