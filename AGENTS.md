@@ -29,8 +29,7 @@ live in `docs/DECISIONS.md`.
 ## 3. Test Loops & Matrix Gates
 * **Inner Dev Loop (<1 min):** Focused unit runs while writing code:
   ```bash
-  export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-  ./gradlew --offline --no-parallel :packages:<module>:jvmTest --tests '<TestClass or pattern>'
+  scripts/check.sh quick <module> '<TestClass or pattern>'
   ```
 * **Full Matrix Gate (<10 min):** Run `scripts/check.sh full` for expect/actual changes, rendering/pixel changes, build graph updates, and prior to PR merges.
 * Never fix red tests by deleting assertions, modifying `test-known-failures.json`, or hand-editing `test-baseline.json`.
@@ -58,6 +57,7 @@ Emit this exact block before hypothesizing on unexpected test failures:
 1. `BasicText` lacks `textAlign` parameter — put alignment inside `style`.
 2. `TextStyle` lacks `overflow` — set on `ParagraphStyle`.
 3. `ImageVector.Builder.addPath` requires `fill: Brush`. Direct color or omitted fill renders nothing silently. Use `fill = SolidColor(Color.Black)` with tint.
+4. Never run raw ./gradlew commands directly. Always execute builds and tests via scripts/check.sh quick ... or scripts/check.sh so the environment's JAVA_HOME and flags are correctly loaded.
 
 ## 7. Skills
 * **`rendered-ui-measurement`** (`.agents/skills/rendered-ui-measurement/SKILL.md`): Load on-demand only when writing or debugging pixel-reading, contrast, or twin-frame differencing tests.
