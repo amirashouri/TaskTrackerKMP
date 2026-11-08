@@ -42,7 +42,8 @@ class AdminProjectsRepository(
         details: String,
         memberIDs: List<UserID>,
         repoUrl: String?,
-    ): AdminProject = remote.createProject(name, keyPrefix, details, memberIDs, repoUrl)
+        agentEnabled: Boolean,
+    ): AdminProject = remote.createProject(name, keyPrefix, details, memberIDs, repoUrl, agentEnabled)
 
     @Throws(AppError::class, CancellationException::class)
     override suspend fun updateProject(project: Project, version: String): AdminProject {

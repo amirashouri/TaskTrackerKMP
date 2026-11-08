@@ -41,6 +41,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AgentState
@@ -52,6 +53,8 @@ import com.tasktracker.resources.settings_agent_copy_run
 import com.tasktracker.resources.settings_agent_empty
 import com.tasktracker.resources.settings_agent_empty_state
 import com.tasktracker.resources.settings_agent_failure
+import com.tasktracker.resources.settings_agent_host_desktop
+import com.tasktracker.resources.settings_agent_host_remote
 import com.tasktracker.resources.settings_agent_offline
 import com.tasktracker.resources.settings_agent_running
 import com.tasktracker.resources.settings_agent_section
@@ -109,7 +112,11 @@ internal fun AgentOverviewSection(
             SettingsDivider()
             SettingsIconRow(
                 label = machine.name,
-                value = machine.modelSummary.ifBlank { agentStateLabel(machine.state(overview)) },
+                value = listOf(
+                    machine.host?.let { agentHostLabel(it) },
+                    agentStateLabel(machine.state(overview)),
+                    machine.modelSummary,
+                ).filterNotNull().filter { it.isNotBlank() }.joinToString(" · "),
                 icon = ttSettingsIcons.account,
             )
             if (isAdmin) {
@@ -353,6 +360,14 @@ private fun AgentMachine.state(overview: AgentOverview): AgentState = when {
 }
 
 /** The Agent row's value. Total with no `else`, like every vocabulary mapping here. */
+@Composable
+private fun agentHostLabel(host: AgentHost): String = stringResource(
+    when (host) {
+        AgentHost.Desktop -> Res.string.settings_agent_host_desktop
+        AgentHost.Remote -> Res.string.settings_agent_host_remote
+    },
+)
+
 @Composable
 private fun agentStateLabel(state: AgentState): String = stringResource(
     when (state) {

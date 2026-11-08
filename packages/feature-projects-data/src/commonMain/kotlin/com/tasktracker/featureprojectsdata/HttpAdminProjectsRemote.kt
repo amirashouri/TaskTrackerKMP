@@ -128,6 +128,8 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val memberIds: List<String>,
         /** Optional and omitted when unset; the server validates the scheme. */
         val repoUrl: String? = null,
+        /** Explicit rather than defaulted on the wire: the create form offers the choice. */
+        val agentEnabled: Boolean = false,
     )
 
     /**
@@ -298,6 +300,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         details: String,
         memberIDs: List<UserID>,
         repoUrl: String? = null,
+        agentEnabled: Boolean = false,
     ): AdminProject {
         val id = randomProjectID()
         val body = CreateProjectRequestBody(
@@ -307,6 +310,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
             details = details,
             memberIds = memberIDs.map { it.stringValue },
             repoUrl = repoUrl,
+            agentEnabled = agentEnabled,
         )
         return try {
             client.send(

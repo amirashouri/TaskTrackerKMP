@@ -3,10 +3,13 @@ package com.tasktracker.featureprojectsdata
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.parseAgentRunnerID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.roundedToSecond
 import com.tasktracker.featureprojectsdomain.AgentPairingCode
+import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
+import com.tasktracker.featureprojectsdomain.ProjectAgentMachine
 import com.tasktracker.network.HttpClient
 import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpRequest
@@ -25,7 +28,10 @@ import kotlin.time.Instant
 class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort {
 
     @Serializable
-    private data class CreatePairingCodeBody(val projectId: String)
+    private data class CreatePairingCodeBody(
+        val projectId: String,
+        val host: String,
+    )
 
     @Serializable
     internal data class PairingCodeDto(
@@ -34,12 +40,33 @@ class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort 
         val expiresAt: String,
     )
 
-    override suspend fun createPairingCode(projectID: ProjectID): AgentPairingCode {
+    @Serializable
+    internal data class RunnerDto(
+        val id: String,
+        val projectId: String? = null,
+        val name: String,
+        val provider: String = "",
+        val modelLabel: String = "",
+        val host: String? = null,
+        val lastSeenAt: String? = null,
+        val pausedAt: String? = null,
+        val revokedAt: String? = null,
+        /** Unused by the roster, but present in the response and so required to decode. */
+        val createdAt: String,
+    )
+
+    @Serializable
+    internal data class RunnersEnvelope(val runners: List<RunnerDto>)
+
+    override suspend fun createPairingCode(
+        projectID: ProjectID,
+        host: AgentPairingHost,
+    ): AgentPairingCode {
         val response = client.send(
             HttpRequest(
                 method = HttpMethod.Post,
                 path = "/v1/agent/runners/pairing-codes",
-                body = jsonBody(CreatePairingCodeBody(projectID.stringValue)),
+                body = jsonBody(CreatePairingCodeBody(projectID.stringValue, host.wireValue)),
             ),
             decoding = PairingCodeDto.serializer(),
         )
@@ -51,7 +78,35 @@ class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort 
         )
     }
 
+    override suspend fun machines(projectID: ProjectID): List<ProjectAgentMachine> =
+        client.send(
+            HttpRequest(
+                method = HttpMethod.Get,
+                path = "/v1/agent/runners",
+            ),
+            decoding = RunnersEnvelope.serializer(),
+        ).runners
+            .filter { it.projectId == projectID.stringValue && it.revokedAt == null }
+            .map { it.toProjectMachine() }
+
+    private fun RunnerDto.toProjectMachine(): ProjectAgentMachine = ProjectAgentMachine(
+        id = parseAgentRunnerID(id)
+            ?: throw AppError.Decoding("Agent runner id \"$id\" is not a UUID."),
+        name = name,
+        provider = provider,
+        modelLabel = modelLabel,
+        lastSeenAt = lastSeenAt.toInstant("lastSeenAt"),
+        pausedAt = pausedAt.toInstant("pausedAt"),
+        host = AgentPairingHost.fromWireValue(host),
+    )
+
     private fun String.toInstant(): Instant =
         DateCoding.parse(this)?.roundedToSecond()
             ?: throw AppError.Decoding("Pairing code expiresAt \"$this\" is not a valid date.")
+
+    private fun String?.toInstant(field: String): Instant? {
+        if (this == null) return null
+        return DateCoding.parse(this)
+            ?: throw AppError.Decoding("Agent runner $field \"$this\" is not a valid date.")
+    }
 }

@@ -441,5 +441,31 @@ class ProjectsUiIosTest {
     fun theBacklogHidesTheSearchUntilAsked() = runComposeUiTest(block = WorkItemSearchScenarios.theBacklogHidesTheSearchUntilAsked)
 
     @Test
+    fun theRosterShowsEachMachineItsHostAndHealth() =
+        runComposeUiTest(block = AgentManagementScenarios.theRosterShowsEachMachineItsHostAndHealth)
+
+    @Test
+    fun anEmptyRosterSaysSo() = runComposeUiTest(block = AgentManagementScenarios.anEmptyRosterSaysSo)
+
+    @Test
+    fun tappingRefreshReReadsTheRoster() = runComposeUiTest(block = AgentManagementScenarios.tappingRefreshReReadsTheRoster)
+
+    @Test
+    fun thePairingHostChoiceReachesTheServer() =
+        runComposeUiTest(block = AgentManagementScenarios.thePairingHostChoiceReachesTheServer)
+
+    @Test
+    fun theAgentEnabledToggleReportsItsState() =
+        runComposeUiTest(block = AgentManagementScenarios.theAgentEnabledToggleReportsItsState)
+
+    @Test
+    fun theDispatchTargetPickerRoutesTheChosenMachine() =
+        runComposeUiTest(block = AgentManagementScenarios.theDispatchTargetPickerRoutesTheChosenMachine)
+
+    @Test
+    fun aTerminalRunWithADiffOpensTheDiffSheet() =
+        runComposeUiTest(block = AgentManagementScenarios.aTerminalRunWithADiffOpensTheDiffSheet)
+
+    @Test
     fun closingTheBacklogSearchClearsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.closingTheBacklogSearchClearsTheQuery)
 }

@@ -6,6 +6,7 @@ import com.tasktracker.core.DateCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseAgentRunnerID
 import com.tasktracker.core.parseProjectID
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
 import com.tasktracker.network.HttpClient
@@ -35,6 +36,7 @@ class HttpAgentRunnersRemote(private val client: HttpClient) : AgentSettingsGate
         val name: String,
         val provider: String = "",
         val modelLabel: String = "",
+        val host: String? = null,
         val lastSeenAt: String? = null,
         val pausedAt: String? = null,
         val revokedAt: String? = null,
@@ -76,6 +78,7 @@ class HttpAgentRunnersRemote(private val client: HttpClient) : AgentSettingsGate
         lastSeenAt = lastSeenAt.toInstant("lastSeenAt"),
         pausedAt = pausedAt.toInstant("pausedAt"),
         revokedAt = revokedAt.toInstant("revokedAt"),
+        host = AgentHost.fromWireValue(host),
     )
 
     private fun String?.toInstant(field: String): Instant? {

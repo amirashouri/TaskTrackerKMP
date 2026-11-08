@@ -113,6 +113,22 @@ class AdminProjectEditorModelTest {
     }
 
     @Test
+    fun `toggling agent runs marks the editor dirty and the save carries the flag`() = runTest {
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+
+        assertFalse(model.agentEnabled, "a project starts with the server's safe default")
+        assertFalse(model.hasChanges)
+
+        model.onAgentEnabledChanged(true)
+
+        assertTrue(model.hasChanges, "enabling agent runs is a reason to enable Save")
+        assertTrue(model.save())
+        assertTrue(port.updateCalls.single().first.agentEnabled)
+    }
+
+    @Test
     fun `a second save carries the version the first one returned`() = runTest {
         val port = RecordingAdminProjectsPort(
             projectByID = mapOf(id to AdminProject(project(), "v1")),

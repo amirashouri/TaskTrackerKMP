@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AgentRunID
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.WorkItemID
 import kotlin.coroutines.cancellation.CancellationException
@@ -27,7 +28,12 @@ interface AgentRunsPort {
      * one-request-one-run behaviour.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String? = null): AgentRun
+    suspend fun dispatch(
+        workItemID: WorkItemID,
+        idempotencyKey: String? = null,
+        /** When set, only this machine may claim the run. */
+        runnerID: AgentRunnerID? = null,
+    ): AgentRun
 
     /** Recent runs for one item, newest first. What reopens an item onto a finished run. */
     @Throws(AppError::class, CancellationException::class)

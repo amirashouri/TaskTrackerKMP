@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingsdata
 
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.JSONCoding
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.network.HttpClient
 import com.tasktracker.network.HttpMethod
 import com.tasktracker.network.HttpRequest
@@ -33,6 +34,7 @@ class HttpAgentRunnersRemoteTest {
         assertEquals(MACHINE_ID, running.id.stringValue)
         assertEquals("dev-machine", running.name)
         assertEquals("openai-compatible · llama3.1", running.modelSummary)
+        assertEquals(AgentHost.Desktop, running.host)
         assertEquals("2026-11-03T12:00:00Z", running.lastSeenAt.toString())
         assertNull(running.pausedAt)
         assertTrue(running.isLive)
@@ -68,6 +70,7 @@ class HttpAgentRunnersRemoteTest {
         assertNull(machine.lastSeenAt)
         assertNull(machine.pausedAt)
         assertNull(machine.revokedAt)
+        assertNull(machine.host)
     }
 
     /**
@@ -126,7 +129,7 @@ class HttpAgentRunnersRemoteTest {
 
         val RUNNING_OBJECT = """
             {"id":"$MACHINE_ID","name":"dev-machine","provider":"openai-compatible",
-             "modelLabel":"llama3.1","lastSeenAt":"2026-11-03T12:00:00Z",
+             "modelLabel":"llama3.1","host":"desktop","lastSeenAt":"2026-11-03T12:00:00Z",
              "createdAt":"2026-11-03T11:00:00Z"}
         """.trimIndent()
 

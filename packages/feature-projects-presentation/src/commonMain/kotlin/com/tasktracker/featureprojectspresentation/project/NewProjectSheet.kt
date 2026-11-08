@@ -33,6 +33,8 @@ fun NewProjectSheet(
     onDetailsChanged: (String) -> Unit,
     repoUrl: String = "",
     onRepoUrlChanged: (String) -> Unit = {},
+    agentEnabled: Boolean = false,
+    onAgentEnabledChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
     /** Prompts confirmation on dismissal if true. */
@@ -74,6 +76,8 @@ fun NewProjectSheet(
             onDetailsChanged = onDetailsChanged,
             repoUrl = repoUrl,
             onRepoUrlChanged = onRepoUrlChanged,
+            agentEnabled = agentEnabled,
+            onAgentEnabledChanged = onAgentEnabledChanged,
             onSave = onSave,
             onDismiss = { guardDismiss(onCancel) },
             isBusy = isBusy,

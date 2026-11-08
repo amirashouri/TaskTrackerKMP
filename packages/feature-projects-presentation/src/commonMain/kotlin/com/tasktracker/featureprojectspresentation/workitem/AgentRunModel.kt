@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.AgentRunID
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.featureprojectsdomain.AgentRun
@@ -55,6 +56,10 @@ class AgentRunModel(
     var isUnavailable by mutableStateOf(false)
         private set
 
+    /** True while the full-log sheet is walking the event cursor. */
+    var isLoadingLog by mutableStateOf(false)
+        private set
+
     private var afterSeq: Long = 0
     private var consecutiveFailures: Int = 0
 
@@ -92,15 +97,46 @@ class AgentRunModel(
         }
     }
 
-    /** Queues this item for an agent. A live run already covering it is reported, not duplicated. */
-    suspend fun dispatch() {
+    /**
+     * Reads every remaining event page for the current run, for the full-log sheet.
+     *
+     * The live section only keeps the tail; this fills in the earlier lines without
+     * changing the polling cursor's meaning. The loop stops when the server says there
+     * is no more, when a page returns no progress (so a bad cursor cannot spin), or at
+     * [MAX_LOG_PAGES] as a final bound.
+     */
+    suspend fun loadFullLog() {
+        val current = run ?: return
+        if (isLoadingLog) return
+        isLoadingLog = true
+        try {
+            var page = reporting { port.run(current.id, afterSeq) } ?: return
+            applyPage(page)
+            var pages = 1
+            while (page.hasMore && pages < MAX_LOG_PAGES) {
+                val before = events.size
+                page = reporting { port.run(current.id, afterSeq) } ?: return
+                applyPage(page)
+                pages++
+                if (page.events.isEmpty() && events.size == before) break
+            }
+        } finally {
+            isLoadingLog = false
+        }
+    }
+
+    /**
+     * Queues this item for an agent, optionally naming the machine that may claim it.
+     * A live run already covering the item is reported, not duplicated.
+     */
+    suspend fun dispatch(runnerID: AgentRunnerID? = null) {
         if (isDispatching || isLive) return
         isDispatching = true
         dismissError()
         isUnavailable = false
         val key = pendingDispatchKey ?: Uuid.random().toString().also { pendingDispatchKey = it }
         try {
-            val dispatched = port.dispatch(workItemID, key)
+            val dispatched = port.dispatch(workItemID, key, runnerID)
             pendingDispatchKey = null
             clear()
             applyPage(AgentRunPage(dispatched, emptyList(), hasMore = false))
@@ -215,5 +251,8 @@ class AgentRunModel(
         val RETRY_POLL_INTERVAL: Duration = 8.seconds
 
         const val FAILURE_THRESHOLD: Int = 3
+
+        /** A hard stop for a server that keeps claiming there is another page. */
+        const val MAX_LOG_PAGES: Int = 20
     }
 }

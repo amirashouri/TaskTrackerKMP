@@ -866,6 +866,8 @@
     <string name="settings_agent_running">Running</string>
     <string name="settings_agent_offline">Offline</string>
     <string name="settings_agent_stopped">Stopped</string>
+    <string name="settings_agent_host_desktop">Desktop</string>
+    <string name="settings_agent_host_remote">Remote / VPS</string>
     <string name="settings_agent_empty">No machine has been paired yet.</string>
     <string name="settings_agent_stop">Stop</string>
     <string name="settings_agent_start">Start</string>
@@ -887,7 +889,10 @@
     -->
     <string name="project_agent_title">Agent</string>
     <string name="project_agent_pair">Pair an agent</string>
-    <string name="project_agent_body">Run the command below on the machine that holds this repository. The code works once and expires in ten minutes.</string>
+    <string name="project_agent_host_label">Where will this machine run?</string>
+    <string name="project_agent_host_desktop">This desktop</string>
+    <string name="project_agent_host_remote">Remote / VPS</string>
+    <string name="project_agent_body">Pair the machine that holds this repository. The code works once and expires in ten minutes.</string>
     <string name="project_agent_code_label">Pairing code</string>
     <string name="project_agent_expires">Expires %1$s</string>
     <string name="project_agent_command">tt agent connect --pairing-code %1$s</string>
@@ -896,4 +901,20 @@
     <string name="project_agent_retry">Get a new code</string>
     <string name="project_agent_failure">Could not create a pairing code. Check your connection and try again.</string>
     <string name="project_agent_note">The agent connects out to the server, so the machine can be behind NAT or on a VPS.</string>
+    <string name="project_agent_machines_loading">Loading machines…</string>
+    <string name="project_agent_machines_empty">No machine has paired with this project yet.</string>
+    <string name="project_agent_refresh">Refresh</string>
+    <string name="project_agent_enabled_label">Agent runs</string>
+    <string name="project_agent_enabled_hint">Allow work items in this project to be sent to a paired agent.</string>
+    <string name="project_agent_enabled_on">On</string>
+    <string name="project_agent_enabled_off">Off</string>
+    <string name="agent_repository">Repository: %1$s</string>
+    <string name="agent_view_log">View full log</string>
+    <string name="agent_log_title">Run log</string>
+    <string name="agent_log_loading">Loading full log…</string>
+    <string name="agent_log_empty">No log lines yet.</string>
+    <string name="agent_run_on">Run on</string>
+    <string name="agent_any_machine">Any machine</string>
+    <string name="agent_view_diff">View diff</string>
+    <string name="agent_diff_title">Changes</string>
 </resources>

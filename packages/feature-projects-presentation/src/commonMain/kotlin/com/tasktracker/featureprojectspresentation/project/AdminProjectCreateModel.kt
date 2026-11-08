@@ -40,6 +40,10 @@ class AdminProjectCreateModel(
     var repoUrl: String by mutableStateOf("")
         private set
 
+    /** Whether the new project may dispatch work items to a paired agent. */
+    var agentEnabled: Boolean by mutableStateOf(false)
+        private set
+
     var memberIDs: List<UserID> by mutableStateOf(emptyList())
         private set
 
@@ -54,6 +58,7 @@ class AdminProjectCreateModel(
                 keyPrefix.isNotBlank() ||
                 details.isNotBlank() ||
                 repoUrl.isNotBlank() ||
+                agentEnabled ||
                 memberIDs.isNotEmpty()
 
     fun openAddForm() {
@@ -84,6 +89,10 @@ class AdminProjectCreateModel(
         repoUrl = value
     }
 
+    fun onAgentEnabledChanged(value: Boolean) {
+        agentEnabled = value
+    }
+
     fun onMemberIDsChanged(value: List<UserID>) {
         memberIDs = value.distinct()
     }
@@ -100,6 +109,7 @@ class AdminProjectCreateModel(
                     details = ProjectRules.normaliseDetails(details),
                     memberIDs = memberIDs,
                     repoUrl = repoUrl.trim().takeIf { it.isNotEmpty() },
+                    agentEnabled = agentEnabled,
                 )
             } ?: return false
 
@@ -116,6 +126,7 @@ class AdminProjectCreateModel(
         keyPrefix = ""
         details = ""
         repoUrl = ""
+        agentEnabled = false
         memberIDs = emptyList()
         isKeyPrefixEdited = false
     }

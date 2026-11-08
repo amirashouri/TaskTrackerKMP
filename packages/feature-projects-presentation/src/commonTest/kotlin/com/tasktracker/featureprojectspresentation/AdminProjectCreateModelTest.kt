@@ -93,6 +93,22 @@ class AdminProjectCreateModelTest {
     }
 
     @Test
+    fun `enabling agent runs travels with the create and resets with the draft`() = runTest {
+        val port = RecordingAdminProjectsPort(created = storedProject())
+        val model = AdminProjectCreateModel(port)
+
+        assertFalse(model.agentEnabled, "a new project starts with the server default")
+        model.onAgentEnabledChanged(true)
+        assertTrue(model.hasChanges, "the switch is a value the dismissed form would lose")
+
+        model.onNameChanged("Gemini")
+        assertTrue(model.create())
+
+        assertTrue(port.createCalls.single().agentEnabled)
+        assertFalse(model.agentEnabled, "the next create must start from the default again")
+    }
+
+    @Test
     fun `a successful create empties the draft the pane it was drawn in will not empty`() = runTest {
         val model = AdminProjectCreateModel(RecordingAdminProjectsPort(created = storedProject()))
         model.onNameChanged("Gemini")

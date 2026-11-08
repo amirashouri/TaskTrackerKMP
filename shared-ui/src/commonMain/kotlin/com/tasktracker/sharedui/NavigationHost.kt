@@ -82,6 +82,7 @@ import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectspresentation.AgentRunModel
+import com.tasktracker.featureprojectspresentation.ProjectAgentsModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveModel
 import com.tasktracker.featureprojectspresentation.ProjectArchiveScreen
 import com.tasktracker.featureprojectspresentation.ProjectBacklogModel
@@ -2078,6 +2079,15 @@ private fun WorkItemEditorDestination(
     // the effect's scope, which ends `follow`. Reopening the item reads the terminal
     // state from `refresh` instead, so a closed app does not chase a background run.
     val agentRunsPort = currentProjectEnvironment?.agentRunsPort
+    val agentPairingPort = currentProjectEnvironment?.agentPairingPort
+    val agentRoster = remember(currentProject?.id, agentPairingPort) {
+        if (currentProject == null || agentPairingPort == null) {
+            null
+        } else {
+            ProjectAgentsModel(agentPairingPort, currentProject.id, com.tasktracker.core.SystemDateProvider())
+        }
+    }
+    LaunchedEffect(agentRoster) { agentRoster?.refresh() }
     val agentModel = remember(workItemID, agentRunsPort) {
         if (workItemID == null || agentRunsPort == null) null else AgentRunModel(workItemID, agentRunsPort)
     }
@@ -2093,9 +2103,11 @@ private fun WorkItemEditorDestination(
             {
                 WorkItemAgentSection(
                     model = agentSectionModel,
-                    onDispatch = { scope.launch { agentSectionModel.dispatch() } },
+                    onDispatch = { runnerID -> scope.launch { agentSectionModel.dispatch(runnerID) } },
                     onCancel = { scope.launch { agentSectionModel.cancel() } },
                     agentConfigured = currentProject?.agentEnabled ?: true,
+                    repoUrl = currentProject?.repoUrl,
+                    agents = agentRoster?.machines.orEmpty(),
                 )
             }
         } else {

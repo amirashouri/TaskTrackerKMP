@@ -25,6 +25,10 @@ import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.common_save
+import com.tasktracker.resources.project_agent_enabled_hint
+import com.tasktracker.resources.project_agent_enabled_label
+import com.tasktracker.resources.project_agent_enabled_off
+import com.tasktracker.resources.project_agent_enabled_on
 import com.tasktracker.resources.project_create
 import com.tasktracker.resources.project_details_label
 import com.tasktracker.resources.project_editor_edit_title
@@ -52,6 +56,8 @@ fun NewProjectForm(
     onDetailsChanged: (String) -> Unit,
     repoUrl: String = "",
     onRepoUrlChanged: (String) -> Unit = {},
+    agentEnabled: Boolean = false,
+    onAgentEnabledChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
     onDismiss: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -114,6 +120,41 @@ fun NewProjectForm(
             style = ttTypography.footnote,
             color = ttLabelSecondary(),
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            ) {
+                ttText(
+                    text = stringResource(Res.string.project_agent_enabled_label),
+                    style = ttTypography.captionEmphasised,
+                    color = ttLabelSecondary(),
+                )
+                ttText(
+                    text = stringResource(Res.string.project_agent_enabled_hint),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                )
+            }
+            ttGlassButton(
+                label = if (agentEnabled) {
+                    stringResource(Res.string.project_agent_enabled_on)
+                } else {
+                    stringResource(Res.string.project_agent_enabled_off)
+                },
+                onClick = { onAgentEnabledChanged(!agentEnabled) },
+                modifier = Modifier.testTag(NewProjectAgentEnabledTag),
+                style = if (agentEnabled) {
+                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                } else {
+                    TTGlassButtonStyle()
+                },
+            )
+        }
         ProjectMembersSection(
             selectedMemberIDs = selectedMemberIDs,
             onMemberIDsChanged = onMemberIDsChanged,
@@ -158,5 +199,6 @@ const val NewProjectFormTag = "projects.newForm"
 const val NewProjectCreateTag = "projects.newForm.create"
 const val NewProjectCancelTag = "projects.newForm.cancel"
 const val NewProjectFormErrorTag = "projects.newForm.error"
+const val NewProjectAgentEnabledTag = "projects.newForm.agentEnabled"
 
 private const val DETAILS_MIN_LINES = 3
