@@ -61,6 +61,9 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
  * upgrade story — a store left by an earlier dev build is dropped and recreated, never
  * migrated. [exportSchema] stays on so a schema change is still visible in review.
  *
+ * Version 2 adds `projects.repoUrl`; the same destructive fallback covers the version-1
+ * stores on developer machines, because there is still nothing shipped to preserve.
+ *
  * Bump the version for every schema change *after* the first production release; that
  * is when real migrations become necessary and this paragraph stops being true.
  */
@@ -78,7 +81,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         AttachmentRecord::class,
         NotificationRecord::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

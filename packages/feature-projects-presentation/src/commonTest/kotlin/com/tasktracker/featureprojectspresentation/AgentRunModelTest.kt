@@ -65,6 +65,26 @@ class AgentRunModelTest {
     }
 
     @Test
+    fun aRetryAfterAFailedDispatchReusesTheSameIdempotencyKey() = runTest {
+        var attempts = 0
+        val port = FakePort(
+            dispatchResult = {
+                attempts += 1
+                if (attempts == 1) throw com.tasktracker.core.AppError.Unknown("offline")
+                run(AgentRunStatus.Queued)
+            },
+        )
+        val model = AgentRunModel(WorkItemID(ITEM_ID), port)
+
+        model.dispatch()
+        model.dispatch()
+
+        assertEquals(2, port.dispatchCalls)
+        assertEquals(1, port.keys.distinct().size)
+        assertTrue(port.keys.first() != null)
+    }
+
+    @Test
     fun aSecondDispatchIsReportedAsAlreadyRunning() = runTest {
         val port = FakePort(dispatchResult = { throw AppError.Conflict("work item") })
         val model = AgentRunModel(WorkItemID(ITEM_ID), port)
@@ -188,11 +208,13 @@ class AgentRunModelTest {
         var runFailure: (() -> AppError)? = null,
     ) : AgentRunsPort {
         var dispatchCalls = 0
+        val keys = mutableListOf<String?>()
         var runCalls = 0
         var cancelCalls = 0
 
-        override suspend fun dispatch(workItemID: WorkItemID): AgentRun {
+        override suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String?): AgentRun {
             dispatchCalls += 1
+            keys += idempotencyKey
             return dispatchResult()
         }
 

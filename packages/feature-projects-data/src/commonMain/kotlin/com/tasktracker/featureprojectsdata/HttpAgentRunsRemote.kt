@@ -39,7 +39,14 @@ import kotlin.time.Instant
 class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
 
     @Serializable
-    private data class DispatchBody(val workItemId: String)
+    private data class DispatchBody(
+        val workItemId: String,
+        /**
+         * Omitted when the caller has no key. A server that predates the field
+         * ignores an unknown key, and the one in this build is optional.
+         */
+        val idempotencyKey: String? = null,
+    )
 
     @Serializable
     internal data class AgentRunDto(
@@ -79,11 +86,16 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
         val hasMore: Boolean,
     )
 
-    override suspend fun dispatch(workItemID: WorkItemID): AgentRun = client.send(
+    override suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String?): AgentRun = client.send(
         HttpRequest(
             method = HttpMethod.Post,
             path = "/v1/agent/runs",
-            body = jsonBody(DispatchBody(workItemID.stringValue)),
+            body = jsonBody(
+                DispatchBody(
+                    workItemId = workItemID.stringValue,
+                    idempotencyKey = idempotencyKey,
+                ),
+            ),
         ),
         decoding = RunEnvelope.serializer(),
     ).run.toDomain()

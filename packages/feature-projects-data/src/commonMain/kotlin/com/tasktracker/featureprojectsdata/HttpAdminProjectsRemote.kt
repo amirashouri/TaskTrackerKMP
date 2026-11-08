@@ -126,6 +126,8 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val name: String,
         val details: String,
         val memberIds: List<String>,
+        /** Optional and omitted when unset; the server validates the scheme. */
+        val repoUrl: String? = null,
     )
 
     /**
@@ -146,6 +148,12 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val keyPrefix: String,
         val name: String,
         val details: String,
+        /**
+         * The project's repository URL, defaulted because a server that predates the field
+         * omits it entirely. A project without one reads as unset rather than as a blank
+         * URL, which is the same value the editor shows as an empty field.
+         */
+        val repoUrl: String? = null,
         /** Admin-owned tag catalog; defaulted so a server that predates tags still decodes. */
         val tags: List<ProjectTag> = emptyList(),
         /** Admin-owned workflow catalog; defaulted so a server that predates it still decodes. */
@@ -166,6 +174,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         keyPrefix = keyPrefix,
         name = name,
         details = details,
+        repoUrl = repoUrl,
         tags = tags,
         statuses = statuses,
         memberIDs = memberIds.mapNotNull { parseUserIDOrNull(it) },
@@ -203,6 +212,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         val keyPrefix: String,
         val name: String,
         val details: String,
+        val repoUrl: String? = null,
         val tags: List<ProjectTag> = emptyList(),
         val statuses: List<StatusDefinition> = emptyList(),
         val memberIds: List<String>,
@@ -222,6 +232,9 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         keyPrefix = project.keyPrefix,
         name = project.name,
         details = project.details,
+        // Empty rather than null on an edit: the server reads null as "leave the stored
+        // URL alone" and an empty string as "clear it", so the two are not interchangeable.
+        repoUrl = project.repoUrl.orEmpty(),
         tags = project.tags,
         statuses = project.statuses,
         memberIds = project.memberIDs.map { it.stringValue },
@@ -284,6 +297,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
         keyPrefix: String,
         details: String,
         memberIDs: List<UserID>,
+        repoUrl: String? = null,
     ): AdminProject {
         val id = randomProjectID()
         val body = CreateProjectRequestBody(
@@ -292,6 +306,7 @@ class HttpAdminProjectsRemote(private val client: HttpClient) {
             name = name,
             details = details,
             memberIds = memberIDs.map { it.stringValue },
+            repoUrl = repoUrl,
         )
         return try {
             client.send(

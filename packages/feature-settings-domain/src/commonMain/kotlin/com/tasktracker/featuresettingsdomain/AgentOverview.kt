@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingsdomain
 
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
@@ -23,6 +24,11 @@ data class AgentMachine(
     val lastSeenAt: Instant? = null,
     val pausedAt: Instant? = null,
     val revokedAt: Instant? = null,
+    /**
+     * The project this machine was paired to, or `null` for a legacy machine-wide
+     * registration or a server that predates the key.
+     */
+    val projectID: ProjectID? = null,
 ) {
     /** A revoked machine is history, not something the agent section can operate. */
     val isLive: Boolean get() = revokedAt == null

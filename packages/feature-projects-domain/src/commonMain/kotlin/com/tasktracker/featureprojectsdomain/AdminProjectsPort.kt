@@ -31,6 +31,8 @@ interface AdminProjectsPort {
         keyPrefix: String,
         details: String,
         memberIDs: List<UserID>,
+        /** Optional; omitted entirely when the admin leaves the field empty. */
+        repoUrl: String? = null,
     ): AdminProject
 
     @Throws(AppError::class, CancellationException::class)

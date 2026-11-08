@@ -379,6 +379,15 @@ data class Project(
      */
     @SerialName("version")
     var version: String = "",
+    /**
+     * Where the project's code lives, or `null` when the admin has not set one.
+     *
+     * Optional and defaulted so a payload from a server that predates the field, a row
+     * stored before the column existed, and a project with no repository all read as
+     * "not set" rather than failing to decode. This is metadata, not authorization: a
+     * private repository's credentials are provisioned to the agent and never ride here.
+     */
+    var repoUrl: String? = null,
 ) {
     init {
         // A counter below 1 would re-issue a key that has already been used, so the

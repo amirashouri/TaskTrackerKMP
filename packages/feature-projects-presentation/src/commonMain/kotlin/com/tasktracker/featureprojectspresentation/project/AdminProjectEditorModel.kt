@@ -43,6 +43,7 @@ class AdminProjectEditorModel(
     private var seeded: AdminProject? = null
     private var originalName: String = ""
     private var originalDetails: String = ""
+    private var originalRepoUrl: String? = null
     private var originalTags: List<ProjectTag> = emptyList()
     private var originalStatuses: List<StatusDefinition> = emptyList()
 
@@ -65,6 +66,10 @@ class AdminProjectEditorModel(
     var details: String by mutableStateOf("")
         private set
 
+    /** Optional repository URL; empty means unset, which the server stores as absent. */
+    var repoUrl: String by mutableStateOf("")
+        private set
+
     /** Admin-managed project tag catalog. */
     var tags: List<ProjectTag> by mutableStateOf(emptyList())
         private set
@@ -76,6 +81,7 @@ class AdminProjectEditorModel(
     val hasChanges: Boolean
         get() = name.trim() != originalName ||
                 details.trim() != originalDetails ||
+                repoUrl.trim().takeIf { it.isNotEmpty() } != originalRepoUrl ||
                 tags != originalTags ||
                 statuses != originalStatuses
 
@@ -101,10 +107,12 @@ class AdminProjectEditorModel(
             name = found.project.name
             keyPrefix = found.project.keyPrefix
             details = found.project.details
+            repoUrl = found.project.repoUrl.orEmpty()
             tags = found.project.tags.map { it.copy() }
             statuses = catalog.map { it.copy() }
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
+            originalRepoUrl = found.project.repoUrl
             originalTags = found.project.tags.map { it.copy() }
             // The seed is the project's *effective* catalog, so inheriting it is not an edit:
             // Save stays disabled until the admin actually changes something.
@@ -126,6 +134,10 @@ class AdminProjectEditorModel(
 
     fun onDetailsChanged(value: String) {
         details = value
+    }
+
+    fun onRepoUrlChanged(value: String) {
+        repoUrl = value
     }
 
     /** Validates against [TagRules] and appends tag if name is unique (case-insensitive). */
@@ -200,6 +212,7 @@ class AdminProjectEditorModel(
                     current.project.copy(
                         name = name.trim(),
                         details = details.trim(),
+                        repoUrl = repoUrl.trim().takeIf { it.isNotEmpty() },
                         tags = tags.map { it.copy(name = TagRules.normaliseName(it.name)) }
                             .filter { it.name.isNotEmpty() },
                         statuses = renumbered(
@@ -214,10 +227,12 @@ class AdminProjectEditorModel(
             seeded = saved
             name = saved.project.name
             details = saved.project.details
+            repoUrl = saved.project.repoUrl.orEmpty()
             tags = saved.project.tags.map { it.copy() }
             statuses = saved.project.statuses.map { it.copy() }
             originalName = saved.project.name.trim()
             originalDetails = saved.project.details.trim()
+            originalRepoUrl = saved.project.repoUrl
             originalTags = saved.project.tags.map { it.copy() }
             originalStatuses = saved.project.statuses.map { it.copy() }
             return true

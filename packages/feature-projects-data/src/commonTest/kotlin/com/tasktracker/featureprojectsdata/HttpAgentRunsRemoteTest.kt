@@ -24,7 +24,7 @@ class HttpAgentRunsRemoteTest {
         val client = QueueHttpClient(listOf(RUN_ENVELOPE))
         val remote = HttpAgentRunsRemote(client)
 
-        val run = remote.dispatch(WorkItemID(ITEM_ID))
+        val run = remote.dispatch(WorkItemID(ITEM_ID), "intent-1")
 
         val request = client.requests.single()
         assertEquals(HttpMethod.Post, request.method)
@@ -32,6 +32,7 @@ class HttpAgentRunsRemoteTest {
         assertTrue(request.requiresAuth)
         val body = JSONCoding.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
         assertEquals(ITEM_ID, body["workItemId"]!!.jsonPrimitive.content)
+        assertEquals("intent-1", body["idempotencyKey"]!!.jsonPrimitive.content)
 
         assertEquals(AgentRunStatus.Running, run.status)
         assertEquals("0195c3a4-0000-7000-8000-0000000000aa", run.runnerID?.stringValue)
