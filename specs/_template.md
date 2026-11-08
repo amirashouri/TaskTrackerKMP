@@ -8,8 +8,11 @@
 
 ## Scope
 
-The modules and layers this task may touch. If a file outside this list has to change,
+The modules, layers, and targets this task may touch. If a file outside this list has to change,
 that is the Drift Constraint in `AGENTS.md` — abort, re-plan, get a second `ACK`.
+
+- **Targets affected:** commonMain | androidMain | iosMain | desktopMain
+- **Modules affected:** e.g., `packages:core`, `packages:sharedui`
 
 ## Files
 
@@ -24,6 +27,7 @@ checks these, not good intentions.
 
 - [ ] <an observable property a test pins>
 - [ ] <the property still holds when the production change is reverted (Rule 1)>
+- [ **KMP Constraint:** No platform-specific APIs (`java.*`, `android.*`, etc.) introduced into `commonMain` without an explicit `expect/actual` contract.]
 
 ## Non-goal
 
@@ -34,13 +38,15 @@ become catch-all cleanup.
 
 ## Validation
 
-- Run: `./gradlew --offline :packages:<module>:jvmTest --tests '<pattern>'` — focused, under
-  a minute; one line per touched module. `scripts/check.sh` is the release gate and is not
-  run per task; name any host-only check this change still needs and leave it pending.
-- Counts: <how `test-baseline.json` would move at release — which host(s), and why>. It is
-  regenerated from a `scripts/check.sh full` run, not from the focused run.
-- Pixel-reading tests go through the `test-reviewer` subagent before the PR.
-  Structural and behavioral tests do not need this review.
+- **Iteration Phase (Use during coding):**
+  Run: `scripts/check.sh quick <module> '<TestClass>.<testName>'`
+  *(Fast, keeps test XML caches, skips baselines. Run this frequently to iterate under seconds).*
+- **Handoff Phase (Run once before marking done):**
+  Run: `scripts/check.sh` (or `scripts/check.sh fast`) to execute JVM unit tests + architecture graph checks (`verifyArchitectureGraph`, `verifyModuleImports`).
+- **Counts / Baselines:**
+  If structural test suites change, `test-baseline.json` may shift. Regenerate via a full run if needed (`scripts/check.sh full` — note: requires macOS for iOS target).
+- **UI / Pixel-reading tests:**
+  Go through the `test-reviewer` subagent before the PR. Structural and behavioral tests do not need this review.
 
 ## Handoff
 
@@ -54,4 +60,4 @@ sessions; a committed spec does not depend on chat context.
 
 ## Risks / notes
 
-- <what is easy to get wrong here>
+- <what is easy to get wrong here, e.g., Compose state preservation across recompositions, KMP expect/actual platform gotchas>
