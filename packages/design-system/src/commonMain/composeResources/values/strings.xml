@@ -904,4 +904,8 @@
     <string name="project_agent_enabled_on">On</string>
     <string name="project_agent_enabled_off">Off</string>
     <string name="agent_repository">Repository: %1$s</string>
+    <string name="agent_view_log">View full log</string>
+    <string name="agent_log_title">Run log</string>
+    <string name="agent_log_loading">Loading full log…</string>
+    <string name="agent_log_empty">No log lines yet.</string>
 </resources>

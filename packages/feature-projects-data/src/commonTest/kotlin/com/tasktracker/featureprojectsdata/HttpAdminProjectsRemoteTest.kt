@@ -294,7 +294,7 @@ class HttpAdminProjectsRemoteTest {
             body["memberIds"]!!.jsonArray.map { it.jsonPrimitive.content },
         )
         assertEquals(
-            setOf("id", "name", "keyPrefix", "details", "memberIds", "repoUrl"),
+            setOf("id", "name", "keyPrefix", "details", "memberIds", "repoUrl", "agentEnabled"),
             body.keys,
             "the create body carries a field the server owns, which the server then has to " +
                 "ignore or be overwritten by",

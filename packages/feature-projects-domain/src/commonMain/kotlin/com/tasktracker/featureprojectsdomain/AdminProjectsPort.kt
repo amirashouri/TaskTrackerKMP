@@ -33,6 +33,8 @@ interface AdminProjectsPort {
         memberIDs: List<UserID>,
         /** Optional; omitted entirely when the admin leaves the field empty. */
         repoUrl: String? = null,
+        /** The admin's per-project switch; the server default is off. */
+        agentEnabled: Boolean = false,
     ): AdminProject
 
     @Throws(AppError::class, CancellationException::class)

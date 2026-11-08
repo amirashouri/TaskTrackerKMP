@@ -60,8 +60,9 @@ class RecordingAdminProjectsPort(
         details: String,
         memberIDs: List<UserID>,
         repoUrl: String?,
+        agentEnabled: Boolean,
     ): AdminProject {
-        createCalls += CreateProjectCall(name, keyPrefix, details, memberIDs)
+        createCalls += CreateProjectCall(name, keyPrefix, details, memberIDs, agentEnabled)
         createFailure?.let { throw it }
         return created ?: error("RecordingAdminProjectsPort.created was not set for this test")
     }
@@ -119,4 +120,5 @@ data class CreateProjectCall(
     val keyPrefix: String,
     val details: String,
     val memberIDs: List<UserID>,
+    val agentEnabled: Boolean,
 )

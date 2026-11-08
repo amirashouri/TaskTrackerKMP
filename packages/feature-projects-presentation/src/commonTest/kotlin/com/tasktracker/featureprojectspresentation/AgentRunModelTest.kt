@@ -117,6 +117,27 @@ class AgentRunModelTest {
     }
 
     @Test
+    fun loadingTheFullLogFollowsTheCursorUntilTheServerHasNoMore() = runTest {
+        val queued = run(AgentRunStatus.Queued)
+        val port = FakePort(
+            dispatchResult = { queued },
+            pages = mutableListOf(
+                page(queued, event(1, "log", "first"), hasMore = true),
+                page(queued, event(2, "log", "second"), hasMore = true),
+                page(queued, event(3, "log", "third"), hasMore = false),
+            ),
+        )
+        val model = AgentRunModel(WorkItemID(ITEM_ID), port)
+        model.dispatch()
+
+        model.loadFullLog()
+
+        assertEquals(listOf(1L, 2L, 3L), model.events.map { it.seq })
+        assertEquals(3, port.runCalls, "each page follows the cursor the previous one advanced")
+        assertFalse(model.isLoadingLog)
+    }
+
+    @Test
     fun pollingStopsOnAFailedRunToo() = runTest {
         val queued = run(AgentRunStatus.Queued)
         val failed = run(AgentRunStatus.Failed, error = "model unreachable")

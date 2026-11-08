@@ -114,6 +114,8 @@ fun AdminProjectsDestination(
                 onDetailsChanged = create::onDetailsChanged,
                 repoUrl = create.repoUrl,
                 onRepoUrlChanged = create::onRepoUrlChanged,
+                agentEnabled = create.agentEnabled,
+                onAgentEnabledChanged = create::onAgentEnabledChanged,
                 onSave = { scope.launch { create.create() } },
                 onDismiss = null,
                 modifier = Modifier.padding(ttSpacing.lg),
@@ -174,6 +176,8 @@ fun AdminProjectsDestination(
             onDetailsChanged = create::onDetailsChanged,
             repoUrl = create.repoUrl,
             onRepoUrlChanged = create::onRepoUrlChanged,
+            agentEnabled = create.agentEnabled,
+            onAgentEnabledChanged = create::onAgentEnabledChanged,
             onSave = {
                 scope.launch {
                     // Closing on `true` only: a failed create leaves the form open with its

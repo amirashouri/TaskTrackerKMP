@@ -120,17 +120,17 @@ implementation scope without a secondary ACK.
   retry states and no persistence. The project editor now reads the project's
   live machines through the same port and shows running/offline/stopped derived
   from one heartbeat observation, refreshing after the pairing sheet closes.
-  The admin editor has the per-project `agentEnabled` switch, the work-item
-  agent block shows the project repository, and Settings shows each machine's
-  health beside its model summary instead of replacing it. Dispatch still
-  carries a stable idempotency key.
+  Both project forms carry the per-project `agentEnabled` switch, the work-item
+  agent block shows the project repository, and the run section pages the event
+  cursor behind a full-log sheet. Settings shows each machine's health beside
+  its model summary instead of replacing it. Dispatch still carries a stable
+  idempotency key.
 - **Pending:** A local-desktop vs remote/VPS host label needs a server runner
   field; choosing a specific project agent for a dispatch needs a server
-  `runnerId` on the run contract; the full run log/diff view needs a paginated
-  result contract. The pairing CLI flag (`tt agent connect --pairing-code`) is
-  still not implemented, and the create form cannot set `agentEnabled` because
-  the admin create route does not accept it yet. Structural Compose scenarios
-  for the roster and toggle have not been added; model and serialization tests
+  `runnerId` on the run contract; a diff/PR view needs an agent result
+  contract, not just a longer log. The pairing CLI flag (`tt agent connect
+  --pairing-code`) is still not implemented. Structural Compose scenarios for
+  the roster and toggle have not been added; model and serialization tests
   cover the behaviour.
 - **Next step:** Agree the server runner host field and run `runnerId` with the
   server spec, then add the CLI flag and run `scripts/check.sh full` as the

@@ -55,6 +55,10 @@ class AgentRunModel(
     var isUnavailable by mutableStateOf(false)
         private set
 
+    /** True while the full-log sheet is walking the event cursor. */
+    var isLoadingLog by mutableStateOf(false)
+        private set
+
     private var afterSeq: Long = 0
     private var consecutiveFailures: Int = 0
 
@@ -89,6 +93,34 @@ class AgentRunModel(
         if (latest.status.isTerminal && latest.id == run?.id) {
             // A finished run still has a log worth showing, and it never changes.
             readDetail(latest.id)
+        }
+    }
+
+    /**
+     * Reads every remaining event page for the current run, for the full-log sheet.
+     *
+     * The live section only keeps the tail; this fills in the earlier lines without
+     * changing the polling cursor's meaning. The loop stops when the server says there
+     * is no more, when a page returns no progress (so a bad cursor cannot spin), or at
+     * [MAX_LOG_PAGES] as a final bound.
+     */
+    suspend fun loadFullLog() {
+        val current = run ?: return
+        if (isLoadingLog) return
+        isLoadingLog = true
+        try {
+            var page = reporting { port.run(current.id, afterSeq) } ?: return
+            applyPage(page)
+            var pages = 1
+            while (page.hasMore && pages < MAX_LOG_PAGES) {
+                val before = events.size
+                page = reporting { port.run(current.id, afterSeq) } ?: return
+                applyPage(page)
+                pages++
+                if (page.events.isEmpty() && events.size == before) break
+            }
+        } finally {
+            isLoadingLog = false
         }
     }
 
@@ -215,5 +247,8 @@ class AgentRunModel(
         val RETRY_POLL_INTERVAL: Duration = 8.seconds
 
         const val FAILURE_THRESHOLD: Int = 3
+
+        /** A hard stop for a server that keeps claiming there is another page. */
+        const val MAX_LOG_PAGES: Int = 20
     }
 }

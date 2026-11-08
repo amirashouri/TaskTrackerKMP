@@ -123,9 +123,10 @@ class FakeAdminProjectsPort(
         details: String,
         memberIDs: List<UserID>,
         repoUrl: String?,
+        agentEnabled: Boolean,
     ): AdminProject {
         val project = shellTestProject(name = name, keyPrefix = keyPrefix)
-            .copy(details = details, memberIDs = memberIDs)
+            .copy(details = details, memberIDs = memberIDs, agentEnabled = agentEnabled)
         val stored = AdminProject(project, version = "1")
         created += stored
         byID[project.id] = stored
