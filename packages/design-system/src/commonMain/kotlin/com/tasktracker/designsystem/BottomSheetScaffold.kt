@@ -94,7 +94,11 @@ fun TTBottomSheetScaffold(
                             Modifier
                                 .widthIn(max = 560.dp)
                                 .heightIn(max = 760.dp)
-                                .padding(horizontal = ttSpacing.xl, vertical = 72.dp)
+                                // The form has its own 16dp inset on each side. At 72dp
+                                // this window needs 776dp for a full form, so the 760dp
+                                // cap makes it scroll 16dp: the measured centre reads
+                                // low and the action row lands below the viewport.
+                                .padding(horizontal = ttSpacing.xl, vertical = 56.dp)
                         } else {
                             Modifier
                                 .fillMaxWidth()
@@ -134,7 +138,14 @@ fun TTBottomSheetScaffold(
                         thickness = ttGlass.GlassThickness.THICK,
                         base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
                     )
-                    .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xxl),
+                    .padding(
+                        horizontal = ttSpacing.md,
+                        // A window's form fills the scroll viewport. Its own bottom
+                        // inset would be the one part scrolled out of view, leaving
+                        // the tagged form exactly that far below the window's centre.
+                        // The window's outer padding supplies the clearance instead.
+                        vertical = if (isWindow) 0.dp else ttSpacing.xxl,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
                 content = content,
             )

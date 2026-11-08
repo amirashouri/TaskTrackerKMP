@@ -176,9 +176,13 @@ object WorkItemGrouping {
      * Newest first because that is the order an archive is read in, and unlike every
      * other listing it sorts by when the item left the flow rather than by manual rank —
      * a resolved item's rank says nothing useful, since its column no longer exists.
+     *
+     * Archive membership is [WorkItemStatus.isTerminal], the same predicate the board,
+     * the backlog and the sprint summary read. `WorkItem.isArchived` is a separate flag
+     * that the file-away path never sets, so filtering on it empties the archive.
      */
     fun resolved(items: List<WorkItem>): List<WorkItem> =
-        items.filter { it.isArchived }
+        items.filter { it.status.isTerminal }
             .sortedByDescending { it.archivedOn }
 
     /**

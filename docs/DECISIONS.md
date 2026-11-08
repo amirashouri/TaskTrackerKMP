@@ -96,6 +96,13 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   not filter on `Closed`, or it disagrees with `ArchiveWorkItem` and the Archive
   tab. A `Done` item is in both the board's done lane and the archive; counts
   must be `items.size`, never the sum of the sections.
+- **`WorkItem.isArchived` is not archive membership.** The flag is a separate,
+  user-owned filing choice that the file-away path never sets. Switching
+  `WorkItemGrouping.resolved` to filter on it emptied the archive and turned four
+  domain tests red on every host, while `Projections.kt` still read `isTerminal`
+  for the same question — the two listings disagreed about what work was finished.
+  "Finished" is a workflow fact (`isTerminal`); "filed away" is a filing choice
+  (`isArchived`). Never replace one predicate with the other.
 - **A preference is shell state.** A feature `presentation` module may not see
   `:packages:user-defaults`, so a screen takes a value plus a change callback
   and `:shared-ui` holds it in `ShellPreferences`. `remember` inside a
@@ -157,6 +164,16 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
 - **Baseline drift is not your regression.** `test-baseline.json` is regenerated
   only from `scripts/check.sh full` and can be stale on `main`. Compare the delta
   against the number of `@Test` lines you added before assuming you broke it.
+  Regenerate from a *green* run only (zero failures and errors on every host),
+  then re-run the gate: `check-baseline.sh` alone proves the counts, not the tests.
+- **A windowed sheet's padding is part of its measured geometry.**
+  `TTBottomSheetScaffold` caps the window with `heightIn(max = 760.dp)`; 72dp of
+  outer padding plus the form's own 16dp inset needs 776dp, so the content
+  scrolled 16dp — the centre read low and the action row fell below the viewport.
+  Window clearance belongs on the outer padding (56dp), and the inner vertical
+  padding is `0.dp` in window mode. Reverting only the inner padding reproduces
+  the centring failure; restoring 72dp reproduces both it and the missing created
+  project. Mutate each padding separately before claiming which test it serves.
 - **A comment claiming "test X cannot see Y" is unverified.** Two guards can
   overlap completely; mutate the behaviour, run both, and write down which one
   goes red. That is the only way to know a pair of tests is complementary.
