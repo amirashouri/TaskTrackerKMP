@@ -2081,10 +2081,11 @@ private fun WorkItemEditorDestination(
     val agentRunsPort = currentProjectEnvironment?.agentRunsPort
     val agentPairingPort = currentProjectEnvironment?.agentPairingPort
     val agentRoster = remember(currentProject?.id, agentPairingPort) {
-        if (currentProject == null || agentPairingPort == null) {
+        val project = currentProject
+        if (project == null || agentPairingPort == null) {
             null
         } else {
-            ProjectAgentsModel(agentPairingPort, currentProject.id, com.tasktracker.core.SystemDateProvider())
+            ProjectAgentsModel(agentPairingPort, project.id, com.tasktracker.core.SystemDateProvider())
         }
     }
     LaunchedEffect(agentRoster) { agentRoster?.refresh() }
