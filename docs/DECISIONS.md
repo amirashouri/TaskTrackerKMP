@@ -56,6 +56,21 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   off: a response may not gain, lose or rename a key unless the client ships
   first with a default. Every optional DTO field needs a default; enabling
   `ignoreUnknownKeys` globally is not a substitute.
+- **The agent wire names are the ones that shipped, not the ones the spec
+  proposed.** `host`, dispatch request `runnerId` → run response
+  `requestedRunnerId`, and `diff` are the contract. `requestedRunnerID` and
+  `resultDiff` were never adopted: a case-only rename breaks installed builds, so
+  a tidier name in a spec is not a reason to change the wire. Request and
+  response keys need not match — `runnerId` is the target picker's choice on the
+  way in, `requestedRunnerId` is the stored target, and `runnerId` on the run is
+  the machine that actually claimed. All three response keys are defaulted on the
+  DTO and `omitempty` on the server, so an untargeted run without a diff gains no
+  new key at all.
+- **`host` is a stated fact, not a third kind.** `desktop` and `remote` are the
+  only kinds; null or empty means "not stated" (a legacy machine or an older
+  client's pairing code). Redeeming a code copies its `host` and `projectId` onto
+  the runner, so the machine cannot name its own project. A UI that reads an
+  empty host as "desktop" would mislabel every legacy machine.
 - **The connect link is one shared grammar.**
   `tasktracker://connect?url=<QueryEscape(the whole verified URL)>` is rendered
   by `tt install` and percent-decoded exactly once by the client. Escape the
