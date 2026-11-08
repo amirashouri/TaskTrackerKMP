@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
 import com.tasktracker.featureprojectsdomain.AgentPairingCode
+import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -29,6 +30,14 @@ class ProjectAgentSetupModel(
     var isRequesting by mutableStateOf(false)
         private set
 
+    /** The host choice sent with the code; the default is the machine in front of the admin. */
+    var host by mutableStateOf(AgentPairingHost.Desktop)
+        private set
+
+    fun onHostChanged(value: AgentPairingHost) {
+        host = value
+    }
+
     /**
      * Issues a new code, replacing any previous one.
      *
@@ -41,7 +50,7 @@ class ProjectAgentSetupModel(
         isRequesting = true
         dismissError()
         try {
-            pairingCode = port.createPairingCode(projectID)
+            pairingCode = port.createPairingCode(projectID, host)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: AppError) {

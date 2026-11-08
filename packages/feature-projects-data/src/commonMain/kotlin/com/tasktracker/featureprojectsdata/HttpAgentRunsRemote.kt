@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AgentRunID
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
 import com.tasktracker.core.WorkItemID
@@ -46,6 +47,8 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
          * ignores an unknown key, and the one in this build is optional.
          */
         val idempotencyKey: String? = null,
+        /** Omitted when the dispatcher did not choose a machine. */
+        val runnerId: String? = null,
     )
 
     @Serializable
@@ -56,12 +59,14 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
         val status: String,
         val requestedBy: String,
         val runnerId: String? = null,
+        val requestedRunnerId: String? = null,
         val cancelRequested: Boolean = false,
         val createdAt: String,
         val startedAt: String? = null,
         val finishedAt: String? = null,
         val summary: String = "",
         val error: String = "",
+        val diff: String = "",
     )
 
     @Serializable
@@ -86,7 +91,11 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
         val hasMore: Boolean,
     )
 
-    override suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String?): AgentRun = client.send(
+    override suspend fun dispatch(
+        workItemID: WorkItemID,
+        idempotencyKey: String?,
+        runnerID: AgentRunnerID?,
+    ): AgentRun = client.send(
         HttpRequest(
             method = HttpMethod.Post,
             path = "/v1/agent/runs",
@@ -94,6 +103,7 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
                 DispatchBody(
                     workItemId = workItemID.stringValue,
                     idempotencyKey = idempotencyKey,
+                    runnerId = runnerID?.stringValue,
                 ),
             ),
         ),
@@ -151,12 +161,17 @@ class HttpAgentRunsRemote(private val client: HttpClient) : AgentRunsPort {
             parseAgentRunnerID(raw)
                 ?: throw AppError.Decoding("Agent run runnerId \"$raw\" is not a UUID.")
         },
+        requestedRunnerID = requestedRunnerId?.let { raw ->
+            parseAgentRunnerID(raw)
+                ?: throw AppError.Decoding("Agent run requestedRunnerId \"$raw\" is not a UUID.")
+        },
         cancelRequested = cancelRequested,
         createdAt = createdAt.toInstant("createdAt"),
         startedAt = startedAt?.toInstant("startedAt"),
         finishedAt = finishedAt?.toInstant("finishedAt"),
         summary = summary,
         error = error,
+        diff = diff,
     )
 
     private fun AgentEventDto.toDomain(): AgentRunEvent = AgentRunEvent(

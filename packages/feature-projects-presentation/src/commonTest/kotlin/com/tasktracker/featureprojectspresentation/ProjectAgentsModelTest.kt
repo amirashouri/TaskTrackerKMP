@@ -94,7 +94,7 @@ class ProjectAgentsModelTest {
 
         var failure: AppError? = null
 
-        override suspend fun createPairingCode(projectID: ProjectID): AgentPairingCode =
+        override suspend fun createPairingCode(projectID: ProjectID, host: com.tasktracker.featureprojectsdomain.AgentPairingHost): AgentPairingCode =
             error("the roster never mints pairing codes")
 
         override suspend fun machines(projectID: ProjectID): List<ProjectAgentMachine> {

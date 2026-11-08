@@ -866,6 +866,8 @@
     <string name="settings_agent_running">Running</string>
     <string name="settings_agent_offline">Offline</string>
     <string name="settings_agent_stopped">Stopped</string>
+    <string name="settings_agent_host_desktop">Desktop</string>
+    <string name="settings_agent_host_remote">Remote / VPS</string>
     <string name="settings_agent_empty">No machine has been paired yet.</string>
     <string name="settings_agent_stop">Stop</string>
     <string name="settings_agent_start">Start</string>
@@ -887,6 +889,9 @@
     -->
     <string name="project_agent_title">Agent</string>
     <string name="project_agent_pair">Pair an agent</string>
+    <string name="project_agent_host_label">Where will this machine run?</string>
+    <string name="project_agent_host_desktop">This desktop</string>
+    <string name="project_agent_host_remote">Remote / VPS</string>
     <string name="project_agent_body">Pair the machine that holds this repository. The code works once and expires in ten minutes.</string>
     <string name="project_agent_code_label">Pairing code</string>
     <string name="project_agent_expires">Expires %1$s</string>
@@ -908,4 +913,8 @@
     <string name="agent_log_title">Run log</string>
     <string name="agent_log_loading">Loading full log…</string>
     <string name="agent_log_empty">No log lines yet.</string>
+    <string name="agent_run_on">Run on</string>
+    <string name="agent_any_machine">Any machine</string>
+    <string name="agent_view_diff">View diff</string>
+    <string name="agent_diff_title">Changes</string>
 </resources>

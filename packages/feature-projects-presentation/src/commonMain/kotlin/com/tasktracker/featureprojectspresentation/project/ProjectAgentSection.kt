@@ -41,6 +41,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.ProjectAgentMachine
 import com.tasktracker.featureprojectsdomain.ProjectAgentState
@@ -54,6 +55,9 @@ import com.tasktracker.resources.project_agent_copy_code
 import com.tasktracker.resources.project_agent_copy_command
 import com.tasktracker.resources.project_agent_expires
 import com.tasktracker.resources.project_agent_failure
+import com.tasktracker.resources.project_agent_host_desktop
+import com.tasktracker.resources.project_agent_host_label
+import com.tasktracker.resources.project_agent_host_remote
 import com.tasktracker.resources.project_agent_machines_empty
 import com.tasktracker.resources.project_agent_machines_loading
 import com.tasktracker.resources.project_agent_note
@@ -207,9 +211,13 @@ private fun AgentMachineRow(machine: ProjectAgentMachine, state: ProjectAgentSta
                 style = ttTypography.footnote,
                 color = ttLabel(),
             )
-            if (machine.modelSummary.isNotBlank()) {
+            val detail = listOfNotNull(
+                machine.host?.let { projectAgentHostLabel(it) },
+                machine.modelSummary.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (detail.isNotBlank()) {
                 ttText(
-                    text = machine.modelSummary,
+                    text = detail,
                     style = ttTypography.captionSmall,
                     color = ttLabelSecondary(),
                 )
@@ -222,6 +230,14 @@ private fun AgentMachineRow(machine: ProjectAgentMachine, state: ProjectAgentSta
         )
     }
 }
+
+@Composable
+private fun projectAgentHostLabel(host: AgentPairingHost): String = stringResource(
+    when (host) {
+        AgentPairingHost.Desktop -> Res.string.project_agent_host_desktop
+        AgentPairingHost.Remote -> Res.string.project_agent_host_remote
+    },
+)
 
 @Composable
 private fun projectAgentStateLabel(state: ProjectAgentState): String = stringResource(
@@ -276,6 +292,37 @@ private fun AgentPairingSheet(
             style = ttTypography.title,
             color = ttLabel(),
         )
+
+        ttText(
+            text = stringResource(Res.string.project_agent_host_label),
+            style = ttTypography.captionEmphasised,
+            color = ttLabelSecondary(),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        ) {
+            ttGlassButton(
+                label = stringResource(Res.string.project_agent_host_desktop),
+                onClick = { model.onHostChanged(AgentPairingHost.Desktop) },
+                modifier = Modifier.testTag(ProjectAgentHostDesktopTag),
+                style = if (model.host == AgentPairingHost.Desktop) {
+                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                } else {
+                    TTGlassButtonStyle()
+                },
+            )
+            ttGlassButton(
+                label = stringResource(Res.string.project_agent_host_remote),
+                onClick = { model.onHostChanged(AgentPairingHost.Remote) },
+                modifier = Modifier.testTag(ProjectAgentHostRemoteTag),
+                style = if (model.host == AgentPairingHost.Remote) {
+                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                } else {
+                    TTGlassButtonStyle()
+                },
+            )
+        }
 
         val code = model.pairingCode
         when {
@@ -404,3 +451,5 @@ const val ProjectAgentCopyCommandTag = "projects.agent.copy.command"
 const val ProjectAgentRetryTag = "projects.agent.retry"
 const val ProjectAgentDoneTag = "projects.agent.done"
 const val ProjectAgentErrorTag = "projects.agent.error"
+const val ProjectAgentHostDesktopTag = "projects.agent.host.desktop"
+const val ProjectAgentHostRemoteTag = "projects.agent.host.remote"

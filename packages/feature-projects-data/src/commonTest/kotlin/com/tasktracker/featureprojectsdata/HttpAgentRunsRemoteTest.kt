@@ -1,5 +1,6 @@
 package com.tasktracker.featureprojectsdata
 
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.featureprojectsdomain.AgentRunStatus
@@ -24,7 +25,7 @@ class HttpAgentRunsRemoteTest {
         val client = QueueHttpClient(listOf(RUN_ENVELOPE))
         val remote = HttpAgentRunsRemote(client)
 
-        val run = remote.dispatch(WorkItemID(ITEM_ID), "intent-1")
+        val run = remote.dispatch(WorkItemID(ITEM_ID), "intent-1", AgentRunnerID(RUNNER_ID))
 
         val request = client.requests.single()
         assertEquals(HttpMethod.Post, request.method)
@@ -33,6 +34,7 @@ class HttpAgentRunsRemoteTest {
         val body = JSONCoding.json.parseToJsonElement(request.body!!.decodeToString()).jsonObject
         assertEquals(ITEM_ID, body["workItemId"]!!.jsonPrimitive.content)
         assertEquals("intent-1", body["idempotencyKey"]!!.jsonPrimitive.content)
+        assertEquals(RUNNER_ID, body["runnerId"]!!.jsonPrimitive.content)
 
         assertEquals(AgentRunStatus.Running, run.status)
         assertEquals("0195c3a4-0000-7000-8000-0000000000aa", run.runnerID?.stringValue)
@@ -122,6 +124,8 @@ class HttpAgentRunsRemoteTest {
         assertNull(dto.finishedAt)
         assertEquals("", dto.summary)
         assertEquals("", dto.error)
+        assertEquals("", dto.diff)
+        assertNull(dto.requestedRunnerId)
         assertEquals(false, dto.cancelRequested)
     }
 
@@ -146,6 +150,7 @@ class HttpAgentRunsRemoteTest {
 
     private companion object {
         const val RUN_ID = "0195c3a4-0000-7000-8000-000000000001"
+        const val RUNNER_ID = "0195c3a4-0000-7000-8000-0000000000aa"
         const val ITEM_ID = "0195c3a4-0000-7000-8000-000000000002"
         const val PROJECT_ID = "0195c3a4-0000-7000-8000-000000000003"
         const val USER_ID = "0195c3a4-0000-7000-8000-000000000004"

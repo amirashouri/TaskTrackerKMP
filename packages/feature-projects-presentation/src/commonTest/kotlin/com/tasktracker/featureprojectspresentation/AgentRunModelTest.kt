@@ -65,6 +65,18 @@ class AgentRunModelTest {
     }
 
     @Test
+    fun aDispatchCanTargetOneMachine() = runTest {
+        val queued = run(AgentRunStatus.Queued)
+        val port = FakePort(dispatchResult = { queued })
+        val model = AgentRunModel(WorkItemID(ITEM_ID), port)
+
+        model.dispatch(AgentRunnerID(RUNNER_ID))
+
+        assertEquals(listOf<AgentRunnerID?>(AgentRunnerID(RUNNER_ID)), port.runners)
+        assertEquals(1, port.dispatchCalls)
+    }
+
+    @Test
     fun aRetryAfterAFailedDispatchReusesTheSameIdempotencyKey() = runTest {
         var attempts = 0
         val port = FakePort(
@@ -230,12 +242,18 @@ class AgentRunModelTest {
     ) : AgentRunsPort {
         var dispatchCalls = 0
         val keys = mutableListOf<String?>()
+        val runners = mutableListOf<AgentRunnerID?>()
         var runCalls = 0
         var cancelCalls = 0
 
-        override suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String?): AgentRun {
+        override suspend fun dispatch(
+            workItemID: WorkItemID,
+            idempotencyKey: String?,
+            runnerID: AgentRunnerID?,
+        ): AgentRun {
             dispatchCalls += 1
             keys += idempotencyKey
+            runners += runnerID
             return dispatchResult()
         }
 

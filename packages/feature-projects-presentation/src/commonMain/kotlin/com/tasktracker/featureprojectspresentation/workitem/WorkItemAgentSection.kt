@@ -24,29 +24,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTBottomSheetScaffold
+import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttMonospaced
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.featureprojectsdomain.AgentRun
+import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentRunEvent
 import com.tasktracker.featureprojectsdomain.AgentRunStatus
+import com.tasktracker.featureprojectsdomain.ProjectAgentMachine
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.agent_cancel
-import com.tasktracker.resources.agent_log_empty
-import com.tasktracker.resources.agent_log_loading
-import com.tasktracker.resources.agent_log_title
-import com.tasktracker.resources.agent_view_log
 import com.tasktracker.resources.agent_cancelling
 import com.tasktracker.resources.agent_empty
+import com.tasktracker.resources.agent_log_empty
+import com.tasktracker.resources.agent_log_loading
 import com.tasktracker.resources.agent_not_configured
 import com.tasktracker.resources.agent_repository
 import com.tasktracker.resources.agent_section_title
@@ -60,6 +63,14 @@ import com.tasktracker.resources.agent_status_running
 import com.tasktracker.resources.agent_status_succeeded
 import com.tasktracker.resources.agent_unavailable
 import com.tasktracker.resources.agent_waiting
+import com.tasktracker.resources.agent_any_machine
+import com.tasktracker.resources.agent_diff_title
+import com.tasktracker.resources.agent_log_title
+import com.tasktracker.resources.agent_run_on
+import com.tasktracker.resources.agent_view_diff
+import com.tasktracker.resources.agent_view_log
+import com.tasktracker.resources.project_agent_host_desktop
+import com.tasktracker.resources.project_agent_host_remote
 import com.tasktracker.resources.common_done
 import org.jetbrains.compose.resources.stringResource
 
@@ -73,7 +84,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun WorkItemAgentSection(
     model: AgentRunModel,
-    onDispatch: () -> Unit,
+    onDispatch: (AgentRunnerID?) -> Unit,
     onCancel: () -> Unit,
     /**
      * Whether an agent is set up for this project. When false the section shows the
@@ -83,10 +94,19 @@ fun WorkItemAgentSection(
     agentConfigured: Boolean = true,
     /** Where the project's code lives, so the run's target is visible before dispatch. */
     repoUrl: String? = null,
+    /** The caller's project-scoped machines; empty means the server chooses. */
+    agents: List<ProjectAgentMachine> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     val run = model.run
     var showLog by remember { mutableStateOf(false) }
+    var showDiff by remember { mutableStateOf(false) }
+    var selectedRunnerID by remember { mutableStateOf<AgentRunnerID?>(null) }
+    LaunchedEffect(agents) {
+        if (selectedRunnerID != null && agents.none { it.id == selectedRunnerID }) {
+            selectedRunnerID = null
+        }
+    }
     LaunchedEffect(showLog) {
         if (showLog) model.loadFullLog()
     }
@@ -135,9 +155,14 @@ fun WorkItemAgentSection(
                         style = ttTypography.footnote,
                         color = ttLabelSecondary(),
                     )
+                    AgentTargetPicker(
+                        agents = agents,
+                        selectedRunnerID = selectedRunnerID,
+                        onSelect = { selectedRunnerID = it },
+                    )
                     ttGlassButton(
                         label = stringResource(Res.string.agent_send),
-                        onClick = { if (!model.isDispatching) onDispatch() },
+                        onClick = { if (!model.isDispatching) onDispatch(selectedRunnerID) },
                         modifier = Modifier.testTag(WorkItemAgentSendTag),
                     )
                 } else {
@@ -195,10 +220,22 @@ fun WorkItemAgentSection(
                             modifier = Modifier.testTag(WorkItemAgentOutcomeTag),
                         )
                     }
+                    if (run.diff.isNotBlank()) {
+                        ttGlassButton(
+                            label = stringResource(Res.string.agent_view_diff),
+                            onClick = { showDiff = true },
+                            modifier = Modifier.testTag(WorkItemAgentDiffButtonTag),
+                        )
+                    }
+                    AgentTargetPicker(
+                        agents = agents,
+                        selectedRunnerID = selectedRunnerID,
+                        onSelect = { selectedRunnerID = it },
+                    )
                     ttGlassButton(
                         label = stringResource(Res.string.agent_send_again),
                         enabled = agentConfigured,
-                        onClick = { if (!model.isDispatching) onDispatch() },
+                        onClick = { if (!model.isDispatching) onDispatch(selectedRunnerID) },
                         modifier = Modifier.testTag(WorkItemAgentSendTag),
                     )
                 } else if (model.canCancel) {
@@ -230,6 +267,89 @@ fun WorkItemAgentSection(
             events = model.events,
             isLoading = model.isLoadingLog,
             onDismiss = { showLog = false },
+        )
+    }
+
+    if (showDiff) {
+        AgentDiffSheet(diff = run?.diff.orEmpty(), onDismiss = { showDiff = false })
+    }
+}
+
+@Composable
+private fun AgentTargetPicker(
+    agents: List<ProjectAgentMachine>,
+    selectedRunnerID: AgentRunnerID?,
+    onSelect: (AgentRunnerID?) -> Unit,
+) {
+    if (agents.isEmpty()) return
+
+    ttText(
+        text = stringResource(Res.string.agent_run_on),
+        style = ttTypography.captionEmphasised,
+        color = ttLabelSecondary(),
+    )
+    ttGlassButton(
+        label = stringResource(Res.string.agent_any_machine),
+        onClick = { onSelect(null) },
+        modifier = Modifier.testTag(WorkItemAgentAnyRunnerTag),
+        style = if (selectedRunnerID == null) {
+            TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+        } else {
+            TTGlassButtonStyle()
+        },
+    )
+    agents.forEach { machine ->
+        val host = machine.host?.let { agentHostLabel(it) }
+        ttGlassButton(
+            label = listOfNotNull(machine.name, host).joinToString(" · "),
+            onClick = { onSelect(machine.id) },
+            modifier = Modifier.testTag(WorkItemAgentRunnerTag(machine.id.stringValue)),
+            style = if (selectedRunnerID == machine.id) {
+                TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+            } else {
+                TTGlassButtonStyle()
+            },
+        )
+    }
+}
+
+@Composable
+private fun agentHostLabel(host: AgentPairingHost): String = stringResource(
+    when (host) {
+        AgentPairingHost.Desktop -> Res.string.project_agent_host_desktop
+        AgentPairingHost.Remote -> Res.string.project_agent_host_remote
+    },
+)
+
+@Composable
+private fun AgentDiffSheet(diff: String, onDismiss: () -> Unit) {
+    TTBottomSheetScaffold(
+        visible = true,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(WorkItemAgentDiffTag),
+    ) {
+        ttText(
+            text = stringResource(Res.string.agent_diff_title),
+            style = ttTypography.title,
+            color = ttLabel(),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = LOG_SHEET_MAX_HEIGHT)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            ttText(
+                text = diff,
+                style = ttTypography.captionSmall.ttMonospaced(),
+                color = ttLabelSecondary(),
+                modifier = Modifier.testTag(WorkItemAgentDiffTextTag),
+            )
+        }
+        ttGlassButton(
+            label = stringResource(Res.string.common_done),
+            onClick = onDismiss,
+            modifier = Modifier.testTag(WorkItemAgentDiffDoneTag),
         )
     }
 }
@@ -355,7 +475,13 @@ const val WorkItemAgentRepositoryTag = "workItem.agent.repository"
 const val WorkItemAgentLogButtonTag = "workItem.agent.log.open"
 const val WorkItemAgentLogTag = "workItem.agent.log"
 const val WorkItemAgentLogDoneTag = "workItem.agent.log.done"
+const val WorkItemAgentDiffButtonTag = "workItem.agent.diff.open"
+const val WorkItemAgentDiffTag = "workItem.agent.diff"
+const val WorkItemAgentDiffTextTag = "workItem.agent.diff.text"
+const val WorkItemAgentDiffDoneTag = "workItem.agent.diff.done"
+const val WorkItemAgentAnyRunnerTag = "workItem.agent.runner.any"
 fun WorkItemAgentLogLineTag(seq: Long): String = "workItem.agent.log.line.$seq"
+fun WorkItemAgentRunnerTag(id: String): String = "workItem.agent.runner.$id"
 fun WorkItemAgentEventTag(seq: Long): String = "workItem.agent.event.$seq"
 
 /** The log shows its tail: a long run's first lines are history, not status. */

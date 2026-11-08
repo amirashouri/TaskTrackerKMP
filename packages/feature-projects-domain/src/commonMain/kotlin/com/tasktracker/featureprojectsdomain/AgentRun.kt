@@ -22,12 +22,16 @@ data class AgentRun(
     val status: AgentRunStatus,
     val requestedBy: UserID,
     val runnerID: AgentRunnerID?,
+    /** The machine chosen at dispatch; null means any eligible machine. */
+    val requestedRunnerID: AgentRunnerID? = null,
     val cancelRequested: Boolean,
     val createdAt: Instant,
     val startedAt: Instant?,
     val finishedAt: Instant?,
     val summary: String,
     val error: String,
+    /** The runner's captured git diff after success; empty when none was reported. */
+    val diff: String = "",
 ) {
     /** A run the user still has to wait for: queued, claimed or executing. */
     val isLive: Boolean get() = status.isLive

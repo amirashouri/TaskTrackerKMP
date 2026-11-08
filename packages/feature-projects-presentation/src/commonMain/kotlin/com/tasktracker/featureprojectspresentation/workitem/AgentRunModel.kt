@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.AgentRunID
+import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.featureprojectsdomain.AgentRun
@@ -124,15 +125,18 @@ class AgentRunModel(
         }
     }
 
-    /** Queues this item for an agent. A live run already covering it is reported, not duplicated. */
-    suspend fun dispatch() {
+    /**
+     * Queues this item for an agent, optionally naming the machine that may claim it.
+     * A live run already covering the item is reported, not duplicated.
+     */
+    suspend fun dispatch(runnerID: AgentRunnerID? = null) {
         if (isDispatching || isLive) return
         isDispatching = true
         dismissError()
         isUnavailable = false
         val key = pendingDispatchKey ?: Uuid.random().toString().also { pendingDispatchKey = it }
         try {
-            val dispatched = port.dispatch(workItemID, key)
+            val dispatched = port.dispatch(workItemID, key, runnerID)
             pendingDispatchKey = null
             clear()
             applyPage(AgentRunPage(dispatched, emptyList(), hasMore = false))

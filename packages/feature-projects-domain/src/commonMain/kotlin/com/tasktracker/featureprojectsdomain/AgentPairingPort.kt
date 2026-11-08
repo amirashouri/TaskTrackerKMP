@@ -37,6 +37,8 @@ data class ProjectAgentMachine(
     val modelLabel: String = "",
     val lastSeenAt: Instant? = null,
     val pausedAt: Instant? = null,
+    /** The pairing sheet's host choice; null for a legacy or older-client runner. */
+    val host: AgentPairingHost? = null,
 ) {
     /** What the row shows under the machine name, e.g. `openai-compatible · llama3.1`. */
     val modelSummary: String
@@ -61,6 +63,19 @@ data class ProjectAgentMachine(
 /** The roster's three words; the screen owns the localized sentence. */
 enum class ProjectAgentState { Running, Offline, Stopped }
 
+/** Where the paired process runs; the screen owns the localized sentence. */
+enum class AgentPairingHost(val wireValue: String) {
+    Desktop("desktop"),
+    Remote("remote"),
+    ;
+
+    companion object {
+        /** Unknown values decode as "not stated" rather than failing the whole roster. */
+        fun fromWireValue(value: String?): AgentPairingHost? =
+            entries.firstOrNull { it.wireValue == value }
+    }
+}
+
 /**
  * The project-scoped half of pairing: asking the server for a code an admin can hand
  * to the machine that holds the repository, and reading back the machines already
@@ -81,7 +96,10 @@ interface AgentPairingPort {
      * server keeps only the hash.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun createPairingCode(projectID: ProjectID): AgentPairingCode
+    suspend fun createPairingCode(
+        projectID: ProjectID,
+        host: AgentPairingHost = AgentPairingHost.Desktop,
+    ): AgentPairingCode
 
     /**
      * The live machines paired to [projectID], newest server order preserved.

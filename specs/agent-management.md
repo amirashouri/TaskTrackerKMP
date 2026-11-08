@@ -124,16 +124,22 @@ implementation scope without a secondary ACK.
   agent block shows the project repository, and the run section pages the event
   cursor behind a full-log sheet. Settings shows each machine's health beside
   its model summary instead of replacing it. Dispatch still carries a stable
-  idempotency key.
-- **Pending:** A local-desktop vs remote/VPS host label needs a server runner
-  field; choosing a specific project agent for a dispatch needs a server
-  `runnerId` on the run contract; a diff/PR view needs an agent result
-  contract, not just a longer log. The pairing CLI flag (`tt agent connect
-  --pairing-code`) is still not implemented. Structural Compose scenarios for
-  the roster and toggle have not been added; model and serialization tests
-  cover the behaviour.
-- **Next step:** Agree the server runner host field and run `runnerId` with the
-  server spec, then add the CLI flag and run `scripts/check.sh full` as the
+  idempotency key. Structural Compose scenarios for the roster, the `agentEnabled`
+  toggle, the dispatch target picker, and the run diff sheet are added in
+  `AgentManagementScenarios` and registered in the JVM, iOS, and Android host test
+  suites; they pass on the JVM.
+- **Pending:** A local-desktop vs remote/VPS host label still needs a server runner
+  field to back the label the client already renders; choosing a specific project
+  agent for a dispatch still needs a server `runnerId` on the run contract; a
+  diff/PR view still needs an agent result contract, not just a longer log. The
+  pairing CLI flag (`tt agent connect --pairing-code`) is still not implemented.
+  The client UI for the roster host label, the dispatch target picker, and the
+  run diff sheet exists and is structurally covered by `AgentManagementScenarios`,
+  but those three wire contracts remain deferred pending a product decision and a
+  cross-repo ACK.
+- **Next step:** The deferred host-label, `runnerId` targeting, and result-diff
+  contracts are tracked in `TaskTrackerServer/specs/agent-wire-contracts.md`. Agree
+  those contracts, then add the CLI flag and run `scripts/check.sh full` as the
   release gate.
 - **Gotchas:** `WorkItemGrouping.resolved` filters `isArchived` while three
   existing domain tests build terminal items without archiving them; those tests

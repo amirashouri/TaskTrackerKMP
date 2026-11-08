@@ -7,6 +7,7 @@ import com.tasktracker.core.parseAgentRunnerID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.roundedToSecond
 import com.tasktracker.featureprojectsdomain.AgentPairingCode
+import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.ProjectAgentMachine
 import com.tasktracker.network.HttpClient
@@ -27,7 +28,10 @@ import kotlin.time.Instant
 class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort {
 
     @Serializable
-    private data class CreatePairingCodeBody(val projectId: String)
+    private data class CreatePairingCodeBody(
+        val projectId: String,
+        val host: String,
+    )
 
     @Serializable
     internal data class PairingCodeDto(
@@ -43,6 +47,7 @@ class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort 
         val name: String,
         val provider: String = "",
         val modelLabel: String = "",
+        val host: String? = null,
         val lastSeenAt: String? = null,
         val pausedAt: String? = null,
         val revokedAt: String? = null,
@@ -53,12 +58,15 @@ class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort 
     @Serializable
     internal data class RunnersEnvelope(val runners: List<RunnerDto>)
 
-    override suspend fun createPairingCode(projectID: ProjectID): AgentPairingCode {
+    override suspend fun createPairingCode(
+        projectID: ProjectID,
+        host: AgentPairingHost,
+    ): AgentPairingCode {
         val response = client.send(
             HttpRequest(
                 method = HttpMethod.Post,
                 path = "/v1/agent/runners/pairing-codes",
-                body = jsonBody(CreatePairingCodeBody(projectID.stringValue)),
+                body = jsonBody(CreatePairingCodeBody(projectID.stringValue, host.wireValue)),
             ),
             decoding = PairingCodeDto.serializer(),
         )
@@ -89,6 +97,7 @@ class HttpAgentPairingRemote(private val client: HttpClient) : AgentPairingPort 
         modelLabel = modelLabel,
         lastSeenAt = lastSeenAt.toInstant("lastSeenAt"),
         pausedAt = pausedAt.toInstant("pausedAt"),
+        host = AgentPairingHost.fromWireValue(host),
     )
 
     private fun String.toInstant(): Instant =

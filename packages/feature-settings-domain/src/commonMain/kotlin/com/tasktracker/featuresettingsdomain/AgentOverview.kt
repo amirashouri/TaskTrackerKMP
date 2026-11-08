@@ -29,6 +29,8 @@ data class AgentMachine(
      * registration or a server that predates the key.
      */
     val projectID: ProjectID? = null,
+    /** The pairing sheet's host choice; null when it was not stated. */
+    val host: AgentHost? = null,
 ) {
     /** A revoked machine is history, not something the agent section can operate. */
     val isLive: Boolean get() = revokedAt == null
@@ -112,6 +114,18 @@ data class AgentOverview(
 
 /** The Agent row's state, in the model's words; the screen owns the sentence. */
 enum class AgentState { NotConfigured, Running, Offline, Stopped }
+
+/** Where the paired process runs; the screen owns the localized sentence. */
+enum class AgentHost(val wireValue: String) {
+    Desktop("desktop"),
+    Remote("remote"),
+    ;
+
+    companion object {
+        fun fromWireValue(value: String?): AgentHost? =
+            entries.firstOrNull { it.wireValue == value }
+    }
+}
 
 /**
  * The agent surface's network half, or `null` in a build with no API root.
