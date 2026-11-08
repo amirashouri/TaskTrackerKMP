@@ -40,6 +40,10 @@ import com.tasktracker.resources.editor_discard_title
 import com.tasktracker.resources.project_create
 import com.tasktracker.resources.project_details_label
 import com.tasktracker.resources.project_editor_edit_title
+import com.tasktracker.resources.project_agent_enabled_hint
+import com.tasktracker.resources.project_agent_enabled_label
+import com.tasktracker.resources.project_agent_enabled_off
+import com.tasktracker.resources.project_agent_enabled_on
 import com.tasktracker.resources.project_editor_new_title
 import com.tasktracker.resources.project_key_prefix_label
 import com.tasktracker.resources.project_key_prefix_placeholder
@@ -65,6 +69,9 @@ fun ProjectEditorScreen(
     onNameChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     onRepoUrlChanged: (String) -> Unit = {},
+    /** Null hides the control; only the admin editor passes a value. */
+    agentEnabled: Boolean? = null,
+    onAgentEnabledChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
     /** Prompts confirmation on cancel if true. */
@@ -147,6 +154,43 @@ fun ProjectEditorScreen(
                 style = ttTypography.footnote,
                 color = ttLabelSecondary(),
             )
+            if (agentEnabled != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                    ) {
+                        ttText(
+                            text = stringResource(Res.string.project_agent_enabled_label),
+                            style = ttTypography.captionEmphasised,
+                            color = ttLabelSecondary(),
+                        )
+                        ttText(
+                            text = stringResource(Res.string.project_agent_enabled_hint),
+                            style = ttTypography.footnote,
+                            color = ttLabelSecondary(),
+                        )
+                    }
+                    ttGlassButton(
+                        label = if (agentEnabled) {
+                            stringResource(Res.string.project_agent_enabled_on)
+                        } else {
+                            stringResource(Res.string.project_agent_enabled_off)
+                        },
+                        onClick = { onAgentEnabledChanged(!agentEnabled) },
+                        modifier = Modifier.testTag(ProjectEditorAgentEnabledTag),
+                        style = if (agentEnabled) {
+                            TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                        } else {
+                            TTGlassButtonStyle()
+                        },
+                    )
+                }
+            }
             tagsSection?.invoke()
             statusesSection?.invoke()
             agentSection?.invoke()
@@ -209,6 +253,7 @@ const val ProjectEditorNameTag = "projects.editor.name"
 const val ProjectEditorKeyPrefixTag = "projects.editor.keyPrefix"
 const val ProjectEditorDetailsTag = "projects.editor.details"
 const val ProjectEditorRepoUrlTag = "projects.editor.repoUrl"
+const val ProjectEditorAgentEnabledTag = "projects.editor.agentEnabled"
 const val ProjectEditorSaveTag = "projects.editor.save"
 const val ProjectEditorCancelTag = "projects.editor.cancel"
 const val ProjectEditorDiscardTag = "projects.editor.discard"

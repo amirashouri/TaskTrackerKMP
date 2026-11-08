@@ -47,8 +47,8 @@ implementation scope without a secondary ACK.
   for pairing and are not persisted in ordinary project data or logs.
 - [ ] The client can distinguish agents assigned to the project, show their
   machine/connection health, and make the execution host clear (local desktop
-  or remote/VPS agent). The runner DTO now carries `projectId`, but no
-  project-scoped machine list or host label is rendered yet.
+  or remote/VPS agent). The project editor now lists the project's live machines
+  with derived health, but the host label still needs a server field.
 - [x] Applying an agent requests a server-managed run with a stable `runId`;
   ordinary task status edits or sync replay do not accidentally create runs.
 - [x] The client displays queued, running, succeeded, failed, and offline/
@@ -117,19 +117,31 @@ implementation scope without a secondary ACK.
   server now emits `repoUrl,omitempty`. Project-scoped pairing is implemented as
   `AgentPairingPort` / `HttpAgentPairingRemote` / `ProjectAgentSetupModel` and a
   pairing sheet on the admin editor, with one-time code, expiry, failure and
-  retry states and no persistence. Dispatch carries a stable idempotency key,
-  and the runner DTO/domain machine expose `projectId`.
-- **Pending:** Project-scoped machine list with health and host labels; the
-  pairing CLI flag (`tt agent connect --pairing-code`) is still not implemented.
-  Structural Compose scenarios for the new sheet have not been added; the model
-  and serialization tests cover the behaviour.
-- **Next step:** Render the project's paired machines on the agent section and
-  add the CLI flag, then run `scripts/check.sh full` as the release gate.
+  retry states and no persistence. The project editor now reads the project's
+  live machines through the same port and shows running/offline/stopped derived
+  from one heartbeat observation, refreshing after the pairing sheet closes.
+  The admin editor has the per-project `agentEnabled` switch, the work-item
+  agent block shows the project repository, and Settings shows each machine's
+  health beside its model summary instead of replacing it. Dispatch still
+  carries a stable idempotency key.
+- **Pending:** A local-desktop vs remote/VPS host label needs a server runner
+  field; choosing a specific project agent for a dispatch needs a server
+  `runnerId` on the run contract; the full run log/diff view needs a paginated
+  result contract. The pairing CLI flag (`tt agent connect --pairing-code`) is
+  still not implemented, and the create form cannot set `agentEnabled` because
+  the admin create route does not accept it yet. Structural Compose scenarios
+  for the roster and toggle have not been added; model and serialization tests
+  cover the behaviour.
+- **Next step:** Agree the server runner host field and run `runnerId` with the
+  server spec, then add the CLI flag and run `scripts/check.sh full` as the
+  release gate.
 - **Gotchas:** `WorkItemGrouping.resolved` filters `isArchived` while three
   existing domain tests build terminal items without archiving them; those tests
   fail on `main` too and are not caused by this slice. A dispatch retry reuses
   the key only while the model's `pendingDispatchKey` is held; closing the
-  editor drops it by design.
+  editor drops it by design. The machine roster is filtered client-side from
+  the account-scoped runner route; a legacy runner with no `projectId` is not
+  shown.
 
 ## Risks / notes
 

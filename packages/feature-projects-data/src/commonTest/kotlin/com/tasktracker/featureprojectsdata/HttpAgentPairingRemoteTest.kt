@@ -36,6 +36,28 @@ class HttpAgentPairingRemoteTest {
         assertEquals(Instant.parse("2026-11-03T12:10:00Z"), code.expiresAt)
     }
 
+    @Test
+    fun theRosterKeepsOnlyThisProjectsLiveMachines() = runTest {
+        val client = QueueHttpClient(
+            """{"runners":[""" +
+                """{"id":"0195c3a4-0000-7000-8000-0000000000aa","projectId":"$PROJECT_ID","name":"dev-machine","provider":"openai-compatible","modelLabel":"llama3.1","lastSeenAt":"2026-11-03T12:00:00Z","pausedAt":null,"revokedAt":null,"createdAt":"2026-11-01T09:00:00Z"},""" +
+                """{"id":"0195c3a4-0000-7000-8000-0000000000bb","projectId":"0195c3a4-0000-7000-8000-000000000099","name":"other","provider":"","modelLabel":"","lastSeenAt":null,"pausedAt":null,"revokedAt":null,"createdAt":"2026-11-01T09:00:00Z"},""" +
+                """{"id":"0195c3a4-0000-7000-8000-0000000000cc","projectId":"$PROJECT_ID","name":"retired","provider":"","modelLabel":"","lastSeenAt":null,"pausedAt":null,"revokedAt":"2026-11-02T09:00:00Z","createdAt":"2026-11-01T09:00:00Z"}""" +
+                """]}""",
+        )
+        val remote = HttpAgentPairingRemote(client)
+
+        val machines = remote.machines(ProjectID(PROJECT_ID))
+
+        val request = client.requests.single()
+        assertEquals(HttpMethod.Get, request.method)
+        assertEquals("/v1/agent/runners", request.path)
+        assertEquals(1, machines.size, "another project's runner and a revoked one are not this roster")
+        assertEquals("dev-machine", machines.single().name)
+        assertEquals("openai-compatible · llama3.1", machines.single().modelSummary)
+        assertEquals(Instant.parse("2026-11-03T12:00:00Z"), machines.single().lastSeenAt)
+    }
+
     private class QueueHttpClient(private val body: String) : HttpClient {
         val requests = mutableListOf<HttpRequest>()
 

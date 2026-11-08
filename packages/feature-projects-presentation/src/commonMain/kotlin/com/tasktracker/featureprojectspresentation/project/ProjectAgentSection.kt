@@ -21,7 +21,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import com.tasktracker.core.DateCoding
+import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
@@ -40,6 +42,8 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
+import com.tasktracker.featureprojectsdomain.ProjectAgentMachine
+import com.tasktracker.featureprojectsdomain.ProjectAgentState
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_done
 import com.tasktracker.resources.copied_to_clipboard
@@ -50,10 +54,16 @@ import com.tasktracker.resources.project_agent_copy_code
 import com.tasktracker.resources.project_agent_copy_command
 import com.tasktracker.resources.project_agent_expires
 import com.tasktracker.resources.project_agent_failure
+import com.tasktracker.resources.project_agent_machines_empty
+import com.tasktracker.resources.project_agent_machines_loading
 import com.tasktracker.resources.project_agent_note
 import com.tasktracker.resources.project_agent_pair
+import com.tasktracker.resources.project_agent_refresh
 import com.tasktracker.resources.project_agent_retry
 import com.tasktracker.resources.project_agent_title
+import com.tasktracker.resources.settings_agent_offline
+import com.tasktracker.resources.settings_agent_running
+import com.tasktracker.resources.settings_agent_stopped
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -71,9 +81,18 @@ import org.jetbrains.compose.resources.stringResource
 fun ProjectAgentSection(
     port: AgentPairingPort,
     projectID: ProjectID,
+    dateProvider: DateProvider? = null,
     modifier: Modifier = Modifier,
 ) {
     var isOpen by remember(projectID) { mutableStateOf(false) }
+    // A fresh default provider on every recomposition would recreate the model and its
+    // `LaunchedEffect`, turning the roster read into a loop. Hold one for this screen.
+    val clock = dateProvider ?: remember { SystemDateProvider() }
+    val model = remember(port, projectID, clock) {
+        ProjectAgentsModel(port, projectID, clock)
+    }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(model) { model.refresh() }
 
     Column(
         modifier = modifier
@@ -105,16 +124,113 @@ fun ProjectAgentSection(
             style = ttTypography.footnote,
             color = ttLabelSecondary(),
         )
+        AgentRoster(
+            model = model,
+            onRefresh = { scope.launch { model.refresh() } },
+        )
     }
 
     if (isOpen) {
         AgentPairingSheet(
             port = port,
             projectID = projectID,
-            onDismiss = { isOpen = false },
+            onDismiss = {
+                isOpen = false
+                // The machine may have connected while the sheet was open; the roster is
+                // the only place the admin can see that it did.
+                scope.launch { model.refresh() }
+            },
         )
     }
 }
+
+@Composable
+private fun AgentRoster(
+    model: ProjectAgentsModel,
+    onRefresh: () -> Unit,
+) {
+    if (model.isLoading && model.machines.isEmpty()) {
+        ttText(
+            text = stringResource(Res.string.project_agent_machines_loading),
+            style = ttTypography.footnote,
+            color = ttLabelSecondary(),
+            modifier = Modifier.testTag(ProjectAgentMachinesLoadingTag),
+        )
+    } else if (model.machines.isEmpty()) {
+        ttText(
+            text = model.errorMessage ?: stringResource(Res.string.project_agent_machines_empty),
+            style = ttTypography.footnote,
+            color = if (model.errorMessage != null) ttError() else ttLabelSecondary(),
+            modifier = Modifier.testTag(ProjectAgentMachinesEmptyTag),
+        )
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth().testTag(ProjectAgentMachinesTag),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            model.machines.forEach { machine ->
+                AgentMachineRow(machine = machine, state = model.state(machine))
+            }
+        }
+        model.errorMessage?.let { message ->
+            ttText(
+                text = message,
+                style = ttTypography.footnote,
+                color = ttError(),
+            )
+        }
+    }
+
+    ttGlassButton(
+        label = stringResource(Res.string.project_agent_refresh),
+        onClick = onRefresh,
+        enabled = !model.isLoading,
+        modifier = Modifier.testTag(ProjectAgentRefreshTag),
+    )
+}
+
+@Composable
+private fun AgentMachineRow(machine: ProjectAgentMachine, state: ProjectAgentState) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(ProjectAgentMachineTag(machine.id.stringValue)),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+        ) {
+            ttText(
+                text = machine.name,
+                style = ttTypography.footnote,
+                color = ttLabel(),
+            )
+            if (machine.modelSummary.isNotBlank()) {
+                ttText(
+                    text = machine.modelSummary,
+                    style = ttTypography.captionSmall,
+                    color = ttLabelSecondary(),
+                )
+            }
+        }
+        ttText(
+            text = projectAgentStateLabel(state),
+            style = ttTypography.captionSmall,
+            color = if (state == ProjectAgentState.Running) ttAccent() else ttLabelSecondary(),
+        )
+    }
+}
+
+@Composable
+private fun projectAgentStateLabel(state: ProjectAgentState): String = stringResource(
+    when (state) {
+        ProjectAgentState.Running -> Res.string.settings_agent_running
+        ProjectAgentState.Offline -> Res.string.settings_agent_offline
+        ProjectAgentState.Stopped -> Res.string.settings_agent_stopped
+    },
+)
 
 /**
  * The one-time code, the command that spends it, and a retry that asks for a new one.
@@ -274,6 +390,11 @@ private fun AgentPairingSheet(
 }
 
 const val ProjectAgentSectionTag = "projects.agent.section"
+const val ProjectAgentMachinesTag = "projects.agent.machines"
+const val ProjectAgentMachinesLoadingTag = "projects.agent.machines.loading"
+const val ProjectAgentMachinesEmptyTag = "projects.agent.machines.empty"
+const val ProjectAgentRefreshTag = "projects.agent.machines.refresh"
+fun ProjectAgentMachineTag(id: String): String = "projects.agent.machine.$id"
 const val ProjectAgentPairTag = "projects.agent.pair"
 const val ProjectAgentSheetTag = "projects.agent.sheet"
 const val ProjectAgentCodeTag = "projects.agent.code"

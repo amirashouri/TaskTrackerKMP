@@ -243,6 +243,8 @@ private fun AdminProjectEditor(
         onNameChanged = model::onNameChanged,
         onDetailsChanged = model::onDetailsChanged,
         onRepoUrlChanged = model::onRepoUrlChanged,
+        agentEnabled = model.agentEnabled,
+        onAgentEnabledChanged = model::onAgentEnabledChanged,
         onSave = { scope.launch { if (model.save()) onClose() } },
         onCancel = onClose,
         hasUnsavedChanges = model.hasChanges,

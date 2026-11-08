@@ -109,7 +109,9 @@ internal fun AgentOverviewSection(
             SettingsDivider()
             SettingsIconRow(
                 label = machine.name,
-                value = machine.modelSummary.ifBlank { agentStateLabel(machine.state(overview)) },
+                value = listOf(agentStateLabel(machine.state(overview)), machine.modelSummary)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · "),
                 icon = ttSettingsIcons.account,
             )
             if (isAdmin) {

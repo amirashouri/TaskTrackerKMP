@@ -887,7 +887,7 @@
     -->
     <string name="project_agent_title">Agent</string>
     <string name="project_agent_pair">Pair an agent</string>
-    <string name="project_agent_body">Run the command below on the machine that holds this repository. The code works once and expires in ten minutes.</string>
+    <string name="project_agent_body">Pair the machine that holds this repository. The code works once and expires in ten minutes.</string>
     <string name="project_agent_code_label">Pairing code</string>
     <string name="project_agent_expires">Expires %1$s</string>
     <string name="project_agent_command">tt agent connect --pairing-code %1$s</string>
@@ -896,4 +896,12 @@
     <string name="project_agent_retry">Get a new code</string>
     <string name="project_agent_failure">Could not create a pairing code. Check your connection and try again.</string>
     <string name="project_agent_note">The agent connects out to the server, so the machine can be behind NAT or on a VPS.</string>
+    <string name="project_agent_machines_loading">Loading machines…</string>
+    <string name="project_agent_machines_empty">No machine has paired with this project yet.</string>
+    <string name="project_agent_refresh">Refresh</string>
+    <string name="project_agent_enabled_label">Agent runs</string>
+    <string name="project_agent_enabled_hint">Allow work items in this project to be sent to a paired agent.</string>
+    <string name="project_agent_enabled_on">On</string>
+    <string name="project_agent_enabled_off">Off</string>
+    <string name="agent_repository">Repository: %1$s</string>
 </resources>

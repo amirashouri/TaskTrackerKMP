@@ -35,6 +35,7 @@ import com.tasktracker.resources.agent_cancel
 import com.tasktracker.resources.agent_cancelling
 import com.tasktracker.resources.agent_empty
 import com.tasktracker.resources.agent_not_configured
+import com.tasktracker.resources.agent_repository
 import com.tasktracker.resources.agent_section_title
 import com.tasktracker.resources.agent_send
 import com.tasktracker.resources.agent_send_again
@@ -66,6 +67,8 @@ fun WorkItemAgentSection(
      * never queued on a project the admin has not enabled agents for.
      */
     agentConfigured: Boolean = true,
+    /** Where the project's code lives, so the run's target is visible before dispatch. */
+    repoUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val run = model.run
@@ -89,6 +92,15 @@ fun WorkItemAgentSection(
                 color = ttLabelSecondary(),
             )
             run?.let { AgentStatusPill(it.status) }
+        }
+
+        if (!repoUrl.isNullOrBlank()) {
+            ttText(
+                text = stringResource(Res.string.agent_repository, repoUrl),
+                style = ttTypography.captionSmall,
+                color = ttLabelSecondary(),
+                modifier = Modifier.testTag(WorkItemAgentRepositoryTag),
+            )
         }
 
         when {
@@ -253,6 +265,7 @@ const val WorkItemAgentSendTag = "workItem.agent.send"
 const val WorkItemAgentCancelTag = "workItem.agent.cancel"
 const val WorkItemAgentStepTag = "workItem.agent.step"
 const val WorkItemAgentOutcomeTag = "workItem.agent.outcome"
+const val WorkItemAgentRepositoryTag = "workItem.agent.repository"
 fun WorkItemAgentEventTag(seq: Long): String = "workItem.agent.event.$seq"
 
 /** The log shows its tail: a long run's first lines are history, not status. */

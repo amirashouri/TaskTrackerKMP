@@ -44,6 +44,7 @@ class AdminProjectEditorModel(
     private var originalName: String = ""
     private var originalDetails: String = ""
     private var originalRepoUrl: String? = null
+    private var originalAgentEnabled: Boolean = false
     private var originalTags: List<ProjectTag> = emptyList()
     private var originalStatuses: List<StatusDefinition> = emptyList()
 
@@ -70,6 +71,10 @@ class AdminProjectEditorModel(
     var repoUrl: String by mutableStateOf("")
         private set
 
+    /** Whether work here may be dispatched to a paired agent. */
+    var agentEnabled: Boolean by mutableStateOf(false)
+        private set
+
     /** Admin-managed project tag catalog. */
     var tags: List<ProjectTag> by mutableStateOf(emptyList())
         private set
@@ -82,6 +87,7 @@ class AdminProjectEditorModel(
         get() = name.trim() != originalName ||
                 details.trim() != originalDetails ||
                 repoUrl.trim().takeIf { it.isNotEmpty() } != originalRepoUrl ||
+                agentEnabled != originalAgentEnabled ||
                 tags != originalTags ||
                 statuses != originalStatuses
 
@@ -108,11 +114,13 @@ class AdminProjectEditorModel(
             keyPrefix = found.project.keyPrefix
             details = found.project.details
             repoUrl = found.project.repoUrl.orEmpty()
+            agentEnabled = found.project.agentEnabled
             tags = found.project.tags.map { it.copy() }
             statuses = catalog.map { it.copy() }
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
             originalRepoUrl = found.project.repoUrl
+            originalAgentEnabled = found.project.agentEnabled
             originalTags = found.project.tags.map { it.copy() }
             // The seed is the project's *effective* catalog, so inheriting it is not an edit:
             // Save stays disabled until the admin actually changes something.
@@ -138,6 +146,10 @@ class AdminProjectEditorModel(
 
     fun onRepoUrlChanged(value: String) {
         repoUrl = value
+    }
+
+    fun onAgentEnabledChanged(value: Boolean) {
+        agentEnabled = value
     }
 
     /** Validates against [TagRules] and appends tag if name is unique (case-insensitive). */
@@ -213,6 +225,7 @@ class AdminProjectEditorModel(
                         name = name.trim(),
                         details = details.trim(),
                         repoUrl = repoUrl.trim().takeIf { it.isNotEmpty() },
+                        agentEnabled = agentEnabled,
                         tags = tags.map { it.copy(name = TagRules.normaliseName(it.name)) }
                             .filter { it.name.isNotEmpty() },
                         statuses = renumbered(
@@ -228,11 +241,13 @@ class AdminProjectEditorModel(
             name = saved.project.name
             details = saved.project.details
             repoUrl = saved.project.repoUrl.orEmpty()
+            agentEnabled = saved.project.agentEnabled
             tags = saved.project.tags.map { it.copy() }
             statuses = saved.project.statuses.map { it.copy() }
             originalName = saved.project.name.trim()
             originalDetails = saved.project.details.trim()
             originalRepoUrl = saved.project.repoUrl
+            originalAgentEnabled = saved.project.agentEnabled
             originalTags = saved.project.tags.map { it.copy() }
             originalStatuses = saved.project.statuses.map { it.copy() }
             return true
