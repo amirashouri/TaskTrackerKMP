@@ -36,6 +36,10 @@ class AdminProjectCreateModel(
     var details: String by mutableStateOf("")
         private set
 
+    /** Optional; empty means the project has no repository URL. */
+    var repoUrl: String by mutableStateOf("")
+        private set
+
     var memberIDs: List<UserID> by mutableStateOf(emptyList())
         private set
 
@@ -49,6 +53,7 @@ class AdminProjectCreateModel(
         get() = name.isNotBlank() ||
                 keyPrefix.isNotBlank() ||
                 details.isNotBlank() ||
+                repoUrl.isNotBlank() ||
                 memberIDs.isNotEmpty()
 
     fun openAddForm() {
@@ -75,6 +80,10 @@ class AdminProjectCreateModel(
         details = value
     }
 
+    fun onRepoUrlChanged(value: String) {
+        repoUrl = value
+    }
+
     fun onMemberIDsChanged(value: List<UserID>) {
         memberIDs = value.distinct()
     }
@@ -90,6 +99,7 @@ class AdminProjectCreateModel(
                     keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix),
                     details = ProjectRules.normaliseDetails(details),
                     memberIDs = memberIDs,
+                    repoUrl = repoUrl.trim().takeIf { it.isNotEmpty() },
                 )
             } ?: return false
 
@@ -105,6 +115,7 @@ class AdminProjectCreateModel(
         name = ""
         keyPrefix = ""
         details = ""
+        repoUrl = ""
         memberIDs = emptyList()
         isKeyPrefixEdited = false
     }

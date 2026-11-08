@@ -36,6 +36,7 @@ import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
@@ -182,6 +183,8 @@ fun RootScreen(
                 // Null in a demo graph: the editor then offers no agent block rather
                 // than one whose every tap fails.
                 resolver.getOrNull(AgentRunsPort::class),
+                // Null in a demo graph for the same reason: no server, no pairing code.
+                resolver.getOrNull(AgentPairingPort::class),
             )
         }
     }

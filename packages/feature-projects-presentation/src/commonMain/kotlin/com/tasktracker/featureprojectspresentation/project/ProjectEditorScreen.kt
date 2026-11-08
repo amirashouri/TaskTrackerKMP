@@ -45,6 +45,9 @@ import com.tasktracker.resources.project_key_prefix_label
 import com.tasktracker.resources.project_key_prefix_placeholder
 import com.tasktracker.resources.project_key_prefix_read_only
 import com.tasktracker.resources.project_name_label
+import com.tasktracker.resources.project_repo_url_hint
+import com.tasktracker.resources.project_repo_url_label
+import com.tasktracker.resources.project_repo_url_placeholder
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -56,10 +59,12 @@ fun ProjectEditorScreen(
     name: String,
     keyPrefix: String,
     details: String,
+    repoUrl: String = "",
     isCreating: Boolean,
     canSave: Boolean,
     onNameChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    onRepoUrlChanged: (String) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
     /** Prompts confirmation on cancel if true. */
@@ -71,6 +76,8 @@ fun ProjectEditorScreen(
     tagsSection: (@Composable () -> Unit)? = null,
     /** Optional custom slot (e.g. admin status catalog management). */
     statusesSection: (@Composable () -> Unit)? = null,
+    /** Optional custom slot (e.g. project-scoped agent pairing). */
+    agentSection: (@Composable () -> Unit)? = null,
 ) {
     val saveEnabled = canSave && !isBusy
     var showDiscardConfirmation by remember { mutableStateOf(false) }
@@ -126,8 +133,23 @@ fun ProjectEditorScreen(
                 imeAction = ImeAction.Done,
                 onImeAction = { if (saveEnabled) onSave() },
             )
+            ProjectsTextField(
+                title = stringResource(Res.string.project_repo_url_label),
+                value = repoUrl,
+                onValueChange = onRepoUrlChanged,
+                modifier = Modifier.testTag(ProjectEditorRepoUrlTag),
+                placeholder = stringResource(Res.string.project_repo_url_placeholder),
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            )
+            ttText(
+                text = stringResource(Res.string.project_repo_url_hint),
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+            )
             tagsSection?.invoke()
             statusesSection?.invoke()
+            agentSection?.invoke()
             if (errorMessage != null) {
                 ttText(
                     text = errorMessage,
@@ -186,6 +208,7 @@ const val ProjectEditorTag = "projects.editor"
 const val ProjectEditorNameTag = "projects.editor.name"
 const val ProjectEditorKeyPrefixTag = "projects.editor.keyPrefix"
 const val ProjectEditorDetailsTag = "projects.editor.details"
+const val ProjectEditorRepoUrlTag = "projects.editor.repoUrl"
 const val ProjectEditorSaveTag = "projects.editor.save"
 const val ProjectEditorCancelTag = "projects.editor.cancel"
 const val ProjectEditorDiscardTag = "projects.editor.discard"

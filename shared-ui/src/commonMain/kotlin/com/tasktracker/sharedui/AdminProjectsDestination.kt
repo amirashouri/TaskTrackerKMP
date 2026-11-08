@@ -19,11 +19,13 @@ import com.tasktracker.featureprojectspresentation.AdminProjectEditorModel
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreen
 import com.tasktracker.featureprojectspresentation.NewProjectForm
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
+import com.tasktracker.featureprojectspresentation.ProjectAgentSection
 import com.tasktracker.featureprojectspresentation.ProjectEditorScreen
 import com.tasktracker.featureprojectspresentation.ProjectStatusesSection
 import com.tasktracker.featureprojectspresentation.ProjectTagsSection
 import com.tasktracker.featureprojectspresentation.defaultStatusCatalog
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.featureteamsdomain.UserStatus
@@ -46,6 +48,8 @@ fun AdminProjectsDestination(
     adminProjectsPort: AdminProjectsPort,
     memberAdminPort: MemberAdminPort?,
     scope: CoroutineScope,
+    /** Null in a demo graph, where there is no server to mint a pairing code. */
+    agentPairingPort: AgentPairingPort? = null,
     isWide: Boolean = false,
 ) {
     val create = remember(adminProjectsPort) { AdminProjectCreateModel(adminProjectsPort) }
@@ -108,6 +112,8 @@ fun AdminProjectsDestination(
                 onNameChanged = create::onNameChanged,
                 onKeyPrefixChanged = create::onKeyPrefixChanged,
                 onDetailsChanged = create::onDetailsChanged,
+                repoUrl = create.repoUrl,
+                onRepoUrlChanged = create::onRepoUrlChanged,
                 onSave = { scope.launch { create.create() } },
                 onDismiss = null,
                 modifier = Modifier.padding(ttSpacing.lg),
@@ -131,6 +137,7 @@ fun AdminProjectsDestination(
                     AdminProjectEditor(
                         projectID = projectID,
                         adminProjectsPort = adminProjectsPort,
+                        agentPairingPort = agentPairingPort,
                         onClose = closeEditor,
                         scope = scope,
                     )
@@ -144,6 +151,7 @@ fun AdminProjectsDestination(
         AdminProjectEditor(
             projectID = projectID,
             adminProjectsPort = adminProjectsPort,
+            agentPairingPort = agentPairingPort,
             onClose = closeEditor,
             scope = scope,
         )
@@ -164,6 +172,8 @@ fun AdminProjectsDestination(
             onNameChanged = create::onNameChanged,
             onKeyPrefixChanged = create::onKeyPrefixChanged,
             onDetailsChanged = create::onDetailsChanged,
+            repoUrl = create.repoUrl,
+            onRepoUrlChanged = create::onRepoUrlChanged,
             onSave = {
                 scope.launch {
                     // Closing on `true` only: a failed create leaves the form open with its
@@ -196,6 +206,7 @@ fun AdminProjectsDestination(
 private fun AdminProjectEditor(
     projectID: ProjectID,
     adminProjectsPort: AdminProjectsPort,
+    agentPairingPort: AgentPairingPort?,
     onClose: () -> Unit,
     scope: CoroutineScope,
 ) {
@@ -226,10 +237,12 @@ private fun AdminProjectEditor(
         name = model.name,
         keyPrefix = model.keyPrefix,
         details = model.details,
+        repoUrl = model.repoUrl,
         isCreating = false,
         canSave = model.canSave,
         onNameChanged = model::onNameChanged,
         onDetailsChanged = model::onDetailsChanged,
+        onRepoUrlChanged = model::onRepoUrlChanged,
         onSave = { scope.launch { if (model.save()) onClose() } },
         onCancel = onClose,
         hasUnsavedChanges = model.hasChanges,
@@ -257,6 +270,13 @@ private fun AdminProjectEditor(
                 onMove = model::reorderStatus,
                 isBusy = model.isSaving,
             )
+        },
+        // Pairing is a project-administration act: the code binds the machine to this
+        // project, and the server checks membership when it issues the code.
+        agentSection = {
+            agentPairingPort?.let { port ->
+                ProjectAgentSection(port = port, projectID = projectID)
+            }
         },
     )
 }

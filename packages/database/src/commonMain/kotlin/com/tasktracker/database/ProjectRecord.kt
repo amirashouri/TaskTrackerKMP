@@ -80,6 +80,14 @@ data class ProjectRecord(
     val nextItemNumber: Int,
     val createdAt: Instant,
     val updatedAt: Instant,
+    /**
+     * The project's repository URL, or `null` when none is set.
+     *
+     * Nullable rather than an empty-string sentinel: "no repository" is a real state and
+     * the editor shows it as an empty field. Defaulted so a row written before this column
+     * existed reads as unset when the store is recreated at schema version 2.
+     */
+    val repoUrl: String? = null,
 )
 
 /**

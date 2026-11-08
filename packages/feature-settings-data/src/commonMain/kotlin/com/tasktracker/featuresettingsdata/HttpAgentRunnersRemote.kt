@@ -3,7 +3,9 @@ package com.tasktracker.featuresettingsdata
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseAgentRunnerID
+import com.tasktracker.core.parseProjectID
 import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
 import com.tasktracker.network.HttpClient
@@ -28,6 +30,8 @@ class HttpAgentRunnersRemote(private val client: HttpClient) : AgentSettingsGate
     @Serializable
     internal data class RunnerDto(
         val id: String,
+        /** Project scoping; defaulted for a legacy machine-wide runner or an older server. */
+        val projectId: String? = null,
         val name: String,
         val provider: String = "",
         val modelLabel: String = "",
@@ -62,6 +66,10 @@ class HttpAgentRunnersRemote(private val client: HttpClient) : AgentSettingsGate
     private fun RunnerDto.toDomain(): AgentMachine = AgentMachine(
         id = parseAgentRunnerID(id)
             ?: throw AppError.Decoding("Agent runner id \"$id\" is not a UUID."),
+        projectID = projectId?.let { raw ->
+            parseProjectID(raw)
+                ?: throw AppError.Decoding("Agent runner projectId \"$raw\" is not a UUID.")
+        },
         name = name,
         provider = provider,
         modelLabel = modelLabel,

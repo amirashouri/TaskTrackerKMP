@@ -20,9 +20,14 @@ interface AgentRunsPort {
      * Throws [AppError.Conflict] when a live run already exists — the server's
      * partial index refuses the second dispatch, and the port does not pretend
      * otherwise.
+     *
+     * [idempotencyKey] is stable across a retry of the *same* intent, so a lost
+     * response is read back as the run it already created instead of colliding
+     * with it as a second dispatch. A client that omits it keeps the old
+     * one-request-one-run behaviour.
      */
     @Throws(AppError::class, CancellationException::class)
-    suspend fun dispatch(workItemID: WorkItemID): AgentRun
+    suspend fun dispatch(workItemID: WorkItemID, idempotencyKey: String? = null): AgentRun
 
     /** Recent runs for one item, newest first. What reopens an item onto a finished run. */
     @Throws(AppError::class, CancellationException::class)

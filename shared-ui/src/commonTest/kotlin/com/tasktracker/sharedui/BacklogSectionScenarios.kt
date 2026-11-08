@@ -546,7 +546,7 @@ object BacklogSectionScenarios {
         board: List<WorkItem> = emptyList(),
         archived: List<WorkItem> = closedItems(),
         onSelect: (WorkItemID) -> Unit = {},
-        onPutOnBoard: (WorkItemID) -> Unit = {},
+        onPutOnBoard: (WorkItemID, String?) -> Unit = { _, _ -> },
         onFileAway: (WorkItemID) -> Unit = {},
         onUnarchive: (WorkItemID) -> Unit = {},
     ) {

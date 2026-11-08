@@ -31,6 +31,8 @@ fun NewProjectSheet(
     onNameChanged: (String) -> Unit,
     onKeyPrefixChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    repoUrl: String = "",
+    onRepoUrlChanged: (String) -> Unit = {},
     onSave: () -> Unit,
     onCancel: () -> Unit,
     /** Prompts confirmation on dismissal if true. */
@@ -70,6 +72,8 @@ fun NewProjectSheet(
             onNameChanged = onNameChanged,
             onKeyPrefixChanged = onKeyPrefixChanged,
             onDetailsChanged = onDetailsChanged,
+            repoUrl = repoUrl,
+            onRepoUrlChanged = onRepoUrlChanged,
             onSave = onSave,
             onDismiss = { guardDismiss(onCancel) },
             isBusy = isBusy,

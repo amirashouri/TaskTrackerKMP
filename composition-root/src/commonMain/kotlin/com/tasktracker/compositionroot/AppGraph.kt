@@ -25,11 +25,13 @@ import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureprojectsdata.AdminProjectsRepository
 import com.tasktracker.featureprojectsdata.HttpAdminProjectsRemote
+import com.tasktracker.featureprojectsdata.HttpAgentPairingRemote
 import com.tasktracker.featureprojectsdata.HttpAgentRunsRemote
 import com.tasktracker.featureprojectsdata.LocalDataSyncSink
 import com.tasktracker.featureprojectsdata.ProjectChangeBus
 import com.tasktracker.featureprojectsdata.RoomProjectRepository
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
@@ -475,6 +477,18 @@ object AppGraph {
                     // created stays server-side until the next cycle, and the work item
                     // editor — which reads the local row — offers them the empty state.
                     localStore = resolver.resolve(LocalDataSyncSink::class),
+                )
+            }
+
+            // Pairing codes are project-scoped and authenticated like the admin
+            // surface, so they ride the same client construction and the same
+            // backend switch.
+            app<AgentPairingPort> { resolver ->
+                HttpAgentPairingRemote(
+                    client = platforms.httpClient(
+                        url,
+                        listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                    ),
                 )
             }
         }

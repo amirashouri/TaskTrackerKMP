@@ -17,6 +17,7 @@ import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -31,6 +32,9 @@ import com.tasktracker.resources.project_editor_new_title
 import com.tasktracker.resources.project_key_prefix_label
 import com.tasktracker.resources.project_key_prefix_placeholder
 import com.tasktracker.resources.project_name_label
+import com.tasktracker.resources.project_repo_url_hint
+import com.tasktracker.resources.project_repo_url_label
+import com.tasktracker.resources.project_repo_url_placeholder
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -46,6 +50,8 @@ fun NewProjectForm(
     onNameChanged: (String) -> Unit,
     onKeyPrefixChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
+    repoUrl: String = "",
+    onRepoUrlChanged: (String) -> Unit = {},
     onSave: () -> Unit,
     onDismiss: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -94,6 +100,19 @@ fun NewProjectForm(
             singleLine = false,
             minLines = DETAILS_MIN_LINES,
             imeAction = ImeAction.Next,
+        )
+        ProjectsTextField(
+            title = stringResource(Res.string.project_repo_url_label),
+            value = repoUrl,
+            onValueChange = onRepoUrlChanged,
+            placeholder = stringResource(Res.string.project_repo_url_placeholder),
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Next,
+        )
+        ttText(
+            text = stringResource(Res.string.project_repo_url_hint),
+            style = ttTypography.footnote,
+            color = ttLabelSecondary(),
         )
         ProjectMembersSection(
             selectedMemberIDs = selectedMemberIDs,

@@ -20,6 +20,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import com.tasktracker.featureprojectsdomain.AttachmentBlobTransport
 import com.tasktracker.featureprojectsdomain.AttachmentOpener
@@ -49,6 +50,11 @@ class ProjectEnvironment(
     val opener: AttachmentOpener? = null,
     /** Server-side agent runs; null when no backend is bound, which disables the block. */
     val agentRunsPort: AgentRunsPort? = null,
+    /**
+     * Project-scoped pairing; null when no backend is bound. Separate from the runs
+     * port because pairing is an administration act on a project, not a dispatch.
+     */
+    val agentPairingPort: AgentPairingPort? = null,
 )
 
 val LocalProjectEnvironment = staticCompositionLocalOf<ProjectEnvironment?> { null }

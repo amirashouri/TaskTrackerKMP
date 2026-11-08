@@ -122,6 +122,7 @@ class FakeAdminProjectsPort(
         keyPrefix: String,
         details: String,
         memberIDs: List<UserID>,
+        repoUrl: String?,
     ): AdminProject {
         val project = shellTestProject(name = name, keyPrefix = keyPrefix)
             .copy(details = details, memberIDs = memberIDs)

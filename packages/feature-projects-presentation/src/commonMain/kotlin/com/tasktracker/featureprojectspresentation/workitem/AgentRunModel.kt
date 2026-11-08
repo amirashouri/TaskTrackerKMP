@@ -13,6 +13,8 @@ import com.tasktracker.featureprojectsdomain.AgentRunsPort
 import kotlinx.coroutines.delay
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 /**
  * The agent state of one work item: the latest run, its event log, and the polling
@@ -27,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
  * dispatch is a request, not a queued intent. That is what makes an offline
  * dispatch fail honestly instead of promising work that would never be sent.
  */
+@OptIn(ExperimentalUuidApi::class)
 class AgentRunModel(
     private val workItemID: WorkItemID,
     private val port: AgentRunsPort,
@@ -54,6 +57,15 @@ class AgentRunModel(
 
     private var afterSeq: Long = 0
     private var consecutiveFailures: Int = 0
+
+    /**
+     * The key of the dispatch the user is trying to land, kept across a failure.
+     *
+     * A retry that minted a fresh key would be a second intent, which is exactly the
+     * duplicate run the server's idempotency guard exists to prevent. Clearing it on
+     * success is what makes the next deliberate send a new run.
+     */
+    private var pendingDispatchKey: String? = null
 
     val isLive: Boolean get() = run?.isLive == true
 
@@ -86,8 +98,10 @@ class AgentRunModel(
         isDispatching = true
         dismissError()
         isUnavailable = false
+        val key = pendingDispatchKey ?: Uuid.random().toString().also { pendingDispatchKey = it }
         try {
-            val dispatched = port.dispatch(workItemID)
+            val dispatched = port.dispatch(workItemID, key)
+            pendingDispatchKey = null
             clear()
             applyPage(AgentRunPage(dispatched, emptyList(), hasMore = false))
         } catch (conflict: AppError.Conflict) {

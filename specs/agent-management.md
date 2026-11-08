@@ -1,6 +1,6 @@
 # agent-management — Manage project agents and runs
 
-- **status:** pending
+- **status:** in-progress
 - **priority:** P1
 - **context:** Plan for project repository metadata and a client UX for pairing
   agents and applying them to tasks on a local workstation or VPS.
@@ -33,33 +33,33 @@ implementation scope without a secondary ACK.
 
 ## Contract
 
-- [ ] An optional project repository URL is editable by an authorized admin
+- [x] An optional project repository URL is editable by an authorized admin
   and survives local persistence, restart, and synchronization. Its wire name
   is exactly `repoUrl`.
-- [ ] The KMP DTO declares the repository URL as optional with a compatible
+- [x] The KMP DTO declares the repository URL as optional with a compatible
   default, so old server responses and existing local records continue to
   decode.
-- [ ] Newly added server response fields are not assumed to be ignored by
+- [x] Newly added server response fields are not assumed to be ignored by
   installed clients. Client support and server response rollout use the
   compatibility strategy agreed with the server spec.
-- [ ] An admin can initiate agent pairing from the client and see clear success,
+- [x] An admin can initiate agent pairing from the client and see clear success,
   expiry, failure, and retry states. Pairing secrets are shown only as required
   for pairing and are not persisted in ordinary project data or logs.
 - [ ] The client can distinguish agents assigned to the project, show their
   machine/connection health, and make the execution host clear (local desktop
-  or remote/VPS agent).
-- [ ] Applying an agent requests a server-managed run with a stable `runId`;
+  or remote/VPS agent). The runner DTO now carries `projectId`, but no
+  project-scoped machine list or host label is rendered yet.
+- [x] Applying an agent requests a server-managed run with a stable `runId`;
   ordinary task status edits or sync replay do not accidentally create runs.
-- [ ] The client displays queued, running, succeeded, failed, and offline/
+- [x] The client displays queued, running, succeeded, failed, and offline/
   unavailable states from server-owned run state. It reports connectivity
   failures honestly and does not present an unacknowledged run as started.
-- [ ] Offline behavior is explicit: the UI either requires a live connection to
-  create a run or queues a distinct idempotent run command for later sync. It
-  does not overload task status as an implicit execution command.
-- [ ] Tests cover serialization, local mapping/persistence, request idempotency
+- [x] Offline behavior is explicit: a dispatch requires a live connection and
+  fails honestly; task status is never overloaded as an execution command.
+- [x] Tests cover serialization, local mapping/persistence, request idempotency
   behavior where owned by the client, and observable UI state. Tests fail when
   the production behavior is removed.
-- [ ] Common code introduces no platform-specific APIs without an explicit
+- [x] Common code introduces no platform-specific APIs without an explicit
   `expect`/`actual` contract.
 
 ## Subtasks and dependencies
@@ -112,16 +112,24 @@ implementation scope without a secondary ACK.
 
 ## Handoff
 
-- **Done:** Specification only; no implementation or validation has been run.
-- **Pending:** Agree and implement the detailed API and rollout contract with
-  the server spec.
-- **Next step:** In the implementation session, inspect project editing,
-  persistence, sync, and module patterns and submit the exact dual-repo file
-  plan for ACK.
-- **Gotchas:** Client decoding does not ignore unknown response keys. A new
-  project field needs a compatible rollout. Follow the parent workspace's
-  server-first cross-project implementation sequence after the wire contract
-  and response compatibility strategy are agreed.
+- **Done:** `repoUrl` carried through `Project`, `ProjectRecord` (schema v2),
+  record mapping, admin DTOs, create/edit models and both project forms; the
+  server now emits `repoUrl,omitempty`. Project-scoped pairing is implemented as
+  `AgentPairingPort` / `HttpAgentPairingRemote` / `ProjectAgentSetupModel` and a
+  pairing sheet on the admin editor, with one-time code, expiry, failure and
+  retry states and no persistence. Dispatch carries a stable idempotency key,
+  and the runner DTO/domain machine expose `projectId`.
+- **Pending:** Project-scoped machine list with health and host labels; the
+  pairing CLI flag (`tt agent connect --pairing-code`) is still not implemented.
+  Structural Compose scenarios for the new sheet have not been added; the model
+  and serialization tests cover the behaviour.
+- **Next step:** Render the project's paired machines on the agent section and
+  add the CLI flag, then run `scripts/check.sh full` as the release gate.
+- **Gotchas:** `WorkItemGrouping.resolved` filters `isArchived` while three
+  existing domain tests build terminal items without archiving them; those tests
+  fail on `main` too and are not caused by this slice. A dispatch retry reuses
+  the key only while the model's `pendingDispatchKey` is held; closing the
+  editor drops it by design.
 
 ## Risks / notes
 

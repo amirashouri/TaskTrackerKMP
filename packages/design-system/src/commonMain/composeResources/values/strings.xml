@@ -260,6 +260,9 @@
     <string name="project_key_prefix_placeholder">2-10 letters or digits</string>
     <string name="project_key_prefix_read_only">The key prefix is fixed once set. Every task key in this project is built from it.</string>
     <string name="project_details_label">Details</string>
+    <string name="project_repo_url_label">Repository URL</string>
+    <string name="project_repo_url_placeholder">https://github.com/org/repo</string>
+    <string name="project_repo_url_hint">Optional. The agent uses this to find the code; it is not a credential.</string>
     <string name="project_create">Create</string>
     <string name="project_delete">Delete Project</string>
 
@@ -877,4 +880,20 @@
     <string name="settings_agent_copy_run">Copy the run command</string>
     <string name="settings_agent_setup_note">Stop keeps the machine paired and refuses it new work. The agent process itself is yours to run.</string>
     <string name="settings_agent_failure">Could not change the agent. Check your connection and try again.</string>
+
+    <!--
+      The project-scoped pairing sheet. The code is shown once and never persisted; the
+      command is composed here so the admin copies one exact string.
+    -->
+    <string name="project_agent_title">Agent</string>
+    <string name="project_agent_pair">Pair an agent</string>
+    <string name="project_agent_body">Run the command below on the machine that holds this repository. The code works once and expires in ten minutes.</string>
+    <string name="project_agent_code_label">Pairing code</string>
+    <string name="project_agent_expires">Expires %1$s</string>
+    <string name="project_agent_command">tt agent connect --pairing-code %1$s</string>
+    <string name="project_agent_copy_code">Copy the pairing code</string>
+    <string name="project_agent_copy_command">Copy the connect command</string>
+    <string name="project_agent_retry">Get a new code</string>
+    <string name="project_agent_failure">Could not create a pairing code. Check your connection and try again.</string>
+    <string name="project_agent_note">The agent connects out to the server, so the machine can be behind NAT or on a VPS.</string>
 </resources>
