@@ -323,15 +323,6 @@ private fun ComposeUiTest.composedRemove(row: ProjectRow): List<Rect> =
         .map { it.boundsInRoot }
 
 /**
- * Whether two rectangles share any area.
- *
- * Touching edges are not an overlap: a control whose right edge meets the row's left edge covers
- * nothing, and counting that as a collision would fail a layout that is correct.
- */
-private fun Rect.overlaps(other: Rect): Boolean =
-    left < other.right && other.left < right && top < other.bottom && other.top < bottom
-
-/**
  * A drag that starts but does not commit.
  *
  * Two things make this number what it is.

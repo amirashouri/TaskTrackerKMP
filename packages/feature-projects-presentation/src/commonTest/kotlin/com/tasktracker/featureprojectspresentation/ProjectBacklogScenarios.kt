@@ -533,12 +533,3 @@ private val pairedBoardStatuses = listOf(
     StatusDefinition(id = "col-todo", name = "To Do", category = WorkItemStatus.Todo, order = 0),
     StatusDefinition(id = "col-doing", name = "Doing", category = WorkItemStatus.InProgress, order = 1),
 )
-
-/**
- * Whether two rectangles share any area.
- *
- * Touching edges are not an overlap: a control whose right edge meets a row's left edge covers
- * nothing, and counting that as a collision would fail a layout that is correct.
- */
-private fun Rect.overlaps(other: Rect): Boolean =
-    left < other.right && other.left < right && top < other.bottom && other.top < bottom
