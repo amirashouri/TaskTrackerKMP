@@ -96,7 +96,6 @@ internal fun NavigationSidebar(
                 )
                 .ttGlassSurface(
                     shape = RoundedCornerShape(ttRadius.surface),
-                    tint = ttAccent().copy(alpha = 0.84f),
                     thickness = ttGlass.GlassThickness.THIN,
                 )
                 .padding(ttSpacing.hairlineInset)

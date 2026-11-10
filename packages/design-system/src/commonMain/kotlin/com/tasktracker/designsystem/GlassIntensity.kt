@@ -74,8 +74,8 @@ fun ttGlassLensAlpha(): Float = ttGlass.LENS_ALPHA * LocalGlassIntensity.current
 @Composable
 internal fun ttGlassHairline(): Color {
     val intensity = LocalGlassIntensity.current.coerceIn(0f, 1f)
-    // Smoothstep from 0.05 (vestigial) to 1.0 (full) — no hard edge at 0.
-    val hairlineScale = lerp(0.05f, 1f, intensity)
+    // Smoothstep from 0.35 (solid edge boundary floor) to 1.0 (full) — ensures card boundaries remain clearly visible at low glass intensity when fill becomes opaque.
+    val hairlineScale = lerp(0.35f, 1f, intensity)
     return if (ttIsDarkTheme()) {
         Color.White.copy(alpha = ttGlass.HAIRLINE_ALPHA * hairlineScale)
     } else {
