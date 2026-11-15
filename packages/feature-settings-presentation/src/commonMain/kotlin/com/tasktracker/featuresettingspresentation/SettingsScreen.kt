@@ -284,7 +284,7 @@ fun SettingsScreen(
     }
     LaunchedEffect(syncToastSuccess) {
         val kind = syncToastSuccess ?: return@LaunchedEffect
-        delay(2000)
+        delay(SyncToastMillis)
         if (syncToastSuccess == kind) syncToastSuccess = null
     }
 
@@ -916,3 +916,5 @@ const val SettingsChangePasswordRowTag = "settings.changePassword"
 const val SettingsForgotPasswordRowTag = "settings.forgotPassword"
 
 
+
+private const val SyncToastMillis = 2_000L
