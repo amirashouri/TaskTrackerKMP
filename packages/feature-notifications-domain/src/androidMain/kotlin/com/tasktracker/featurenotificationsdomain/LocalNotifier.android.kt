@@ -18,7 +18,6 @@ import com.tasktracker.featurenotificationsdomain.Trigger
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.time.Duration
 import kotlin.math.absoluteValue
 
 private const val CHANNEL_ID = "tasktracker_notifications"

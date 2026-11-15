@@ -31,7 +31,6 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.TTGlassSurface
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpinner

@@ -3,7 +3,6 @@ package com.tasktracker.featuresettingsdata
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateCoding
-import com.tasktracker.core.ProjectID
 import com.tasktracker.core.parseAgentRunnerID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.featuresettingsdomain.AgentHost

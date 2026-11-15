@@ -12,7 +12,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.designsystem.TTStoryPoints
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBodyLabel
@@ -24,7 +23,6 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.domain.sprintSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.sprint_achieved

@@ -36,7 +36,6 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.core.ProjectID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassLensAlpha

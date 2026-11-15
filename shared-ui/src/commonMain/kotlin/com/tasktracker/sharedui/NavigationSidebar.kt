@@ -34,12 +34,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.TTGlassSurface
-import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttRadius

@@ -21,10 +21,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTBottomSheetScaffold
-import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
@@ -34,7 +31,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
-import com.tasktracker.resources.backlog_put_on_board_confirm
 import com.tasktracker.resources.backlog_put_on_board_prompt_body
 import com.tasktracker.resources.backlog_put_on_board_prompt_title
 import com.tasktracker.resources.common_cancel

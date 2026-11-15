@@ -1,7 +1,6 @@
 package com.tasktracker.userdefaults
 
 import com.tasktracker.core.isDesktopApp
-import java.io.File
 import java.util.Properties
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

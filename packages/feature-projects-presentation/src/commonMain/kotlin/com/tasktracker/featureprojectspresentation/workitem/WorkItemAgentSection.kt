@@ -39,7 +39,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.core.AgentRunnerID
-import com.tasktracker.featureprojectsdomain.AgentRun
 import com.tasktracker.featureprojectsdomain.AgentPairingHost
 import com.tasktracker.featureprojectsdomain.AgentRunEvent
 import com.tasktracker.featureprojectsdomain.AgentRunStatus

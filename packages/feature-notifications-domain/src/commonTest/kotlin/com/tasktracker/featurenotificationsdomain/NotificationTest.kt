@@ -1,13 +1,10 @@
 package com.tasktracker.featurenotificationsdomain
 
-import com.tasktracker.core.NotificationID
-import com.tasktracker.core.UserID
 import com.tasktracker.core.randomNotificationID
 import com.tasktracker.core.randomUserID
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.time.Instant
 

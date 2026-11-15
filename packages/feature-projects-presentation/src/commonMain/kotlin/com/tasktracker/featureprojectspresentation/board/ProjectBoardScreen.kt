@@ -65,7 +65,6 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
-import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_kanban

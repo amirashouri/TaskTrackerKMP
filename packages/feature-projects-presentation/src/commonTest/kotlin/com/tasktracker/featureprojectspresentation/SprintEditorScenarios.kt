@@ -5,10 +5,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import com.tasktracker.designsystem.TTBannerTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTDateFieldTag
 import com.tasktracker.designsystem.ttTheme

@@ -10,7 +10,6 @@ import com.tasktracker.core.UserID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
-import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.Comment

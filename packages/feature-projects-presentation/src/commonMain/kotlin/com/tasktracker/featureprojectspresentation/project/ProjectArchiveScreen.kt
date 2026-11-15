@@ -20,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel

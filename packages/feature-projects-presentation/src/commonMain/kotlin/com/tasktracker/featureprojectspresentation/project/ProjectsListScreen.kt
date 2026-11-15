@@ -25,7 +25,6 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBannerTone

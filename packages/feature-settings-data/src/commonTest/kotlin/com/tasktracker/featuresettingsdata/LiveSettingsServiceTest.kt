@@ -6,7 +6,6 @@ import com.tasktracker.core.DateProvider
 import com.tasktracker.core.SystemDateProvider
 import com.tasktracker.core.TestDateProvider
 import com.tasktracker.featuresettingsdomain.AgentMachine
-import com.tasktracker.featuresettingsdomain.AgentOverview
 import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
 import com.tasktracker.featuresettingsdomain.AgentState
 import com.tasktracker.featuresettingsdomain.AppVersion

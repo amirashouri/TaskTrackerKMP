@@ -5,7 +5,6 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import com.tasktracker.core.UserID
 import com.tasktracker.featureteamsdomain.User
 import kotlinx.coroutines.test.runTest

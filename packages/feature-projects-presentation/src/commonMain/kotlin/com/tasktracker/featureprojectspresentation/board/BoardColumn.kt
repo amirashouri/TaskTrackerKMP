@@ -49,7 +49,6 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
-import com.tasktracker.designsystem.ttSurface
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.BoardColumn

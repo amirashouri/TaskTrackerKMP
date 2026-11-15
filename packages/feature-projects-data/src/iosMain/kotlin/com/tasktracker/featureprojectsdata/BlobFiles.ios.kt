@@ -7,7 +7,6 @@ import platform.Foundation.NSData
 import platform.Foundation.NSFileManager
 import platform.Foundation.NSString
 import platform.Foundation.create
-import platform.Foundation.dataWithBytes
 import platform.Foundation.stringByDeletingLastPathComponent
 import platform.Foundation.writeToFile
 import platform.posix.memcpy

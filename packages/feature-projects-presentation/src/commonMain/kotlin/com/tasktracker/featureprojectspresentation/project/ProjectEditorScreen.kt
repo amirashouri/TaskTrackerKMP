@@ -22,7 +22,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton

@@ -33,7 +33,6 @@ import com.tasktracker.resources.attachment_state_opening
 import com.tasktracker.resources.attachment_state_synced
 import com.tasktracker.resources.attachment_state_uploading
 import com.tasktracker.resources.attachment_state_waiting
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /** Lifecycle synchronization state for file attachments. */

@@ -38,7 +38,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.SprintStatus
-import com.tasktracker.domain.sprintSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
 import com.tasktracker.resources.sprint_add_task

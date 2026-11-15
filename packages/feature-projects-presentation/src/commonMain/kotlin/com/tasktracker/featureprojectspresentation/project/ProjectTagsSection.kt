@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,8 +26,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.TagID
-import com.tasktracker.core.randomTagID
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -60,24 +57,6 @@ import com.tasktracker.resources.admin_project_tags_name
 import com.tasktracker.resources.admin_project_tags_name_required
 import com.tasktracker.resources.admin_project_tags_remove
 import com.tasktracker.resources.admin_project_tags_title
-import com.tasktracker.resources.tag_color_amber
-import com.tasktracker.resources.tag_color_blue
-import com.tasktracker.resources.tag_color_gray
-import com.tasktracker.resources.tag_color_green
-import com.tasktracker.resources.tag_color_indigo
-import com.tasktracker.resources.tag_color_orange
-import com.tasktracker.resources.tag_color_pink
-import com.tasktracker.resources.tag_color_purple
-import com.tasktracker.resources.tag_color_red
-import com.tasktracker.resources.tag_color_teal
-import com.tasktracker.resources.tag_icon_bell
-import com.tasktracker.resources.tag_icon_bolt
-import com.tasktracker.resources.tag_icon_book
-import com.tasktracker.resources.tag_icon_bug
-import com.tasktracker.resources.tag_icon_flag
-import com.tasktracker.resources.tag_icon_mobile
-import com.tasktracker.resources.tag_icon_sparkle
-import com.tasktracker.resources.tag_icon_star
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 

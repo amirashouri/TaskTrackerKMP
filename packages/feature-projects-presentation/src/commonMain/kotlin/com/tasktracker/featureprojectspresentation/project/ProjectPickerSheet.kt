@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
-import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
