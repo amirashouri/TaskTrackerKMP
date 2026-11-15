@@ -101,7 +101,7 @@ fun TTBottomSheetScaffold(
                                 // this window needs 776dp for a full form, so the 760dp
                                 // cap makes it scroll 16dp: the measured centre reads
                                 // low and the action row lands below the viewport.
-                                .padding(horizontal = ttSpacing.xxl, vertical = 56.dp)
+                                .padding(horizontal = 24.dp, vertical = 56.dp)
                         } else {
                             Modifier
                                 .fillMaxWidth()
@@ -137,7 +137,7 @@ fun TTBottomSheetScaffold(
                     .then(sheetModifier)
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
                     .padding(
-                        horizontal = ttSpacing.xxl,
+                        horizontal = 24.dp,
                         // A window's form fills the scroll viewport. Its own bottom
                         // inset would be the one part scrolled out of view, leaving
                         // the tagged form exactly that far below the window's centre.
