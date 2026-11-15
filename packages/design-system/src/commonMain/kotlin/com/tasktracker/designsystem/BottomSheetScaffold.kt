@@ -101,11 +101,11 @@ fun TTBottomSheetScaffold(
                                 // this window needs 776dp for a full form, so the 760dp
                                 // cap makes it scroll 16dp: the measured centre reads
                                 // low and the action row lands below the viewport.
-                                .padding(horizontal = ttSpacing.xl, vertical = 56.dp)
+                                .padding(horizontal = ttSpacing.xxl, vertical = 56.dp)
                         } else {
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
+                                .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.md)
                         }
                     )
                     .then(if (keyboardVisible) Modifier.imePadding() else Modifier.navigationBarsPadding())
