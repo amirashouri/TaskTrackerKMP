@@ -105,7 +105,7 @@ fun TTBottomSheetScaffold(
                         } else {
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
+                                .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
                         }
                     )
                     .then(if (keyboardVisible) Modifier.imePadding() else Modifier.navigationBarsPadding())
@@ -137,7 +137,7 @@ fun TTBottomSheetScaffold(
                     .then(sheetModifier)
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
                     .padding(
-                        horizontal = ttSpacing.md,
+                        horizontal = ttSpacing.xxl,
                         // A window's form fills the scroll viewport. Its own bottom
                         // inset would be the one part scrolled out of view, leaving
                         // the tagged form exactly that far below the window's centre.

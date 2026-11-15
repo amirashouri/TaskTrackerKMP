@@ -211,7 +211,6 @@ internal fun AgentSetupSheet(
         visible = true,
         onDismissRequest = onDismiss,
         modifier = modifier.testTag(SettingsAgentSetupSheetTag),
-        sheetModifier = Modifier.padding(horizontal = ttSpacing.sm),
     ) {
         ttText(
             text = stringResource(Res.string.settings_agent_setup_title),
