@@ -33,6 +33,7 @@ import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttStatusActive
 import com.tasktracker.designsystem.ttStatusAway
@@ -68,7 +69,7 @@ internal fun UserStatusPickerRow(
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SettingsIconWell(icon = ttActionIcons.person, tint = ttAccent())
+            SettingsIconWell(icon = ttSettingsIcons.status, tint = ttAccent())
             ttText(
                 text = stringResource(Res.string.settings_user_status),
                 style = ttTypography.body,

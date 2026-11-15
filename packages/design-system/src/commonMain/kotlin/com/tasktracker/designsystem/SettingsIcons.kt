@@ -117,6 +117,56 @@ object ttSettingsIcons {
         circle(12f, 7.5f, 1.15f)
         roundRect(10.9f, 10f, 13.1f, 18f, 1.1f)
     }
+
+    val email: ImageVector = icon("Email") {
+        // Envelope silhouette: a V-flap top over a rectangular body.
+        moveTo(4f, 6f)
+        lineTo(12f, 13f)
+        lineTo(20f, 6f)
+        lineTo(20f, 18f)
+        lineTo(4f, 18f)
+        close()
+    }
+
+    val members: ImageVector = icon("Members") {
+        // Two heads over two shoulders: a group rather than a single person.
+        circle(8f, 7f, 3f)
+        circle(16f, 7f, 3f)
+        moveTo(3f, 21f)
+        quadTo(3f, 14f, 8f, 14f)
+        quadTo(13f, 14f, 13f, 21f)
+        close()
+        moveTo(11f, 21f)
+        quadTo(11f, 14f, 16f, 14f)
+        quadTo(21f, 14f, 21f, 21f)
+        close()
+    }
+
+    val signOut: ImageVector = icon("SignOut") {
+        // A door plus an arrow pointing out of it.
+        roundRect(3f, 4f, 13f, 20f, 2f)
+        moveTo(14f, 10.5f)
+        lineTo(20f, 10.5f)
+        lineTo(20f, 9f)
+        lineTo(23f, 12f)
+        lineTo(20f, 15f)
+        lineTo(20f, 13.5f)
+        lineTo(14f, 13.5f)
+        close()
+    }
+
+    val role: ImageVector = icon("Role") {
+        // A briefcase: body plus a handle on top.
+        roundRect(3f, 9f, 21f, 19f, 2f)
+        roundRect(9f, 5f, 15f, 9f, 1.5f)
+    }
+
+    val status: ImageVector = icon("Status", PathFillType.EvenOdd) {
+        // A ring with a filled centre dot: a status indicator.
+        circle(12f, 12f, 10f)
+        circle(12f, 12f, 6f)
+        circle(12f, 12f, 2.5f)
+    }
 }
 
 /** Icon tile dimensions shared by settings rows. */

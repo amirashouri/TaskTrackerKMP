@@ -66,7 +66,7 @@ internal fun UserPositionPickerRow(
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SettingsIconWell(icon = ttSettingsIcons.account, tint = ttAccent())
+            SettingsIconWell(icon = ttSettingsIcons.role, tint = ttAccent())
             ttText(
                 text = stringResource(Res.string.settings_position_label),
                 style = ttTypography.body,

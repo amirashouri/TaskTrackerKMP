@@ -286,7 +286,7 @@ fun SettingsScreen(
                 SettingsIconRow(
                     label = stringResource(Res.string.settings_email_label),
                     value = userDetails.email,
-                    icon = ttSettingsIcons.account,
+                    icon = ttSettingsIcons.email,
                     modifier = Modifier.testTag(SettingsEmailRowTag),
                 )
             }
@@ -341,7 +341,7 @@ fun SettingsScreen(
             SettingsSection {
                 SettingsActionRow(
                     label = stringResource(Res.string.settings_manage_members),
-                    icon = ttSettingsIcons.account,
+                    icon = ttSettingsIcons.members,
                     tint = ttAccent(),
                     onClick = onManageMembers,
                     modifier = Modifier.testTag(SettingsManageMembersTag),
@@ -503,7 +503,7 @@ fun SettingsScreen(
         SettingsSection {
             SettingsActionRow(
                 label = stringResource(Res.string.settings_sign_out),
-                icon = ttSettingsIcons.account,
+                icon = ttSettingsIcons.signOut,
                 tint = ttError(),
                 labelColor = ttError(),
                 chevronTint = ttError(),
