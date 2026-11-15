@@ -138,7 +138,7 @@ fun TTBottomSheetScaffold(
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = if (isWindow) 0.dp else ttSpacing.xxl),
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
                     content = content,
                 )
