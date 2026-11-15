@@ -259,7 +259,9 @@ internal fun AgentSetupSheet(
             if (copies > 0) {
                 ttToast(
                     message = stringResource(Res.string.copied_to_clipboard),
-                    modifier = Modifier.align(Alignment.BottomCenter),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = ttSpacing.sm),
                 )
             }
         }
@@ -299,8 +301,8 @@ private fun AgentSetupCommand(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
-            .padding(start = ttSpacing.md, end = ttSpacing.sm, top = ttSpacing.sm, bottom = ttSpacing.sm),
+            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+            .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
@@ -321,7 +323,7 @@ private fun AgentSetupCommand(
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
         ) {
             ttText(
                 text = caption,
@@ -350,7 +352,7 @@ private fun AgentSetupCommand(
 private const val AgentCopiedToastMillis = 2_000L
 
 /** 22dp, the tab glyph size: large enough for a digit, small enough not to lead. */
-private val AgentStepBadgeSize = 22.dp
+private val AgentStepBadgeSize = 24.dp
 
 /** One machine's own state, from the overview's observation time. */
 private fun AgentMachine.state(overview: AgentOverview): AgentState = when {
