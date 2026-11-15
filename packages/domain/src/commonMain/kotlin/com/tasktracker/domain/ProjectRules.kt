@@ -205,7 +205,7 @@ object WorkItemGrouping {
                 )
             }
         } else {
-            boardStatuses.filter { it.category.appearsOnBoard }.sortedBy { it.order }
+            boardStatuses.filter { it.isOnBoard }.sortedBy { it.order }
         }
         val grouped = itemsByStatus(items)
         return effective.map { definition ->

@@ -813,6 +813,7 @@
     <string name="admin_project_statuses_name">Stage name</string>
     <string name="admin_project_statuses_category">Built-in category</string>
     <string name="admin_project_statuses_color">Colour</string>
+    <string name="admin_project_statuses_show_on_board">Show on board</string>
     <string name="admin_project_statuses_add">Add stage</string>
     <string name="admin_project_statuses_save">Save stage</string>
     <string name="admin_project_statuses_cancel">Cancel</string>

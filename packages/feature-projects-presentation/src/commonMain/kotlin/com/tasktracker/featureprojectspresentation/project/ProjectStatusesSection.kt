@@ -56,7 +56,10 @@ import com.tasktracker.resources.admin_project_statuses_name
 import com.tasktracker.resources.admin_project_statuses_name_required
 import com.tasktracker.resources.admin_project_statuses_remove
 import com.tasktracker.resources.admin_project_statuses_save
+import com.tasktracker.resources.admin_project_statuses_show_on_board
 import com.tasktracker.resources.admin_project_statuses_title
+import com.tasktracker.resources.project_agent_enabled_off
+import com.tasktracker.resources.project_agent_enabled_on
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -66,6 +69,7 @@ const val AdminProjectStatusAddTag = "admin.projectEditor.statusAdd"
 const val AdminProjectStatusSaveTag = "admin.projectEditor.statusSave"
 const val AdminProjectStatusCancelTag = "admin.projectEditor.statusCancel"
 const val AdminProjectStatusErrorTag = "admin.projectEditor.statusError"
+const val AdminProjectStatusOnBoardTag = "admin.projectEditor.statusOnBoard"
 fun AdminProjectStatusRowTag(status: StatusDefinition): String =
     "admin.projectEditor.status.${status.id}"
 fun AdminProjectStatusEditTag(status: StatusDefinition): String = "${AdminProjectStatusRowTag(status)}.edit"
@@ -87,8 +91,8 @@ fun AdminProjectStatusColorTag(color: TagColor): String =
 @OptIn(ExperimentalLayoutApi::class)
 fun ProjectStatusesSection(
     statuses: List<StatusDefinition>,
-    onAdd: (name: String, category: WorkItemStatus, color: TagColor) -> Boolean,
-    onUpdate: (id: String, name: String, category: WorkItemStatus, color: TagColor) -> Unit,
+    onAdd: (name: String, category: WorkItemStatus, color: TagColor, appearsOnBoard: Boolean?) -> Boolean,
+    onUpdate: (id: String, name: String, category: WorkItemStatus, color: TagColor, appearsOnBoard: Boolean?) -> Unit,
     onRemove: (String) -> Unit,
     onMove: (from: Int, to: Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -97,6 +101,7 @@ fun ProjectStatusesSection(
     var draftName by remember { mutableStateOf("") }
     var draftCategory by remember { mutableStateOf(WorkItemStatus.Todo) }
     var draftColor by remember { mutableStateOf(TagColor.Blue) }
+    var draftOnBoard by remember { mutableStateOf(true) }
     var editingID by remember { mutableStateOf<String?>(null) }
     var attempted by remember { mutableStateOf(false) }
 
@@ -107,6 +112,7 @@ fun ProjectStatusesSection(
         draftName = ""
         draftCategory = WorkItemStatus.Todo
         draftColor = TagColor.Blue
+        draftOnBoard = true
         editingID = null
         attempted = false
     }
@@ -145,6 +151,7 @@ fun ProjectStatusesSection(
                         draftName = status.name
                         draftCategory = status.category
                         draftColor = status.color
+                        draftOnBoard = status.appearsOnBoard ?: true
                         attempted = false
                     },
                     onMoveUp = { onMove(index, index - 1) },
@@ -180,6 +187,33 @@ fun ProjectStatusesSection(
                 onSelect = { draftCategory = it },
                 title = { statusLabel(it) },
             )
+            if (draftCategory.appearsOnBoard) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ttText(
+                        text = stringResource(Res.string.admin_project_statuses_show_on_board),
+                        style = ttTypography.captionEmphasised,
+                        color = ttLabelSecondary(),
+                    )
+                    ttGlassButton(
+                        label = if (draftOnBoard) {
+                            stringResource(Res.string.project_agent_enabled_on)
+                        } else {
+                            stringResource(Res.string.project_agent_enabled_off)
+                        },
+                        onClick = { draftOnBoard = !draftOnBoard },
+                        modifier = Modifier.testTag(AdminProjectStatusOnBoardTag),
+                        style = if (draftOnBoard) {
+                            TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+                        } else {
+                            TTGlassButtonStyle()
+                        },
+                    )
+                }
+            }
             ttText(
                 text = stringResource(Res.string.admin_project_statuses_color),
                 style = ttTypography.captionEmphasised,
@@ -226,6 +260,7 @@ fun ProjectStatusesSection(
                                     StatusRules.normaliseName(draftName),
                                     draftCategory,
                                     draftColor,
+                                    if (draftCategory.appearsOnBoard) draftOnBoard else null,
                                 )
                                 resetDraft()
                             } else {
@@ -239,7 +274,12 @@ fun ProjectStatusesSection(
                     ttGlassButton(
                         label = stringResource(Res.string.admin_project_statuses_add),
                         onClick = {
-                            if (!isBusy && refusal == null && onAdd(draftName, draftCategory, draftColor)) {
+                            if (!isBusy && refusal == null && onAdd(
+                                    draftName,
+                                    draftCategory,
+                                    draftColor,
+                                    if (draftCategory.appearsOnBoard) draftOnBoard else null,
+                                )) {
                                 resetDraft()
                             } else {
                                 attempted = true

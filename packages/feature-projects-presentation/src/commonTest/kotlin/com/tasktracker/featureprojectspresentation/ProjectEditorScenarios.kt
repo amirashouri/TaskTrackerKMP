@@ -175,8 +175,8 @@ object ProjectEditorScenarios {
             ttTheme(ThemeScheme.Light) {
                 ProjectStatusesSection(
                     statuses = listOf(todo, build),
-                    onAdd = { _, _, _ -> true },
-                    onUpdate = { id, name, category, _ ->
+                    onAdd = { _, _, _, _ -> true },
+                    onUpdate = { id, name, category, _, _ ->
                         updates = updates + Triple(id, name, category)
                     },
                     onRemove = { removes = removes + it },
@@ -212,11 +212,11 @@ object ProjectEditorScenarios {
             ttTheme(ThemeScheme.Light) {
                 ProjectStatusesSection(
                     statuses = emptyList(),
-                    onAdd = { name, category, color ->
+                    onAdd = { name, category, color, _ ->
                         added = Triple(name, category, color)
                         true
                     },
-                    onUpdate = { _, _, _, _ -> },
+                    onUpdate = { _, _, _, _, _ -> },
                     onRemove = {},
                     onMove = { _, _ -> },
                 )

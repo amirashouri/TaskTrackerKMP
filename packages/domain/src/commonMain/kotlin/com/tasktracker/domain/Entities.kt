@@ -16,6 +16,7 @@ import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomTagID
 import com.tasktracker.core.randomWorkItemID
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
@@ -296,7 +297,18 @@ data class StatusDefinition(
     /** Board/editor order, ascending. */
     var order: Int = 0,
     var color: TagColor = TagColor.Blue,
-)
+    /**
+     * Whether this status is a board column. Null means "use the category default"
+     * (Backlog and Closed are never on the board). Never encoded when null so an
+     * older server or an untargeted write gains no key.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    var appearsOnBoard: Boolean? = null,
+) {
+    /** Resolved board visibility: Backlog/Closed stay off the board regardless. */
+    val isOnBoard: Boolean
+        get() = category.appearsOnBoard && (appearsOnBoard ?: true)
+}
 
 /** The rules a project status catalog shares with the tag catalog. */
 object StatusRules {
@@ -401,7 +413,7 @@ data class Project(
 
     /** The catalog entries that draw as board lanes, in order. Empty when no catalog. */
     val boardStatuses: List<StatusDefinition>
-        get() = statuses.filter { it.category.appearsOnBoard }.sortedBy { it.order }
+        get() = statuses.filter { it.isOnBoard }.sortedBy { it.order }
 
     /**
      * The catalog entry [item] belongs to, or `null` when the project defines no catalog.

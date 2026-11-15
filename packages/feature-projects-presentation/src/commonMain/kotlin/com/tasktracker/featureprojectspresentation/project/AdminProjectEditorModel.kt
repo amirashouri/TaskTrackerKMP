@@ -167,7 +167,12 @@ class AdminProjectEditorModel(
     }
 
     /** Validates against [StatusRules] and appends a status if its name is unique. */
-    fun addStatus(name: String, category: WorkItemStatus, color: TagColor): Boolean {
+    fun addStatus(
+        name: String,
+        category: WorkItemStatus,
+        color: TagColor,
+        appearsOnBoard: Boolean? = null,
+    ): Boolean {
         if (!StatusRules.isNameValid(name)) return false
         if (statuses.size >= StatusRules.MAX_PER_PROJECT) return false
         val normalised = StatusRules.normaliseName(name)
@@ -178,19 +183,27 @@ class AdminProjectEditorModel(
                 name = normalised,
                 category = category,
                 color = color,
+                appearsOnBoard = appearsOnBoard,
             ),
         )
         return true
     }
 
     /** Renames or recategorises an existing status draft entry by id. */
-    fun updateStatus(id: String, name: String, category: WorkItemStatus, color: TagColor) {
+    fun updateStatus(
+        id: String,
+        name: String,
+        category: WorkItemStatus,
+        color: TagColor,
+        appearsOnBoard: Boolean? = null,
+    ) {
         statuses = renumbered(
             statuses.map { status ->
                 if (status.id != id) status else status.copy(
                     name = StatusRules.normaliseName(name),
                     category = category,
                     color = color,
+                    appearsOnBoard = appearsOnBoard ?: status.appearsOnBoard,
                 )
             },
         )

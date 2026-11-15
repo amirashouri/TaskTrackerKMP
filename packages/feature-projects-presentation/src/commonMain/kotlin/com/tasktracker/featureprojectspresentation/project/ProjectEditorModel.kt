@@ -107,7 +107,12 @@ class ProjectEditorModel(
     }
 
     /** Validates against [StatusRules] and appends a status if name is unique (case-insensitive). */
-    fun addStatus(name: String, category: WorkItemStatus, color: TagColor): Boolean {
+    fun addStatus(
+        name: String,
+        category: WorkItemStatus,
+        color: TagColor,
+        appearsOnBoard: Boolean? = null,
+    ): Boolean {
         if (!StatusRules.isNameValid(name)) return false
         if (statuses.size >= StatusRules.MAX_PER_PROJECT) return false
         val normalised = StatusRules.normaliseName(name)
@@ -117,6 +122,7 @@ class ProjectEditorModel(
             name = normalised,
             category = category,
             color = color,
+            appearsOnBoard = appearsOnBoard,
         )).mapIndexed { index, status -> status.copy(order = index) }
         return true
     }
@@ -127,12 +133,19 @@ class ProjectEditorModel(
     }
 
     /** Renames or recategorises an existing status draft entry by id. */
-    fun updateStatus(id: String, name: String?, category: WorkItemStatus?, color: TagColor?) {
+    fun updateStatus(
+        id: String,
+        name: String? = null,
+        category: WorkItemStatus? = null,
+        color: TagColor? = null,
+        appearsOnBoard: Boolean? = null,
+    ) {
         statuses = statuses.map { s ->
             if (s.id != id) s else s.copy(
                 name = name?.let { StatusRules.normaliseName(it) } ?: s.name,
                 category = category ?: s.category,
                 color = color ?: s.color,
+                appearsOnBoard = appearsOnBoard ?: s.appearsOnBoard,
             )
         }
     }
