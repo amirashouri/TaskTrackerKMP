@@ -193,9 +193,13 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
 - **License terms.** MIT + Commons Clause + a no-rebranding term: source-available
   (not OSI), forbids selling and redistributing under another name. Both repos
   must keep `LICENSE` byte-identical or the terms drift.
-- **Real backdrop blur is a non-goal.** The painted material ships because the
-  alternatives were a third-party dependency in a package every module compiles
-  against, or UIKit interop that replaces the Compose-drawn rim on iOS.
+- **Native backdrop blur is now available on iOS via `TTGlassSurface`.** It wraps
+  content in a `UIVisualEffectView` (`UIBlurEffect`) so iOS surfaces read as real
+  native glass. The painted `ttGlassSurface` remains the fallback on JVM/Android
+  and for any surface not yet migrated; fully replacing the painted material
+  across all 33 call sites is still in progress on the `feat/native-liquid-glass-ios`
+  branch. macOS desktop keeps the painted material (Compose Desktop has no native
+  vibrancy seam).
 - **Never log or render untrusted content.** Prefer user-facing `AppError.message`
   in log lines, never append tokens, and render the agent event log as plain
   text — never as markup or a link the model chose.

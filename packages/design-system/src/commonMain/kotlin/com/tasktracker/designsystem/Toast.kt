@@ -22,18 +22,19 @@ fun ttToast(
     message: String,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    TTGlassSurface(
+        shape = RoundedCornerShape(ttRadius.banner),
         modifier = modifier
             .testTag(TTToastTag)
             .semantics { liveRegion = LiveRegionMode.Polite }
-            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.banner))
             .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        ttText(
-            text = message,
-            style = ttTypography.footnote,
-            color = ttLabel(),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            ttText(
+                text = message,
+                style = ttTypography.footnote,
+                color = ttLabel(),
+            )
+        }
     }
 }

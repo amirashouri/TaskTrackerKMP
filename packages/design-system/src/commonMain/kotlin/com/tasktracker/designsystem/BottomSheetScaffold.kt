@@ -86,7 +86,10 @@ fun TTBottomSheetScaffold(
                     .testTag(TTBottomSheetScrimTag),
             )
 
-            Column(
+            TTGlassSurface(
+                shape = RoundedCornerShape(ttRadius.surface),
+                thickness = ttGlass.GlassThickness.THICK,
+                base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
                 modifier = Modifier
                     .align(if (isWindow) Alignment.Center else Alignment.BottomCenter)
                     .then(
@@ -133,11 +136,6 @@ fun TTBottomSheetScaffold(
                     )
                     .then(sheetModifier)
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier)
-                    .ttGlassSurface(
-                        shape = RoundedCornerShape(ttRadius.surface),
-                        thickness = ttGlass.GlassThickness.THICK,
-                        base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
-                    )
                     .padding(
                         horizontal = ttSpacing.md,
                         // A window's form fills the scroll viewport. Its own bottom
@@ -146,9 +144,12 @@ fun TTBottomSheetScaffold(
                         // The window's outer padding supplies the clearance instead.
                         vertical = if (isWindow) 0.dp else ttSpacing.xxl,
                     ),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
-                content = content,
-            )
+            ) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
+                    content = content,
+                )
+            }
         }
     }
 }

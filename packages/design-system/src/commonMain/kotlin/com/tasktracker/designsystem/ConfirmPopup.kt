@@ -50,17 +50,17 @@ fun ConfirmPopup(
             .pointerInput(Unit) {},
         contentAlignment = Alignment.Center,
     ) {
-        Column(
+        TTGlassSurface(
+            shape = shape,
+            base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
             modifier = Modifier
                 .fillMaxWidth()
-                .ttGlassSurface(
-                    shape = shape,
-                    base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
-                )
                 .padding(ttSpacing.formStack)
                 .testTag(tag),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+            ) {
             ttText(
                 text = title,
                 style = ttTypography.titleSmall,
@@ -87,6 +87,7 @@ fun ConfirmPopup(
                     modifier = Modifier.testTag(TTConfirmPopupConfirmTag),
                     style = confirmStyle,
                 )
+            }
             }
         }
     }
