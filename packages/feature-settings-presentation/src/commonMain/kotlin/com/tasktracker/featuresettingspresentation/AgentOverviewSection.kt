@@ -211,6 +211,7 @@ internal fun AgentSetupSheet(
         visible = true,
         onDismissRequest = onDismiss,
         modifier = modifier.testTag(SettingsAgentSetupSheetTag),
+        sheetModifier = Modifier.padding(horizontal = ttSpacing.sm),
     ) {
         ttText(
             text = stringResource(Res.string.settings_agent_setup_title),
@@ -302,7 +303,7 @@ private fun AgentSetupCommand(
         modifier = modifier
             .fillMaxWidth()
             .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
-            .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
     ) {
