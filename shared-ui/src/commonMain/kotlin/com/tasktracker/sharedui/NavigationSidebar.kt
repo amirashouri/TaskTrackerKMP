@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -37,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
+import com.tasktracker.designsystem.TTGlassSurface
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIconSize
@@ -84,7 +86,9 @@ internal fun NavigationSidebar(
             )
             .testTag(SidebarTag),
     ) {
-        Column(
+        TTGlassSurface(
+            shape = RoundedCornerShape(ttRadius.surface),
+            thickness = ttGlass.GlassThickness.THIN,
             modifier = Modifier
                 .width(ShellSidebarWidth)
                 .fillMaxHeight()
@@ -94,14 +98,13 @@ internal fun NavigationSidebar(
                     ambientColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
                     spotColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
                 )
-                .ttGlassSurface(
-                    shape = RoundedCornerShape(ttRadius.surface),
-                    thickness = ttGlass.GlassThickness.THIN,
-                )
                 .padding(ttSpacing.hairlineInset)
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
         ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            ) {
             // The index, at the head. It is the one destination that is not scoped to a project,
             // so it opens the panel rather than sitting at the bottom with the work destinations.
             // A heading here instead of a row was 8.1's shape, and it composed "Projects" twice —
@@ -168,6 +171,7 @@ internal fun NavigationSidebar(
                 onClick = { onSelect(AppTab.Settings) },
                 modifier = Modifier.testTag(SidebarButtonTag(AppTab.Settings)),
             )
+        }
         }
     }
 }

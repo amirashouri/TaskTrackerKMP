@@ -10,6 +10,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -29,6 +30,7 @@ import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttCanvas
+import com.tasktracker.designsystem.TTGlassSurface
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
@@ -80,17 +82,15 @@ fun PrimaryButton(
     )
     val shape = RoundedCornerShape(ttRadius.control)
 
-    Box(
+    TTGlassSurface(
+        shape = shape,
+        tint = ttAccent(),
+        base = ttAccent(),
         modifier = modifier
             .fillMaxWidth()
             .testTag(PrimaryButtonTag)
             .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .scale(scale)
-            .ttGlassSurface(
-                shape = shape,
-                tint = ttAccent(),
-                base = ttAccent(),
-            )
             // The padding is inside the material, so the control's touch target is the
             // visible control. Applied after, it would enlarge the row without enlarging the
             // thing being pressed.
@@ -109,17 +109,18 @@ fun PrimaryButton(
                 role = Role.Button,
                 onClick = onClick,
             ),
-        contentAlignment = Alignment.Center,
     ) {
-        // Both children are always composed and cross-faded, so the button's width does not
-        // change when the label becomes a spinner.
-        LabelContent(
-            text = label,
-            visible = !isLoading,
-        )
-        SpinnerContent(
-            visible = isLoading,
-        )
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            // Both children are always composed and cross-faded, so the button's width does not
+            // change when the label becomes a spinner.
+            LabelContent(
+                text = label,
+                visible = !isLoading,
+            )
+            SpinnerContent(
+                visible = isLoading,
+            )
+        }
     }
 }
 
