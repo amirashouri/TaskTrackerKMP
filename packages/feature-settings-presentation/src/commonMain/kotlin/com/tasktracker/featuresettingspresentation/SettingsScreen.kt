@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AgentRunnerID
@@ -33,6 +36,7 @@ import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttTabIcons
@@ -266,6 +270,24 @@ fun SettingsScreen(
     var forgotPasswordOpen by remember { mutableStateOf(false) }
     var startChangeWithCode by remember { mutableStateOf(false) }
 
+    // Tracks whether a sync cycle was running on the previous frame, so the
+    // completion toast fires exactly once when a run finishes rather than on
+    // every recomposition. The toast text is held locally because it is a
+    // transient confirmation, not model state.
+    var wasSyncing by remember { mutableStateOf(false) }
+    var syncToastSuccess by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(activity.isSyncing) {
+        if (wasSyncing && !activity.isSyncing) {
+            syncToastSuccess = activity.phase == SyncActivity.Phase.UpToDate
+        }
+        wasSyncing = activity.isSyncing
+    }
+    LaunchedEffect(syncToastSuccess) {
+        val kind = syncToastSuccess ?: return@LaunchedEffect
+        delay(2000)
+        if (syncToastSuccess == kind) syncToastSuccess = null
+    }
+
     // The setup instructions, in the same local register as the name editor: the
     // sheet holds no draft, so the only state is whether it is open.
     var agentSetupOpen by remember { mutableStateOf(false) }
@@ -494,6 +516,7 @@ fun SettingsScreen(
                 tint = ttAccent(),
                 onClick = onSyncNow,
                 enabled = !activity.isSyncing,
+                loading = activity.isSyncing,
                 modifier = Modifier.testTag(SettingsSyncNowTag),
             )
         }
@@ -765,6 +788,23 @@ fun SettingsScreen(
                 onSelectResetMember = onSelectResetMember,
                 onGenerateResetCode = onGenerateResetCode,
             )
+        }
+
+        // Transient confirmation after a Sync Now run finishes.
+        syncToastSuccess?.let { success ->
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current),
+            ) {
+                ttToast(
+                    message = if (success) {
+                        stringResource(Res.string.settings_activity_up_to_date)
+                    } else {
+                        stringResource(Res.string.settings_activity_failed)
+                    },
+                )
+            }
         }
     }
 }

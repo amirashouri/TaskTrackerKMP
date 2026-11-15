@@ -36,6 +36,7 @@ import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSettingsIconSize
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSpinner
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 
@@ -127,6 +128,7 @@ internal fun SettingsActionRow(
     tint: Color,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    loading: Boolean = false,
     // `null` keeps the standard legible tokens (ttLabel / ttLabelSecondary). A caller that
     // wants to flag the row as destructive (Sign Out) passes ttError() for both, which the
     // design system holds to the same 4.5:1 contrast bar as the accent.
@@ -142,7 +144,7 @@ internal fun SettingsActionRow(
             .heightIn(min = 48.dp)
             .clip(RoundedCornerShape(ttRadius.row))
             .clickable(
-                enabled = enabled,
+                enabled = enabled && !loading,
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 role = Role.Button,
@@ -163,14 +165,22 @@ internal fun SettingsActionRow(
             // primary-text token instead, as SettingsIconRow already does.
             ttText(text = label, style = ttTypography.body, color = resolvedLabelColor)
         }
-        // Disclosure indicator: this row navigates. A chevron reads as "tappable" in
-        // every theme and contrast level, unlike an accent-coloured label, which fails
-        // the bar on the mid-tone dark palettes (Navy Blue / Classic dark).
-        ttIcon(
-            image = ttActionIcons.chevronRight,
-            contentDescription = null,
-            tint = resolvedChevronTint,
-            modifier = Modifier.size(ttSettingsIconSize.glyph),
-        )
+        if (loading) {
+            ttSpinner(
+                color = tint,
+                size = ttSettingsIconSize.glyph,
+                modifier = Modifier.size(ttSettingsIconSize.glyph),
+            )
+        } else {
+            // Disclosure indicator: this row navigates. A chevron reads as "tappable" in
+            // every theme and contrast level, unlike an accent-coloured label, which fails
+            // the bar on the mid-tone dark palettes (Navy Blue / Classic dark).
+            ttIcon(
+                image = ttActionIcons.chevronRight,
+                contentDescription = null,
+                tint = resolvedChevronTint,
+                modifier = Modifier.size(ttSettingsIconSize.glyph),
+            )
+        }
     }
 }
