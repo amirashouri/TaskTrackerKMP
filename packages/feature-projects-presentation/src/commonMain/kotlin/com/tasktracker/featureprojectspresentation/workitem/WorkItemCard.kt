@@ -98,6 +98,20 @@ fun WorkItemCard(
             maxLines = CARD_TITLE_MAX_LINES,
             overflow = TextOverflow.Ellipsis,
         )
+        // One line of the description, in the secondary colour so it reads as support for the
+        // title rather than a second heading. The card keeps a fixed rhythm — title, snippet,
+        // chips — so a paragraph does not turn a lane into one very tall card; the full text is
+        // a tap away, and `TextOverflow.Ellipsis` is the three dots the reader expects there.
+        item.details.trim().takeIf { it.isNotEmpty() }?.let { description ->
+            ttText(
+                text = description,
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+                maxLines = CARD_DESCRIPTION_MAX_LINES,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(WorkItemCardDescriptionTag),
+            )
+        }
         assigneeName?.takeIf { it.isNotBlank() }?.let { assignee ->
             AssigneeLabel(firstName = assigneeFirstName(assignee))
         }
@@ -207,10 +221,14 @@ const val WorkItemCardTagPrefix = "workItem.card"
 const val WorkItemCardDueTag = "workItem.card.dueDate"
 const val WorkItemCardAssigneeTag = "workItem.card.assignee"
 const val WorkItemCardCopyTag = "workItem.card.copy"
+const val WorkItemCardDescriptionTag = "workItem.card.description"
 
 fun WorkItemCardTag(item: WorkItem): String = "$WorkItemCardTagPrefix.${item.key}"
 
 private const val CARD_TITLE_MAX_LINES = 3
+
+/** One line, because the card is a summary and the snippet is not the reason it was opened. */
+private const val CARD_DESCRIPTION_MAX_LINES = 1
 private const val MONTH_ABBREVIATION_LENGTH = 3
 private const val OVERDUE_FILL_ALPHA = 0.16f
 private val CHIP_PADDING_V = 2.dp

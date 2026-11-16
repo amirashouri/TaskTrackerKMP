@@ -1,11 +1,17 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
@@ -16,6 +22,8 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * What a backlog row does with its copy control, as scenarios.
@@ -30,6 +38,67 @@ import kotlin.test.assertFalse
  */
 @OptIn(ExperimentalTestApi::class)
 object WorkItemBacklogRowScenarios {
+
+    /**
+     * A row draws two lines of the description — one more than the board card.
+     *
+     * Read off the real layout rather than the string, because semantics reports the whole
+     * description either way: a row that printed all of it would pass a text assertion. The
+     * fixed-width box makes the overflow a fact of this scenario, not of the host's viewport,
+     * and the fixture is long enough that a third line would fit if the cap were raised.
+     */
+    val showsTwoLinesOfTheDescription: suspend ComposeUiTest.() -> Unit = {
+        val description = "Reported on a cold install with no keychain entry, and it comes back " +
+            "after every restart — which is the part that matters, and the part that has to be " +
+            "cut off, because the row is two lines and the rest of it is a tap away from here"
+        val item = ViewPreviewData.workItems
+            .first { it.status == WorkItemStatus.Backlog }
+            .copy(details = description)
+
+        setContent {
+            Themed {
+                Box(modifier = Modifier.width(DESCRIPTION_SCENARIO_WIDTH)) {
+                    WorkItemBacklogRow(
+                        item = item,
+                        onPutOnBoard = {},
+                        onFileAway = {},
+                    )
+                }
+            }
+        }
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        // Unmerged: the row is clickable, so its own node swallows the children's text.
+        val action = onNodeWithTag(BacklogDescriptionTag(item), useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+        assertNotNull(action, "the row's description exposes no text layout, so its length is unreadable")
+        action(layouts)
+
+        val layout = layouts.single()
+        assertEquals(
+            2,
+            layout.lineCount,
+            "the description took ${layout.lineCount} lines, so one long item makes every row " +
+                "in the list as tall as its text",
+        )
+        assertTrue(
+            layout.hasVisualOverflow,
+            "the fixture fits in one line, so this scenario proves nothing about truncation",
+        )
+    }
+
+    /** An item with no details draws no line, rather than an empty gap under the title. */
+    val omitsTheDescriptionWhenThereIsNone: suspend ComposeUiTest.() -> Unit = {
+        val item = ViewPreviewData.workItems
+            .first { it.status == WorkItemStatus.Backlog }
+            .copy(details = "")
+
+        rowShowing(item = item, onCopy = null)
+
+        onNodeWithTag(BacklogDescriptionTag(item), useUnmergedTree = true).assertDoesNotExist()
+    }
 
     /** The control is on every row the backlog wires, including one with no due date or assignee. */
     val showsTheCopyControl: suspend ComposeUiTest.() -> Unit = {
@@ -136,6 +205,9 @@ object WorkItemBacklogRowScenarios {
         onNested(BacklogUnarchiveTag(item)).assertDoesNotExist()
     }
 }
+
+/** The width these row scenarios draw at, so a line break is a decision and not an accident. */
+private val DESCRIPTION_SCENARIO_WIDTH = 300.dp
 
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.rowShowing(

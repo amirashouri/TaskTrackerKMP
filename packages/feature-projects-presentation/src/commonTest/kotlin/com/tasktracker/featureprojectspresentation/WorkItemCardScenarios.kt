@@ -1,12 +1,18 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.core.UserID
@@ -19,6 +25,7 @@ import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -41,6 +48,11 @@ import kotlin.test.assertTrue
  *
  * **Never the status.** The card sits in a column *named* with its status. Printing it again
  * is the duplication that goes stale the moment a move fails halfway.
+ *
+ * **One line of the description, when there is one.** It is what tells two similarly titled
+ * tasks apart on a board, and one line is all a lane can afford: a paragraph would make each
+ * card as tall as its author's mood, so the rest is ellipsized and the full text waits behind
+ * a tap.
  *
  * ## What is not in here, and why
  *
@@ -167,6 +179,61 @@ object WorkItemCardScenarios {
     }
 
     /**
+     * The description is one line, ellipsized when it does not fit.
+     *
+     * The claim is read off the real layout, not off the string: semantics reports the whole
+     * description either way, so a card that printed every line of it would pass a string
+     * assertion. A fixed 300dp card makes the overflow a fact of this scenario rather than of
+     * whatever width the host happens to run at.
+     */
+    val showsOneLineOfTheDescription: suspend ComposeUiTest.() -> Unit = {
+        val description = "Reported on a cold install with no keychain entry, and it comes back " +
+            "after every restart — which is the part that matters, and the part that has to be " +
+            "cut off at the first line"
+        val item = ViewPreviewData.workItems.first().copy(details = description)
+
+        setContent {
+            Themed {
+                Box(modifier = Modifier.width(CARD_SCENARIO_WIDTH)) {
+                    WorkItemCard(item = item, onClick = {}, onCopy = {})
+                }
+            }
+        }
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        // Unmerged: the card is clickable, so its own node swallows the children's text and
+        // the snippet's layout is only reachable in the unmerged tree.
+        val action = onNodeWithTag(WorkItemCardDescriptionTag, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+        assertNotNull(action, "the description exposes no text layout, so its length is unreadable")
+        action(layouts)
+
+        val layout = layouts.single()
+        assertEquals(
+            1,
+            layout.lineCount,
+            "the description took ${layout.lineCount} lines, so a long one makes every card in a " +
+                "lane as tall as its text",
+        )
+        assertTrue(
+            layout.hasVisualOverflow,
+            "the fixture fits in one line, so this scenario proves nothing about truncation",
+        )
+    }
+
+    /** A task with no description gets no snippet, rather than an empty line. */
+    val omitsTheDescriptionWhenThereIsNone: suspend ComposeUiTest.() -> Unit = {
+        val item = ViewPreviewData.workItems.first().copy(details = "")
+
+        cardShowing(item)
+
+        onNodeWithTag(WorkItemCardTag(item)).assertIsDisplayed()
+        onNodeWithTag(WorkItemCardDescriptionTag).assertDoesNotExist()
+    }
+
+    /**
      * Copying hands the host the title and the details, and does not also select the card.
      *
      * The expected payload is restated as a literal rather than produced by [clipboardText]:
@@ -205,6 +272,9 @@ object WorkItemCardScenarios {
         )
     }
 }
+
+/** The width this file's card scenarios draw at, so a line break is a decision not an accident. */
+private val CARD_SCENARIO_WIDTH = 300.dp
 
 @OptIn(ExperimentalTestApi::class)
 internal fun ComposeUiTest.cardShowing(

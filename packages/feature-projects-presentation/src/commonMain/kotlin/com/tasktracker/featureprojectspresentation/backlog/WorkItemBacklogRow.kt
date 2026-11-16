@@ -120,6 +120,26 @@ fun WorkItemBacklogRow(
                     maxLines = BACKLOG_TITLE_MAX_LINES,
                     overflow = TextOverflow.Ellipsis,
                 )
+                // Two lines here, where the board card keeps one: a row has the width and the
+                // room to say what the item actually is, and the button row below it is what
+                // needs the space to stay clear.
+                //
+                // The padding is what separates the snippet from its neighbours. The key and the
+                // title are one block at `xs`; the snippet sits a step further from the title
+                // than the title sits from the key, and a step further again from whatever the
+                // row draws underneath it — the due date, the tag strip, or the buttons directly.
+                item.details.trim().takeIf { it.isNotEmpty() }?.let { description ->
+                    ttText(
+                        text = description,
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                        maxLines = BACKLOG_DESCRIPTION_MAX_LINES,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .padding(top = ttSpacing.sm, bottom = ttSpacing.sm)
+                            .testTag(BacklogDescriptionTag(item)),
+                    )
+                }
             }
             PriorityBadge(priority = item.priority)
             if (showStatusBadge) {
@@ -213,5 +233,9 @@ fun BacklogFileAwayTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}
 fun BacklogUnarchiveTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.unarchive"
 fun BacklogRemoveFromSprintTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.removeFromSprint"
 fun BacklogCopyTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.copy"
+fun BacklogDescriptionTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.description"
 
 private const val BACKLOG_TITLE_MAX_LINES = 2
+
+/** Two lines: the row is wider than a board card and is where the item gets read. */
+private const val BACKLOG_DESCRIPTION_MAX_LINES = 2

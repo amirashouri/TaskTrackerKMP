@@ -219,6 +219,14 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTheCopyControl)
 
     @Test
+    fun backlogRowShowsTwoLinesOfTheDescription() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTwoLinesOfTheDescription)
+
+    @Test
+    fun backlogRowOmitsTheDescriptionWhenThereIsNone() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.omitsTheDescriptionWhenThereIsNone)
+
+    @Test
     fun backlogRowShowsTagsAsIconsWithoutTheirNames() =
         runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTagsAsIconsWithoutTheirNames)
 
@@ -331,6 +339,14 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun showsTheCopyControl() = runComposeUiTest(block = WorkItemCardScenarios.showsTheCopyControl)
+
+    @Test
+    fun showsOneLineOfTheDescription() =
+        runComposeUiTest(block = WorkItemCardScenarios.showsOneLineOfTheDescription)
+
+    @Test
+    fun omitsTheDescriptionWhenThereIsNone() =
+        runComposeUiTest(block = WorkItemCardScenarios.omitsTheDescriptionWhenThereIsNone)
 
     @Test
     fun showsTagsAsIconsWithoutTheirNames() =
