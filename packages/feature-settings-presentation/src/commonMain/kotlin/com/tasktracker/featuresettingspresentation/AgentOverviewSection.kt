@@ -381,7 +381,6 @@ private fun AgentSetupForm(
             selection = draft.host,
             // The picker has no `enabled`: a live code freezes the draft, so the gate is here.
             onSelect = { host -> if (!hasCode) onSelectHost(host) },
-            modifier = Modifier.fillMaxWidth(),
             title = { host -> agentHostLabel(host) },
             testTag = { host ->
                 when (host) {
@@ -400,7 +399,6 @@ private fun AgentSetupForm(
             options = AgentSetupProvider.entries,
             selection = draft.provider,
             onSelect = onSelectProvider,
-            modifier = Modifier.fillMaxWidth(),
             title = { provider -> agentSetupProviderLabel(provider) },
         )
 

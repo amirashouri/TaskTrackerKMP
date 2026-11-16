@@ -23,7 +23,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.TTGlassFlowPicker
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
@@ -181,7 +181,7 @@ fun ProjectStatusesSection(
                 style = ttTypography.captionEmphasised,
                 color = ttLabelSecondary(),
             )
-            TTGlassFlowPicker(
+            TTGlassSegmentedPicker(
                 options = WorkItemStatus.entries,
                 selection = draftCategory,
                 onSelect = { draftCategory = it },

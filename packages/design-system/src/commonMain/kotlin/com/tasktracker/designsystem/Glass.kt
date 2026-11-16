@@ -13,6 +13,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -49,11 +51,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import androidx.compose.ui.util.lerp as lerpFloat
 
@@ -431,7 +436,20 @@ fun Modifier.ttGlassCard(
     thickness: ttGlass.GlassThickness = ttGlass.GlassThickness.STANDARD,
 ): Modifier = ttGlassSurface(shape = RoundedCornerShape(cornerRadius), tint = tint, thickness = thickness)
 
-/** Single slab segmented control sharing a unified glass selection lens. */
+/**
+ * Single slab segmented control sharing a unified glass selection lens.
+ *
+ * The options are a packed grid, not one stretched row. Each label is measured once — in both
+ * the resting and the selected weight, because selection is semibold and therefore wider — and
+ * a cell is only as wide as its own label plus [ttSpacing.controlPaddingH], so short words do
+ * not sit in wide empty cells. Options are packed in order and an option that does not fit
+ * moves to the next row whole: at phone width the five priorities are four and one rather than
+ * five cells narrow enough to break "Medium" in half, and [Segment] holds every label to one
+ * line so nothing splits inside a cell. The slab hugs its widest row rather than filling the
+ * page, so a handful of options stays its own size on a desktop instead of stretching across
+ * it; the rows are centred in that slab and the labels stay close together. The lens already
+ * carries a Y offset, so it travels between rows when the selection crosses one.
+ */
 @Composable
 fun <Option> TTGlassSegmentedPicker(
     options: List<Option>,
@@ -450,7 +468,10 @@ fun <Option> TTGlassSegmentedPicker(
     val (lensX, lensY, lensWidth, lensHeight, velocityX) = ttLensPlacement(positions, selection, density)
     val lensShape = RoundedCornerShape(ttRadius.control)
 
-    Box(
+    val labels = options.map { title(it) }
+    val optionTags = options.map { testTag(it) }
+
+    BoxWithConstraints(
         modifier = modifier
             .ttGlassSurface(
                 shape = lensShape,
@@ -461,30 +482,62 @@ fun <Option> TTGlassSegmentedPicker(
             .padding(ttSpacing.hairlineInset)
             .onGloballyPositioned { containerCoordinates = it },
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-            verticalAlignment = Alignment.CenterVertically,
+        if (options.isEmpty()) return@BoxWithConstraints
+
+        val gap = ttSpacing.xxs
+        val textMeasurer = rememberTextMeasurer()
+        // Whole dp, rounded up: a cell laid out from a fractional width would round down and
+        // ellipsize the last glyph of the word the cell was measured from.
+        val cellWidths = labels.map { label ->
+            val resting = textMeasurer.measure(
+                text = label,
+                style = ttTypography.subheadline,
+                maxLines = 1,
+                softWrap = false,
+            )
+            val selected = textMeasurer.measure(
+                text = label,
+                style = ttTypography.subheadlineSelected,
+                maxLines = 1,
+                softWrap = false,
+            )
+            val textWidth = maxOf(resting.size.width, selected.size.width)
+            ceil(textWidth / density.density).dp + ttSpacing.controlPaddingH * 2
+        }
+        val rows = packIntoRows(cellWidths, maxWidth, gap)
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(gap),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            for (option in options) {
-                val optionTestTag = testTag(option)
-                Segment(
-                    label = title(option),
-                    isSelected = option == selection,
-                    onClick = { onSelect(option) },
-                    onPositioned = { coordinates ->
-                        val parent = containerCoordinates
-                        if (parent != null) {
-                            val position = parent.localPositionOf(coordinates, Offset.Zero)
-                            positions[option] = IntRect(
-                                left = position.x.roundToInt(),
-                                top = position.y.roundToInt(),
-                                right = position.x.roundToInt() + coordinates.size.width,
-                                bottom = position.y.roundToInt() + coordinates.size.height,
-                            )
-                        }
-                    },
-                    modifier = Modifier.weight(1f).let { if (optionTestTag != null) it.testTag(optionTestTag) else it },
-                )
+            rows.forEach { row ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    row.forEach { index ->
+                        val option = options[index]
+                        val optionTag = optionTags[index]
+                        Segment(
+                            label = labels[index],
+                            isSelected = option == selection,
+                            onClick = { onSelect(option) },
+                            onPositioned = { coordinates ->
+                                val parent = containerCoordinates
+                                if (parent != null) {
+                                    val position = parent.localPositionOf(coordinates, Offset.Zero)
+                                    positions[option] = IntRect(
+                                        left = position.x.roundToInt(),
+                                        top = position.y.roundToInt(),
+                                        right = position.x.roundToInt() + coordinates.size.width,
+                                        bottom = position.y.roundToInt() + coordinates.size.height,
+                                    )
+                                }
+                            },
+                            modifier = if (optionTag != null) Modifier.testTag(optionTag) else Modifier,
+                        )
+                    }
+                }
             }
         }
 
@@ -497,6 +550,35 @@ fun <Option> TTGlassSegmentedPicker(
             )
         }
     }
+}
+
+/**
+ * Packs option indices into rows, in order, keeping every cell at its measured width.
+ *
+ * Greedy rather than balanced: a row ends where the next option would not fit, which is the
+ * rule the picker states. Balancing the counts instead moves an option down while the row it
+ * left still had room for it.
+ */
+private fun packIntoRows(
+    cellWidths: List<Dp>,
+    available: Dp,
+    gap: Dp,
+): List<List<Int>> {
+    val rows = mutableListOf<MutableList<Int>>()
+    var row = mutableListOf<Int>()
+    var used = 0.dp
+    cellWidths.forEachIndexed { index, width ->
+        val needed = if (row.isEmpty()) width else used + gap + width
+        if (row.isNotEmpty() && needed > available) {
+            rows += row
+            row = mutableListOf()
+            used = 0.dp
+        }
+        used = if (row.isEmpty()) width else used + gap + width
+        row += index
+    }
+    if (row.isNotEmpty()) rows += row
+    return rows
 }
 
 @Composable
@@ -636,6 +718,13 @@ private fun Segment(
                 style = if (isSelected) ttTypography.subheadlineSelected else ttTypography.subheadline,
                 color = content,
                 textAlign = TextAlign.Center,
+                // A cell is sized from this label's measured width, so it needs one line.
+                // Without the cap a caller that hands the picker a narrower slab than its
+                // measurements assumed would get "Medium" back as "Medi/um" — the defect
+                // the grid exists to prevent — instead of a truncation that is visibly one
+                // option rather than two halves.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

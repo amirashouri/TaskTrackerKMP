@@ -1,10 +1,14 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -12,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -25,9 +30,22 @@ import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.ProjectTag
+import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.priority_critical
+import com.tasktracker.resources.priority_high
+import com.tasktracker.resources.priority_low
+import com.tasktracker.resources.priority_lowest
+import com.tasktracker.resources.priority_medium
+import com.tasktracker.resources.work_item_repeat_daily
+import com.tasktracker.resources.work_item_repeat_monthly
+import com.tasktracker.resources.work_item_repeat_none
+import com.tasktracker.resources.work_item_repeat_weekly
+import com.tasktracker.resources.work_item_repeat_yearly
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import org.jetbrains.compose.resources.getString
 
 /**
  * The editor's own fields must show the draft, not a constant.
@@ -254,6 +272,7 @@ object WorkItemEditorScenarios {
         onCancel: () -> Unit = {},
         status: WorkItemStatus = WorkItemStatus.Backlog,
         isFiledAway: Boolean = false,
+        selectableStatuses: List<StatusDefinition> = emptyList(),
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -273,7 +292,7 @@ object WorkItemEditorScenarios {
                 repeatAnchor = null,
                 isCreating = isCreating,
                 issuedKey = null,
-                selectableStatuses = emptyList(),
+                selectableStatuses = selectableStatuses,
                 isFiledAway = isFiledAway,
                 canSave = title.isNotBlank(),
                 isBusy = false,
@@ -317,4 +336,192 @@ object WorkItemEditorScenarios {
         onNodeWithTag(WorkItemEditorFiledAwayStatusTag).performScrollTo().assertIsDisplayed()
         onNodeWithTag(WorkItemStatusPickerTag).assertDoesNotExist()
     }
+
+    /**
+     * Every option in the Status, Priority and Repeat pickers keeps to one line.
+     *
+     * ## The defect this exists for
+     *
+     * Priority and Repeat each ask a five-way question, and each used to draw it as one row of
+     * five equal cells. On a phone each cell was narrower than the longest word, so "Medium"
+     * wrapped onto a second line while its neighbours stayed short — a segment taller than its
+     * row mates, read as a broken control. Repeat was a chip flow besides, and Status was a
+     * second flow picker, so three adjacent fields of one form drew two different shapes for
+     * the same kind of question. The packed grid in
+     * [com.tasktracker.designsystem.TTGlassSegmentedPicker] sizes each cell from its own
+     * measured label and moves an option that does not fit onto the next row whole.
+     *
+     * A wrapped label makes its cell taller than the others, so equal label heights across
+     * every option is exactly the property the old layout could not hold. Heights rather
+     * than a fixed dp: the row's own metrics are the picker's, and this only asserts that no
+     * option costs an extra line.
+     */
+    val everyPickerOptionStaysOnOneLine: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            // A phone-width form: the defect only appears when five cells share a handset,
+            // and a full-window JVM host would give every cell room to spare, so the
+            // assertion would pass for the wrong reason.
+            Box(modifier = Modifier.width(NARROW_FORM_WIDTH.dp)) {
+                editorSheet(selectableStatuses = EDITOR_STATUSES)
+            }
+        }
+
+        assertOptionsShareOneLineHeight(
+            pickerTag = WorkItemStatusPickerTag,
+            labels = EDITOR_STATUSES.map { it.name },
+        )
+        assertOptionsShareOneLineHeight(
+            pickerTag = WorkItemPriorityPickerTag,
+            labels = listOf(
+                getString(Res.string.priority_lowest),
+                getString(Res.string.priority_low),
+                getString(Res.string.priority_medium),
+                getString(Res.string.priority_high),
+                getString(Res.string.priority_critical),
+            ),
+        )
+        assertOptionsShareOneLineHeight(
+            pickerTag = WorkItemRecurrencePickerTag,
+            labels = listOf(
+                getString(Res.string.work_item_repeat_none),
+                getString(Res.string.work_item_repeat_daily),
+                getString(Res.string.work_item_repeat_weekly),
+                getString(Res.string.work_item_repeat_monthly),
+                getString(Res.string.work_item_repeat_yearly),
+            ),
+        )
+    }
+
+    /**
+     * A wide window does not stretch a segmented picker.
+     *
+     * ## The defect this exists for
+     *
+     * The Backlog section switcher on a desktop filled the whole content column, so three
+     * labels sat in the middle of a bar with a hand's width of empty glass on either side:
+     * the control read as a rule with words near its centre rather than as a control. The
+     * picker packs its cells from their measured labels, so its own width is its content's
+     * width and nothing in that arithmetic reads the window. The glass, though, was drawn at
+     * `fillMaxWidth`, and that is the empty glass this pins down.
+     *
+     * Stability under a wider form is the assertion rather than a ratio or a dp cap: a picker
+     * that fills its caller is exactly as wide as the form, so widening the form must leave
+     * the picker unchanged. The form's own growth is asserted first — otherwise a layout that
+     * never resized at all would satisfy the picker's half for the wrong reason.
+     */
+    val aPickerDoesNotStretchAcrossAWideForm: suspend ComposeUiTest.() -> Unit = {
+        val width = mutableStateOf(WIDE_FORM_WIDTH.dp)
+        setContent {
+            // `requiredWidth`, not `width`: the Android and iOS hosts are phone-sized, so a
+            // plain width would be coerced back to the host window and both renders would
+            // measure the same narrow form. Only the left edge has to be on screen, and the
+            // picker is at it.
+            Box(modifier = Modifier.requiredWidth(width.value)) {
+                editorSheet(selectableStatuses = EDITOR_STATUSES)
+            }
+        }
+
+        onNodeWithTag(WorkItemPriorityPickerTag).performScrollTo()
+        val fieldAtWide = onNodeWithTag(ProjectsFieldCardTag("Title"))
+            .fetchSemanticsNode().boundsInRoot.width
+        val pickerAtWide = onNodeWithTag(WorkItemPriorityPickerTag)
+            .fetchSemanticsNode().boundsInRoot.width
+
+        runOnIdle { width.value = WIDER_FORM_WIDTH.dp }
+        waitForIdle()
+
+        val fieldAtWider = onNodeWithTag(ProjectsFieldCardTag("Title"))
+            .fetchSemanticsNode().boundsInRoot.width
+        val pickerAtWider = onNodeWithTag(WorkItemPriorityPickerTag)
+            .fetchSemanticsNode().boundsInRoot.width
+
+        assertTrue(
+            fieldAtWider > fieldAtWide + MIN_GROWTH,
+            "the form did not widen: the Title card is ${fieldAtWide}px at ${WIDE_FORM_WIDTH}dp " +
+                "and ${fieldAtWider}px at ${WIDER_FORM_WIDTH}dp, so the assertion below would " +
+                "be vacuous.",
+        )
+        assertEquals(
+            expected = pickerAtWide,
+            actual = pickerAtWider,
+            absoluteTolerance = 1f,
+            message = "the priority picker is ${pickerAtWide}px wide at ${WIDE_FORM_WIDTH}dp and " +
+                "${pickerAtWider}px at ${WIDER_FORM_WIDTH}dp: it stretched with the form instead " +
+                "of hugging its labels. That is the desktop backlog bar with three centred " +
+                "labels and a band of empty glass at both ends.",
+        )
+        assertTrue(
+            pickerAtWider < fieldAtWider * 0.8f,
+            "the picker is ${pickerAtWider}px wide against a ${fieldAtWider}px field, so it is " +
+                "tracking the form rather than its content.",
+        )
+    }
+
+    private suspend fun ComposeUiTest.assertOptionsShareOneLineHeight(
+        pickerTag: String,
+        labels: List<String>,
+    ) {
+        onNodeWithTag(pickerTag).performScrollTo()
+        val heights = labels.map { label ->
+            onNodeWithContentDescription(label).fetchSemanticsNode().boundsInRoot.height
+        }
+        val reference = heights.first()
+        labels.forEachIndexed { index, label ->
+            assertEquals(
+                expected = reference,
+                actual = heights[index],
+                absoluteTolerance = 0.5f,
+                message = "\"$label\" is ${heights[index]}px tall against ${reference}px for " +
+                    "\"${labels.first()}\": it wrapped onto a second line.",
+            )
+        }
+    }
 }
+
+/**
+ * The narrow edge of the common Android phone range. Five equal cells for the picker's five
+ * options are narrower than "Medium" here, which is the width the grid has to survive; a
+ * full-window JVM host gives every cell room to spare and would let a broken layout pass.
+ */
+private const val NARROW_FORM_WIDTH = 360
+
+/**
+ * A desktop content width, and a wider one to resize into.
+ *
+ * Both are wide enough that the five priorities fit one row, which they do not at
+ * [NARROW_FORM_WIDTH]: the pair has to differ in *form* width while the picker's content is
+ * the same one row, or the width comparison would be measuring a wrap instead of a stretch.
+ */
+private const val WIDE_FORM_WIDTH = 1000
+private const val WIDER_FORM_WIDTH = 1400
+
+/** Pixels, not dp: the widths compared are semantics bounds. Well below the 400px the pair differs by. */
+private const val MIN_GROWTH = 100f
+
+/**
+ * Three named stages, so the editor's Status picker is drawn at all.
+ *
+ * The picker only appears when there are at least two selectable statuses; with none the
+ * field is absent, and a single-line assertion over an absent control would pass for the
+ * wrong reason.
+ */
+private val EDITOR_STATUSES = listOf(
+    StatusDefinition(
+        id = "s-ready",
+        name = "Ready",
+        category = WorkItemStatus.Todo,
+        order = 0,
+    ),
+    StatusDefinition(
+        id = "s-build",
+        name = "In build",
+        category = WorkItemStatus.InProgress,
+        order = 1,
+    ),
+    StatusDefinition(
+        id = "s-ship",
+        name = "Shipped",
+        category = WorkItemStatus.Done,
+        order = 2,
+    ),
+)
