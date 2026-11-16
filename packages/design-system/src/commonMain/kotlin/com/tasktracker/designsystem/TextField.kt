@@ -1,6 +1,8 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -69,6 +73,17 @@ import androidx.compose.ui.unit.dp
  *   [keyboardOptions] overrides it.
  * @param isError draws the error ring and wash. The message itself is the caller's.
  * @param onFocusChanged reports focus transitions, for callers that commit on blur.
+ * @param focusRequester lets a caller focus the field from outside it — a tappable label
+ *   above the pill, say. Left null, the field keeps a requester of its own.
+ *
+ * ## The whole pill is the field
+ *
+ * A tap is a finger, not a pointer: the pill is 48dp tall while the single line of text inside
+ * it is about 20dp, so for most of the control's height the only thing under the finger was
+ * glass, and nothing happened. The pill itself now takes the tap and focuses the field, so the
+ * padding, the rim and the band above and below the text all count as the field they belong to.
+ * Taps that land on the text are still the text field's own, which is what keeps caret
+ * placement where the finger went.
  */
 @Composable
 fun ttTextField(
@@ -83,9 +98,11 @@ fun ttTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
     onFocusChanged: ((Boolean) -> Unit)? = null,
+    focusRequester: FocusRequester? = null,
 ) {
     val accent = ttAccent()
     var focused by remember { mutableStateOf(false) }
+    val requester = focusRequester ?: remember { FocusRequester() }
     val shape = RoundedCornerShape(ttRadius.row)
 
     // The wash is a value rather than a branch around the modifier call: `ttGlassSurface` is
@@ -112,7 +129,18 @@ fun ttTextField(
     val ringed = if (ring == null) surface else surface.border(FocusRingWidth, ring, shape)
 
     Row(
-        modifier = ringed.padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+        modifier = ringed
+            // Before the padding, so the tap area is the whole pill rather than the strip of
+            // text inside it. `indication = null` because the focus ring is the feedback: a
+            // ripple on a control that then shows where the caret is would be two answers to
+            // one tap.
+            .clickable(
+                enabled = enabled,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = { requester.requestFocus() },
+            )
+            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicTextField(
@@ -120,6 +148,7 @@ fun ttTextField(
             onValueChange = onValueChange,
             modifier = fieldModifier
                 .fillMaxWidth()
+                .focusRequester(requester)
                 .onFocusChanged { state ->
                     if (focused != state.isFocused) {
                         focused = state.isFocused

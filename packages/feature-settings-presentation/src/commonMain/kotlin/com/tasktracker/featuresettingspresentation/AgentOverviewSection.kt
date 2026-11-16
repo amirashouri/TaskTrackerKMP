@@ -1,5 +1,6 @@
 package com.tasktracker.featuresettingspresentation
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
@@ -100,8 +102,8 @@ import com.tasktracker.resources.settings_agent_setup_waiting
 import com.tasktracker.resources.settings_agent_setup_workspace_hint
 import com.tasktracker.resources.settings_agent_setup_workspace_label
 import com.tasktracker.resources.settings_agent_start
-import com.tasktracker.resources.settings_agent_stopped
 import com.tasktracker.resources.settings_agent_stop
+import com.tasktracker.resources.settings_agent_stopped
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
@@ -309,6 +311,13 @@ private fun AgentSetupForm(
     // offer a first one.
     val hasMinted = hasCode || phase is AgentSetupPhase.Expired
 
+    // One per text field, so the label above each pill can focus it. A label is part of its
+    // field: tapping the word "Model" on a phone aimed at the pill should land in the pill.
+    val modelFocus = remember { FocusRequester() }
+    val baseUrlFocus = remember { FocusRequester() }
+    val workspaceFocus = remember { FocusRequester() }
+    val serverFocus = remember { FocusRequester() }
+
     ttText(
             text = stringResource(Res.string.settings_agent_setup_title),
             style = ttTypography.title,
@@ -396,39 +405,55 @@ private fun AgentSetupForm(
         )
 
         if (draft.provider != AgentSetupProvider.Echo) {
-            AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_model_label))
+            AgentSetupFieldLabel(
+                text = stringResource(Res.string.settings_agent_setup_model_label),
+                onClick = { modelFocus.requestFocus() },
+            )
             ttTextField(
                 value = draft.model,
                 onValueChange = onModelChange,
                 hint = stringResource(Res.string.settings_agent_setup_model_hint),
                 modifier = Modifier.testTag(SettingsAgentSetupModelTag),
+                focusRequester = modelFocus,
             )
         }
 
         if (draft.provider == AgentSetupProvider.OpenAiCompatible) {
-            AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_base_url_label))
+            AgentSetupFieldLabel(
+                text = stringResource(Res.string.settings_agent_setup_base_url_label),
+                onClick = { baseUrlFocus.requestFocus() },
+            )
             ttTextField(
                 value = draft.baseUrl,
                 onValueChange = onBaseUrlChange,
                 hint = stringResource(Res.string.settings_agent_setup_base_url_hint),
                 modifier = Modifier.testTag(SettingsAgentSetupBaseUrlTag),
+                focusRequester = baseUrlFocus,
             )
         }
 
-        AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_workspace_label))
+        AgentSetupFieldLabel(
+            text = stringResource(Res.string.settings_agent_setup_workspace_label),
+            onClick = { workspaceFocus.requestFocus() },
+        )
         ttTextField(
             value = draft.workspace,
             onValueChange = onWorkspaceChange,
             hint = stringResource(Res.string.settings_agent_setup_workspace_hint),
             modifier = Modifier.testTag(SettingsAgentSetupWorkspaceTag),
+            focusRequester = workspaceFocus,
         )
 
-        AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_server_label))
+        AgentSetupFieldLabel(
+            text = stringResource(Res.string.settings_agent_setup_server_label),
+            onClick = { serverFocus.requestFocus() },
+        )
         ttTextField(
             value = draft.serverUrl,
             onValueChange = onServerChange,
             hint = stringResource(Res.string.settings_agent_setup_server_hint),
             modifier = Modifier.testTag(SettingsAgentSetupServerTag),
+            focusRequester = serverFocus,
         )
 
         // The one action that changes server state. Disabled while a project is missing,
@@ -597,11 +622,22 @@ private fun AgentSetupForm(
 
 /** A small caption above one question in the wizard. */
 @Composable
-private fun AgentSetupFieldLabel(text: String) {
+private fun AgentSetupFieldLabel(
+    text: String,
+    onClick: (() -> Unit)? = null,
+) {
+    // A label with a field under it is a way into that field, so it takes the tap; a label over
+    // a picker or a list stays plain text, because there is nothing single to focus.
+    val tap = if (onClick == null) {
+        Modifier
+    } else {
+        Modifier.clickable(onClick = onClick)
+    }
     ttText(
         text = text,
         style = ttTypography.captionEmphasised,
         color = ttLabelSecondary(),
+        modifier = tap,
     )
 }
 
