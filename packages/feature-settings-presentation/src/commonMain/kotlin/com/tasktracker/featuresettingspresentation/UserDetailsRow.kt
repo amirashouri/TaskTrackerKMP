@@ -1,5 +1,15 @@
 package com.tasktracker.featuresettingspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -12,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,19 +32,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttGlass
+import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttInitialsAvatar
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -163,24 +179,85 @@ internal fun UserDetailsRow(
                 }
             }
         }
-        if (avatarPickerOpen) {
-            Column(
-                modifier = Modifier.fillMaxWidth().testTag(AvatarPickerTag),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-            ) {
-                AvatarIdRange.chunked(AvatarsPerRow).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
-                        row.forEach { id ->
-                            AvatarPortraitOption(
-                                id = id,
-                                isSelected = id == details.avatarId,
-                                onClick = {
-                                    onDetailsChange(details.copy(avatarId = id))
-                                    avatarPickerOpen = false
-                                },
-                            )
-                        }
+        AvatarPicker(
+            visible = avatarPickerOpen,
+            selectedId = details.avatarId,
+            onPick = { id ->
+                onDetailsChange(details.copy(avatarId = id))
+                avatarPickerOpen = false
+            },
+        )
+    }
+}
+
+/**
+ * The portrait grid, on a glass panel that unfolds under the disc.
+ *
+ * ## Why this is not an `if`
+ *
+ * The ten portraits are 120dp of content. Popping them into existence moves the name, the
+ * position row and everything below by that height in one frame, so the page jumps under the
+ * finger that just tapped. Unfolding from the top keeps the identity header anchored and gives
+ * the space back on the way out, which is the same motion the search field uses in Projects for
+ * the same reason — one duration, [AVATAR_PICKER_REVEAL_MILLIS], shared with that reveal's
+ * vocabulary rather than invented here.
+ *
+ * ## The surface
+ *
+ * The same `ttGlassSurface` in the same `THICK` thickness and `ttRadius.surface` rounding the
+ * other Settings panels use: the picker floats over the section's glass rather than reading as a
+ * stray grid of circles on top of it. The section is 264dp wide, so five 44dp portraits with
+ * `ttSpacing.xs` gaps and the panel's own `ttSpacing.sm` inset fit inside it.
+ */
+@Composable
+private fun AvatarPicker(
+    visible: Boolean,
+    selectedId: Int?,
+    onPick: (Int) -> Unit,
+) {
+    val reducedMotion = LocalReducedMotion.current
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = if (reducedMotion) {
+            EnterTransition.None
+        } else {
+            fadeIn(animationSpec = tween(AVATAR_PICKER_FADE_IN_MILLIS)) +
+                expandVertically(
+                    animationSpec = tween(AVATAR_PICKER_REVEAL_MILLIS),
+                    expandFrom = Alignment.Top,
+                )
+        },
+        exit = if (reducedMotion) {
+            ExitTransition.None
+        } else {
+            fadeOut(animationSpec = tween(AVATAR_PICKER_FADE_OUT_MILLIS)) +
+                shrinkVertically(
+                    animationSpec = tween(AVATAR_PICKER_REVEAL_MILLIS),
+                    shrinkTowards = Alignment.Top,
+                )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .ttGlassSurface(
+                    shape = RoundedCornerShape(ttRadius.surface),
+                    thickness = ttGlass.GlassThickness.THICK,
+                )
+                .padding(ttSpacing.sm)
+                .testTag(AvatarPickerTag),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            AvatarIdRange.chunked(AvatarsPerRow).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
+                    row.forEach { id ->
+                        AvatarPortraitOption(
+                            id = id,
+                            isSelected = id == selectedId,
+                            onClick = { onPick(id) },
+                        )
                     }
                 }
             }
@@ -191,6 +268,11 @@ internal fun UserDetailsRow(
 /**
  * One of the ten bundled portraits, in the grid: 44dp, tappable, and selected-state marked by
  * opacity rather than a ring.
+ *
+ * Both the opacity and the lift are animated on the design system's own selection spring, so
+ * picking a portrait cross-fades instead of snapping, and the same spring that moves a selected
+ * status row moves this choice. The springs `snap` under reduced motion, which is the whole of
+ * that setting's contract: the state still changes, it just does not travel.
  */
 @Composable
 private fun AvatarPortraitOption(
@@ -198,14 +280,29 @@ private fun AvatarPortraitOption(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
+    val animationSpec = if (LocalReducedMotion.current) snap<Float>() else ttGlass.selectionSpring
+    val optionAlpha by animateFloatAsState(
+        targetValue = if (isSelected) SelectedAvatarAlpha else UnselectedAvatarAlpha,
+        animationSpec = animationSpec,
+        label = "avatarOptionAlpha",
+    )
+    val optionScale by animateFloatAsState(
+        targetValue = if (isSelected) SelectedAvatarScale else UnselectedAvatarScale,
+        animationSpec = animationSpec,
+        label = "avatarOptionScale",
+    )
     Image(
         painter = painterResource(avatarResource(id)),
         contentDescription = avatarPortraitLabel(id),
         contentScale = ContentScale.Crop,
         modifier = Modifier
             .size(UserDetailsAvatarOptionSize)
+            .graphicsLayer {
+                scaleX = optionScale
+                scaleY = optionScale
+            }
+            .alpha(optionAlpha)
             .clip(CircleShape)
-            .alpha(if (isSelected) SelectedAvatarAlpha else UnselectedAvatarAlpha)
             .selectable(selected = isSelected, role = Role.Button, onClick = onClick)
             .testTag(AvatarOptionTag(id)),
     )
@@ -245,3 +342,14 @@ private val AvatarIdRange = 0..9
 private const val AvatarsPerRow = 5
 private const val SelectedAvatarAlpha = 1f
 private const val UnselectedAvatarAlpha = 0.55f
+
+/** Fully sized when it is the chosen portrait; the rest sit a step back. */
+private const val SelectedAvatarScale = 1f
+private const val UnselectedAvatarScale = 0.92f
+
+/** The unfold's duration, in the search reveal's 200ms vocabulary. */
+private const val AVATAR_PICKER_REVEAL_MILLIS = 200
+
+/** Shorter than the unfold, so opacity settles before the clipping edge stops moving. */
+private const val AVATAR_PICKER_FADE_IN_MILLIS = 120
+private const val AVATAR_PICKER_FADE_OUT_MILLIS = 90
