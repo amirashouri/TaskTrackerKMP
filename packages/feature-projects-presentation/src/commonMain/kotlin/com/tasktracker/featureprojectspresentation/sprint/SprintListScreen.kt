@@ -105,7 +105,6 @@ fun SprintListScreen(
                 options = listOf(SprintSection.Active, SprintSection.Archived),
                 selection = section,
                 onSelect = { section = it },
-                modifier = Modifier.fillMaxWidth(),
                 title = { option ->
                     when (option) {
                         SprintSection.Active -> "Active"

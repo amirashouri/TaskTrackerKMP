@@ -181,6 +181,10 @@ class ProjectsUiJvmTest {
     fun theBacklogListScrollsUnderTheHeader() =
         runComposeUiTest(block = ProjectBacklogScenarios.theListScrollsUnderTheHeader)
 
+    @Test
+    fun theSectionPickerSharesTheHeadersLeadingEdge() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theSectionPickerSharesTheHeadersLeadingEdge)
+
     /** One board column: the resolver boards into it on the tap, with no picker. */
     @Test
     fun puttingOnBoardWithASingleColumnBoardsDirectly() =
@@ -355,6 +359,14 @@ class ProjectsUiJvmTest {
     @Test
     fun aFiledAwayWorkItemShowsAReadOnlyStatusChip() =
         runComposeUiTest(block = WorkItemEditorScenarios.aFiledAwayItemShowsAReadOnlyStatusChip)
+
+    @Test
+    fun everyWorkItemEditorPickerOptionStaysOnOneLine() =
+        runComposeUiTest(block = WorkItemEditorScenarios.everyPickerOptionStaysOnOneLine)
+
+    @Test
+    fun aWorkItemEditorPickerDoesNotStretchAcrossAWideForm() =
+        runComposeUiTest(block = WorkItemEditorScenarios.aPickerDoesNotStretchAcrossAWideForm)
 
     @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)

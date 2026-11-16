@@ -34,11 +34,13 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.TTToastTag
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
+import kotlin.math.abs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertEquals
@@ -177,6 +179,42 @@ object ProjectBacklogScenarios {
             underHeader.isNotEmpty(),
             "after scrolling, a row should be visible under the picker's band: " +
                 "sections=$sections rows=$rows",
+        )
+    }
+
+    /**
+     * The section picker shares the header's leading edge, and the sort row's.
+     *
+     * ## The defect this exists for
+     *
+     * The picker carried its own `xxl` horizontal gutter on top of the header column's, so it
+     * began one gutter further in than the project switcher above it and the sort controls
+     * below it: three stacked controls with two different indents, which read as a picker that
+     * had slipped rather than as the middle of a column. Only the picker was wrong, so the
+     * assertion is that the three edges agree.
+     *
+     * The sort row is measured through its summary label, because that label sits at the glass
+     * surface's own `md` inset and the glass is the row's leading edge.
+     */
+    val theSectionPickerSharesTheHeadersLeadingEdge: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {})
+
+        val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
+        val sortLabel = onNodeWithTag(BacklogSortLabelTag).fetchSemanticsNode().boundsInRoot
+        val sortRow = sortLabel.left - densityPixels(ttSpacing.md)
+
+        assertTrue(
+            abs(picker.left - switcher.left) <= EDGE_TOLERANCE_PX,
+            "the section picker starts at ${picker.left}px and the project switcher above it " +
+                "at ${switcher.left}px, so the middle of the header is indented from its top: " +
+                "picker=$picker switcher=$switcher",
+        )
+        assertTrue(
+            abs(picker.left - sortRow) <= EDGE_TOLERANCE_PX,
+            "the section picker starts at ${picker.left}px and the sort row below it at " +
+                "${sortRow}px (its label at ${sortLabel.left}px inside a ${ttSpacing.md} inset), " +
+                "so the picker is indented from the filter row: picker=$picker label=$sortLabel",
         )
     }
 

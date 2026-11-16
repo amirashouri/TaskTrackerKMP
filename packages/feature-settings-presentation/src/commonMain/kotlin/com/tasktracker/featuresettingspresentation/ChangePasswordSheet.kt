@@ -204,7 +204,7 @@ internal fun ChangePasswordSheet(
                 // the value rather than the swap.
                 credential = ""
             },
-            modifier = Modifier.fillMaxWidth().testTag(ChangePasswordVerifyTag),
+            modifier = Modifier.testTag(ChangePasswordVerifyTag),
             title = { option ->
                 when (option) {
                     VerifyMethod.OldPassword -> stringResource(Res.string.settings_change_password_verify_old)

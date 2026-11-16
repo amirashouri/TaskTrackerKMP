@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import com.tasktracker.designsystem.TTGlassFlowPicker
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
@@ -28,7 +28,13 @@ import kotlin.time.Clock
 import kotlin.time.Instant
 
 /**
- * Recurrence rule flow picker anchoring weekly/monthly frequency patterns to due dates or current date.
+ * Recurrence rule segmented picker anchoring weekly/monthly frequency patterns to due dates
+ * or current date.
+ *
+ * Segmented rather than a chip flow: Repeat sits directly under Priority in the editor, and
+ * two different picker treatments for two five-option questions made the form look like two
+ * forms. The segmented picker also wraps its options into rows, which is what keeps "Monthly"
+ * on one line at phone width.
  */
 @Composable
 fun WorkItemRecurrenceRow(
@@ -49,7 +55,7 @@ fun WorkItemRecurrenceRow(
             style = ttTypography.captionEmphasised,
             color = ttLabelSecondary(),
         )
-        TTGlassFlowPicker(
+        TTGlassSegmentedPicker(
             options = choices,
             selection = recurrence.choice(),
             onSelect = { choice ->

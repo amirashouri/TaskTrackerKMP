@@ -38,7 +38,6 @@ import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.TTGlassFlowPicker
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -499,7 +498,7 @@ private fun ProjectsEditorFullScreen(
                         style = ttTypography.captionEmphasised,
                         color = ttLabelSecondary(),
                     )
-                    TTGlassFlowPicker(
+                    TTGlassSegmentedPicker(
                         options = selectableStatuses,
                         selection = selectedStatusDefinition,
                         onSelect = onStatusChanged,
@@ -522,7 +521,7 @@ private fun ProjectsEditorFullScreen(
                     selection = priority,
                     onSelect = onPriorityChanged,
                     title = { priorityLabel(it) },
-                    modifier = Modifier.fillMaxWidth().testTag(WorkItemPriorityPickerTag),
+                    modifier = Modifier.testTag(WorkItemPriorityPickerTag),
                 )
             }
             WorkItemAssigneeRow(
@@ -807,7 +806,7 @@ private fun WorkItemEditorForm(
                     style = ttTypography.captionEmphasised,
                     color = ttLabelSecondary(),
                 )
-                TTGlassFlowPicker(
+                TTGlassSegmentedPicker(
                     options = selectableStatuses,
                     selection = selectedStatusDefinition,
                     onSelect = onStatusChanged,
@@ -827,7 +826,7 @@ private fun WorkItemEditorForm(
                 selection = priority,
                 onSelect = onPriorityChanged,
                 title = { priorityLabel(it) },
-                modifier = Modifier.fillMaxWidth().testTag(WorkItemPriorityPickerTag),
+                modifier = Modifier.testTag(WorkItemPriorityPickerTag),
             )
         }
         WorkItemAssigneeRow(

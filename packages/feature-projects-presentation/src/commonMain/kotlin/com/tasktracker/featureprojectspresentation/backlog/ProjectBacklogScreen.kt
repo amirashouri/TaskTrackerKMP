@@ -295,7 +295,7 @@ fun ProjectBacklogScreen(
                     options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
                     selection = currentSection,
                     onSelect = { currentSection = it },
-                    modifier = Modifier.fillMaxWidth().horizontalGutter().testTag(ProjectBacklogSectionsTag),
+                    modifier = Modifier.testTag(ProjectBacklogSectionsTag),
                     title = { option ->
                         when (option) {
                             BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
@@ -567,8 +567,6 @@ private fun EmptyArchivedSection(modifier: Modifier = Modifier) {
         image = ttActionIcons.archive,
     )
 }
-
-private fun Modifier.horizontalGutter(): Modifier = padding(horizontal = ttSpacing.xxl)
 
 const val ProjectBacklogScreenTag = "backlog.screen"
 const val ProjectBacklogListTag = "backlog.rows"
