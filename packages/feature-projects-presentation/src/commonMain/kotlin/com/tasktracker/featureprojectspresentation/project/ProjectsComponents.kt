@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,16 +20,19 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.AmbientBackdrop
 import com.tasktracker.designsystem.ThemeScheme
@@ -68,6 +73,15 @@ internal fun ProjectsLabelledField(
     isFocused: Boolean,
     modifier: Modifier = Modifier,
     trailing: (@Composable () -> Unit)? = null,
+    /**
+     * Makes the whole card a way into the field it holds, title and padding included.
+     *
+     * The card is the control as far as a finger is concerned. Before this, only the ~20dp line
+     * of text inside it accepted a tap: the caption above it, the `xxl`/`xl` inset around it and
+     * the space below it were all inert, so aiming at "Task title" put nothing anywhere. Null
+     * for a read-only field, which has no caret to move to.
+     */
+    onCardClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val ringColor by animateColorAsState(
@@ -79,12 +93,20 @@ internal fun ProjectsLabelledField(
 
     Column(
         modifier = modifier
+            .testTag(ProjectsFieldCardTag(title))
             .clip(shape)
             .background(ttSurface())
             .border(
                 width = if (isFocused) FOCUSED_RING_WIDTH else RESTING_RING_WIDTH,
                 color = ringColor,
                 shape = shape,
+            )
+            // Before the padding, so the inset and the caption are inside the target.
+            .clickable(
+                enabled = onCardClick != null,
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onCardClick ?: {},
             )
             .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
@@ -125,7 +147,17 @@ internal fun ProjectsTextField(
     singleLine: Boolean = true,
     minLines: Int = 1,
 ) {
-    ProjectsLabelledField(title = title, isFocused = isFocused && !isReadOnly, modifier = modifier) {
+    // The card and the field are one control, so they share one requester: a tap on the caption
+    // above the line, or on the card's own inset, puts the caret in the line — and a tap on the
+    // line itself is still the text field's own, which is what keeps caret placement exact.
+    val focusRequester = remember { FocusRequester() }
+
+    ProjectsLabelledField(
+        title = title,
+        isFocused = isFocused && !isReadOnly,
+        modifier = modifier,
+        onCardClick = if (isReadOnly || !enabled) null else ({ focusRequester.requestFocus() }),
+    ) {
         if (isReadOnly) {
             ttText(
                 text = value,
@@ -136,7 +168,10 @@ internal fun ProjectsTextField(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                modifier = Modifier.fillMaxWidth().testTag(fieldTag ?: title.tagSuffix()),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .testTag(fieldTag ?: title.tagSuffix()),
                 enabled = enabled,
                 textStyle = ttTypography.body.copy(color = if (enabled) ttLabel() else ttLabelSecondary()),
                 cursorBrush = SolidColor(ttAccent()),
@@ -308,6 +343,16 @@ internal fun priorityLabel(priority: Priority): String = when (priority) {
 
 private fun String.tagSuffix(): String =
     lowercase().replace(' ', '.').filter { it.isLetterOrDigit() || it == '.' }
+
+/**
+ * The card around a field, tagged from the field's own label.
+ *
+ * Separate from the field's tag because the two are different hit targets now: the card takes a
+ * tap anywhere, the field takes the taps that land on its line. A test that aimed at the caption
+ * alone would not be able to tell the two apart on a narrow card, where foundation's 48dp touch
+ * target around the field already reaches up to it.
+ */
+fun ProjectsFieldCardTag(title: String): String = "${title.tagSuffix()}.card"
 
 private val EMPTY_BADGE_SIZE = 64.dp
 private val EMPTY_GLYPH_SIZE = 28.dp

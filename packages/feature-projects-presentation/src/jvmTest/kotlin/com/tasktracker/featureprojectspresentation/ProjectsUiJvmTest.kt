@@ -307,6 +307,9 @@ class ProjectsUiJvmTest {
     fun theTitleFieldShowsWhatYouType() = runComposeUiTest(block = WorkItemEditorScenarios.theTitleFieldShowsWhatYouType)
 
     @Test
+    fun tappingAFieldCardFocusesItsField() = runComposeUiTest(block = WorkItemEditorScenarios.tappingAFieldCardFocusesItsField)
+
+    @Test
     fun theActionsFloatOverTheScrollingForm() = runComposeUiTest(block = WorkItemEditorScenarios.theActionsFloatOverTheScrollingForm)
 
     @Test

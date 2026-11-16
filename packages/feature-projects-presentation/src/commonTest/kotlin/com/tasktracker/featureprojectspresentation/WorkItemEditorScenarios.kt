@@ -5,14 +5,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTConfirmPopupCancelTag
 import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ThemeScheme
@@ -56,6 +61,31 @@ object WorkItemEditorScenarios {
         onNodeWithTag("title").performTextInput("Ship the migration")
 
         onNodeWithTag("title").assertTextEquals("Ship the migration")
+    }
+
+    /**
+     * A tap on a field's card — caption or inset — focuses that field.
+     *
+     * The caption sits inside the same bordered card as the line it labels, so it reads as part
+     * of the control — and before this it did nothing: the caret only moved when the finger
+     * landed on the ~20dp strip of text itself, which on a card padded by `xxl`/`xl` is a small
+     * target in a large box. The assertion is focus, not text, because the defect was that
+     * nothing happened at all.
+     */
+    val tappingAFieldCardFocusesItsField: suspend ComposeUiTest.() -> Unit = {
+        setContent { editorSheet() }
+
+        // 4dp in from the card's left edge at its vertical centre: inside the glass, inside the
+        // `xxl` horizontal inset, and outside both the caption and the field's own 48dp touch
+        // target. A point on the caption would pass even without the card being tappable,
+        // because foundation expands a text field's touch target to 48dp and a narrow card
+        // leaves it reaching up to the caption — so this aims where only the card can answer.
+        onNodeWithTag(ProjectsFieldCardTag("Title")).performTouchInput {
+            click(Offset(4.dp.toPx(), centerY))
+        }
+        waitForIdle()
+
+        onNodeWithTag("title").assertIsFocused()
     }
 
     /**
