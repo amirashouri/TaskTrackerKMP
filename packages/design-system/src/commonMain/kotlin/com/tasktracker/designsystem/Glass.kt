@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -445,10 +446,13 @@ fun Modifier.ttGlassCard(
  * not sit in wide empty cells. Options are packed in order and an option that does not fit
  * moves to the next row whole: at phone width the five priorities are four and one rather than
  * five cells narrow enough to break "Medium" in half, and [Segment] holds every label to one
- * line so nothing splits inside a cell. The slab hugs its widest row rather than filling the
- * page, so a handful of options stays its own size on a desktop instead of stretching across
- * it; the rows are centred in that slab and the labels stay close together. The lens already
- * carries a Y offset, so it travels between rows when the selection crosses one.
+ * line so nothing splits inside a cell. The control fills its caller up to
+ * [ttSpacing.pickerMaxWidth]: a phone form is under the cap, so the picker spans it, while on a
+ * desktop the cap keeps a handful of options a control instead of a bar across the page. Each
+ * option then takes an equal share of the space left over, so a row spans the glass rather than
+ * clustering in its middle, and a wrapped option lands under the middle of the row above it.
+ * The lens already carries a Y offset, so it travels between rows when the selection crosses
+ * one.
  */
 @Composable
 fun <Option> TTGlassSegmentedPicker(
@@ -486,8 +490,15 @@ fun <Option> TTGlassSegmentedPicker(
 
         val gap = ttSpacing.xxs
         val textMeasurer = rememberTextMeasurer()
+        // The slab fills its caller up to [ttSpacing.pickerMaxWidth], which measures the whole
+        // control; the slab is that glass minus the hairline it is inset by. A phone form is
+        // under the cap, so the picker spans it; a desktop form stops at the cap instead of
+        // stretching across the page.
+        val slabWidth = minOf(maxWidth, ttSpacing.pickerMaxWidth - ttSpacing.hairlineInset * 2)
         // Whole dp, rounded up: a cell laid out from a fractional width would round down and
-        // ellipsize the last glyph of the word the cell was measured from.
+        // ellipsize the last glyph of the word the cell was measured from. Capped at the slab
+        // so one very long label cannot draw a row wider than the glass; it truncates on its
+        // one line instead, which is still visibly one option rather than two halves.
         val cellWidths = labels.map { label ->
             val resting = textMeasurer.measure(
                 text = label,
@@ -502,15 +513,34 @@ fun <Option> TTGlassSegmentedPicker(
                 softWrap = false,
             )
             val textWidth = maxOf(resting.size.width, selected.size.width)
-            ceil(textWidth / density.density).dp + ttSpacing.controlPaddingH * 2
+            minOf(ceil(textWidth / density.density).dp + ttSpacing.controlPaddingH * 2, slabWidth)
         }
-        val rows = packIntoRows(cellWidths, maxWidth, gap)
+        // Pack against the slab, not the caller: with the cap in place a row has to wrap
+        // inside the capped control rather than inside the wide page the control sits on.
+        val rows = packIntoRows(cellWidths, slabWidth, gap)
+        // Inside the slab each option takes an equal share of what is left over, so the
+        // widest row spans the glass instead of clustering in the middle with a band of empty
+        // glass at either end — the same defect as stretching, at the other end.
+        val rowWidths = rows.map { row ->
+            row.map { cellWidths[it] }.fold(0.dp, Dp::plus) + gap * (row.size - 1)
+        }
+        val widestRowWidth = rowWidths.max()
+        val widestRowCount = rows[rowWidths.indexOf(widestRowWidth)].size
+        val stretch = ((slabWidth - widestRowWidth) / widestRowCount).coerceAtLeast(0.dp)
 
         Column(
+            modifier = Modifier.width(slabWidth),
             verticalArrangement = Arrangement.spacedBy(gap),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            rows.forEach { row ->
+            rows.forEachIndexed { rowIndex, row ->
+                // Uniform growth, clamped by this row's own room: a row holding more, shorter
+                // options than the widest row would otherwise grow by more than it has space
+                // for and push past the glass.
+                val rowStretch = minOf(
+                    stretch,
+                    ((slabWidth - rowWidths[rowIndex]) / row.size).coerceAtLeast(0.dp),
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(gap),
                     verticalAlignment = Alignment.CenterVertically,
@@ -534,7 +564,8 @@ fun <Option> TTGlassSegmentedPicker(
                                     )
                                 }
                             },
-                            modifier = if (optionTag != null) Modifier.testTag(optionTag) else Modifier,
+                            modifier = Modifier.width(cellWidths[index] + rowStretch)
+                                .let { if (optionTag != null) it.testTag(optionTag) else it },
                         )
                     }
                 }
@@ -698,35 +729,39 @@ private fun Segment(
     Box(
         modifier = modifier
             .onGloballyPositioned(onPositioned)
-            .padding(
-                vertical = ttSpacing.controlPaddingV,
-                horizontal = ttSpacing.controlPaddingH,
-            )
+            // The label and the selected state belong to the whole cell, not to the text
+            // inside its padding. Put on the inner box they named a node narrower than the
+            // selection lens, and because the padding was also outside `clickable`, the
+            // strip either side of a word did not respond to a tap.
+            .semantics {
+                contentDescription = label
+                selected = isSelected
+            }
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 role = Role.Tab,
                 onClick = onClick,
             )
-            .semantics { selected = isSelected },
+            .padding(
+                vertical = ttSpacing.controlPaddingV,
+                horizontal = ttSpacing.controlPaddingH,
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        val content = ttLabel()
-        Box(modifier = Modifier.semantics { contentDescription = label }) {
-            ttText(
-                text = label,
-                style = if (isSelected) ttTypography.subheadlineSelected else ttTypography.subheadline,
-                color = content,
-                textAlign = TextAlign.Center,
-                // A cell is sized from this label's measured width, so it needs one line.
-                // Without the cap a caller that hands the picker a narrower slab than its
-                // measurements assumed would get "Medium" back as "Medi/um" — the defect
-                // the grid exists to prevent — instead of a truncation that is visibly one
-                // option rather than two halves.
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        ttText(
+            text = label,
+            style = if (isSelected) ttTypography.subheadlineSelected else ttTypography.subheadline,
+            color = ttLabel(),
+            textAlign = TextAlign.Center,
+            // A cell is sized from this label's measured width, so it needs one line.
+            // Without the cap a caller that hands the picker a narrower slab than its
+            // measurements assumed would get "Medium" back as "Medi/um" — the defect
+            // the grid exists to prevent — instead of a truncation that is visibly one
+            // option rather than two halves.
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

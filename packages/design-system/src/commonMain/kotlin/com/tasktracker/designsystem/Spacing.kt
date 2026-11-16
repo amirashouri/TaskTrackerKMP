@@ -122,6 +122,17 @@ object ttSpacing {
      */
     val fieldMinHeight: Dp = 48.dp
 
+    /**
+     * 480dp — the widest a segmented picker grows, whatever its caller offers.
+     *
+     * Phones are narrower than this: a 360–430dp screen leaves a form of roughly 290–370dp
+     * after the screen gutter, so a picker fills one. A desktop form is far wider, and there
+     * this cap is what keeps a three-word control a control instead of a bar across the page.
+     * The rows divide the width between their options, so the cap bounds how far the labels
+     * spread rather than leaving glass empty at the ends.
+     */
+    val pickerMaxWidth: Dp = 480.dp
+
     /** 18dp — the splash mark's distance to its title. */
     val splashStack: Dp = 18.dp
 
