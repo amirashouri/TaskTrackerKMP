@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -445,9 +446,11 @@ fun Modifier.ttGlassCard(
  * not sit in wide empty cells. Options are packed in order and an option that does not fit
  * moves to the next row whole: at phone width the five priorities are four and one rather than
  * five cells narrow enough to break "Medium" in half, and [Segment] holds every label to one
- * line so nothing splits inside a cell. The slab hugs its widest row rather than filling the
- * page, so a handful of options stays its own size on a desktop instead of stretching across
- * it; the rows are centred in that slab and the labels stay close together. The lens already
+ * line so nothing splits inside a cell. The slab is its widest row, floored at
+ * [ttSpacing.pickerMinWidth] and capped by its caller: a phone form is narrower than the floor,
+ * so the picker fills it, while on a desktop a handful of options keeps a control's width
+ * instead of stretching across the page. The rows are centred in that slab, so a wrapped
+ * option lands under the middle of the row above it rather than at its start. The lens already
  * carries a Y offset, so it travels between rows when the selection crosses one.
  */
 @Composable
@@ -505,8 +508,16 @@ fun <Option> TTGlassSegmentedPicker(
             ceil(textWidth / density.density).dp + ttSpacing.controlPaddingH * 2
         }
         val rows = packIntoRows(cellWidths, maxWidth, gap)
+        // The slab is its widest row, floored at [ttSpacing.pickerMinWidth] and capped by the
+        // caller. A phone form is narrower than the floor, so the picker fills it; a desktop
+        // form leaves a short control at its floor instead of at the width of the page.
+        val contentWidth = rows.maxOf { row ->
+            row.map { cellWidths[it] }.reduce(Dp::plus) + gap * (row.size - 1)
+        }
+        val slabWidth = minOf(maxWidth, maxOf(contentWidth, ttSpacing.pickerMinWidth))
 
         Column(
+            modifier = Modifier.width(slabWidth),
             verticalArrangement = Arrangement.spacedBy(gap),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

@@ -394,6 +394,10 @@ class ProjectsUiIosTest {
         runComposeUiTest(block = WorkItemEditorScenarios.aPickerDoesNotStretchAcrossAWideForm)
 
     @Test
+    fun aWorkItemEditorPickerFillsAPhoneWidthForm() =
+        runComposeUiTest(block = WorkItemEditorScenarios.aPickerFillsAPhoneWidthForm)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

@@ -43,6 +43,7 @@ import com.tasktracker.resources.work_item_repeat_monthly
 import com.tasktracker.resources.work_item_repeat_none
 import com.tasktracker.resources.work_item_repeat_weekly
 import com.tasktracker.resources.work_item_repeat_yearly
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.jetbrains.compose.resources.getString
@@ -393,6 +394,42 @@ object WorkItemEditorScenarios {
     }
 
     /**
+     * A picker fills a phone-width form.
+     *
+     * ## The rule this pins
+     *
+     * The slab is the wider of its widest row and `ttSpacing.pickerMinWidth`, capped by its
+     * caller. A phone form is narrower than that floor, so the capped width is the form's:
+     * the picker spans the field, the way a system segmented control does. A slab that hugged
+     * its labels here would leave a three-option picker as a capsule with a strip of empty
+     * glass beside it inside a field that is otherwise full — a form that looks half filled.
+     *
+     * The Title field is the yardstick because the two share the form's content width and
+     * nothing else: the card is `fillMaxWidth`, so if the picker has not filled the form the
+     * two widths differ by exactly what the picker left behind.
+     */
+    val aPickerFillsAPhoneWidthForm: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            Box(modifier = Modifier.width(NARROW_FORM_WIDTH.dp)) {
+                editorSheet(selectableStatuses = EDITOR_STATUSES)
+            }
+        }
+
+        onNodeWithTag(WorkItemPriorityPickerTag).performScrollTo()
+        val field = onNodeWithTag(ProjectsFieldCardTag("Title"))
+            .fetchSemanticsNode().boundsInRoot.width
+        val picker = onNodeWithTag(WorkItemPriorityPickerTag)
+            .fetchSemanticsNode().boundsInRoot.width
+
+        assertTrue(
+            abs(picker - field) <= 1f,
+            "the priority picker is ${picker}px wide against a ${field}px field at " +
+                "${NARROW_FORM_WIDTH}dp: the form is narrower than ttSpacing.pickerMinWidth, " +
+                "so the picker should fill it rather than stop at its labels.",
+        )
+    }
+
+    /**
      * A wide window does not stretch a segmented picker.
      *
      * ## The defect this exists for
@@ -400,8 +437,9 @@ object WorkItemEditorScenarios {
      * The Backlog section switcher on a desktop filled the whole content column, so three
      * labels sat in the middle of a bar with a hand's width of empty glass on either side:
      * the control read as a rule with words near its centre rather than as a control. The
-     * picker packs its cells from their measured labels, so its own width is its content's
-     * width and nothing in that arithmetic reads the window. The glass, though, was drawn at
+     * picker packs its cells from their measured labels, so its width is its content's width
+     * or [com.tasktracker.designsystem.ttSpacing.pickerMinWidth], whichever is wider, and
+     * nothing in that arithmetic reads the page. The glass, though, was drawn at
      * `fillMaxWidth`, and that is the empty glass this pins down.
      *
      * Stability under a wider form is the assertion rather than a ratio or a dp cap: a picker
@@ -447,8 +485,8 @@ object WorkItemEditorScenarios {
             absoluteTolerance = 1f,
             message = "the priority picker is ${pickerAtWide}px wide at ${WIDE_FORM_WIDTH}dp and " +
                 "${pickerAtWider}px at ${WIDER_FORM_WIDTH}dp: it stretched with the form instead " +
-                "of hugging its labels. That is the desktop backlog bar with three centred " +
-                "labels and a band of empty glass at both ends.",
+                "of stopping at its content width or its floor. That is the desktop backlog bar " +
+                "with three centred labels and a band of empty glass at both ends.",
         )
         assertTrue(
             pickerAtWider < fieldAtWider * 0.8f,
