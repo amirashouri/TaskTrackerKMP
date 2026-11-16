@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -189,6 +190,40 @@ object MembersAdminScenarios {
         assertEquals(0, cancels)
     }
 
+    /**
+     * The minted code is a field of its own with a copy control, and Done is what closes it.
+     *
+     * Three claims in one flow, because they are one dialog: the credential is readable as a
+     * value rather than as the tail of a sentence, copying is a control of its own, and copying
+     * does **not** dismiss — an admin who copies and then has to hand the code on twice must not
+     * have to ask the server to revoke and mint again. The dismissal is asserted as the absence of
+     * a "nothing happened" tap: only Done dispatches. The clipboard itself is not read, because
+     * there is no portable way to read it from `commonTest`.
+     */
+    val theMintedCodeIsCopyableAndDoneDismisses: suspend ComposeUiTest.() -> Unit = {
+        var dismissals = 0
+        val generated = GeneratedResetCode(member = ada, code = "8f2c4d1e-9b7a-4c3d-8e5f-6a1b2c3d4e5f")
+        screenShowing(
+            members = listOf(ada),
+            resetCode = generated,
+            onDismissResetCode = { dismissals++ },
+        )
+
+        onNodeWithTag(MembersResetCodeTag).assertIsDisplayed()
+        onNodeWithTag(MembersResetCodeValueTag).assertTextContains(generated.code)
+        // The reset popup is not the delete one: a code and a confirmation never share a card.
+        onNodeWithTag(TTConfirmPopupTag).assertDoesNotExist()
+
+        onNodeWithTag(MembersResetCodeCopyTag).performClick()
+
+        assertEquals(0, dismissals, "copying must leave the code on screen to be copied again")
+        onNodeWithTag(MembersResetCodeValueTag).assertTextContains(generated.code)
+
+        onNodeWithTag(MembersResetCodeDoneTag).performClick()
+
+        assertEquals(1, dismissals, "Done must ask for the popup to close exactly once")
+    }
+
     /** The segment control asks for the bucket it names — the Deleted one, from the Active one. */
     val theDeletedSegmentAsksForTheDeletedBucket: suspend ComposeUiTest.() -> Unit = {
         var asked: MembersBucket? = null
@@ -355,6 +390,7 @@ private fun ComposeUiTest.screenShowing(
     isLoading: Boolean = false,
     errorMessage: String? = null,
     pendingDeletion: User? = null,
+    resetCode: GeneratedResetCode? = null,
     isAddFormOpen: Boolean = false,
     isCreating: Boolean = false,
     createErrorMessage: String? = null,
@@ -364,6 +400,7 @@ private fun ComposeUiTest.screenShowing(
     onRequestDelete: (User) -> Unit = {},
     onCancelDelete: () -> Unit = {},
     onConfirmDelete: () -> Unit = {},
+    onDismissResetCode: () -> Unit = {},
     onReactivate: (User) -> Unit = {},
     onOpenAddForm: () -> Unit = {},
     onCloseAddForm: () -> Unit = {},
@@ -378,6 +415,7 @@ private fun ComposeUiTest.screenShowing(
                 isLoading = isLoading,
                 errorMessage = errorMessage,
                 pendingDeletion = pendingDeletion,
+                resetCode = resetCode,
                 isAddFormOpen = isAddFormOpen,
                 isCreating = isCreating,
                 createErrorMessage = createErrorMessage,
@@ -387,6 +425,7 @@ private fun ComposeUiTest.screenShowing(
                 onRequestDelete = onRequestDelete,
                 onCancelDelete = onCancelDelete,
                 onConfirmDelete = onConfirmDelete,
+                onDismissResetCode = onDismissResetCode,
                 onReactivate = onReactivate,
                 onOpenAddForm = onOpenAddForm,
                 onCloseAddForm = onCloseAddForm,

@@ -43,6 +43,10 @@ class MembersAdminViewJvmTest {
         runComposeUiTest(block = MembersAdminScenarios.theConfirmationNamesTheMemberAndDispatches)
 
     @Test
+    fun theMintedCodeIsCopyableAndDoneDismisses() =
+        runComposeUiTest(block = MembersAdminScenarios.theMintedCodeIsCopyableAndDoneDismisses)
+
+    @Test
     fun theDeletedSegmentAsksForTheDeletedBucket() =
         runComposeUiTest(block = MembersAdminScenarios.theDeletedSegmentAsksForTheDeletedBucket)
 

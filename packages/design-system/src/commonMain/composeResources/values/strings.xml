@@ -750,6 +750,9 @@
     <string name="admin_members_reset_code_body">Give this code to %1$s. It can be used once and expires in 24 hours.
 
 %2$s</string>
+    <!-- The same sentence without the code: the members screen draws the code as its own
+         copyable field instead of ending a paragraph with it. -->
+    <string name="admin_members_reset_code_for">Give this code to %1$s. It can be used once and expires in 24 hours.</string>
     <string name="admin_members_reset_code_copy">Copy</string>
 
     <!-- The admin projects screen, reached from the same admin-only Settings row as members. -->

@@ -41,6 +41,7 @@ import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttMonospaced
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttSpinner
@@ -48,8 +49,8 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
-import com.tasktracker.resources.admin_members_reset_code_body
 import com.tasktracker.resources.admin_members_reset_code_copy
+import com.tasktracker.resources.admin_members_reset_code_for
 import com.tasktracker.resources.copied_to_clipboard
 import com.tasktracker.resources.settings_change_password_generate
 import com.tasktracker.resources.settings_change_password_member_hint
@@ -186,26 +187,42 @@ internal fun ResetCodeGenerator(
                         .fillMaxWidth()
                         .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
                         .padding(ttSpacing.xl),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
                     // The members screen's own sentence, reused rather than restated: who the code
-                    // is for, that it dies after one use, when it dies, and the code itself on a
-                    // line of its own. Two surfaces delivering the same credential must not word it
-                    // two ways.
+                    // is for, that it dies after one use, and when it dies. The code is not the
+                    // tail of that sentence — it is the field underneath, the same field the
+                    // members screen's dialog draws, so the same credential reads the same way on
+                    // both surfaces.
                     ttText(
                         text = stringResource(
-                            Res.string.admin_members_reset_code_body,
+                            Res.string.admin_members_reset_code_for,
                             generated.forMember.label,
-                            generated.code,
                         ),
                         style = ttTypography.footnote,
                         color = ttLabelSecondary(),
-                        modifier = Modifier.testTag(SettingsResetCodeTag),
                     )
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.row))
+                            .padding(
+                                start = ttSpacing.md,
+                                end = ttSpacing.xs,
+                                top = ttSpacing.xs,
+                                bottom = ttSpacing.xs,
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                     ) {
+                        ttText(
+                            text = generated.code,
+                            // Monospaced so the hyphens line up and an `l` cannot be read as a
+                            // `1` when the code is being read aloud rather than copied.
+                            style = ttTypography.footnote.ttMonospaced(),
+                            color = ttLabel(),
+                            modifier = Modifier.weight(1f).testTag(SettingsResetCodeTag),
+                        )
                         // The work-item card's affordance, not a worded button: the same glyph
                         // that copies a card copies this code, and the label the button used to
                         // carry becomes the content description, so a screen reader still gets it.
@@ -216,6 +233,7 @@ internal fun ResetCodeGenerator(
                                 clipboard.setText(AnnotatedString(generated.code))
                                 copies++
                             },
+                            tint = ttAccent(),
                             modifier = Modifier.testTag(SettingsResetCopyTag),
                         )
                     }
@@ -348,7 +366,7 @@ fun resetMemberOptionTag(candidate: ResetCodeCandidate): String =
 /** The button that mints the code. */
 const val SettingsResetGenerateTag = "settings.changePassword.resetGenerate"
 
-/** The minted code and its sentence. */
+/** The minted code's own field — the credential, not the sentence introducing it. */
 const val SettingsResetCodeTag = "settings.changePassword.resetCode"
 
 /** The Copy button beside the minted code — the delivery, since there is no mailer. */
