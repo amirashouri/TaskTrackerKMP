@@ -58,7 +58,11 @@ fun ConfirmPopup(
                 .padding(ttSpacing.formStack)
                 .testTag(tag),
         ) {
+            // The card draws its own inset. `TTGlassSurface` is a container, not a padded
+            // panel, so without this the title and the buttons sat on the glass rim — every
+            // confirmation in the app, since they all come through here.
             Column(
+                modifier = Modifier.padding(ttSpacing.xl),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
             ) {
             ttText(
