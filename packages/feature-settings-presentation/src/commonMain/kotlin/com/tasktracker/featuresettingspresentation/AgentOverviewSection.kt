@@ -24,7 +24,7 @@ import com.tasktracker.core.DateCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
-import com.tasktracker.designsystem.TTGlassFlowPicker
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttError
@@ -364,41 +364,34 @@ private fun AgentSetupForm(
         }
 
         AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_host_label))
-        Row(
+        // The same control the backlog page switches sections with: two exclusive choices that
+        // are one question, drawn on one slab with the selection sliding between them, rather
+        // than two buttons whose "prominent" style had to carry the selection by itself.
+        TTGlassSegmentedPicker(
+            options = AgentHost.entries,
+            selection = draft.host,
+            // The picker has no `enabled`: a live code freezes the draft, so the gate is here.
+            onSelect = { host -> if (!hasCode) onSelectHost(host) },
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-        ) {
-            ttGlassButton(
-                label = stringResource(Res.string.settings_agent_host_desktop),
-                onClick = { onSelectHost(AgentHost.Desktop) },
-                enabled = !hasCode,
-                modifier = Modifier.testTag(SettingsAgentSetupHostDesktopTag),
-                style = if (draft.host == AgentHost.Desktop) {
-                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
-                } else {
-                    TTGlassButtonStyle()
-                },
-            )
-            ttGlassButton(
-                label = stringResource(Res.string.settings_agent_host_remote),
-                onClick = { onSelectHost(AgentHost.Remote) },
-                enabled = !hasCode,
-                modifier = Modifier.testTag(SettingsAgentSetupHostRemoteTag),
-                style = if (draft.host == AgentHost.Remote) {
-                    TTGlassButtonStyle(tint = ttAccent(), prominent = true)
-                } else {
-                    TTGlassButtonStyle()
-                },
-            )
-        }
+            title = { host -> agentHostLabel(host) },
+            testTag = { host ->
+                when (host) {
+                    AgentHost.Desktop -> SettingsAgentSetupHostDesktopTag
+                    AgentHost.Remote -> SettingsAgentSetupHostRemoteTag
+                }
+            },
+        )
 
         AgentSetupFieldLabel(stringResource(Res.string.settings_agent_setup_provider_label))
-        // Chips rather than full-width rows: the three providers are short names, and three
-        // stacked rows is most of a phone screen spent on one question.
-        TTGlassFlowPicker(
+        // Segmented rather than the chip flow it was: the three providers are one question with
+        // one answer, and the chip row drew its glass across the full width while the three
+        // names filled a fraction of it — a background longer than its content. Three equal
+        // segments put the slab's edges where the content's edges are.
+        TTGlassSegmentedPicker(
             options = AgentSetupProvider.entries,
             selection = draft.provider,
             onSelect = onSelectProvider,
+            modifier = Modifier.fillMaxWidth(),
             title = { provider -> agentSetupProviderLabel(provider) },
         )
 
