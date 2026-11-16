@@ -3,9 +3,13 @@ package com.tasktracker.featuresettingsdata
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SystemDateProvider
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentPairingGateway
 import com.tasktracker.featuresettingsdomain.AgentSettingsGateway
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.CheckServerAddress
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -127,6 +131,15 @@ class LiveSettingsService(
      * shows "not set up" because nothing was ever paired to a server it has.
      */
     private val agentGateway: AgentSettingsGateway? = null,
+    /**
+     * The mint half of agent setup, or `null` in the offline demo.
+     *
+     * Separate from [agentGateway] because they are separate server routes and separate
+     * questions: one reads a fleet, the other creates a credential. Defaulted for the same
+     * reason the fleet gateway is, so a build without a server simply has no button that
+     * could mint a code nothing would redeem.
+     */
+    private val agentPairingGateway: AgentPairingGateway? = null,
     /**
      * Used to stamp the agent snapshot's observation time and to move a machine's
      * row after a stop/start. The graph passes its app-scoped clock so this agrees
@@ -251,6 +264,21 @@ class LiveSettingsService(
         val updated = agentOverviewFlow.value.withMachine(machine, dateProvider.now())
         agentOverviewFlow.value = updated
         return updated
+    }
+
+    /**
+     * Forwarded to the pairing transport; nothing is stored.
+     *
+     * A `null` gateway is the offline demo, and that has to be an error rather than a silent
+     * no-op: a code the sheet reported but the server never issued would send the admin to a
+     * terminal to redeem nothing. [AppError.Validation] is what the screen's own failure
+     * sentence covers, so it needs no second case.
+     */
+    override suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode {
+        val gateway = agentPairingGateway ?: throw AppError.Validation(
+            "There is no server to pair a machine with.",
+        )
+        return gateway.createCode(projectID, host)
     }
 
     // MARK: - Version

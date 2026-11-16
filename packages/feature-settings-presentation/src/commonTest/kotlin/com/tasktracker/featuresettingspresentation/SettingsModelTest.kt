@@ -2,8 +2,12 @@ package com.tasktracker.featuresettingspresentation
 
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
+import com.tasktracker.featuresettingsdomain.AgentSetupProject
 import com.tasktracker.featuresettingsdomain.AgentState
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -665,6 +669,101 @@ class SettingsModelTest {
         assertNull(model.agentFailure)
     }
 
+    // MARK: - Agent setup
+
+    @Test
+    fun theWizardMintsACodeForTheSelectedProjectAndHost() = runTest {
+        val port = RecordingSettingsPort()
+        val project = setupProject()
+        val model = SettingsModel(port) { listOf(project) }
+
+        model.openAgentSetup()
+        model.setAgentSetupHost(AgentHost.Remote)
+        model.requestAgentSetupCode()
+
+        // Pairing is project-scoped on the server, so the project is half the request: a wizard
+        // that minted for "whatever is selected" without sending it would pair the wrong project
+        // or none. The host rides along because the runner row shows it.
+        assertEquals(listOf(project.id to AgentHost.Remote), port.pairingRequests)
+        assertEquals(
+            project.id,
+            model.agentSetup?.project?.id,
+            "the only available project is preselected, so the admin is not asked a question with one answer",
+        )
+        val phase = model.agentSetupPhase
+        assertTrue(phase is AgentSetupPhase.Ready, "a minted code is what the sheet renders next")
+        assertEquals("ttpc_test", phase.code.code)
+        assertTrue(model.isAgentSetupPolling, "a live code means the sheet is waiting for a machine")
+    }
+
+    @Test
+    fun aRefusedMintHoldsTheFailureAndKeepsTheSheetOpen() = runTest {
+        val port = RecordingSettingsPort()
+        port.pairingFailure = AppError.Transport("offline")
+        val model = SettingsModel(port) { listOf(setupProject()) }
+        model.openAgentSetup()
+
+        model.requestAgentSetupCode()
+
+        // Held rather than thrown: the sheet is still the right place to read a refusal, and a
+        // dismissal would throw away the form the admin just filled in.
+        assertTrue(model.agentSetupPhase is AgentSetupPhase.Failed)
+        assertNotNull(model.agentSetup)
+    }
+
+    @Test
+    fun theWizardReportsTheMachineItWasWaitingFor() = runTest {
+        val port = RecordingSettingsPort()
+        val project = setupProject()
+        val model = SettingsModel(port) { listOf(project) }
+        model.openAgentSetup()
+        model.requestAgentSetupCode()
+
+        // Paired but not claiming yet: the runner row exists, its heartbeat has not started.
+        port.agentOverviewValue = AgentOverview(
+            machines = listOf(setupMachine(project.id, lastSeenAt = null)),
+            observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+        )
+        model.pollAgentSetup()
+        assertTrue(
+            model.agentSetupPhase is AgentSetupPhase.Paired,
+            "a runner row is a paired machine, not an online one — saying connected here would " +
+                "tell the admin to stop when the worker has not started",
+        )
+
+        // The worker starts and its first heartbeat lands inside the freshness window.
+        port.agentOverviewValue = AgentOverview(
+            machines = listOf(
+                setupMachine(project.id, lastSeenAt = Instant.parse("2026-11-03T12:00:29Z")),
+            ),
+            observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+        )
+        model.pollAgentSetup()
+
+        assertTrue(model.agentSetupPhase is AgentSetupPhase.Online)
+        assertFalse(model.isAgentSetupPolling, "an online machine ends the wait")
+        assertEquals(
+            AgentState.Running,
+            model.agentOverview.state,
+            "the roster behind the sheet must show the machine it just paired",
+        )
+    }
+
+    private fun setupProject() = AgentSetupProject(
+        id = ProjectID("0195c3a4-0000-7000-8000-0000000000bb"),
+        name = "Task Tracker",
+        keyPrefix = "TT",
+        agentEnabled = true,
+    )
+
+    private fun setupMachine(projectID: ProjectID, lastSeenAt: Instant?) = AgentMachine(
+        id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000cc"),
+        name = "paired-machine",
+        provider = "echo",
+        projectID = projectID,
+        lastSeenAt = lastSeenAt,
+    )
+
     private fun agentMachine() = AgentMachine(
         id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000aa"),
         name = "dev-machine",
@@ -881,6 +980,25 @@ class RecordingSettingsPort(
 
     override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview =
         setAgentPaused(machineID, paused = false)
+
+    /** The wizard's mint, recorded so a test can assert the project and host it asked for. */
+    val pairingRequests = mutableListOf<Pair<ProjectID, AgentHost>>()
+
+    /** When set, the mint fails with it instead of answering a code. */
+    var pairingFailure: AppError? = null
+
+    /** When set, the mint answers this code instead of the default one. */
+    var pairingCode: AgentSetupCode? = null
+
+    override suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode {
+        pairingRequests += projectID to host
+        pairingFailure?.let { throw it }
+        return pairingCode ?: AgentSetupCode(
+            code = "ttpc_test",
+            projectID = projectID,
+            expiresAt = Instant.parse("2026-11-03T12:10:00Z"),
+        )
+    }
 
     private fun setAgentPaused(machineID: AgentRunnerID, paused: Boolean): AgentOverview {
         if (paused) stopAgentCalls += machineID else startAgentCalls += machineID

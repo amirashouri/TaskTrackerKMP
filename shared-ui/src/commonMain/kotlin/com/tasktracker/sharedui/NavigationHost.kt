@@ -80,6 +80,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
+import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectspresentation.AgentRunModel
 import com.tasktracker.featureprojectspresentation.ProjectAgentsModel
@@ -108,6 +109,7 @@ import com.tasktracker.featureprojectspresentation.WorkItemEditorModel
 import com.tasktracker.featureprojectspresentation.WorkItemEditorSheet
 import com.tasktracker.featureprojectspresentation.assignableMembersFor
 import com.tasktracker.featureprojectspresentation.currentProjectEnvironment
+import com.tasktracker.featuresettingsdomain.AgentSetupProject
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.MissingSettingsServiceView
 import com.tasktracker.featuresettingspresentation.ResetCodePanel
@@ -461,8 +463,10 @@ fun NavigationHost(
                             null
                         },
                         // The Settings branch's change-password sheet mints a member's code
-                        // through this port; every other tab ignores it.
+                        // through this port, and its agent wizard lists the projects to pair;
+                        // every other tab ignores both.
                         memberAdminPort = memberAdminPort,
+                        adminProjectsPort = adminProjectsPort,
                     )
                 }
                 val pushedPane: @Composable () -> Unit = {
@@ -839,6 +843,14 @@ private fun TabRoot(
      * and only to mint a reset code for a member.
      */
     memberAdminPort: MemberAdminPort? = null,
+    /**
+     * The administrator's project list, for the Settings tab's agent wizard.
+     *
+     * The wizard pairs a machine to a project, so it has to offer the projects that can be
+     * paired — and the settings feature may not depend on the projects one to read them. The
+     * shell maps each `AdminProject` into the wizard's own flat [AgentSetupProject].
+     */
+    adminProjectsPort: AdminProjectsPort? = null,
 ) {
     when (tab) {
         AppTab.Projects -> ProjectsHost(
@@ -909,6 +921,7 @@ private fun TabRoot(
                 themeScheme = themeScheme,
                 scope = scope,
                 memberAdminPort = memberAdminPort,
+                adminProjectsPort = adminProjectsPort,
             )
         }
     }
@@ -1006,6 +1019,7 @@ private fun PushedRoute(
                 themeScheme = themeScheme,
                 scope = scope,
                 memberAdminPort = memberAdminPort,
+                adminProjectsPort = adminProjectsPort,
             )
         }
 
@@ -2356,9 +2370,46 @@ private fun SettingsDestination(
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
     memberAdminPort: MemberAdminPort?,
+    /**
+     * The administrator's project list, or `null` when the app bound no admin backend.
+     *
+     * Read through a closure rather than passed as a value: the list is asked for when the
+     * setup wizard opens, not every time Settings is drawn, and the model is the only thing that
+     * knows when that is. `null` produces an empty list, which the wizard renders as "nothing to
+     * pair" rather than as a failure.
+     */
+    adminProjectsPort: AdminProjectsPort? = null,
 ) {
     val layoutClass = LocalShellLayoutClass.current
-    val model = remember(port) { SettingsModel(port) }
+    // The membership filter that pairing itself enforces: the server requires the caller to be
+    // a member of the project whose code they mint. Filtering here means the wizard offers only
+    // answers the server would accept, instead of a picker that fails on tap. A project the
+    // admin *administers* but has not joined is legally theirs to edit and not theirs to pair,
+    // which is why the filter is membership rather than the admin gate.
+    val currentUserID by preferences.currentUserID.collectAsState()
+    val agentSetupProjects: suspend () -> List<AgentSetupProject> = remember(adminProjectsPort, currentUserID) {
+        {
+            val member = currentUserID
+            if (member == null) {
+                emptyList()
+            } else {
+                adminProjectsPort?.projects(ProjectAdminStatus.Active)
+                    ?.map { it.project }
+                    ?.filter { project -> member in project.memberIDs }
+                    ?.sortedBy { it.name.lowercase() }
+                    ?.map { project ->
+                        AgentSetupProject(
+                            id = project.id,
+                            name = project.name,
+                            keyPrefix = project.keyPrefix,
+                            agentEnabled = project.agentEnabled,
+                        )
+                    }
+                    .orEmpty()
+            }
+        }
+    }
+    val model = remember(port, agentSetupProjects) { SettingsModel(port, agentSetupProjects) }
     DisposableEffect(model) {
         model.observe(scope)
         onDispose { model.stopObserving() }
@@ -2451,6 +2502,27 @@ private fun SettingsDestination(
         onStopAgent = { machineID -> scope.launch { model.stopAgent(machineID) } },
         onStartAgent = { machineID -> scope.launch { model.startAgent(machineID) } },
         onDismissAgentFailure = { model.dismissAgentFailure() },
+        // The setup wizard. Opening is a launch because it reads the project list; the polls are
+        // launches for the same reason, and the screen decides when to make them — the model
+        // holds `isAgentSetupPolling`, which is what ends them. A mint and its failure are both
+        // the model's state, so the sheet renders the outcome rather than a second flag here.
+        agentSetup = model.agentSetup,
+        agentSetupProjects = model.agentSetupProjects,
+        isAgentSetupProjectsLoading = model.isAgentSetupProjectsLoading,
+        agentSetupProjectsFailure = model.agentSetupProjectsFailure,
+        agentSetupPhase = model.agentSetupPhase,
+        isAgentSetupPolling = model.isAgentSetupPolling,
+        onOpenAgentSetup = { scope.launch { model.openAgentSetup() } },
+        onDismissAgentSetup = { model.dismissAgentSetup() },
+        onAgentSetupProject = { projectID -> model.selectAgentSetupProject(projectID) },
+        onAgentSetupHost = { host -> model.setAgentSetupHost(host) },
+        onAgentSetupProvider = { provider -> model.setAgentSetupProvider(provider) },
+        onAgentSetupModel = { text -> model.setAgentSetupModel(text) },
+        onAgentSetupBaseUrl = { text -> model.setAgentSetupBaseUrl(text) },
+        onAgentSetupWorkspace = { text -> model.setAgentSetupWorkspace(text) },
+        onAgentSetupServer = { text -> model.setAgentSetupServerUrl(text) },
+        onRequestAgentSetupCode = { scope.launch { model.requestAgentSetupCode() } },
+        onPollAgentSetup = { scope.launch { model.pollAgentSetup() } },
         // The change-password sheet's pair: state read straight from the model, the submit
         // launched like every other command here, and the dismissal clearing the outcome the
         // same way the sign-out and profile banners are cleared — once read, never re-raised.

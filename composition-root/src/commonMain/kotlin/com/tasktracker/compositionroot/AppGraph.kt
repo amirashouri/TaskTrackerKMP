@@ -43,6 +43,7 @@ import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.SweepPendingAttachments
 import com.tasktracker.featureprojectsdomain.UploadAttachment
 import com.tasktracker.featuresettingsdata.HttpAgentRunnersRemote
+import com.tasktracker.featuresettingsdata.HttpAgentSetupRemote
 import com.tasktracker.featuresettingsdata.HttpServerAddressProbe
 import com.tasktracker.featuresettingsdata.HttpUserProfileGateway
 import com.tasktracker.featuresettingsdata.LiveSettingsService
@@ -842,6 +843,18 @@ object AppGraph {
                 // agrees with every other timestamp this app compares.
                 agentGateway = platforms.apiBaseUrl?.let { url ->
                     HttpAgentRunnersRemote(
+                        client = platforms.httpClient(
+                            url,
+                            listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
+                        ),
+                    )
+                },
+                // The mint half of the same section: the setup wizard asks the server for a
+                // one-use code and then watches the fleet above for the machine it makes. Its
+                // own client, like every other authenticated remote, so a failed mint never
+                // shares a connection state with the read that confirms it.
+                agentPairingGateway = platforms.apiBaseUrl?.let { url ->
+                    HttpAgentSetupRemote(
                         client = platforms.httpClient(
                             url,
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),

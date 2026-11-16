@@ -36,13 +36,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTToastTag
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
+import com.tasktracker.featuresettingsdomain.AgentSetupProject
+import com.tasktracker.featuresettingsdomain.AgentSetupProvider
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
@@ -603,6 +608,7 @@ object SettingsScenarios {
     val anAdminStopsAMachineAndCanOpenSetup: suspend ComposeUiTest.() -> Unit = {
         val machine = scenarioAgentMachine()
         val stopped = mutableListOf<AgentRunnerID>()
+        var opened = 0
         screenShowing(
             isAdmin = true,
             serverAddress = ServerAddressSettings(
@@ -614,6 +620,7 @@ object SettingsScenarios {
                 observedAt = Instant.parse("2026-11-03T12:00:30Z"),
             ),
             onStopAgent = { stopped += it },
+            onOpenAgentSetup = { opened++ },
         )
 
         onNodeWithTag(SettingsAgentStopTagPrefix + machine.id.stringValue)
@@ -622,10 +629,7 @@ object SettingsScenarios {
         assertEquals(listOf(machine.id), stopped, "the Stop row must dispatch that machine's id")
 
         onNodeWithTag(SettingsAgentSetupRowTag).performScrollTo().performClick()
-        onNodeWithTag(SettingsAgentSetupSheetTag).assertIsDisplayed()
-        onNodeWithTag(SettingsAgentSetupCommandTag).assertIsDisplayed()
-        onNodeWithTag(SettingsAgentSetupCloseTag).performClick()
-        onNodeWithTag(SettingsAgentSetupSheetTag).assertDoesNotExist()
+        assertEquals(1, opened, "the Setup row must ask the model to open the wizard")
     }
 
     /**
@@ -638,37 +642,71 @@ object SettingsScenarios {
      */
     val theSetupCommandsCopyTheTextTheyShow: suspend ComposeUiTest.() -> Unit = {
         val clipboard = RecordingClipboard()
+        val project = scenarioSetupProject()
+        val code = "ttpc_test"
 
         setContent {
             Themed {
                 CompositionLocalProvider(LocalClipboardManager provides clipboard) {
                     AgentSetupSheet(
-                        serverRoot = "https://tasks.example.com",
+                        draft = AgentSetupDraft(
+                            project = project,
+                            host = AgentHost.Desktop,
+                            provider = AgentSetupProvider.OpenAiCompatible,
+                            model = "llama3.1",
+                            serverUrl = "https://tasks.example.com",
+                        ),
+                        projects = listOf(project),
+                        projectsLoading = false,
+                        projectsFailure = null,
+                        phase = AgentSetupPhase.Ready(
+                            AgentSetupCode(
+                                code = code,
+                                projectID = project.id,
+                                expiresAt = Instant.parse("2026-11-03T12:10:00Z"),
+                            ),
+                        ),
                         onDismiss = {},
+                        onSelectProject = {},
+                        onSelectHost = {},
+                        onSelectProvider = {},
+                        onModelChange = {},
+                        onBaseUrlChange = {},
+                        onWorkspaceChange = {},
+                        onServerChange = {},
+                        onRequestCode = {},
                     )
                 }
             }
         }
         waitForIdle()
 
-        onNodeWithTag(SettingsAgentSetupCopyConnectTag).performClick()
+        // One line, both halves: `connect` writes the provider into the machine's config and
+        // `run` reads it back, so the admin pastes one command rather than sequencing two.
+        val expected = "tt agent connect --server https://tasks.example.com" +
+            " --pairing-code $code --provider openai-compatible --model llama3.1" +
+            " && tt agent run"
+        assertEquals(
+            expected,
+            onNodeWithTag(SettingsAgentSetupCommandTag).fetchSemanticsNode()
+                .config[SemanticsProperties.Text].first().text,
+            "the sheet must show the exact command it copies",
+        )
+
+        onNodeWithTag(SettingsAgentSetupCopyCommandTag).performScrollTo().performClick()
         waitForIdle()
         assertEquals(
-            "tt agent connect --server https://tasks.example.com",
+            expected,
             clipboard.text,
-            "Copy on the pair step must put the exact command, address included, on the clipboard",
+            "Copy must put the exact command, address and flags included, on the clipboard",
         )
         onNodeWithTag(TTToastTag).assertExists(
             "the command reached the clipboard but nothing confirmed it",
         )
 
-        onNodeWithTag(SettingsAgentSetupCopyRunTag).performClick()
+        onNodeWithTag(SettingsAgentSetupCopyCodeTag).performScrollTo().performClick()
         waitForIdle()
-        assertEquals(
-            "tt agent run",
-            clipboard.text,
-            "Copy on the run step must put the command, and only the command, on the clipboard",
-        )
+        assertEquals(code, clipboard.text, "Copy beside the code must put the code alone on the clipboard")
     }
 
     /** A refused stop is a dismissible banner, not a silently unchanged row. */
@@ -683,6 +721,13 @@ object SettingsScenarios {
         onNodeWithTag(TTBannerDismissTag).performClick()
         assertEquals(1, dismissals)
     }
+
+    private fun scenarioSetupProject() = AgentSetupProject(
+        id = ProjectID("0195c3a4-0000-7000-8000-0000000000bb"),
+        name = "Task Tracker",
+        keyPrefix = "TT",
+        agentEnabled = true,
+    )
 
     private fun scenarioAgentMachine() = AgentMachine(
         id = AgentRunnerID("0195c3a4-0000-7000-8000-0000000000aa"),
@@ -1159,6 +1204,7 @@ private fun ComposeUiTest.screenShowing(
     onStopAgent: (AgentRunnerID) -> Unit = {},
     onStartAgent: (AgentRunnerID) -> Unit = {},
     onDismissAgentFailure: () -> Unit = {},
+    onOpenAgentSetup: () -> Unit = {},
 ) {
     setContent {
         Themed {
@@ -1185,6 +1231,7 @@ private fun ComposeUiTest.screenShowing(
                 onStopAgent = onStopAgent,
                 onStartAgent = onStartAgent,
                 onDismissAgentFailure = onDismissAgentFailure,
+                onOpenAgentSetup = onOpenAgentSetup,
             )
         }
     }

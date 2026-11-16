@@ -6,7 +6,10 @@ import com.tasktracker.core.AppError
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.core.AgentRunnerID
+import com.tasktracker.core.ProjectID
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ServerAddressSettings
 import com.tasktracker.featuresettingsdomain.ServerAddressValidation
@@ -146,6 +149,10 @@ class PreviewSettingsPort(
     override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
 
     override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
+
+    /** A preview has no server, so the wizard's mint fails exactly as the demo's would. */
+    override suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode =
+        throw AppError.Validation("There is no server to pair a machine with.")
 }
 
 

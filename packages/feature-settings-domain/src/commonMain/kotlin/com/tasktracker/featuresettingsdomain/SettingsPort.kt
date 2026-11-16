@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingsdomain
 
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import kotlinx.coroutines.flow.Flow
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -210,5 +211,19 @@ interface SettingsPort {
     /** The reversible half of [stopAgent]: the same machine begins claiming work again. */
     @Throws(AppError::class, CancellationException::class)
     suspend fun startAgent(machineID: AgentRunnerID): AgentOverview
+
+    /**
+     * Mints one single-use code for a machine to join [projectID].
+     *
+     * The setup wizard's first half. Pairing is project-scoped on the server — the code is
+     * bound to the project it was issued for, so a machine cannot choose a different one for
+     * itself — which is why this takes a project rather than the account.
+     *
+     * The second half is [agentOverview]: the wizard watches the machine list for the runner
+     * the code creates, because the app can mint the credential but cannot start a process on
+     * somebody else's machine.
+     */
+    @Throws(AppError::class, CancellationException::class)
+    suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode
 }
 

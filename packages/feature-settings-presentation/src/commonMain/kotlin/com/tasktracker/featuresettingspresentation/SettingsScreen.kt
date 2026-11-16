@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
@@ -40,7 +41,10 @@ import com.tasktracker.designsystem.ttToast
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttTabIcons
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupProject
+import com.tasktracker.featuresettingsdomain.AgentSetupProvider
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
@@ -187,6 +191,39 @@ fun SettingsScreen(
     onStopAgent: (AgentRunnerID) -> Unit = {},
     onStartAgent: (AgentRunnerID) -> Unit = {},
     onDismissAgentFailure: () -> Unit = {},
+    /**
+     * The setup wizard: the open draft (its non-null-ness *is* the sheet's visibility), the
+     * projects it may pair, and where it has got to.
+     *
+     * The model owns every value here, including the draft the fields edit, because the code it
+     * mints has to outlive a recomposition and the polling that confirms the pairing is a
+     * command rather than screen state. All defaulted, like the rest of this screen's optional
+     * wiring, so previews and the scenarios that never open the wizard compile unchanged.
+     */
+    agentSetup: AgentSetupDraft? = null,
+    agentSetupProjects: List<AgentSetupProject> = emptyList(),
+    isAgentSetupProjectsLoading: Boolean = false,
+    agentSetupProjectsFailure: AppError? = null,
+    agentSetupPhase: AgentSetupPhase = AgentSetupPhase.Editing,
+    /**
+     * Whether the wizard is still waiting for a machine, so the screen should keep polling.
+     *
+     * Passed in rather than derived from [agentSetupPhase] here, because the rule lives with the
+     * code it belongs to — a phase this screen does not know how to interpret must not turn into
+     * a poll loop.
+     */
+    isAgentSetupPolling: Boolean = false,
+    onOpenAgentSetup: () -> Unit = {},
+    onDismissAgentSetup: () -> Unit = {},
+    onAgentSetupProject: (ProjectID) -> Unit = {},
+    onAgentSetupHost: (AgentHost) -> Unit = {},
+    onAgentSetupProvider: (AgentSetupProvider) -> Unit = {},
+    onAgentSetupModel: (String) -> Unit = {},
+    onAgentSetupBaseUrl: (String) -> Unit = {},
+    onAgentSetupWorkspace: (String) -> Unit = {},
+    onAgentSetupServer: (String) -> Unit = {},
+    onRequestAgentSetupCode: () -> Unit = {},
+    onPollAgentSetup: () -> Unit = {},
     signOutFailure: AppError? = null,
     onForceSignOut: () -> Unit = {},
     onDismissSignOutFailure: () -> Unit = {},
@@ -288,9 +325,26 @@ fun SettingsScreen(
         if (syncToastSuccess == kind) syncToastSuccess = null
     }
 
-    // The setup instructions, in the same local register as the name editor: the
-    // sheet holds no draft, so the only state is whether it is open.
-    var agentSetupOpen by remember { mutableStateOf(false) }
+    // The wizard watches the fleet while it waits for the machine its code creates. The
+    // interval lives here rather than in the model because the model holds no scope, and
+    // the model's own `isAgentSetupPolling` is what ends the loop: a machine that came
+    // online or a code that expired stops it on the next recomposition.
+    LaunchedEffect(isAgentSetupPolling) {
+        if (!isAgentSetupPolling) return@LaunchedEffect
+        while (true) {
+            delay(AgentSetupPollMillis)
+            onPollAgentSetup()
+        }
+    }
+
+    // The sheet closes itself once the machine is online. The result is on the roster
+    // behind it, and leaving a finished wizard open asks the admin to dismiss something
+    // that has already succeeded.
+    LaunchedEffect(agentSetupPhase) {
+        if (agentSetupPhase !is AgentSetupPhase.Online) return@LaunchedEffect
+        delay(AgentSetupOnlineDismissMillis)
+        onDismissAgentSetup()
+    }
 
     val identitySection: @Composable () -> Unit = {
         SettingsSection {
@@ -389,7 +443,7 @@ fun SettingsScreen(
             isAdmin = isAdmin,
             onStop = onStopAgent,
             onStart = onStartAgent,
-            onOpenSetup = { agentSetupOpen = true },
+            onOpenSetup = onOpenAgentSetup,
         )
     }
 
@@ -722,16 +776,26 @@ fun SettingsScreen(
             )
         }
 
-        // The agent setup instructions, in the same overlay layer. The root is
-        // re-read here so a Settings opened with no server can never raise a sheet
-        // that has no address to print.
-        if (agentSetupOpen) {
-            serverAddress.inUse?.let { root ->
-                AgentSetupSheet(
-                    serverRoot = root,
-                    onDismiss = { agentSetupOpen = false },
-                )
-            }
+        // The setup wizard, in the same overlay layer. The draft being non-null is both
+        // the visibility and the form's contents — see `AgentSetupDraft` — so there is no
+        // flag here that could disagree with it.
+        agentSetup?.let { draft ->
+            AgentSetupSheet(
+                draft = draft,
+                projects = agentSetupProjects,
+                projectsLoading = isAgentSetupProjectsLoading,
+                projectsFailure = agentSetupProjectsFailure,
+                phase = agentSetupPhase,
+                onDismiss = onDismissAgentSetup,
+                onSelectProject = onAgentSetupProject,
+                onSelectHost = onAgentSetupHost,
+                onSelectProvider = onAgentSetupProvider,
+                onModelChange = onAgentSetupModel,
+                onBaseUrlChange = onAgentSetupBaseUrl,
+                onWorkspaceChange = onAgentSetupWorkspace,
+                onServerChange = onAgentSetupServer,
+                onRequestCode = onRequestAgentSetupCode,
+            )
         }
 
         // The name editor, in the same overlay layer as the Server sheet. Saving closes it
@@ -918,3 +982,15 @@ const val SettingsForgotPasswordRowTag = "settings.forgotPassword"
 
 
 private const val SyncToastMillis = 2_000L
+
+/**
+ * How often the setup wizard re-reads the fleet while it waits.
+ *
+ * A worker touches its row on every claim poll, so three seconds is well inside the overview's
+ * two-minute freshness window: the wizard reports a machine as online as soon as the first
+ * heartbeat lands, and the list it reads is the same one the section renders.
+ */
+private const val AgentSetupPollMillis = 3_000L
+
+/** How long the sheet shows "online" before closing itself onto the updated roster. */
+private const val AgentSetupOnlineDismissMillis = 2_000L

@@ -2,6 +2,7 @@ package com.tasktracker.featuresettingsdomain
 
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -194,6 +195,25 @@ class FakeSettingsPort(
 
     override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview =
         setAgentPaused(machineID, paused = false)
+
+    /** Every mint, as the project and host the wizard asked for. */
+    val pairingRequests = mutableListOf<Pair<ProjectID, AgentHost>>()
+
+    /** When set, the mint throws it after recording the attempt. */
+    var pairingCodeFailure: AppError? = null
+
+    /** When set, the mint answers with this instead of the default `ttpc_test` code. */
+    var nextPairingCode: AgentSetupCode? = null
+
+    override suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode {
+        pairingRequests += projectID to host
+        pairingCodeFailure?.let { throw it }
+        return nextPairingCode ?: AgentSetupCode(
+            code = "ttpc_test",
+            projectID = projectID,
+            expiresAt = Instant.fromEpochSeconds(600),
+        )
+    }
 
     /**
      * Mirrors the server's reversible pause: the same machine comes back with a

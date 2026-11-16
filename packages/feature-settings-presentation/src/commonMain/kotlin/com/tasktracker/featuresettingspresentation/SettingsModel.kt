@@ -5,7 +5,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.AgentRunnerID
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
+import com.tasktracker.featuresettingsdomain.AgentHost
+import com.tasktracker.featuresettingsdomain.AgentMachine
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
+import com.tasktracker.featuresettingsdomain.AgentSetupProject
+import com.tasktracker.featuresettingsdomain.AgentSetupProvider
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.RetryStuckChanges
@@ -21,6 +27,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * The open server-address editor: what the user has typed, whether 6.3's check is in flight,
@@ -62,6 +70,48 @@ sealed interface ChangePasswordOutcome {
 }
 
 /**
+ * The setup wizard's answers, as the sheet holds them.
+ *
+ * Its **non-null-ness is the sheet's visibility**, the same rule [ServerAddressEditor] follows:
+ * a draft is the only reason the sheet is drawn, so there is no second boolean that could
+ * disagree with it and leave a sheet open over a closed state. [serverUrl] is prefilled from
+ * the root this launch is using but stays editable, because the machine being paired may need a
+ * different address than the phone does — a VPS reaches the server over the public host, not
+ * over the loopback the app happens to have bound.
+ */
+data class AgentSetupDraft(
+    val project: AgentSetupProject? = null,
+    val host: AgentHost = AgentHost.Desktop,
+    val provider: AgentSetupProvider = AgentSetupProvider.OpenAiCompatible,
+    val model: String = "",
+    val baseUrl: String = "",
+    val workspace: String = "",
+    val serverUrl: String = "",
+)
+
+/**
+ * Where the wizard is, in the model's words.
+ *
+ * [Ready] and [Paired] are two beats rather than one because the app can only observe two
+ * things: the runner row the code creates appears when `tt agent connect` redeems it, and the
+ * row's heartbeat starts when `tt agent run` claims work. Reporting both is what lets the sheet
+ * say "paired, now start the worker" instead of an unqualified "connected" over a machine that
+ * is not.
+ *
+ * [Failed] carries the [AppError] for the reason [SettingsModel.commandOutcome] does: a model
+ * is a plain class and must not read a resource, so the wording stays in the screen.
+ */
+sealed interface AgentSetupPhase {
+    data object Editing : AgentSetupPhase
+    data object Requesting : AgentSetupPhase
+    data class Ready(val code: AgentSetupCode) : AgentSetupPhase
+    data class Paired(val machine: AgentMachine) : AgentSetupPhase
+    data class Online(val machine: AgentMachine) : AgentSetupPhase
+    data object Expired : AgentSetupPhase
+    data class Failed(val error: AppError) : AgentSetupPhase
+}
+
+/**
  * Drives the Settings screen.
  *
  * Holds the three readings the screen renders and the three commands it dispatches, and owns
@@ -91,7 +141,18 @@ sealed interface ChangePasswordOutcome {
  * composition that shows it. The three collections run as three children of the caller's
  * scope, so [stopObserving] cancels all three at once.
  */
-class SettingsModel(private val port: SettingsPort) {
+class SettingsModel(
+    private val port: SettingsPort,
+    /**
+     * The projects the wizard may pair a machine to, in the order it should offer them.
+     *
+     * A closure the shell supplies rather than a port call, for the reason the sign-out pair is
+     * a closure: the admin project list lives in a feature this module may not name, and this
+     * module may not depend on `:packages:feature-projects-domain`. Defaulted to empty so every
+     * preview and every test that does not open the wizard compiles unchanged.
+     */
+    private val onLoadAgentSetupProjects: suspend () -> List<AgentSetupProject> = { emptyList() },
+) {
 
     private val syncNow = SyncNow(port)
 
@@ -176,6 +237,55 @@ class SettingsModel(private val port: SettingsPort) {
      */
     var agentFailure: AppError? by mutableStateOf(null)
         private set
+
+    /**
+     * The open setup wizard, or `null` when its sheet is closed. See [AgentSetupDraft].
+     */
+    var agentSetup: AgentSetupDraft? by mutableStateOf(null)
+        private set
+
+    /** The projects the open wizard offers; empty until [openAgentSetup] reads them. */
+    var agentSetupProjects: List<AgentSetupProject> by mutableStateOf(emptyList())
+        private set
+
+    /** The last project read the wizard could not complete, or `null` when there is nothing to say. */
+    var agentSetupProjectsFailure: AppError? by mutableStateOf(null)
+        private set
+
+    /**
+     * Whether the wizard is still reading its project list.
+     *
+     * Held apart from an empty list on purpose: an empty list means "you are not a member of any
+     * project", and showing that sentence for the second it takes the read to land is a claim the
+     * app has not earned yet.
+     */
+    var isAgentSetupProjectsLoading: Boolean by mutableStateOf(false)
+        private set
+
+    /** Where the wizard is: editing, waiting for a code, or watching for the machine. */
+    var agentSetupPhase: AgentSetupPhase by mutableStateOf(AgentSetupPhase.Editing)
+        private set
+
+    /**
+     * The machines that already existed when the code was minted.
+     *
+     * The difference against the current fleet is what "a machine arrived" means here. Not
+     * Compose state: it is read by [pollAgentSetup] alone and must not cause a recomposition.
+     */
+    private var agentSetupBaseline: Set<AgentRunnerID> = emptySet()
+
+    /**
+     * Whether the sheet should keep asking the server for the fleet.
+     *
+     * Derived rather than stored, so it cannot outlive the phase it belongs to: polling stops on
+     * its own once the machine is online or the code has expired, and the screen keys its
+     * `LaunchedEffect` off this value for exactly that reason.
+     */
+    val isAgentSetupPolling: Boolean
+        get() = agentSetup != null && (
+            agentSetupPhase is AgentSetupPhase.Ready ||
+                agentSetupPhase is AgentSetupPhase.Paired
+            )
 
     /**
      * The last value the server confirmed, i.e. the value to fall back to when a write fails.
@@ -457,6 +567,154 @@ class SettingsModel(private val port: SettingsPort) {
     /** Clears [agentFailure], for a user who has read the banner. */
     fun dismissAgentFailure() {
         agentFailure = null
+    }
+
+    // MARK: - Agent setup
+
+    /**
+     * Opens the wizard on a fresh draft and reads the projects it can pair.
+     *
+     * The baseline snapshot is taken here, before any code exists, so [pollAgentSetup] recognises
+     * the machine the new code creates rather than reporting a machine that was already paired
+     * as the one that just arrived.
+     */
+    suspend fun openAgentSetup() {
+        agentSetupBaseline = agentOverview.machines.map { it.id }.toSet()
+        agentSetupProjectsFailure = null
+        agentSetupProjects = emptyList()
+        agentSetupPhase = AgentSetupPhase.Editing
+        agentSetup = AgentSetupDraft(serverUrl = serverAddress.inUse.orEmpty())
+        loadAgentSetupProjects()
+    }
+
+    /**
+     * Reads the pair-able projects and preselects the only one when there is exactly one.
+     *
+     * The preselection is not politeness: pairing is project-scoped, so a wizard that opened on
+     * "no project" with one project available would be asking the admin to answer a question
+     * with one answer. A failure is held rather than thrown, because the sheet is still the
+     * right place to read it.
+     */
+    private suspend fun loadAgentSetupProjects() {
+        isAgentSetupProjectsLoading = true
+        try {
+            val projects = onLoadAgentSetupProjects()
+            agentSetupProjects = projects
+            val draft = agentSetup ?: return
+            if (draft.project == null && projects.size == 1) {
+                agentSetup = draft.copy(project = projects.single())
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            agentSetupProjectsFailure = failure
+        } finally {
+            isAgentSetupProjectsLoading = false
+        }
+    }
+
+    /** Closes the sheet and forgets the code, so reopening starts from nothing. */
+    fun dismissAgentSetup() {
+        agentSetup = null
+        agentSetupPhase = AgentSetupPhase.Editing
+        agentSetupBaseline = emptySet()
+    }
+
+    fun selectAgentSetupProject(projectID: ProjectID) {
+        val draft = agentSetup ?: return
+        val project = agentSetupProjects.firstOrNull { it.id == projectID } ?: return
+        if (draft.project?.id == projectID) return
+        // The code is bound to the project it was minted for, so choosing another one spends
+        // nothing but does make the code on screen wrong.
+        agentSetupPhase = AgentSetupPhase.Editing
+        agentSetup = draft.copy(project = project)
+    }
+
+    /** The host is stored on the runner the code creates, so changing it retires the code. */
+    fun setAgentSetupHost(host: AgentHost) {
+        val draft = agentSetup ?: return
+        if (draft.host == host) return
+        agentSetupPhase = AgentSetupPhase.Editing
+        agentSetup = draft.copy(host = host)
+    }
+
+    fun setAgentSetupProvider(provider: AgentSetupProvider) {
+        agentSetup = agentSetup?.copy(provider = provider)
+    }
+
+    fun setAgentSetupModel(model: String) {
+        agentSetup = agentSetup?.copy(model = model)
+    }
+
+    fun setAgentSetupBaseUrl(baseUrl: String) {
+        agentSetup = agentSetup?.copy(baseUrl = baseUrl)
+    }
+
+    fun setAgentSetupWorkspace(workspace: String) {
+        agentSetup = agentSetup?.copy(workspace = workspace)
+    }
+
+    fun setAgentSetupServerUrl(serverUrl: String) {
+        agentSetup = agentSetup?.copy(serverUrl = serverUrl)
+    }
+
+    /**
+     * Mints one code for the selected project and host.
+     *
+     * The baseline is taken again on success rather than reused from [openAgentSetup]: the fleet
+     * can change while the admin fills the form, and a machine paired by somebody else in that
+     * window is not the one this wizard is waiting for.
+     *
+     * [CancellationException] is rethrown for the reason [signOut] gives.
+     */
+    suspend fun requestAgentSetupCode() {
+        val draft = agentSetup ?: return
+        val project = draft.project ?: return
+        agentSetupPhase = AgentSetupPhase.Requesting
+        try {
+            val code = port.createAgentPairingCode(project.id, draft.host)
+            agentSetupBaseline = agentOverview.machines.map { it.id }.toSet()
+            agentSetupPhase = AgentSetupPhase.Ready(code)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: AppError) {
+            agentSetupPhase = AgentSetupPhase.Failed(failure)
+        }
+    }
+
+    /**
+     * One poll: re-reads the fleet and moves the wizard along if the machine arrived.
+     *
+     * Nothing here starts a timer — the screen owns the interval, because the model holds no
+     * scope and [isAgentSetupPolling] is what stops it. The loop is deliberately idempotent: a
+     * poll that lands before `tt agent connect` has redeemed the code changes nothing, and one
+     * that lands after `tt agent run` has claimed work reports [AgentSetupPhase.Online].
+     */
+    suspend fun pollAgentSetup() {
+        val draft = agentSetup ?: return
+        val projectID = draft.project?.id ?: return
+        val overview = port.agentOverview()
+        agentOverview = overview
+
+        val arrived = overview.liveMachines.firstOrNull {
+            it.projectID == projectID && it.id !in agentSetupBaseline
+        }
+        when {
+            arrived == null -> Unit
+            isFresh(arrived, overview.observedAt) -> agentSetupPhase = AgentSetupPhase.Online(arrived)
+            agentSetupPhase !is AgentSetupPhase.Online -> agentSetupPhase = AgentSetupPhase.Paired(arrived)
+        }
+
+        val phase = agentSetupPhase
+        if (arrived == null && phase is AgentSetupPhase.Ready && Clock.System.now() > phase.code.expiresAt) {
+            agentSetupPhase = AgentSetupPhase.Expired
+        }
+    }
+
+    /** The overview's freshness rule, applied to one machine; see [AgentOverview.ONLINE_WINDOW]. */
+    private fun isFresh(machine: AgentMachine, observedAt: Instant): Boolean {
+        val seen = machine.lastSeenAt ?: return false
+        return observedAt - seen <= AgentOverview.ONLINE_WINDOW
     }
 
     // MARK: - Server Address

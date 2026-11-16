@@ -13,7 +13,10 @@ import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.core.AgentRunnerID
+import com.tasktracker.core.ProjectID
+import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentOverview
+import com.tasktracker.featuresettingsdomain.AgentSetupCode
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.featuresettingsdomain.ConnectivitySummary
@@ -381,6 +384,10 @@ class FakeShellSettingsPort(
     override suspend fun stopAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
 
     override suspend fun startAgent(machineID: AgentRunnerID): AgentOverview = agentOverview()
+
+    /** No server, so nothing can be paired: the wizard's mint fails as it would in the demo. */
+    override suspend fun createAgentPairingCode(projectID: ProjectID, host: AgentHost): AgentSetupCode =
+        throw AppError.Validation("There is no server to pair a machine with.")
 }
 
 /** A signed-in state for tests, with a recognisable address. */
