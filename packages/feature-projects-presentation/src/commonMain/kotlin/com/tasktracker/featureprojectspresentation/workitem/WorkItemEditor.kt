@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -25,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -39,6 +39,7 @@ import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassFlowPicker
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
@@ -81,8 +82,8 @@ import com.tasktracker.resources.work_item_priority_label
 import com.tasktracker.resources.work_item_status_label
 import com.tasktracker.resources.work_item_story_points_label
 import com.tasktracker.resources.work_item_title_label
-import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Instant
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Full-screen work item editor for creating or editing tasks.
@@ -513,12 +514,15 @@ private fun ProjectsEditorFullScreen(
                     style = ttTypography.captionEmphasised,
                     color = ttLabelSecondary(),
                 )
-                TTGlassFlowPicker(
+                // Segmented, like the setup agent's pickers: five named priorities are one
+                // question with one answer, and the chip flow drew its glass across the whole
+                // form while five short words filled a fraction of it.
+                TTGlassSegmentedPicker(
                     options = Priority.entries,
                     selection = priority,
                     onSelect = onPriorityChanged,
                     title = { priorityLabel(it) },
-                    modifier = Modifier.testTag(WorkItemPriorityPickerTag),
+                    modifier = Modifier.fillMaxWidth().testTag(WorkItemPriorityPickerTag),
                 )
             }
             WorkItemAssigneeRow(
@@ -818,12 +822,12 @@ private fun WorkItemEditorForm(
                 style = ttTypography.captionEmphasised,
                 color = ttLabelSecondary(),
             )
-            TTGlassFlowPicker(
+            TTGlassSegmentedPicker(
                 options = Priority.entries,
                 selection = priority,
                 onSelect = onPriorityChanged,
                 title = { priorityLabel(it) },
-                modifier = Modifier.testTag(WorkItemPriorityPickerTag),
+                modifier = Modifier.fillMaxWidth().testTag(WorkItemPriorityPickerTag),
             )
         }
         WorkItemAssigneeRow(
