@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTConfirmPopupCancelTag
 import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Priority
@@ -44,6 +45,7 @@ import com.tasktracker.resources.work_item_repeat_none
 import com.tasktracker.resources.work_item_repeat_weekly
 import com.tasktracker.resources.work_item_repeat_yearly
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.jetbrains.compose.resources.getString
@@ -394,23 +396,26 @@ object WorkItemEditorScenarios {
     }
 
     /**
-     * A picker fills a phone-width form.
+     * A picker fills a phone-width form, and its options spread across it.
      *
-     * ## The rule this pins
+     * ## The rules this pins
      *
-     * The slab is the wider of its widest row and `ttSpacing.pickerMinWidth`, capped by its
-     * caller. A phone form is narrower than that floor, so the capped width is the form's:
-     * the picker spans the field, the way a system segmented control does. A slab that hugged
-     * its labels here would leave a three-option picker as a capsule with a strip of empty
-     * glass beside it inside a field that is otherwise full — a form that looks half filled.
+     * The slab fills its caller up to `ttSpacing.pickerMaxWidth`. A phone form is under that
+     * cap, so the picker spans the field, the way a system segmented control does. Inside it,
+     * each option takes an equal share of the leftover width, so the widest row reaches both
+     * edges: a slab that fills but keeps content-sized cells bunches the labels in the middle
+     * and leaves two strips of empty glass, which is the desktop defect at phone size.
      *
-     * The Title field is the yardstick because the two share the form's content width and
-     * nothing else: the card is `fillMaxWidth`, so if the picker has not filled the form the
-     * two widths differ by exactly what the picker left behind.
+     * The Title field is the yardstick for the slab because the two share the form's content
+     * width and nothing else. For the spread, the cells are grouped into rows by their top
+     * edge and the widest row's edges are compared with the glass'. The form is wider than
+     * [NARROW_FORM_WIDTH] on purpose: at 360 the four priority cells already add up to the
+     * row, so a row that never spread would still touch both edges and the assertion would
+     * pass for the wrong reason. At 393 there is width left over, and only a spread uses it.
      */
     val aPickerFillsAPhoneWidthForm: suspend ComposeUiTest.() -> Unit = {
         setContent {
-            Box(modifier = Modifier.width(NARROW_FORM_WIDTH.dp)) {
+            Box(modifier = Modifier.width(PHONE_FORM_WIDTH.dp)) {
                 editorSheet(selectableStatuses = EDITOR_STATUSES)
             }
         }
@@ -418,14 +423,44 @@ object WorkItemEditorScenarios {
         onNodeWithTag(WorkItemPriorityPickerTag).performScrollTo()
         val field = onNodeWithTag(ProjectsFieldCardTag("Title"))
             .fetchSemanticsNode().boundsInRoot.width
-        val picker = onNodeWithTag(WorkItemPriorityPickerTag)
-            .fetchSemanticsNode().boundsInRoot.width
+        val glass = onNodeWithTag(WorkItemPriorityPickerTag)
+            .fetchSemanticsNode().boundsInRoot
+        val picker = glass.width
 
         assertTrue(
             abs(picker - field) <= 1f,
             "the priority picker is ${picker}px wide against a ${field}px field at " +
-                "${NARROW_FORM_WIDTH}dp: the form is narrower than ttSpacing.pickerMinWidth, " +
-                "so the picker should fill it rather than stop at its labels.",
+                "${PHONE_FORM_WIDTH}dp: the form is under ttSpacing.pickerMaxWidth, so the " +
+                "picker should fill it rather than stop short of it.",
+        )
+
+        val labels = listOf(
+            getString(Res.string.priority_lowest),
+            getString(Res.string.priority_low),
+            getString(Res.string.priority_medium),
+            getString(Res.string.priority_high),
+            getString(Res.string.priority_critical),
+        )
+        val cells = labels.map { label ->
+            onNodeWithContentDescription(label).fetchSemanticsNode().boundsInRoot
+        }
+        val widestRow = cells.groupBy { it.top.roundToInt() }.values
+            .maxBy { row -> row.maxOf { it.right } - row.minOf { it.left } }
+        val inset = with(density) { ttSpacing.hairlineInset.toPx() }
+        val leftGap = widestRow.minOf { it.left } - glass.left
+        val rightGap = glass.right - widestRow.maxOf { it.right }
+
+        assertTrue(
+            abs(leftGap - inset) <= 1.5f,
+            "the widest row starts ${leftGap}px in from the glass' left edge against the " +
+                "${inset}px inset: the labels are bunched away from the edge instead of " +
+                "sharing the width. glass=$glass row=$widestRow",
+        )
+        assertTrue(
+            abs(rightGap - inset) <= 1.5f,
+            "the widest row ends ${rightGap}px before the glass' right edge against the " +
+                "${inset}px inset: the labels are bunched away from the edge instead of " +
+                "sharing the width. glass=$glass row=$widestRow",
         )
     }
 
@@ -437,10 +472,10 @@ object WorkItemEditorScenarios {
      * The Backlog section switcher on a desktop filled the whole content column, so three
      * labels sat in the middle of a bar with a hand's width of empty glass on either side:
      * the control read as a rule with words near its centre rather than as a control. The
-     * picker packs its cells from their measured labels, so its width is its content's width
-     * or [com.tasktracker.designsystem.ttSpacing.pickerMinWidth], whichever is wider, and
-     * nothing in that arithmetic reads the page. The glass, though, was drawn at
-     * `fillMaxWidth`, and that is the empty glass this pins down.
+     * picker fills its caller up to [com.tasktracker.designsystem.ttSpacing.pickerMaxWidth], so
+     * a form wider than the cap leaves the control at the cap and nothing in that arithmetic
+     * reads the page. The glass, though, was drawn at `fillMaxWidth`, and that is the empty
+     * glass this pins down.
      *
      * Stability under a wider form is the assertion rather than a ratio or a dp cap: a picker
      * that fills its caller is exactly as wide as the form, so widening the form must leave
@@ -485,8 +520,8 @@ object WorkItemEditorScenarios {
             absoluteTolerance = 1f,
             message = "the priority picker is ${pickerAtWide}px wide at ${WIDE_FORM_WIDTH}dp and " +
                 "${pickerAtWider}px at ${WIDER_FORM_WIDTH}dp: it stretched with the form instead " +
-                "of stopping at its content width or its floor. That is the desktop backlog bar " +
-                "with three centred labels and a band of empty glass at both ends.",
+                "of stopping at the cap. That is the desktop backlog bar " +
+                "with three centred labels and a band of empty glass at both ends",
         )
         assertTrue(
             pickerAtWider < fieldAtWider * 0.8f,
@@ -522,6 +557,15 @@ object WorkItemEditorScenarios {
  * full-window JVM host gives every cell room to spare and would let a broken layout pass.
  */
 private const val NARROW_FORM_WIDTH = 360
+
+/**
+ * A common modern phone width, wider than [NARROW_FORM_WIDTH].
+ *
+ * The priority cells add up to less than this form's content width, so the leftover has to be
+ * spread between them for the row to reach both edges. At [NARROW_FORM_WIDTH] they happen to
+ * add up to the row exactly, which would let a picker that never spread pass the same check.
+ */
+private const val PHONE_FORM_WIDTH = 393
 
 /**
  * A desktop content width, and a wider one to resize into.

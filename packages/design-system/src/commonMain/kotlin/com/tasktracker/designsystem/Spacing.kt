@@ -123,14 +123,15 @@ object ttSpacing {
     val fieldMinHeight: Dp = 48.dp
 
     /**
-     * 320dp — the narrowest a segmented picker is allowed to be when its caller is wider.
+     * 480dp — the widest a segmented picker grows, whatever its caller offers.
      *
-     * Not a page width and not a breakpoint: a picker fills a narrow form and stops at this on
-     * a wide one, so a three-word control on a desktop is a control rather than a capsule the
-     * size of its text. 320 is the narrowest phone layout the app targets, which is why the
-     * floor never widens a phone: the form there is already narrower than it.
+     * Phones are narrower than this: a 360–430dp screen leaves a form of roughly 290–370dp
+     * after the screen gutter, so a picker fills one. A desktop form is far wider, and there
+     * this cap is what keeps a three-word control a control instead of a bar across the page.
+     * The rows divide the width between their options, so the cap bounds how far the labels
+     * spread rather than leaving glass empty at the ends.
      */
-    val pickerMinWidth: Dp = 320.dp
+    val pickerMaxWidth: Dp = 480.dp
 
     /** 18dp — the splash mark's distance to its title. */
     val splashStack: Dp = 18.dp
