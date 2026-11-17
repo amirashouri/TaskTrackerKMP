@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaskTracker — App Icon Concepts</title>
+<style>
+  :root{
+    --ink:#16223A; --muted:#5b6472; --line:#e2e6ec; --card:#ffffff;
+    --accent:#34537A; --bg:#f5f7fa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 28px 64px}
+  header{text-align:center;margin-bottom:44px}
+  .kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);font-weight:700}
+  h1{font-size:34px;margin:10px 0 6px;letter-spacing:-.02em}
+  .motto{font-style:italic;color:var(--muted);font-size:17px;margin:0}
+  .lead{max-width:640px;margin:18px auto 0;color:var(--muted);font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;
+    padding:22px;display:flex;flex-direction:column;align-items:center;
+    box-shadow:0 1px 2px rgba(16,24,40,.03)}
+  .card.hero{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 8px 24px rgba(52,83,122,.10)}
+  .badge{align-self:flex-start;font-size:10px;font-weight:800;letter-spacing:.1em;
+    text-transform:uppercase;color:#fff;background:var(--accent);
+    padding:4px 9px;border-radius:999px;margin-bottom:8px}
+  .card img{width:200px;height:200px;border-radius:26px;display:block}
+  .name{font-weight:700;font-size:16px;margin-top:18px}
+  .line{font-size:13px;color:var(--accent);font-weight:600;margin-top:3px}
+  .desc{font-size:13px;color:var(--muted);text-align:center;margin-top:8px;max-width:340px}
+  .full{grid-column:1/-1}
+  .strip{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;align-items:center}
+  .strip figure{margin:0;text-align:center}
+  .strip img{width:120px;height:120px;border-radius:20px}
+  .strip figcaption{font-size:12px;color:var(--muted);margin-top:8px}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Icon redesign · concept set</div>
+    <h1>TaskTracker</h1>
+    <p class="motto">“Your tasks. Your server. Your rules.”</p>
+    <p class="lead">Seven directions built from the existing brand tokens — the deep slate-blue ramp, the white checkmark, and the Liquid Glass sheen — so any of them can ship without redesigning the rest of the app. <strong>02 Board is the adopted direction.</strong></p>
+  </header>
+
+  <div class="grid">
+    <div class="card hero">
+      <span class="badge">Adopted</span>
+      <img src="02-board.png" alt="Board concept">
+      <div class="name">02 · Board</div>
+      <div class="line">Your tasks.</div>
+      <div class="desc">Three kanban lanes with cards and a completed check. The chosen direction — enlarged lanes and mark.</div>
+    </div>
+
+    <div class="card">
+      <img src="01-signature.png" alt="Signature concept">
+      <div class="name">01 · Signature</div>
+      <div class="line">Your tasks.</div>
+      <div class="desc">The current mark, refined: bolder checkmark, tighter lanes, cleaner gradient. Lowest-risk evolution — instant brand recognition.</div>
+    </div>
+
+    <div class="card">
+      <img src="03-vault.png" alt="Vault concept">
+      <div class="name">03 · Vault</div>
+      <div class="line">Your server. Your rules.</div>
+      <div class="desc">A shield with the mark inside. Self-hosted, private, yours — the strongest expression of data ownership.</div>
+    </div>
+
+    <div class="card">
+      <img src="04-glass.png" alt="Glass concept">
+      <div class="name">04 · Glass</div>
+      <div class="line">Liquid Glass.</div>
+      <div class="desc">A lit refractive lens with an embossed checkmark. Leans fully into the app's signature glassmorphism design system.</div>
+    </div>
+
+    <div class="card">
+      <img src="05-sync.png" alt="Sync concept">
+      <div class="name">05 · Sync</div>
+      <div class="line">Works offline. Syncs when it can.</div>
+      <div class="desc">The mark inside an orbit arrow. Captures the offline-first, cross-device sync that makes the server yours.</div>
+    </div>
+
+    <div class="card">
+      <img src="06-essential.png" alt="Essential concept">
+      <div class="name">06 · Essential</div>
+      <div class="line">Your tasks. Full stop.</div>
+      <div class="desc">One bold checkmark, no lanes. Maximum legibility at 16px launcher size — the minimalist option.</div>
+    </div>
+
+    <div class="card full">
+      <div class="name" style="margin-top:0">02 · Board — appearances <span style="font-weight:400;color:var(--muted);font-size:13px">(the adopted direction)</span></div>
+      <div class="strip">
+        <figure><img src="02-board.png" alt="Light"><figcaption>Light</figcaption></figure>
+        <figure><img src="02-board-dark.png" alt="Dark"><figcaption>Dark</figcaption></figure>
+      </div>
+      <div class="desc">The dark variant mirrors the shipped iOS dark-icon behaviour: white mark, lowered field. This is the pair now shipped in the project.</div>
+    </div>
+
+    <div class="card full">
+      <div class="name" style="margin-top:0">01 · Signature — appearances</div>
+      <div class="strip">
+        <figure><img src="01-signature.png" alt="Light"><figcaption>Light</figcaption></figure>
+        <figure><img src="01-signature-dark.png" alt="Dark"><figcaption>Dark</figcaption></figure>
+      </div>
+      <div class="desc">The dark variant mirrors the shipped iOS dark-icon and Android themed-icon behaviour: white mark, lowered field.</div>
+    </div>
+  </div>
+
+  <footer>Generated by docs/design/app-icons/generate_concepts.py · 1024×1024 · 02 Board adopted and shipped as the launcher icon</footer>
+</div>
+</body>
+</html>

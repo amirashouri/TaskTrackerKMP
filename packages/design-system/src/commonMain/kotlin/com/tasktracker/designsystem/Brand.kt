@@ -24,12 +24,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
- * The app's mark: a checkmark on a rounded accent tile.
+ * The app's mark: the Board composition — three kanban columns, their card dashes and a
+ * white checkmark — on a rounded accent tile.
  *
  * Shared by the splash and by sign-in so the hand-off between them keeps the mark itself
  * perfectly still while everything around it cross-fades. Two copies of this view would
  * drift — a radius nudged, a gradient angle changed — and the drift would be visible
  * precisely where it is least welcome, in a 0.35s transition the user is watching.
+ *
+ * ## The geometry is the launcher's
+ *
+ * Every fraction in [AppMarkDefaults] is `tools/generate_app_icon.py`'s canvas fraction
+ * verbatim: that canvas is the launcher's tile, so this tile is the same picture at 68dp.
+ * Splash and sign-in show one mark, not two that merely resemble each other. Only the finish differs — the launcher has the full three-stop ramp and its
+ * sheen, while this tile keeps the accent-to-accent fade and takes its ink from
+ * `ttOnAccent`, the pairing already contrast-tested against the accent in every palette.
  *
  * ## The glyph is drawn, not imported
  *
@@ -38,15 +47,15 @@ import androidx.compose.ui.unit.dp
  * Material dependency this design system has deliberately refused throughout
  * (`Colors.kt` explains why), and an SF Symbol cannot be shipped at all.
  *
- * So the checkmark is a [Path] of two strokes. That is more code than a vector asset and it
- * buys three things worth having: no new dependency, a glyph that takes its colour from the
- * same token as everything else, and a mark that is identical on all three targets instead
- * of being whatever the platform happened to substitute.
+ * So the columns, dashes and checkmark are paths and round-capped lines. That is more code
+ * than a vector asset and it buys three things worth having: no new dependency, an ink that
+ * comes from the same tokens as everything else, and a mark identical on all three targets
+ * instead of being whatever the platform happened to substitute.
  *
- * ## The glyph's size is fixed, and that is the point
+ * ## The tile's size is fixed, and that is the point
  *
  * Every other size in this design system is in `sp` and grows with the user's text-size
- * setting. This one cannot. It is a picture inside a fixed [size] tile: a glyph that grew
+ * setting. This one cannot. It is a picture inside a fixed [size] tile: a mark that grew
  * with the text setting would overflow a 68dp tile at 200% and clip the very corners the
  * rounded tile exists to show. The original gets this for free — `.system(size: 30)` is a
  * fixed point size, not a text style — and here it has to be said out loud, because the
@@ -82,70 +91,69 @@ fun AppMark(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        AppMarkGlyph(size = size)
+        AppMarkGlyph()
     }
 }
 
 /**
- * The checkmark itself, sized and weighted as a fraction of the tile.
+ * The Board composition, in fractions of the tile.
  *
  * Split out from [AppMark] so the geometry is described once and cannot drift between a
- * preview and the real thing. The stroke is round-capped and round-joined because the
- * original's SF Symbol has rounded terminals, and butt caps on a two-segment path read as
- * a different logo at 68dp.
+ * preview and the real component. Columns and cards are round-capped lines, so no arcs are
+ * needed to fake a capsule; the check is a two-segment [Path] with a round join. Ink is read
+ * once before the draw scope — the same `ttOnAccent` the tile's contrast pairing assumes.
  */
 @Composable
-private fun AppMarkGlyph(size: Dp) {
-    // Plain `Dp` arithmetic, and no density here at all: both values are already in `dp`
-    // and `Canvas` resolves them to pixels itself. The tempting version of this wraps the
-    // two in `with(LocalDensity)` to reach `toDp`, which is both unnecessary and the place
-    // a fixed size would quietly become a font-scaled one.
-    val glyph = size * AppMarkDefaults.glyphFraction
-    val stroke = size * AppMarkDefaults.strokeFraction
+private fun AppMarkGlyph() {
+    val ink = ttOnAccent
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+        val unit = size.minDimension
 
-    Canvas(modifier = Modifier.size(glyph)) {
-        drawCheckmark(strokeWidth = stroke.toPx())
+        // Columns first: the cards sit on them, and the check sits over both.
+        for (cx in AppMarkDefaults.COLUMN_CENTRES) {
+            drawLine(
+                color = ink.copy(alpha = AppMarkDefaults.COLUMN_ALPHA),
+                start = Offset(cx * w, (0.5f - AppMarkDefaults.COLUMN_HALF_STRAIGHT) * h),
+                end = Offset(cx * w, (0.5f + AppMarkDefaults.COLUMN_HALF_STRAIGHT) * h),
+                strokeWidth = AppMarkDefaults.COLUMN_STROKE * unit,
+                cap = StrokeCap.Round,
+            )
+        }
+        for (cy in AppMarkDefaults.CARD_CENTRES) {
+            for (cx in AppMarkDefaults.COLUMN_CENTRES) {
+                drawLine(
+                    color = ink.copy(alpha = AppMarkDefaults.CARD_ALPHA),
+                    start = Offset((cx - AppMarkDefaults.CARD_HALF_STRAIGHT) * w, cy * h),
+                    end = Offset((cx + AppMarkDefaults.CARD_HALF_STRAIGHT) * w, cy * h),
+                    strokeWidth = AppMarkDefaults.CARD_STROKE * unit,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
+        val path = Path().apply {
+            moveTo(AppMarkDefaults.SHORT_ARM_X * w, AppMarkDefaults.VERTEX_Y * h)
+            lineTo(AppMarkDefaults.VERTEX_X * w, AppMarkDefaults.VERTEX_Y * h)
+            lineTo(AppMarkDefaults.TIP_X * w, AppMarkDefaults.TIP_Y * h)
+        }
+        drawPath(
+            path = path,
+            color = ink,
+            style = Stroke(
+                width = AppMarkDefaults.CHECK_STROKE * unit,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+            ),
+        )
     }
 }
 
-/**
- * The checkmark path, in a unit box.
- *
- * A long arm and a short one meeting at a vertex. The proportions are the original glyph's
- * and not arbitrary: the long arm is more than twice the short, which is what stops it
- * reading as a tick, and the vertex sits below the centre so the mark looks seated rather
- * than floating high in the tile.
- */
-private fun DrawScope.drawCheckmark(strokeWidth: Float) {
-    val w = size.width
-    val h = size.height
-    val path = Path().apply {
-        moveTo(w * AppMarkDefaults.SHORT_ARM_X, h * AppMarkDefaults.VERTEX_Y)
-        lineTo(w * AppMarkDefaults.VERTEX_X, h * AppMarkDefaults.VERTEX_Y)
-        lineTo(w * AppMarkDefaults.TIP_X, h * AppMarkDefaults.TIP_Y)
-    }
-    drawPath(
-        path = path,
-        color = ttOnAccent,
-        style = Stroke(
-            width = strokeWidth,
-            cap = StrokeCap.Round,
-            join = StrokeJoin.Round,
-        ),
-    )
-}
-
-/** The mark's geometry, named so a preview and the real component cannot disagree. */
+/** The geometry, named so a preview and the real component cannot disagree. */
 object AppMarkDefaults {
 
     /** 68dp, the original's fixed frame. */
     val size: Dp = 68.dp
-
-    /** Glyph size as a fraction of [size]: 30/68, the original's `size: 30`. */
-    const val glyphFraction: Float = 30f / 68f
-
-    /** Stroke weight as a fraction of [size], tuned so both arms read at 68dp. */
-    const val strokeFraction: Float = 0.085f
 
     /** The gradient's second stop: `accentColor.opacity(0.7)`. */
     const val gradientFloorAlpha: Float = 0.7f
@@ -156,12 +164,29 @@ object AppMarkDefaults {
     /** The shadow's drop: the original's `y: 6`. */
     val shadowY: Dp = 6.dp
 
-    // Checkmark geometry, as fractions of the glyph box.
-    const val SHORT_ARM_X: Float = 0.10f
-    const val VERTEX_X: Float = 0.38f
-    const val VERTEX_Y: Float = 0.80f
-    const val TIP_X: Float = 0.90f
-    const val TIP_Y: Float = 0.18f
+    // The Board, as fractions of this tile. These are tools/generate_app_icon.py's canvas
+    // fractions verbatim (its `_ship(u) = (u - 0.08) / 0.84` applied to the concept): the
+    // launcher's canvas is its tile, so these draw the same picture here at 68dp. Floats
+    // carry eight decimals because the card/check clearance is sub-pixel even at 1024px —
+    // rounding to four made two shapes touch that the launcher keeps apart.
+    val COLUMN_CENTRES: List<Float> =
+        listOf(0.27380952f, 0.5f, 0.72619048f)
+    const val COLUMN_ALPHA: Float = 0.15f
+    const val COLUMN_STROKE: Float = 0.18571429f
+    const val COLUMN_HALF_STRAIGHT: Float = 0.18690476f
+
+    val CARD_CENTRES: List<Float> = listOf(0.40476191f, 0.65476191f)
+    const val CARD_ALPHA: Float = 0.24f
+    const val CARD_STROKE: Float = 0.02857143f
+    const val CARD_HALF_STRAIGHT: Float = 0.02441406f
+
+    // The check's two segments, in the same tile fractions. Tip above vertex, as before.
+    const val SHORT_ARM_X: Float = 0.35714286f
+    const val VERTEX_X: Float = 0.46190476f
+    const val VERTEX_Y: Float = 0.54761905f
+    const val TIP_X: Float = 0.65476191f
+    const val TIP_Y: Float = 0.36904762f
+    const val CHECK_STROKE: Float = 0.09047619f
 }
 
 /**

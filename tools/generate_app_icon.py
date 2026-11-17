@@ -12,13 +12,22 @@ Writes:
   androidApp/src/main/res/drawable/ic_launcher_background.xml
   androidApp/src/main/res/drawable/ic_launcher_foreground.xml
   androidApp/src/main/res/drawable/ic_launcher_monochrome.xml
+  shared-ui/src/jvmMain/resources/AppIcon.png                            (1024, masked)
+
+The last one is the desktop source PNG: same light render, but clipped to the
+rounded-square tile with an alpha channel, which is what `iconutil` packs into
+AppIcon.icns for the macOS .app bundle. Regenerate the .icns after running this:
+
+  mkdir -p /tmp/tasktracker.iconset
+  # ... populate every required size from the masked PNG ...
+  iconutil -c icns -o shared-ui/src/jvmMain/resources/AppIcon.icns /tmp/tasktracker.iconset
 
 ## Why a generator rather than two hand-drawn assets
 
 The PNG and the vector have to be the same picture. They are also the two places this
 repo is most likely to drift apart, because only one of them can be eyeballed: nobody
 compares a rendered `ic_launcher_foreground.xml` against a 1024px PNG by looking at
-them. Emitting both from one geometry means a change to `GLYPH_BOX` moves both, and the
+them. Emitting both from one geometry means a change to `CHECK_POINTS` moves both, and the
 Android vector cannot drift from the iOS bitmap by anybody editing one of them.
 
 ## Why this is not a Pillow script
@@ -93,48 +102,53 @@ SHEEN_ALPHA_DARK = 0.10
 
 ON_ICON = (255, 255, 255)
 
-# The board lanes behind the check. 0.15 rather than the original 0.18: the sheen
-# shares these rows with the mark, and 0.18 + a 0.09 gloss measured 4.42:1 under the
-# crossing — a fail. 0.15 keeps the gloss at full strength and puts the composited
-# worst case at 4.75:1.
+# --- the adopted 02 Board composition -------------------------------------------------------
+
+# Every number below is the 02 Board concept from docs/design/app-icons/ mapped out of
+# that render's 0.08..0.92 tile into the full canvas: `_ship(u) = (u - 0.08) / 0.84`.
+# iOS masks the full canvas itself; leaving the concept's inset in would shrink the mark.
+# Widths divide by the span only — they have no positional offset.
+TILE_INSET = 0.08
+TILE_SPAN = 1.0 - 2 * TILE_INSET
+
+
+def _ship(u):
+    return (u - TILE_INSET) / TILE_SPAN
+
+
+def _ship_len(v):
+    return v / TILE_SPAN
+
+
+# Columns: three tall pills. The concept drew near-pill rounded rectangles
+# (half-width 0.078, corner radius 0.072); a capsule of radius 0.078 keeps the PNG
+# and the VectorDrawable the same shape with no arc approximation, and is what lets
+# the existing round-capped mask/emitter machinery do all the work.
 LANE_ALPHA = 0.15
+COLUMN_CENTRES = tuple(_ship(c) for c in (0.31, 0.50, 0.69))
+LANE_RADIUS = _ship_len(0.078) * CANVAS
+COLUMN_HALF_STRAIGHT = _ship_len(0.235 - 0.078) * CANVAS
 
-# --- the composition --------------------------------------------------------------------------
+# Card dashes on each column, as bright as the foreground gate allows (0.24, just
+# under its 0.25 cap). They can stay this bright because of their position, not a
+# dimmed alpha: the dashes sit at 0.42/0.63 of the canvas and are short enough that
+# the enlarged check never crosses one. The mark therefore rests only on the columns
+# (4.53:1), not on a column *and* a card — crossing both lifted the field under the
+# mark to 3.1:1 and failed the gate at 40px. The concept drew them at 0.28; 0.24 is
+# indistinguishable at launcher size and keeps the existing invariant intact.
+CARD_ALPHA = 0.24
+CARD_RADIUS = _ship_len(0.012) * CANVAS
+CARD_HALF_STRAIGHT = 25.0
+CARD_CENTRES = tuple(_ship(c) for c in (0.42, 0.63))
 
-# A pill, not a rounded rectangle: the lane's corner radius equals its half-height, so
-# the shape is a round-capped line and the VectorDrawable can say so with
-# `strokeLineCap="round"` instead of approximating the caps with arcs.
-LANE_HALF_LENGTH = 0.32 * CANVAS
-LANE_RADIUS = 0.026 * CANVAS
-LANE_CENTRES = (0.315, 0.50, 0.685)  # fractions of CANVAS, measured from the top
-
-GLYPH_BOX = 0.48 * CANVAS
-GLYPH_ORIGIN = CANVAS / 2 - GLYPH_BOX / 2
-
-# The checkmark, as fractions of GLYPH_BOX. These are `AppMarkDefaults`' proportions
-# moved, and the moves are the point of this file rather than a detail of it:
-#
-#   AppMarkDefaults    short arm (0.10, 0.80) -> vertex (0.38, 0.80) -> tip (0.90, 0.18)
-#   here               short arm (0.04, 0.78) -> vertex (0.34, 0.78) -> tip (0.93, 0.14)
-#
-# `AppMark` is tuned for a 68dp tile drawn at 1x inside a screen the user is already
-# looking at. A launcher icon is seen at roughly 40px and is then masked down to about
-# half that, so the two changes are both about surviving downscale: the short arm
-# reaches further left and the vertex sits further left with it, which widens the
-# corner that a small render is most likely to round off; and the long arm climbs
-# further, which keeps the diagonal from flattening into a horizontal dash.
-#
-# `AppMark` is deliberately NOT changed to match. One of the two numbers would be wrong
-# at one of the two sizes, and pretending otherwise is how a logo ends up with a stroke
-# that looks heavy in the splash and flimsy on the home screen.
-SHORT_ARM = (0.04, 0.78)
-VERTEX = (0.34, 0.78)
-TIP = (0.93, 0.14)
-
-# Stroke as a fraction of the glyph box, so it is comparable to AppMarkDefaults'
-# `strokeFraction` divided by its `glyphFraction`: 0.085 / (30/68) = 0.193. This is
-# 0.24, i.e. 24% heavier, which is the same downscale argument as the geometry above.
-STROKE_OF_GLYPH = 0.24
+# The enlarged checkmark from the approved concept, mapped the same way. Brand.kt's
+# AppMark uses the same Board geometry at tile-fraction scale so the splash and
+# sign-in marks stay aligned with the launcher identity.
+CHECK_POINTS = tuple(
+    (_ship(x) * CANVAS, _ship(y) * CANVAS)
+    for x, y in ((0.38, 0.54), (0.468, 0.54), (0.63, 0.39))
+)
+CHECK_STROKE = 2 * _ship_len(0.038) * CANVAS
 
 # --- Android ------------------------------------------------------------------------------
 
@@ -151,24 +165,25 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # --- geometry, resolved once ----------------------------------------------------------------
 
 
-def _glyph_point(fx, fy):
-    return (GLYPH_ORIGIN + fx * GLYPH_BOX, GLYPH_ORIGIN + fy * GLYPH_BOX)
-
-
-CHECK_POINTS = (
-    _glyph_point(*SHORT_ARM),
-    _glyph_point(*VERTEX),
-    _glyph_point(*TIP),
-)
-CHECK_STROKE = GLYPH_BOX * STROKE_OF_GLYPH
 CHECK_SEGMENTS = ((CHECK_POINTS[0], CHECK_POINTS[1]), (CHECK_POINTS[1], CHECK_POINTS[2]))
 
-LANE_LINES = tuple(
+# A column is a vertical capsule: the straight run plus its two round caps.
+COLUMN_LINES = tuple(
     (
-        (CANVAS / 2 - LANE_HALF_LENGTH, fy * CANVAS),
-        (CANVAS / 2 + LANE_HALF_LENGTH, fy * CANVAS),
+        (cx * CANVAS, CANVAS / 2 - COLUMN_HALF_STRAIGHT),
+        (cx * CANVAS, CANVAS / 2 + COLUMN_HALF_STRAIGHT),
     )
-    for fy in LANE_CENTRES
+    for cx in COLUMN_CENTRES
+)
+
+# Each column carries two horizontal card dashes.
+CARD_LINES = tuple(
+    (
+        (cx * CANVAS - CARD_HALF_STRAIGHT, cy * CANVAS),
+        (cx * CANVAS + CARD_HALF_STRAIGHT, cy * CANVAS),
+    )
+    for cx in COLUMN_CENTRES
+    for cy in CARD_CENTRES
 )
 
 
@@ -185,12 +200,20 @@ def android_scale():
     launcher. The measured difference is about 3dp of icon width.
     """
     furthest = 0.0
-    # Lanes: each end cap is a circle of radius LANE_RADIUS.
-    for (ax, ay), (bx, by) in LANE_LINES:
+    # Columns: a vertical capsule, radius LANE_RADIUS. Their top/bottom caps are
+    # now the outermost geometry, not the check.
+    for (ax, ay), (bx, by) in COLUMN_LINES:
         furthest = max(
             furthest,
             math.hypot(ax - CANVAS / 2, ay - CANVAS / 2) + LANE_RADIUS,
             math.hypot(bx - CANVAS / 2, by - CANVAS / 2) + LANE_RADIUS,
+        )
+    # Card dashes: horizontal capsules, radius CARD_RADIUS.
+    for (ax, ay), (bx, by) in CARD_LINES:
+        furthest = max(
+            furthest,
+            math.hypot(ax - CANVAS / 2, ay - CANVAS / 2) + CARD_RADIUS,
+            math.hypot(bx - CANVAS / 2, by - CANVAS / 2) + CARD_RADIUS,
         )
     # Check: the stroke is a union of capsules about the polyline's three vertices.
     for px, py in CHECK_POINTS:
@@ -256,22 +279,25 @@ def _ramp(t, top, mid, bottom):
     return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f)
 
 
-def _render(top, mid, bottom, sheen_alpha, lane_mask, check_mask):
-    """Composite the ramp, the sheen, the lanes and the check, one row at a time.
+def _render(top, mid, bottom, sheen_alpha, column_mask, card_mask, check_mask):
+    """Composite the ramp, the sheen, the columns, the cards and the check.
 
-    The lanes are looked up only on the rows that have any, which is 3 bands of 53px
-    out of 1024. Without that check the lane lookup runs a million times to find zero
-    about ninety-five percent of the time, which is most of this function's cost.
+    Each translucent layer is looked up only on rows that contain any of it. Columns
+    cover most rows, cards only six short bands, so this keeps the card lookup — the
+    one that is mostly zero — off roughly three quarters of the image.
 
     Returns `(rows, worst_contrast)`: the picture, and the lowest white-on-background
     contrast found at any pixel the mark covers solidly. That number is the real
-    legibility gate — the mark is drawn on the sheen and the lanes too, so the raw
-    stops alone cannot answer "can the check be read".
+    legibility gate — the mark is drawn on the sheen, columns and cards too, so the
+    raw stops alone cannot answer "can the check be read".
     """
     rows = []
-    lane_rows = [
-        any(lane_mask[y * CANVAS + x] for x in range(0, CANVAS, 4)) for y in range(CANVAS)
-    ]
+
+    def active_rows(mask):
+        return [any(mask[y * CANVAS + x] for x in range(0, CANVAS, 4)) for y in range(CANVAS)]
+
+    column_rows = active_rows(column_mask)
+    card_rows = active_rows(card_mask)
 
     inv = 1.0 / (CANVAS - 1)
     sheen_cx = SHEEN_CENTRE[0] * CANVAS
@@ -283,7 +309,8 @@ def _render(top, mid, bottom, sheen_alpha, lane_mask, check_mask):
     for y in range(CANVAS):
         row = bytearray(CANVAS * 3)
         off = y * CANVAS
-        on_lane_row = lane_rows[y]
+        on_column_row = column_rows[y]
+        on_card_row = card_rows[y]
         dy = y - sheen_cy
         dy2 = dy * dy
         for x in range(CANVAS):
@@ -302,10 +329,17 @@ def _render(top, mid, bottom, sheen_alpha, lane_mask, check_mask):
                 r += (ON_ICON[0] - r) * a
                 g += (ON_ICON[1] - g) * a
                 b += (ON_ICON[2] - b) * a
-            if on_lane_row:
-                c = lane_mask[off + x]
+            if on_column_row:
+                c = column_mask[off + x]
                 if c:
                     a = c / 255.0 * LANE_ALPHA
+                    r += (ON_ICON[0] - r) * a
+                    g += (ON_ICON[1] - g) * a
+                    b += (ON_ICON[2] - b) * a
+            if on_card_row:
+                c = card_mask[off + x]
+                if c:
+                    a = c / 255.0 * CARD_ALPHA
                     r += (ON_ICON[0] - r) * a
                     g += (ON_ICON[1] - g) * a
                     b += (ON_ICON[2] - b) * a
@@ -353,6 +387,45 @@ def _write_png(path, rows):
     with open(path, "wb") as handle:
         handle.write(b"\x89PNG\r\n\x1a\n")
         handle.write(chunk(b"IHDR", struct.pack(">IIBBBBB", CANVAS, CANVAS, 8, 2, 0, 0, 0)))
+        handle.write(chunk(b"IDAT", compressed))
+        handle.write(chunk(b"IEND", b""))
+
+
+# The macOS tile: inset 100/1024, radius 220/1024, measured off the shipped AppIcon.png.
+# Unlike the iOS asset this one keeps an alpha channel, so Finder and the Dock see a
+# rounded square against transparency rather than a square against the desktop.
+DESKTOP_INSET = 100
+DESKTOP_RADIUS = 220
+
+
+def _write_masked_png(path, rows):
+    """The light render clipped to the macOS rounded-square tile, as RGBA."""
+    raw = bytearray()
+    lo, hi = DESKTOP_INSET, CANVAS - DESKTOP_INSET
+    for y in range(CANVAS):
+        raw.append(0)
+        src = rows[y]
+        for x in range(CANVAS):
+            # signed distance to the rounded box, in pixels; coverage is a 1px ramp
+            qx = abs(x + 0.5 - CANVAS / 2) - ((hi - lo) / 2 - DESKTOP_RADIUS)
+            qy = abs(y + 0.5 - CANVAS / 2) - ((hi - lo) / 2 - DESKTOP_RADIUS)
+            d = math.sqrt(max(qx, 0.0) ** 2 + max(qy, 0.0) ** 2) + min(max(qx, qy), 0.0) - DESKTOP_RADIUS
+            a = int(max(0.0, min(1.0, 0.5 - d)) * 255.0 + 0.5)
+            i = x * 3
+            raw += bytes((src[i], src[i + 1], src[i + 2], a))
+    compressed = zlib.compress(bytes(raw), 9)
+
+    def chunk(tag, data):
+        return (
+            struct.pack(">I", len(data))
+            + tag
+            + data
+            + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        )
+
+    with open(path, "wb") as handle:
+        handle.write(b"\x89PNG\r\n\x1a\n")
+        handle.write(chunk(b"IHDR", struct.pack(">IIBBBBB", CANVAS, CANVAS, 8, 6, 0, 0, 0)))
         handle.write(chunk(b"IDAT", compressed))
         handle.write(chunk(b"IEND", b""))
 
@@ -405,15 +478,16 @@ def _assert_legible(worst_light, worst_dark):
 
 
 def _assert_lanes_stay_behind_the_mark():
-    """The lanes must not be able to read as a foreground element.
+    """The columns and cards must not be able to read as a foreground element.
 
-    At 15% on a mid-tone ramp they are a texture, and that is deliberate: at the size a
-    launcher actually draws an icon, three separate bars in front of a checkmark would
-    be the first thing to turn to mush. If this alpha is ever raised past roughly a
-    quarter, the design has to be re-measured at 40px rather than trusted.
+    Both are texture, not competing marks: at the size a launcher actually draws an
+    icon, three columns and six dashes in front of a checkmark would be the first thing
+    to turn to mush. Past about a quarter alpha the design has to be re-measured at 40px
+    rather than trusted.
     """
-    if LANE_ALPHA > 0.25:
-        sys.exit("FAIL: lane alpha %.2f makes the lanes a foreground element" % LANE_ALPHA)
+    for name, alpha in (("column", LANE_ALPHA), ("card", CARD_ALPHA)):
+        if alpha > 0.25:
+            sys.exit("FAIL: %s alpha %.2f makes it a foreground element" % (name, alpha))
 
 
 # --- the Android vectors ----------------------------------------------------------------------
@@ -479,14 +553,26 @@ def _background_xml(top, mid, bottom):
     )
 
 
-def _lane_paths(scale):
-    paths = []
-    for (ax, ay), (bx, by) in LANE_LINES:
-        paths.append(
-            'M%s,%s L%s,%s'
-            % (_n(_dp(ax, scale)), _n(_dp(ay, scale)), _n(_dp(bx, scale)), _n(_dp(by, scale)))
-        )
-    return paths
+def _capsule_paths(lines, scale):
+    return [
+        'M%s,%s L%s,%s'
+        % (_n(_dp(ax, scale)), _n(_dp(ay, scale)), _n(_dp(bx, scale)), _n(_dp(by, scale)))
+        for (ax, ay), (bx, by) in lines
+    ]
+
+
+def _stroked_paths(paths, alpha, half_width, scale):
+    return "".join(
+        """    <path
+        android:pathData="%s"
+        android:strokeColor="%s"
+        android:strokeAlpha="%s"
+        android:strokeWidth="%s"
+        android:strokeLineCap="round" />
+"""
+        % (path, _hex(ON_ICON), _n(alpha), _n(half_width * 2 * scale))
+        for path in paths
+    )
 
 
 def _check_path(scale):
@@ -499,38 +585,36 @@ def _check_path(scale):
 
 
 def _foreground_xml(scale):
-    lanes = "".join(
-        """    <path
-        android:pathData="%s"
-        android:strokeColor="%s"
-        android:strokeAlpha="%s"
-        android:strokeWidth="%s"
-        android:strokeLineCap="round" />
-"""
-        % (path, _hex(ON_ICON), _n(LANE_ALPHA), _n(LANE_RADIUS * 2 * scale))
-        for path in _lane_paths(scale)
-    )
+    columns = _stroked_paths(_capsule_paths(COLUMN_LINES, scale), LANE_ALPHA, LANE_RADIUS, scale)
+    cards = _stroked_paths(_capsule_paths(CARD_LINES, scale), CARD_ALPHA, CARD_RADIUS, scale)
     return """<?xml version="1.0" encoding="utf-8"?>
 <!-- Generated by tools/generate_app_icon.py. Do not edit by hand. -->
 <!--
-  Fitted to the %sdp safe circle rather than to the 72dp safe square: the lanes run
-  past the check on both sides, and a square fit would put their round ends outside the
-  circular mask. See android_scale() for why the bound is the capsule endpoints and not
-  the bounding box.
+  Fitted to the %sdp safe circle rather than to the 72dp safe square: the columns'
+  top and bottom caps are the outermost geometry, and a square fit would put them
+  outside the circular mask. See android_scale() for why the bound is the capsule
+  endpoints and not the bounding box.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-%s    <path
+%s%s    <path
         android:pathData="%s"
         android:strokeColor="%s"
         android:strokeWidth="%s"
         android:strokeLineCap="round"
         android:strokeLineJoin="round" />
 </vector>
-""" % (_n(ANDROID_SAFE_RADIUS), lanes, _check_path(scale), _hex(ON_ICON), _n(CHECK_STROKE * scale))
+""" % (
+        _n(ANDROID_SAFE_RADIUS),
+        columns,
+        cards,
+        _check_path(scale),
+        _hex(ON_ICON),
+        _n(CHECK_STROKE * scale),
+    )
 
 
 def _monochrome_xml(scale):
@@ -604,31 +688,40 @@ def main():
 
     print("composing")
     check_mask = _stroke_mask(CHECK_SEGMENTS, CHECK_STROKE / 2)
-    lane_mask = _stroke_mask(LANE_LINES, LANE_RADIUS)
+    column_mask = _stroke_mask(COLUMN_LINES, LANE_RADIUS)
+    card_mask = _stroke_mask(CARD_LINES, CARD_RADIUS)
 
     icon_dir = os.path.join(
         REPO, "iosApp", "TaskTracker", "Assets.xcassets", "AppIcon.appiconset"
     )
     drawable_dir = os.path.join(REPO, "androidApp", "src", "main", "res", "drawable")
+    desktop_dir = os.path.join(REPO, "shared-ui", "src", "jvmMain", "resources")
 
     worst = {}
+    light_rows = None
     for name, top, mid, bottom, sheen in (
         ("AppIcon.png", GRADIENT_TOP, GRADIENT_MID, GRADIENT_BOTTOM, SHEEN_ALPHA),
         ("AppIcon-Dark.png", DARK_GRADIENT_TOP, DARK_GRADIENT_MID, DARK_GRADIENT_BOTTOM, SHEEN_ALPHA_DARK),
     ):
         path = os.path.join(icon_dir, name)
-        rows, worst[name] = _render(top, mid, bottom, sheen, lane_mask, check_mask)
+        rows, worst[name] = _render(top, mid, bottom, sheen, column_mask, card_mask, check_mask)
         _write_png(path, rows)
         print("  wrote %s (%d x %d, no alpha)" % (os.path.relpath(path, REPO), CANVAS, CANVAS))
         if name == "AppIcon.png":
+            light_rows = rows
             _preview(rows)
 
     _assert_legible(worst["AppIcon.png"], worst["AppIcon-Dark.png"])
 
+    desktop_path = os.path.join(desktop_dir, "AppIcon.png")
+    _write_masked_png(desktop_path, light_rows)
+    print("  wrote %s (%d x %d, rounded-square alpha)"
+          % (os.path.relpath(desktop_path, REPO), CANVAS, CANVAS))
+
     scale = android_scale()
     print()
-    print("android scale %.5f dp/px; lane span %.1f dp of the 108dp viewport"
-          % (scale, LANE_HALF_LENGTH * 2 * scale))
+    print("android scale %.5f dp/px; column width %.1f dp of the 108dp viewport"
+          % (scale, LANE_RADIUS * 2 * scale))
     for name, body in (
         ("ic_launcher_background.xml", _background_xml(GRADIENT_TOP, GRADIENT_MID, GRADIENT_BOTTOM)),
         ("ic_launcher_foreground.xml", _foreground_xml(scale)),

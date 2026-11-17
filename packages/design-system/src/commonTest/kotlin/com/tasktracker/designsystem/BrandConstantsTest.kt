@@ -15,38 +15,36 @@ import kotlin.test.assertTrue
  * not a bug anyone was looking for.
  *
  * So these assert the properties the numbers have to have for the drawing to be the thing
- * it claims to be: the glyph fits inside the tile with room for its own stroke, the
- * gradient's floor is dimmer than its ceiling, the mark's shadow is offset downwards and
- * not sideways, and the checkmark's tip is above its vertex. Each of those is a drawing
- * mistake that is invisible in code review and obvious on screen.
+ * it claims to be: the board fits inside the tile with room for its own strokes, the
+ * decorative layers stay behind the mark, the gradient's floor is dimmer than its ceiling,
+ * the mark's shadow is offset downwards and not sideways, and the checkmark's tip is above
+ * its vertex. Each of those is a drawing mistake that is invisible in code review and
+ * obvious on screen.
  */
 class BrandConstantsTest {
 
     /**
-     * The glyph fits inside the tile, with room for the stroke.
+     * The board fits inside the tile, with room for its own strokes.
      *
-     * The arithmetic is the point. The original places a 30pt glyph in a 68pt frame, and
-     * the stroke is drawn *on* the path rather than inside it — so a stroke that is a
-     * fraction of the size has to fit in the space between the glyph and the tile's edge.
-     * A glyph fraction of 1.0 would draw a checkmark whose stroke runs off the tile, and no
-     * test of the constant alone would say so.
+     * The arithmetic is the point. Columns are vertical capsules described by a centre, a
+     * half-length and a stroke drawn *on* the path, so the stroke has to fit in the space
+     * between the capsule and the tile's edge. A centre fraction of 0.1 with a 0.4 stroke
+     * would draw off the tile, and no test of the constant alone would say so.
      */
     @Test
-    fun `the glyph fits the tile with room for its stroke`() {
-        val glyph = AppMarkDefaults.size.value * AppMarkDefaults.glyphFraction
-        val stroke = AppMarkDefaults.size.value * AppMarkDefaults.strokeFraction
-        val glyphPlusStroke = glyph + stroke
-
+    fun `the board fits the tile with room for its strokes`() {
+        val halfStroke = AppMarkDefaults.COLUMN_STROKE / 2
+        for (cx in AppMarkDefaults.COLUMN_CENTRES) {
+            assertTrue(
+                cx - halfStroke > 0f && cx + halfStroke < 1f,
+                "the column at $cx spans ${cx - halfStroke}..${cx + halfStroke} of the tile",
+            )
+        }
+        val top = 0.5f - AppMarkDefaults.COLUMN_HALF_STRAIGHT - halfStroke
+        val bottom = 0.5f + AppMarkDefaults.COLUMN_HALF_STRAIGHT + halfStroke
         assertTrue(
-            glyphPlusStroke < AppMarkDefaults.size.value,
-            "the glyph and its stroke span $glyphPlusStroke of a " +
-                "${AppMarkDefaults.size.value}dp tile, so the stroke is clipped",
-        )
-        // The original's own proportion: a mark with a much larger glyph stops reading as a
-        // mark in a small frame, and the splash is not the only place it appears.
-        assertTrue(
-            glyph in 28f..32f,
-            "the glyph is ${glyph}dp; the original uses 30",
+            top > 0f && bottom < 1f,
+            "the columns span $top..$bottom of the tile, so a cap is clipped",
         )
     }
 
@@ -105,23 +103,51 @@ class BrandConstantsTest {
     }
 
     /**
-     * The checkmark stays inside the glyph box.
+     * The checkmark stays inside the tile.
      *
-     * The arms are described as fractions, and a fraction of 1.1 is a perfectly ordinary
-     * value that draws outside the box. Both extremes are asserted, because the two
+     * The arms are described as fractions of the tile, and a fraction of 1.1 is a perfectly
+     * ordinary value that draws outside it. Both extremes are asserted, because the two
      * failure directions are different mistakes: a tip past the right edge is a
      * mis-transcribed fraction, and a short arm at 0 is a mark that starts mid-air.
      */
     @Test
-    fun `the checkmark's geometry stays inside the glyph box`() {
-        assertTrue(AppMarkDefaults.SHORT_ARM_X > 0f, "the checkmark's short arm starts off-box")
+    fun `the checkmark's geometry stays inside the tile`() {
+        val halfStroke = AppMarkDefaults.CHECK_STROKE / 2
         assertTrue(
-            AppMarkDefaults.TIP_X <= 1f,
-            "the checkmark's tip is past the glyph box at ${AppMarkDefaults.TIP_X}",
+            AppMarkDefaults.SHORT_ARM_X - halfStroke > 0f,
+            "the checkmark's short arm starts off-tile",
         )
         assertTrue(
-            AppMarkDefaults.TIP_Y > 0f && AppMarkDefaults.VERTEX_Y <= 1f,
-            "the checkmark's y values are outside the glyph box",
+            AppMarkDefaults.TIP_X + halfStroke < 1f,
+            "the checkmark's tip is past the tile edge at ${AppMarkDefaults.TIP_X}",
+        )
+        assertTrue(
+            AppMarkDefaults.TIP_Y - halfStroke > 0f && AppMarkDefaults.VERTEX_Y + halfStroke < 1f,
+            "the checkmark's y values are outside the tile",
+        )
+    }
+
+    /**
+     * The decorative layers stay behind the mark.
+     *
+     * Columns are the board's field and cards are texture on it; only the check is full
+     * ink. The launcher enforces the same ordering with a gate that fails any decorative
+     * layer above 0.25, because three columns and six dashes in front of a checkmark turn
+     * to mush at launcher size. This asserts the in-app copy kept the hierarchy.
+     */
+    @Test
+    fun `the columns and cards stay behind the check`() {
+        assertTrue(
+            AppMarkDefaults.COLUMN_ALPHA < AppMarkDefaults.CARD_ALPHA,
+            "the cards are brighter than the columns they sit on",
+        )
+        assertTrue(
+            AppMarkDefaults.CARD_ALPHA <= 0.25f,
+            "the cards are a foreground element at ${AppMarkDefaults.CARD_ALPHA}",
+        )
+        assertTrue(
+            AppMarkDefaults.COLUMN_ALPHA > 0f && AppMarkDefaults.CARD_ALPHA > 0f,
+            "a decorative layer is invisible",
         )
     }
 
