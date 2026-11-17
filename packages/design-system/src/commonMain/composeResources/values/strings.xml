@@ -380,8 +380,17 @@
     <string name="backlog_sort_lowest_first">Lowest first</string>
     <string name="backlog_sort_newest_first">Newest first</string>
     <string name="backlog_sort_oldest_first">Oldest first</string>
-    <!-- Spoken for a chip that is not part of the order: the list is not sorted by it at all. -->
+    <!-- Spoken for a key that is not part of the order: the list is not sorted by it at all. -->
     <string name="backlog_sort_off">Not sorting</string>
+    <!-- The sort sheet: its title, the two keys it holds, and where each key sits in the order. -->
+    <string name="backlog_sort_sheet_title">Sort</string>
+    <string name="backlog_sort_key_priority">Priority</string>
+    <string name="backlog_sort_key_created">Created date</string>
+    <string name="backlog_sort_position_first">First</string>
+    <string name="backlog_sort_position_then">Then</string>
+    <!-- Spoken for the position chip, which swaps the two keys rather than only labelling them. -->
+    <string name="backlog_sort_make_first">Make this the first sort key</string>
+    <string name="backlog_sort_make_second">Make this the second sort key</string>
     <!-- Short names used in the dynamic "Sort by …" label -->
     <string name="backlog_sort_label_priority_desc">priority</string>
     <string name="backlog_sort_label_priority_asc">lowest priority</string>

@@ -57,6 +57,7 @@ import com.tasktracker.designsystem.NavigationRailLensTag
 import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.domain.BacklogSortBasis
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Sprint
@@ -74,6 +75,9 @@ import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
+import com.tasktracker.featureprojectspresentation.BacklogSortControlsTag
+import com.tasktracker.featureprojectspresentation.BacklogSortDirectionTag
+import com.tasktracker.featureprojectspresentation.BacklogSortDoneTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
@@ -4949,20 +4953,21 @@ object ShellScenarios {
      *
      * ## What it catches that a screen test cannot
      *
-     * The chip walk in [BacklogSectionScenarios] proves the *state machine*: given a tap, what
+     * The sheet walk in [BacklogSectionScenarios] proves the *state machine*: given a tap, what
      * order results. It cannot see this bug, because the screen it drives is never taken out of
      * the composition — and being taken out is the whole failure. The selection used to live in
      * a `remember` inside [com.tasktracker.featureprojectspresentation.ProjectBacklogScreen],
      * so switching tabs and coming back rebuilt it at priority-first with no error anywhere.
      *
-     * ## Why the chip's state description rather than the label text
+     * ## Why the key's state description rather than the header text
      *
-     * Both are real, and the label is the one a sighted user reads — but this scenario runs in
-     * the shell, where the backlog screen's resource strings are not what is being asserted,
-     * and the direction is already published to accessibility (`stateDescription`) by the chip
-     * itself. Comparing the description before and after the round trip also proves the tap did
-     * something, which an assertion against a hardcoded string would not: a chip that never
-     * changed would satisfy "equals the string for ascending" only if the default were wrong.
+     * Both are real, and the header label is the one a sighted user reads — but this scenario
+     * runs in the shell, where the backlog screen's resource strings are not what is being
+     * asserted, and the direction is already published to accessibility (`stateDescription`) by
+     * the key's own row. Comparing the description before and after the round trip also proves
+     * the direction chip did something, which an assertion against a hardcoded string would not:
+     * a row that never changed would satisfy "equals the string for ascending" only if the
+     * default were wrong.
      *
      * The store read at the end is the second half of the claim and cannot be inferred from the
      * screen: memory surviving a tab switch would still lose the choice on a relaunch.
@@ -4984,15 +4989,23 @@ object ShellScenarios {
         onNodeWithTag(TabButtonTag(AppTab.Backlog)).performClick()
         waitForIdle()
 
+        // The order is edited in a sheet now, so every read of it opens that sheet: the header
+        // names the order in words, the sheet's direction chips are what say which way a key
+        // reads. The sheet's own state is what the round trip has to preserve.
+        onNodeWithTag(BacklogSortControlsTag).performClick()
+        waitForIdle()
         val defaultDirection = sortDirectionOf(BacklogSortPriorityTag)
-        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        onNodeWithTag(BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = false)).performClick()
         waitForIdle()
         val chosenDirection = sortDirectionOf(BacklogSortPriorityTag)
         assertTrue(
             chosenDirection != defaultDirection,
-            "tapping the priority chip left it saying \"$chosenDirection\", the same direction " +
-                "it had before the tap — the scenario cannot tell a saved order from a lost one",
+            "choosing the other direction left the priority key saying \"$chosenDirection\", the " +
+                "same direction it had before the tap — the scenario cannot tell a saved order " +
+                "from a lost one",
         )
+        onNodeWithTag(BacklogSortDoneTag).performClick()
+        waitForIdle()
 
         // The round trip: away to another tab, and back. This is the sequence that used to
         // reset the list, and it is the reason the preference is held by the shell.
@@ -5001,6 +5014,8 @@ object ShellScenarios {
         onNodeWithTag(TabButtonTag(AppTab.Backlog)).performClick()
         waitForIdle()
 
+        onNodeWithTag(BacklogSortControlsTag).performClick()
+        waitForIdle()
         assertEquals(
             chosenDirection,
             sortDirectionOf(BacklogSortPriorityTag),
@@ -5008,6 +5023,8 @@ object ShellScenarios {
                 "tab and coming back, but the user chose \"$chosenDirection\" — the selection is " +
                 "being rebuilt at the default instead of read from the preference",
         )
+        onNodeWithTag(BacklogSortDoneTag).performClick()
+        waitForIdle()
 
         assertEquals(
             listOf("priority:ascending"),

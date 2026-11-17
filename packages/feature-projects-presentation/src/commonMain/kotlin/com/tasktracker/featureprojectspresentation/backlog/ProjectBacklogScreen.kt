@@ -44,7 +44,6 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttRadius
-import com.tasktracker.domain.BacklogSortBasis
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -138,6 +137,9 @@ fun ProjectBacklogScreen(
     // Closed by default and screen state, like the query: a list is mostly read, and the field
     // returns closed on the next visit rather than remembering that it was open once.
     var searchOpen by remember { mutableStateOf(false) }
+    // The sort sheet's visibility. Screen state for the same reason: it is a visit, not a
+    // preference — the order it edits is the preference, and that is reported on every change.
+    var sortSheetOpen by remember { mutableStateOf(false) }
     val appliedQuery = rememberDebouncedQuery(query)
     // Keyed on the projection instance as well as the query: the model replaces the projection
     // on every reload, and a filter remembered against the query alone would keep showing the
@@ -156,6 +158,15 @@ fun ProjectBacklogScreen(
     fun commitPutOnBoard(item: WorkItem, definition: StatusDefinition) {
         onPutOnBoard(item.id, definition.id)
         onPutOnBoardDefaultStatusChosen(definition.id)
+    }
+
+    /**
+     * Updates the list first, reports second: the rows have to re-read in the same frame as the
+     * change, and the report is what remembers the order, which may outlive this screen.
+     */
+    fun commitSortOrder(next: BacklogSortOrder) {
+        currentSortOrder = next
+        onSortOrderChanged(next)
     }
 
     /**
@@ -362,14 +373,7 @@ fun ProjectBacklogScreen(
                             modifier = toggleModifier.testTag(ProjectBacklogSearchToggleTag),
                         )
                     }
-                    val onSortToggle: (BacklogSortBasis) -> Unit = { basis ->
-                        // Update first, report second: the list has to re-read in the same frame
-                        // as the tap, and the report is what remembers it, which may outlive this
-                        // screen.
-                        val next = currentSortOrder.toggled(basis)
-                        currentSortOrder = next
-                        onSortOrderChanged(next)
-                    }
+                    val openSortSheet: () -> Unit = { sortSheetOpen = true }
 
                     Column(
                         modifier = Modifier
@@ -456,7 +460,7 @@ fun ProjectBacklogScreen(
                                 if (currentSection == BacklogSection.Backlog) {
                                     BacklogSortControls(
                                         order = currentSortOrder,
-                                        onToggle = onSortToggle,
+                                        onOpen = openSortSheet,
                                         // Whatever the field and toggle do not take: closed, that
                                         // is the whole header width, which is what "fill the
                                         // width" means here.
@@ -492,7 +496,7 @@ fun ProjectBacklogScreen(
                             if (currentSection == BacklogSection.Backlog) {
                                 BacklogSortControls(
                                     order = currentSortOrder,
-                                    onToggle = onSortToggle,
+                                    onOpen = openSortSheet,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -507,6 +511,16 @@ fun ProjectBacklogScreen(
                     }
                 }
             }
+            // The sort sheet: one trigger in the header, and every key's state edited here.
+            // Mounted on the screen rather than inside the header row so its scrim covers the
+            // whole list, and so switching section cannot leave it stranded inside a row that
+            // is no longer composed.
+            BacklogSortSheet(
+                order = currentSortOrder,
+                onOrderChange = { next -> commitSortOrder(next) },
+                onDismissRequest = { sortSheetOpen = false },
+                visible = sortSheetOpen,
+            )
             // The column picker, open only while the resolver has decided it cannot board without
             // a choice. `visible` tracks `pendingPutOnBoard`, so dismissing sets it null and the
             // sheet animates out on its own.
@@ -787,19 +801,9 @@ private val BacklogHeaderWideMinimumWidth = 700.dp
  * The share of the desktop header row the search field takes when it is open.
  *
  * Large enough for a query with a clear button, small enough that the sort row it sits beside
- * still shows its summary and both chips. Expressed as a fraction rather than a width so the
- * split travels with the window instead of leaving a fixed gap on one side.
+ * still shows its summary. Expressed as a fraction rather than a width so the split travels with
+ * the window instead of leaving a fixed gap on one side.
  */
 private const val DESKTOP_SEARCH_FIELD_FRACTION = 0.42f
-
-/**
- * The height every control in the filter row is given.
- *
- * The sort row's own height: a [ttSpacing.iconButtonSize] chip plus its vertical padding. The
- * search field's default minimum is shorter than that, and beside the sort row the two controls
- * read as misaligned — a 48dp field against 52dp of glass — even though their tops agree. One
- * height for both means their centres do too, and the toggle's 44dp chip centres inside it.
- */
-private val BacklogFilterRowHeight = ttSpacing.iconButtonSize + ttSpacing.xs * 2
 
 fun SectionIndicatorTag(label: String): String = "backlog.section.$label"

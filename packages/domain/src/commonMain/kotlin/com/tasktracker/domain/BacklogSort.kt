@@ -15,10 +15,7 @@ enum class BacklogSortBasis {
 data class BacklogSortKey(
     val basis: BacklogSortBasis,
     val descending: Boolean = true,
-) {
-    /** Flip direction, keeping the same basis. */
-    fun flipped(): BacklogSortKey = copy(descending = !descending)
-}
+)
 
 /**
  * The backlog's chosen ordering: the active sort keys, leading key first.
@@ -28,22 +25,9 @@ data class BacklogSortKey(
  * newest among equals" is one selection rather than a list of two orderings to choose between.
  * There is always at least one key, and no basis appears twice.
  *
- * ## Why one gesture carries three decisions
- *
- * The row is two chips and a label, so tapping is the only gesture available. A tap therefore
- * resolves on/off, direction, and leadership together, in the one way that keeps the list
- * showing what was just asked for:
- *
- * - **Tapping an inactive basis** turns it on *in front*, at its default direction. The old
- *   leader becomes the tie-breaker rather than disappearing: asking for a new order and still
- *   seeing the previous one lead would be a lie about the tap.
- * - **Tapping the leading basis** reverses it. Tapping it once more switches it off, and the
- *   tie-breaker takes over the lead — that is the way back to a single-key order.
- * - **Tapping the key that is only breaking ties** promotes it to lead, keeping its direction.
- *   Reversing it instead would silently change the tie-break order the user was looking at.
- *
- * The single exception to the off state is the last remaining key: a list has to be ordered by
- * something, so a lone key cycles between its two directions rather than switching off.
+ * The sheet that edits this order (the backlog's `BacklogSortSheet`) builds a new value with
+ * `copy(keys = …)` and reports it whole, so this type stays a statement of the order and holds
+ * no interaction rules: which control changes what is the screen's business.
  *
  * The final tie-break is always the item's [WorkItem.key], so the order is fully deterministic.
  */
@@ -71,26 +55,6 @@ data class BacklogSortOrder(
 
     /** The [BacklogSortKey] for [basis], or null if it is not currently active. */
     fun keyFor(basis: BacklogSortBasis): BacklogSortKey? = keys.firstOrNull { it.basis == basis }
-
-    /**
-     * Apply one tap on [basis]; see the class documentation for the three cases.
-     *
-     * The result always has at least one key, so callers never have to guard against an
-     * unsorted list.
-     */
-    fun toggled(basis: BacklogSortBasis): BacklogSortOrder {
-        val index = keys.indexOfFirst { it.basis == basis }
-        return when {
-            // Inactive → on, and in front: the tap asked for this ordering to be the one.
-            index < 0 -> copy(keys = listOf(BacklogSortKey(basis)) + keys)
-            // Tie-breaker → promoted, keeping the direction it was already reading in.
-            index > 0 -> copy(keys = listOf(keys[index]) + keys.filterIndexed { i, _ -> i != index })
-            // Leader, ascending, with somewhere to fall back to → off.
-            keys.size > 1 && !keys[0].descending -> copy(keys = keys.drop(1))
-            // Leader, descending (or the only key) → reversed.
-            else -> copy(keys = listOf(keys[0].flipped()) + keys.drop(1))
-        }
-    }
 
     /**
      * The total order this selection describes, ending on [WorkItem.key] so it is deterministic.

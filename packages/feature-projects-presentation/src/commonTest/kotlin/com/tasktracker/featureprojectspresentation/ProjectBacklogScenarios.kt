@@ -224,8 +224,8 @@ object ProjectBacklogScenarios {
      * had slipped rather than as the middle of a column. Only the picker was wrong, so the
      * assertion is that the three edges agree.
      *
-     * The sort row is measured through its summary label, because that label sits at the glass
-     * surface's own `md` inset and the glass is the row's leading edge.
+     * The sort row is measured through its own control node: the glass surface is the row's
+     * leading edge, and the summary it holds starts at that surface's `md` inset inside it.
      */
     val theSectionPickerSharesTheHeadersLeadingEdge: suspend ComposeUiTest.() -> Unit = {
         // A compact header: on a wide one the picker is in the selector's row by design and
@@ -234,8 +234,7 @@ object ProjectBacklogScenarios {
 
         val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
         val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
-        val sortLabel = onNodeWithTag(BacklogSortLabelTag).fetchSemanticsNode().boundsInRoot
-        val sortRow = sortLabel.left - densityPixels(ttSpacing.md)
+        val sortRow = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
 
         assertTrue(
             abs(picker.left - switcher.left) <= EDGE_TOLERANCE_PX,
@@ -244,10 +243,10 @@ object ProjectBacklogScenarios {
                 "picker=$picker switcher=$switcher",
         )
         assertTrue(
-            abs(picker.left - sortRow) <= EDGE_TOLERANCE_PX,
+            abs(picker.left - sortRow.left) <= EDGE_TOLERANCE_PX,
             "the section picker starts at ${picker.left}px and the sort row below it at " +
-                "${sortRow}px (its label at ${sortLabel.left}px inside a ${ttSpacing.md} inset), " +
-                "so the picker is indented from the filter row: picker=$picker label=$sortLabel",
+                "${sortRow.left}px, so the picker is indented from the filter row: " +
+                "picker=$picker sort=$sortRow",
         )
     }
 

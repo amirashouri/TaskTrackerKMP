@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.domain.BacklogSortBasis
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -24,9 +25,13 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectspresentation.BacklogFileAwayTag
 import com.tasktracker.featureprojectspresentation.BacklogPutOnBoardTag
+import com.tasktracker.featureprojectspresentation.BacklogSortControlsTag
 import com.tasktracker.featureprojectspresentation.BacklogSortCreatedTag
-import com.tasktracker.featureprojectspresentation.BacklogSortLabelTag
+import com.tasktracker.featureprojectspresentation.BacklogSortDirectionTag
+import com.tasktracker.featureprojectspresentation.BacklogSortDoneTag
+import com.tasktracker.featureprojectspresentation.BacklogSortPositionTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
+import com.tasktracker.featureprojectspresentation.BacklogSortSheetTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogArchivedListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyArchivedTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogEmptyBacklogTag
@@ -39,6 +44,8 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
+import com.tasktracker.resources.backlog_sort_position_first
+import com.tasktracker.resources.backlog_sort_position_then
 import com.tasktracker.resources.backlog_sort_label_created_asc
 import com.tasktracker.resources.backlog_sort_label_created_desc
 import com.tasktracker.resources.backlog_sort_label_one
@@ -417,19 +424,20 @@ object BacklogSectionScenarios {
     }
 
     /**
-     * The two sort chips combine into an ordered pair, and the label names the pair it built.
+     * The sort sheet builds an ordered pair, and the header names it.
      *
      * Priority, creation time and the key prefix are deliberately all in different orders, so
      * every state below has a distinct first two rows: which key leads, which direction it
      * reads in, and whether the other key is on at all are each visible in the list, not just
-     * in the chips' selected flags. The label is asserted alongside them because it is the only
-     * text on the row — the chips are glyphs — so a state the label cannot describe is a state
-     * a user cannot read.
+     * in the sheet's selected flags. The header label is asserted alongside them because it is
+     * the only part of the control the list is read under — a state the label cannot describe
+     * is a state a user cannot read.
      *
-     * The walk is the whole cycle: turn the second key on (it leads), hand the lead back,
-     * take it again, reverse it, switch it off, then reverse the last key and wrap it. Reading
-     * the first two rows rather than all three keeps the assertion independent of how much each
-     * host's viewport composes.
+     * The walk is the whole model, one control at a time: a key turned on arrives second rather
+     * than replacing the order, the position chip swaps the pair, a direction belongs to its own
+     * key, a key can be switched off unless it is the last one, and closing the sheet leaves the
+     * order in the header. Reading the first two rows rather than all three keeps the assertion
+     * independent of how much each host's viewport composes.
      */
     val theSortChipsCombineIntoAnOrderedPair: suspend ComposeUiTest.() -> Unit = {
         val criticalOld = shellWorkItem(
@@ -454,63 +462,73 @@ object BacklogSectionScenarios {
         val priority = getString(Res.string.backlog_sort_label_priority_desc)
         val lowestPriority = getString(Res.string.backlog_sort_label_priority_asc)
         val newest = getString(Res.string.backlog_sort_label_created_desc)
-        val oldest = getString(Res.string.backlog_sort_label_created_asc)
         suspend fun label(first: String, second: String? = null): String = if (second == null) {
             getString(Res.string.backlog_sort_label_one, first)
         } else {
             getString(Res.string.backlog_sort_label_pair, first, second)
         }
-        // Priority alone leads, so the label names one key and the other chip is off.
-        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
-        onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
+        // Priority alone leads: the header names one key, and the sheet shows one key on.
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(priority))
         assertFirstRowsAre(criticalOld, mediumNew)
 
-        // Tapping the off chip turns it on in front: newest leads, priority breaks its ties.
+        onNodeWithTag(BacklogSortControlsTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortSheetTag).assertExists()
+        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
+        onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
+        onNodeWithTag(BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = true))
+            .assertIsSelected()
+
+        // A newly chosen key refines the order instead of replacing it: it arrives second, so
+        // the list keeps reading by priority.
         onNodeWithTag(BacklogSortCreatedTag).performClick()
         waitForIdle()
         onNodeWithTag(BacklogSortCreatedTag).assertIsSelected()
-        onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(newest, priority))
-        assertFirstRowsAre(mediumNew, lowMiddle)
-
-        // Tapping the tie-breaker hands the lead back without reversing it, so the pair stays
-        // on in the same directions and only their order in the sentence changes.
-        onNodeWithTag(BacklogSortPriorityTag).performClick()
-        waitForIdle()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority, newest))
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(priority, newest))
         assertFirstRowsAre(criticalOld, mediumNew)
 
-        // And the other way: the tie-breaker can take the lead too.
-        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        // The position chip says where each key sits, and tapping it swaps the pair.
+        onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.Priority))
+            .assertTextEquals(getString(Res.string.backlog_sort_position_first))
+        onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.CreatedAt))
+            .assertTextEquals(getString(Res.string.backlog_sort_position_then))
+        onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.CreatedAt)).performClick()
         waitForIdle()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(newest, priority))
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(newest, priority))
         assertFirstRowsAre(mediumNew, lowMiddle)
 
-        // Tapping the leader reverses it.
-        onNodeWithTag(BacklogSortCreatedTag).performClick()
+        // Direction belongs to a key and not to the selection: reading the tie-breaker the other
+        // way leaves the leader exactly as it was.
+        onNodeWithTag(BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = false)).performClick()
         waitForIdle()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(oldest, priority))
-        assertFirstRowsAre(criticalOld, lowMiddle)
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(newest, lowestPriority))
+        assertFirstRowsAre(mediumNew, lowMiddle)
 
-        // Tapping it once more switches it off, and priority takes the lead back.
+        // Switching a key off is its own control, and the remaining key takes over the order.
         onNodeWithTag(BacklogSortCreatedTag).performClick()
         waitForIdle()
         onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
-        assertFirstRowsAre(criticalOld, mediumNew)
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(lowestPriority))
+        assertFirstRowsAre(lowMiddle, mediumNew)
 
-        // The last key cannot be switched off, so its second tap wraps the direction.
+        // The last key stays on — a list is always ordered by something — so the card is refused
+        // rather than emptying the order.
         onNodeWithTag(BacklogSortPriorityTag).performClick()
         waitForIdle()
         onNodeWithTag(BacklogSortPriorityTag).assertIsSelected()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(lowestPriority))
-        assertFirstRowsAre(lowMiddle, mediumNew)
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(lowestPriority))
 
-        onNodeWithTag(BacklogSortPriorityTag).performClick()
+        // Both directions are named, so the way back is one tap that reads as a control.
+        onNodeWithTag(BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = true)).performClick()
         waitForIdle()
-        onNodeWithTag(BacklogSortLabelTag).assertTextEquals(label(priority))
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(priority))
         assertFirstRowsAre(criticalOld, mediumNew)
+
+        // Closing the sheet leaves the order it built in the header.
+        onNodeWithTag(BacklogSortDoneTag).performClick()
+        waitForIdle()
+        onNodeWithTag(BacklogSortSheetTag).assertDoesNotExist()
+        onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(priority))
     }
 
     private fun ComposeUiTest.assertFirstRowsAre(first: WorkItem, second: WorkItem) {
