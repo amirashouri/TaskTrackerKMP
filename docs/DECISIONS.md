@@ -174,6 +174,14 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   padding is `0.dp` in window mode. Reverting only the inner padding reproduces
   the centring failure; restoring 72dp reproduces both it and the missing created
   project. Mutate each padding separately before claiming which test it serves.
+- **A back press must be dispatched on the dispatcher the handler joined.**
+  `setUpShell` provides `LocalNavigationEventDispatcherOwner`, and every host's
+  `BackHandler` prefers it — on Android that is `activity-compose` 1.12's
+  `androidx.activity.compose.BackHandler`. `activity.onBackPressed()` completes
+  on the *activity's* dispatcher, which that handler never joined, so it reaches
+  nothing under Robolectric. Dispatching a synthetic input on the provided
+  dispatcher is the real chain on all three hosts; the old Android-only skip was
+  a stale measurement, not a host limitation. No capability gate for system back.
 - **A comment claiming "test X cannot see Y" is unverified.** Two guards can
   overlap completely; mutate the behaviour, run both, and write down which one
   goes red. That is the only way to know a pair of tests is complementary.
@@ -199,7 +207,11 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   and for any surface not yet migrated; fully replacing the painted material
   across all 33 call sites is still in progress on the `feat/native-liquid-glass-ios`
   branch. macOS desktop keeps the painted material (Compose Desktop has no native
-  vibrancy seam).
+  vibrancy seam). The native path is opt-in through `LocalNativeGlassEnabled`
+  (default `false`), turned on only by the iOS entry point in `MainViewController`:
+  `UIKitView` needs an interop container that the Compose test scene does not
+  provide, so a `runComposeUiTest` tree that reaches for one fails to compose with
+  `LocalInteropContainer not provided` (61 iOS view tests, when the gate was absent).
 - **Never log or render untrusted content.** Prefer user-facing `AppError.message`
   in log lines, never append tokens, and render the agent event log as plain
   text — never as markup or a link the model chose.

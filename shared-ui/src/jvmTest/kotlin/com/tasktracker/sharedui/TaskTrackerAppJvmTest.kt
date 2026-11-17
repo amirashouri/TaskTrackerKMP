@@ -17,12 +17,3 @@ import androidx.compose.ui.test.ExperimentalTestApi
  */
 @OptIn(ExperimentalTestApi::class)
 class TaskTrackerAppJvmTest : TaskTrackerAppScenarios()
-
-/**
- * The JVM host presses through the synthetic input on the dispatcher the shell registers with, so
- * the scenario's back assertions run here.
- */
-internal actual fun thisHostDeliversSystemBack(): Boolean = true
-
-/** No-op: this host delivers a system back press, so there is nothing to skip. */
-internal actual fun assumeHostDeliversSystemBack() = Unit

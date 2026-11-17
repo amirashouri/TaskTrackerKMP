@@ -1,6 +1,8 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -28,3 +30,16 @@ expect fun TTGlassSurface(
     base: Color? = null,
     content: @Composable () -> Unit,
 )
+
+/**
+ * Whether [TTGlassSurface] may back its rim with a native view on this host.
+ *
+ * Off everywhere by default, which is what the painted fallback always did. Only the iOS
+ * application entry point turns it on. A native backing view is UIKit interop, and the
+ * Compose test scene (`runComposeUiTest`) has no interop container to host it, so a tree
+ * composed by a scenario must not reach for one — otherwise every screen that draws a
+ * surface fails to compose on that host with `LocalInteropContainer not provided`.
+ * Gating it here rather than sniffing for a test host keeps the test harness out of
+ * production code: the one host that can host a UIKit view is the one that says so.
+ */
+val LocalNativeGlassEnabled: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }

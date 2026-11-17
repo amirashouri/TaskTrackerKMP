@@ -14,12 +14,3 @@ import androidx.compose.ui.test.ExperimentalTestApi
  */
 @OptIn(ExperimentalTestApi::class)
 class TaskTrackerAppIosTest : TaskTrackerAppScenarios()
-
-/**
- * The iOS simulator presses through the same synthetic input as the JVM, so the scenario's back
- * assertions run here too.
- */
-internal actual fun thisHostDeliversSystemBack(): Boolean = true
-
-/** No-op: this host delivers a system back press, so there is nothing to skip. */
-internal actual fun assumeHostDeliversSystemBack() = Unit

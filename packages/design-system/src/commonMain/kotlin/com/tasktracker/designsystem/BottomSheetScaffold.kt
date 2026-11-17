@@ -138,7 +138,14 @@ fun TTBottomSheetScaffold(
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier),
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp),
+                    // A window's form fills the scroll viewport, so its own vertical inset
+                    // would be the one part scrolled out of view, leaving the tagged form
+                    // that far below the window's centre. The window's 56dp outer padding
+                    // supplies the clearance instead; bottom sheets keep their inset.
+                    modifier = Modifier.padding(
+                        horizontal = 24.dp,
+                        vertical = if (isWindow) 0.dp else 24.dp,
+                    ),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
                     content = content,
                 )

@@ -1165,12 +1165,10 @@ object ShellScenarios {
      * shell now answers back with the rule every pushed screen's chevron
      * already carries: pop exactly one route, never leave the tab.
      *
-     * The press enters through [pressSystemBack], which is host-specific
-     * for a measured reason: the JVM and iOS hosts' `BackHandler`
-     * registers with the dispatcher the scenario provides (see
-     * [setUpShell]'s `navigationEventOwner`), while the Android host's
-     * registers with the activity's own dispatcher. The split and the
-     * measurements behind it live on the [pressSystemBack] declaration.
+     * The press enters through [pressSystemBack], which dispatches on the
+     * dispatcher the scenario provides (see [setUpShell]'s
+     * `navigationEventOwner`). Every host's `BackHandler` joins that
+     * dispatcher, so all three hosts drive the same chain.
      */
     val systemBackPopsTheSprintDetail: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
@@ -1178,10 +1176,6 @@ object ShellScenarios {
         projects.seed(project)
         val sprint = shellTestSprint(projectID = project.id)
         projects.seedSprint(sprint)
-
-        // The whole claim is about a delivered back press, so a host that cannot deliver one
-        // skips rather than reaching the assertion with an untouched router.
-        assumeHostDeliversSystemBack()
 
         val router = Router()
         val dispatcher = NavigationEventDispatcher()
@@ -1220,10 +1214,7 @@ object ShellScenarios {
         )
         onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
 
-        // At the tab root the handler is disabled, so the OS default governs.
-        // On the Android host that default is the activity's own back, which a
-        // test cannot assert from here; what can be asserted is that the press
-        // does not pop anything off the stack.
+        // At the tab root the handler is disabled, so the press has nothing to pop.
         pressSystemBack(dispatcher)
         waitForIdle()
         assertEquals(
@@ -3040,13 +3031,14 @@ object ShellScenarios {
      * in dp.
      *
      * The anchored gap is frame chrome — `ttSpacing.md`, navigation padding, the tab bar —
-     * never more than a hundred dp on any host (68 on the Android host's cramped
-     * viewport). The windowed gap is half the leftover viewport — ~280 on the hosts
-     * that run it. 150dp separates the two placements by a margin neither side's
-     * geometry can cross, without pinning the bar's measured height the way asserting
-     * the exact gap would.
+     * measured at 68dp on the JVM host at phone width. The windowed gap is half the leftover
+     * viewport plus that chrome, measured at 120dp on the same host. 100dp sits between the
+     * two, so forced window presentation fails here while the anchored one passes, without
+     * pinning the bar's measured height the way asserting the exact gap would. The previous
+     * 150dp bound passed both placements on this host, which is why the scenario used to
+     * return before reaching it.
      */
-    private val ANCHORED_SHEET_BOTTOM_CLEARANCE = 150f
+    private val ANCHORED_SHEET_BOTTOM_CLEARANCE = 100f
 
     /**
      * A wide window shows the sprint list and the sprint detail side by side.
@@ -3611,13 +3603,8 @@ object ShellScenarios {
      * depth one, and the Settings tab button a no-op because the tab is already selected — leaving
      * the section with no way back to the screen it was opened from.
      *
-     * The presses are gated on [thisHostDeliversSystemBack]. Where the host delivers one — the
-     * JVM and the iOS simulator — the scenario drives the real chain end to end. Where it does not
-     * — the Android host, whose press enters through `activity.onBackPressed()` and never reaches
-     * the shell's `BackHandler`, the same host gap that leaves `systemBackPopsTheSprintDetail` red
-     * at its own back assertion — the presses are skipped and the remaining claims are still made,
-     * because the stack shape and the compact replacement are facts about the router and the
-     * composition rather than about this host's back chain.
+     * The press drives the real chain end to end on every host, through the dispatcher the
+     * scenario provides.
      */
     val theAdminMembersRowOpensTheSectionAndSystemBackPopsOutOfIt:
         suspend ComposeUiTest.() -> Unit = {
@@ -3634,7 +3621,6 @@ object ShellScenarios {
                 navigationEventOwner = owner,
             )
             waitForIdle()
-            val deliversBack = thisHostDeliversSystemBack()
 
             onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
             waitForIdle()
@@ -3651,17 +3637,15 @@ object ShellScenarios {
                 "tapping the members row should show the members list",
             )
 
-            if (deliversBack) {
-                pressSystemBack(dispatcher)
-                waitForIdle()
-                assertEquals(
-                    listOf(AppRoute.Settings),
-                    router.path(AppTab.Settings),
-                    "system back from the members list should return to the settings screen " +
-                        "rather than exit the app — that is why the settings screen is in the " +
-                        "stack at all, and it was ${router.path(AppTab.Settings)}",
-                )
-            }
+            pressSystemBack(dispatcher)
+            waitForIdle()
+            assertEquals(
+                listOf(AppRoute.Settings),
+                router.path(AppTab.Settings),
+                "system back from the members list should return to the settings screen " +
+                    "rather than exit the app — that is why the settings screen is in the " +
+                    "stack at all, and it was ${router.path(AppTab.Settings)}",
+            )
         }
 
     /**
@@ -4099,15 +4083,18 @@ object ShellScenarios {
      * then failed on the Android host — not wrongly anchored, but cramped. Robolectric's
      * viewport is far shorter than the form wants, so the sheet fills it: 24dp above,
      * 68dp below, the 68 being the frame's own padding stack. Asymmetry is not the anchor;
-     * nearness to the bottom is, and on a viewport the sheet fills, the two disagree.
+     * nearness to the bottom is, and on a viewport the sheet fills, the two disagree. The
+     * windowed placement still lands clear of the bound (181dp under the mutation), so the
+     * scenario certifies on that host as well.
      *
      * The bound is not pinned to the bar either. The anchored gap is frame chrome —
-     * `ttSpacing.md` plus navigation padding plus the bar, all host-independent hundreds
-     * below this bound — and the windowed gap is half the leftover of the viewport,
-     * which even the Android host leaves above 180. The number between them is a
-     * separation, not a measurement of anything.
+     * `ttSpacing.md` plus navigation padding plus the bar — measured at 68dp on the JVM host.
+     * The windowed gap is half the leftover viewport plus that chrome: 120dp on the JVM host,
+     * and 181dp on the Android host under the forced-window mutation.
+     * [ANCHORED_SHEET_BOTTOM_CLEARANCE] sits between the two, so the mutation goes red and
+     * the anchored placement stays green on every host.
      */
-    val aNarrowShellAnchorsTheSheetToTheBottomEdge: suspend ComposeUiTest.() -> Unit = narrow@{
+    val aNarrowShellAnchorsTheSheetToTheBottomEdge: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
@@ -4124,25 +4111,11 @@ object ShellScenarios {
 
         val root = onRoot().getBoundsInRoot()
 
-        // Whether this viewport can tell anchoring from centring at all. A centred
-        // sheet's content box sits half the leftover above the root, so the bound below can
-        // only see an anchored sheet when that half still clears it. The Android host's
-        // cramped viewport cannot — the forced-window mutation also lands at ~46dp there
-        // — so it returns here: the same bargain as every wide scenario's width gate, a
-        // test the host cannot render registers as a pass rather than certifying nothing.
-        val roomAboveAndBelow = (root.bottom - root.top - (form.bottom - form.top)).value
-        // The windowed placement always reports a smaller bottom gap than the anchored
-        // one — centering moves the sheet's bottom *up*, and the viewport being short
-        // only makes it worse. So the windowed placement can never trip the 150dp
-        // ceiling the scenario asserts, and the same windowed geometry is what the
-        // JVM host's Window presentation produces for the correct code: the correct
-        // code fails the bound there exactly where the mutation would. Either way the
-        // scenario cannot certify the anchored placement (or expose the mutation),
-        // which is why the wide-layout scenarios live in their own class, where a wide
-        // viewport is a precondition. Returning here keeps the test registered as a pass
-        // rather than certifying nothing.
-        return@narrow
-
+        // Presentation is width-driven, so a 390dp shell composes `Compact` on every host and
+        // the sheet anchors there. This scenario used to return unconditionally, on a rationale
+        // written when the JVM host's presentation was its own `Window` rather than the shell's
+        // width — a dead assertion that reported green without measuring anything. The bound
+        // below is the measured separation between the two placements on this host.
         val bottomGap = root.bottom.value - form.bottom.value
         assertTrue(
             bottomGap < ANCHORED_SHEET_BOTTOM_CLEARANCE,
@@ -5139,26 +5112,3 @@ object ShellScenarios {
     }
 }
 
-/**
- * Whether this host can deliver a system back press into the composition.
- *
- * True on the JVM and the iOS simulator, where [pressSystemBack] drives a synthetic input on the
- * dispatcher the shell's `BackHandler` registers with. False on the Android host: there the press
- * enters through `activity.onBackPressed()` — the chain the device uses — and it does not reach the
- * shell's `BackHandler` under Robolectric. That is not this task's defect and not something the
- * scenario can work around; `systemBackPopsTheSprintDetail` is red on that host at the same
- * assertion, and this is the declaration that stops a second scenario from silently joining it.
- *
- * Declared per host because the capability is a property of the host, so the scenario asks
- * rather than going red where the answer is no, and top level because `expect` cannot be a
- * member.
- */
-internal expect fun thisHostDeliversSystemBack(): Boolean
-
-/**
- * Records a scenario as skipped when this host cannot deliver a system back press.
- *
- * An assumption rather than an early return: a scenario whose whole claim is about a back press
- * must not report green where no press can be delivered.
- */
-internal expect fun assumeHostDeliversSystemBack()

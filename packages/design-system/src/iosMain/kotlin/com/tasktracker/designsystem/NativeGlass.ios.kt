@@ -25,6 +25,24 @@ actual fun TTGlassSurface(
     base: Color?,
     content: @Composable () -> Unit,
 ) {
+    // A native backing view is UIKit interop, and only a real UIKit host can carry one.
+    // Everything else — including the Compose test scene — draws the painted surface, so
+    // a scenario never reaches for an interop container that is not there.
+    if (!LocalNativeGlassEnabled.current) {
+        Box(
+            modifier = modifier.ttGlassSurface(
+                shape = shape,
+                tint = tint,
+                thickness = thickness,
+                borderWidth = borderWidth,
+                base = base,
+            ),
+        ) {
+            content()
+        }
+        return
+    }
+
     Box(
         modifier = modifier
             .clip(shape)
