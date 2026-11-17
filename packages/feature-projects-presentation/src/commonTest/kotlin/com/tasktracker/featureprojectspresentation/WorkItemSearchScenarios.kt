@@ -1,6 +1,11 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertContentDescriptionEquals
@@ -10,11 +15,13 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.TTSearchFieldClearTag
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
@@ -25,6 +32,7 @@ import com.tasktracker.resources.backlog_section_kanban
 import com.tasktracker.resources.work_item_search_close
 import com.tasktracker.resources.work_item_search_open
 import org.jetbrains.compose.resources.getString
+import kotlin.math.abs
 import kotlin.test.assertTrue
 
 /**
@@ -112,7 +120,9 @@ object WorkItemSearchScenarios {
      * how fast the machine is.
      */
     val theFieldUnfoldsRatherThanSnapping: suspend ComposeUiTest.() -> Unit = {
-        boardShowing()
+        // Pinned to a phone width: a desktop host now renders the field beside its toggle, and
+        // that arrangement has no vertical unfold to measure.
+        boardShowing(width = COMPACT_BOARD_WIDTH)
 
         val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
         openBoardSearch()
@@ -155,7 +165,7 @@ object WorkItemSearchScenarios {
      * field reaches when the reveal is over, which a travelling field cannot be at on frame one.
      */
     val reducedMotionRevealsTheFieldWithoutTravel: suspend ComposeUiTest.() -> Unit = {
-        boardShowing(reducedMotion = true)
+        boardShowing(reducedMotion = true, width = COMPACT_BOARD_WIDTH)
         val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
 
         openBoardSearch()
@@ -182,6 +192,53 @@ object WorkItemSearchScenarios {
 
         mainClock.autoAdvance = true
         waitForIdle()
+    }
+
+    /**
+     * A wide header opens the field beside its toggle, inside the header row.
+     *
+     * That is the backlog's desktop arrangement: the field takes width from the title instead
+     * of taking a row from the lanes. The assertions mirror the claims — the lanes do not move,
+     * the field is one row gap short of the toggle and centred on it, and its bounds sit inside
+     * the header row rather than under it. A field that merely existed somewhere would pass a
+     * presence check while still being the stacked phone layout.
+     */
+    val theWideBoardOpensTheFieldBesideItsToggle: suspend ComposeUiTest.() -> Unit = {
+        boardShowing(width = WIDE_BOARD_WIDTH)
+        val lanesClosedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+
+        openBoardSearch()
+
+        val field = onNodeWithTag(ProjectBoardSearchFieldTag).getUnclippedBoundsInRoot()
+        val toggle = onNodeWithTag(ProjectBoardSearchToggleTag).getUnclippedBoundsInRoot()
+        val header = onNodeWithTag(ProjectBoardHeaderTag).getUnclippedBoundsInRoot()
+        val lanesOpenTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+
+        // The field is 48dp against the 44dp buttons, so the header row itself grows by 4dp.
+        // Anything near a whole field-plus-gap means it took a row of its own.
+        assertTrue(
+            abs((lanesOpenTop - lanesClosedTop).value) < ttSpacing.lg.value,
+            "the wide field pushed the lanes down by ${lanesOpenTop - lanesClosedTop} " +
+                "(closed=$lanesClosedTop, open=$lanesOpenTop), so it is stacked under the " +
+                "header instead of opening beside its toggle",
+        )
+        assertTrue(
+            abs((field.right + ttSpacing.sm - toggle.left).value) <= EDGE_TOLERANCE_DP * 2,
+            "the field ends at ${field.right} and the toggle starts at ${toggle.left}, so the " +
+                "field is not the control immediately before the search button: " +
+                "field=$field toggle=$toggle",
+        )
+        val fieldCentre = (field.top + field.bottom) / 2
+        val toggleCentre = (toggle.top + toggle.bottom) / 2
+        assertTrue(
+            abs((fieldCentre - toggleCentre).value) <= 2f,
+            "the field and its toggle are not on one centre line: field=$field toggle=$toggle",
+        )
+        assertTrue(
+            (field.top - header.top).value >= -EDGE_TOLERANCE_DP &&
+                (header.bottom - field.bottom).value >= -EDGE_TOLERANCE_DP,
+            "the field is outside the header row (header=$header, field=$field)",
+        )
     }
 
     /** The backlog hides it the same way, so the two screens do not drift. */
@@ -385,6 +442,15 @@ object WorkItemSearchScenarios {
     }
 }
 
+/** The slack a layout assertion allows for rounding, in dp. */
+private const val EDGE_TOLERANCE_DP = 1f
+
+/** A phone-width board, below the wide-header threshold. */
+private val COMPACT_BOARD_WIDTH = 400.dp
+
+/** 900dp: comfortably above the board's 700dp + gutters wide-header threshold. */
+private val WIDE_BOARD_WIDTH = 900.dp
+
 /** Past the debounce window with a margin, without being a sleep. */
 private const val DEBOUNCE_MILLIS = 200L
 
@@ -421,20 +487,32 @@ private val doneItem = ViewPreviewData.workItems.first { it.key.rawValue == "TT-
 private fun ComposeUiTest.boardShowing(
     projection: BoardProjection = ViewPreviewData.boardProjection(),
     reducedMotion: Boolean = false,
+    width: Dp? = null,
 ) {
     setContent {
         CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
             Themed {
-                ProjectBoardScreen(
-                    projection = projection,
-                    isLoading = false,
-                    errorMessage = null,
-                    movingItemID = null,
-                    onSelect = {},
-                    onFileAway = {},
-                    onMove = { _, _ -> },
-                    onDismissError = {},
-                )
+                // `requiredWidth` rather than `width`: a preferred width is coerced back to
+                // the phone-sized host, so the wide header could never be rendered on the
+                // Android and iOS hosts.
+                Box(
+                    modifier = if (width == null) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier.requiredWidth(width).fillMaxHeight()
+                    },
+                ) {
+                    ProjectBoardScreen(
+                        projection = projection,
+                        isLoading = false,
+                        errorMessage = null,
+                        movingItemID = null,
+                        onSelect = {},
+                        onFileAway = {},
+                        onMove = { _, _ -> },
+                        onDismissError = {},
+                    )
+                }
             }
         }
     }

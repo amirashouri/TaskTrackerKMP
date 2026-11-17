@@ -498,6 +498,10 @@ class ProjectsUiJvmTest {
     fun theFieldUnfoldsRatherThanSnapping() = runComposeUiTest(block = WorkItemSearchScenarios.theFieldUnfoldsRatherThanSnapping)
 
     @Test
+    fun theWideBoardOpensTheFieldBesideItsToggle() =
+        runComposeUiTest(block = WorkItemSearchScenarios.theWideBoardOpensTheFieldBesideItsToggle)
+
+    @Test
     fun reducedMotionRevealsTheFieldWithoutTravel() = runComposeUiTest(block = WorkItemSearchScenarios.reducedMotionRevealsTheFieldWithoutTravel)
 
     @Test

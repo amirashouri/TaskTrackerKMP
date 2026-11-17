@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -145,267 +146,321 @@ fun ProjectBoardScreen(
     val focusManager = LocalFocusManager.current
 
     ClipboardCopyHost(modifier = modifier) { onCopy ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = ttSpacing.screenGutterLarge)
-                .testTag(ProjectBoardScreenTag),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-        ) {
-            val assignees = boardAssigneeNames(projection.items, assigneeNames)
-            Row(
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            // Measured without the gutters below, so the threshold is the one the backlog uses: the
+            // desktop header needs 700dp of room for the project identity, the field and the two
+            // actions before it stops fitting on one row.
+            val wideHeader = maxWidth >= BoardHeaderWideMinimumWidth + ttSpacing.xxl * 2
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalGutter()
-                    .testTag(ProjectBoardHeaderTag),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .fillMaxSize()
+                    .padding(top = ttSpacing.screenGutterLarge)
+                    .testTag(ProjectBoardScreenTag),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
             ) {
-                Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    onOpenSwitcher?.let { openSwitcher ->
-                        ProjectSwitcherButton(
-                            project = projection.project,
-                            onClick = openSwitcher,
-                            projects = projects,
-                            onSelectProject = onSelectProject,
-                            showName = false,
-                        )
-                    }
-                    if (assignees.isNotEmpty()) {
-                        AssigneeStack(
-                            names = assignees,
-                            modifier = Modifier.testTag(ProjectBoardAssigneesTag),
-                        )
-                    }
-                    ttText(
-                        text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
-                        style = ttTypography.titleSmall,
-                        color = ttLabel(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
-                    )
-                }
-                // The trailing controls keep their order: the search toggle is inserted *before*
-                // My Tasks rather than after it, so the button that was already here does not
-                // move when this one appears. No toggle without a project — it would reveal a
-                // field over "no project selected", which filters a list that does not exist.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (projection.project != null) {
-                        ttGlassIconButton(
-                            image = ttActionIcons.search,
-                            contentDescription = stringResource(
-                                if (searchOpen) {
-                                    Res.string.work_item_search_close
-                                } else {
-                                    Res.string.work_item_search_open
-                                },
-                            ),
-                            onClick = {
-                                searchOpen = !searchOpen
-                                // Closing is also a reset. A query that outlives its field would
-                                // leave the board filtered by a control that is no longer on
-                                // screen, with the lanes simply missing cards and nothing to
-                                // explain why.
-                                if (!searchOpen) {
-                                    query = ""
-                                    focusManager.clearFocus()
-                                }
-                            },
-                            tint = if (searchOpen) ttAccent() else ttLabel(),
-                            modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
-                        )
-                    }
-                    ttGlassIconButton(
-                        image = ttActionIcons.person,
-                        contentDescription = stringResource(Res.string.board_my_tasks),
-                        onClick = onToggleMyTasks,
-                        tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
-                        modifier = Modifier.testTag(ProjectBoardMyTasksTag),
-                    )
-                }
-            }
-
-            // Only with a project on screen: a field over "no project selected" would filter
-            // nothing and offer a control whose list does not exist yet. Immediately under the
-            // header row and above the banner, so the header's own order is identity first,
-            // then the control over the list it filters.
-            if (projection.project != null) {
-                SearchReveal(visible = searchOpen) {
+                val assignees = boardAssigneeNames(projection.items, assigneeNames)
+                val searchField: @Composable (Modifier) -> Unit = { fieldModifier ->
                     ttSearchField(
                         value = query,
                         onValueChange = { query = it },
                         hint = stringResource(Res.string.work_item_search_placeholder),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalGutter()
-                            .testTag(ProjectBoardSearchFieldTag),
+                        modifier = fieldModifier.testTag(ProjectBoardSearchFieldTag),
                         fieldModifier = Modifier.testTag(ProjectBoardSearchInputTag),
                         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                     )
                 }
-            }
-
-            errorMessage?.let { message ->
-                ttBanner(
-                    message = message,
-                    onDismiss = onDismissError,
-                    modifier = Modifier.fillMaxWidth().horizontalGutter(),
-                )
-            }
-
-            if (projection.project == null && !isLoading) {
-                ProjectsEmptyState(
-                    title = stringResource(Res.string.board_no_project_title),
-                    body = stringResource(Res.string.board_no_project_body),
-                    modifier = Modifier.horizontalGutter(),
-                )
-            } else if (appliedQuery.isNotBlank() && shown.isEmpty) {
-                // A query that matches nothing replaces the lane row rather than emptying it:
-                // six empty lanes read as "this board is empty", which is a different and false
-                // statement. With a blank query the lanes are untouched, empty ones included.
-                ProjectsEmptyState(
-                    title = stringResource(Res.string.work_item_search_empty_title),
-                    body = stringResource(Res.string.work_item_search_empty_body),
-                    modifier = Modifier.horizontalGutter().testTag(ProjectBoardEmptySearchTag),
-                )
-            } else {
-                val leadingChromeInset = LocalLeadingChromeScrollUnderInset.current
-                val gutterDp = ttSpacing.xxl + leadingChromeInset
-                val scrollState = rememberScrollState()
-                val laneCount = shown.columns.size
-                val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
-                val density = LocalDensity.current
-                val gutterPx = with(density) { gutterDp.toPx() }
-                val stridePx = with(density) { boardLaneStride.toPx() }
-                val laneWidthPx = with(density) { columnWidth.toPx() }
-                val edgePx = with(density) { 56.dp.toPx() }
-                val scrollStepPx = with(density) { 10.dp.toPx() }
-
-                var viewport by remember { mutableStateOf(Rect.Zero) }
-
-                /** Maps pointer offset to target column status key, or null if outside drop boundaries. */
-                fun laneAt(pointer: Offset): String? {
-                    val row = viewport
-                    if (row.width <= 0f || pointer.y < row.top || pointer.y > row.bottom) return null
-                    val contentX = pointer.x - row.left - gutterPx + scrollState.value
-                    if (contentX < 0f) return null
-                    val index = floor(contentX / stridePx).toInt()
-                    if (index !in 0 until laneCount) return null
-                    return if (contentX - index * stridePx <= laneWidthPx) {
-                        shown.columns[index].status.id
-                    } else {
-                        null
-                    }
-                }
-
-                val drag = BoardCardDrag(
-                    draggingItemID = dragState.item?.id,
-                    onStart = { item, bounds, grab ->
-                        // Terminal items cannot be dragged onto the board; ignore if already busy
-                        if (movingItemID == null && !item.status.isTerminal) {
-                            dragState.start(item, bounds, grab)
-                            dragState.retarget(laneAt(dragState.pointer))
-                        }
-                    },
-                    onDrag = { delta ->
-                        dragState.move(delta)
-                        dragState.retarget(laneAt(dragState.pointer))
-                    },
-                    onEnd = {
-                        val ended = dragState.end()
-                        if (ended != null) {
-                            val (dragged, target) = ended
-                            // The card's lane is the catalog entry it resolves to, or its
-                            // category's key on a catalog-free board: comparing against the
-                            // raw statusKey alone makes a card with no key look like it moved.
-                            val currentLane = shown.project?.statusFor(dragged)?.id
-                                ?: dragged.statusKey
-                                ?: dragged.status.wireValue
-                            if (target != null && target != currentLane) {
-                                onMove(dragged.id, target)
-                            }
-                        }
-                    },
-                    onCancel = { dragState.cancel() },
-                )
-
-                // Auto-scroll horizontal row when dragging near the viewport edges
-                LaunchedEffect(dragState.isDragging) {
-                    if (!dragState.isDragging) return@LaunchedEffect
-                    while (true) {
-                        withFrameNanos { }
-                        if (!dragState.isDragging) break
-                        val pointer = dragState.pointer
-                        val row = viewport
-                        if (row.width <= 0f) continue
-                        val dx = when {
-                            pointer.x < row.left + edgePx -> -scrollStepPx
-                            pointer.x > row.right - edgePx -> scrollStepPx
-                            else -> 0f
-                        }
-                        if (dx != 0f) {
-                            val consumed = scrollState.scrollBy(dx)
-                            if (consumed != 0f) dragState.retarget(laneAt(pointer))
-                        }
-                    }
-                }
-
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .then(
-                            if (leadingChromeInset > 0.dp) {
-                                Modifier.layout { measurable, constraints ->
-                                    val extraWidth = leadingChromeInset.roundToPx()
-                                    val placeable = measurable.measure(
-                                        constraints.copy(
-                                            maxWidth = constraints.maxWidth + extraWidth,
-                                        ),
-                                    )
-                                    layout(placeable.width - extraWidth, placeable.height) {
-                                        placeable.placeRelative(-extraWidth, 0)
-                                    }
-                                }
-                            } else {
-                                Modifier
-                            },
-                        )
-                        .clipToBounds()
-                        .onGloballyPositioned { viewport = it.boundsInRoot() },
+                        .horizontalGutter()
+                        .testTag(ProjectBoardHeaderTag),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
-                            .testTag(ProjectBoardColumnsTag),
-                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        LaneRowSpacer(gutterDp)
-                        shown.columns.forEachIndexed { index, column ->
-                            if (index > 0) LaneRowSpacer(ttSpacing.md)
-                            BoardColumnView(
-                                column = column,
-                                onSelect = { onSelect(it.id) },
-                                onCopy = onCopy,
-                                onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status.id) } } else null,
-                                modifier = Modifier,
-                                assigneeName = { item ->
-                                    item.assigneeID?.let { assigneeNames[it] }
+                        onOpenSwitcher?.let { openSwitcher ->
+                            ProjectSwitcherButton(
+                                project = projection.project,
+                                onClick = openSwitcher,
+                                projects = projects,
+                                onSelectProject = onSelectProject,
+                                showName = false,
+                            )
+                        }
+                        if (assignees.isNotEmpty()) {
+                            AssigneeStack(
+                                names = assignees,
+                                modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                            )
+                        }
+                        ttText(
+                            text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
+                            style = ttTypography.titleSmall,
+                            color = ttLabel(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
+                        )
+                    }
+                    // The trailing controls keep their order: the search toggle is inserted *before*
+                    // My Tasks rather than after it, so the button that was already here does not
+                    // move when this one appears. No toggle without a project — it would reveal a
+                    // field over "no project selected", which filters a list that does not exist.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (projection.project != null) {
+                            // On a wide header the field unfolds *beside* its button, inside the
+                            // trailing row: it takes width from the title rather than pushing the
+                            // lanes down, which is the same arrangement the backlog header uses.
+                            // A fixed width, because this row wraps its content — a weighted child
+                            // in a wrap-content row receives no space to grow into.
+                            if (wideHeader) {
+                                SearchRevealBeside(visible = searchOpen) {
+                                    searchField(Modifier.width(BoardSearchFieldWidth))
+                                }
+                            }
+                            ttGlassIconButton(
+                                image = ttActionIcons.search,
+                                contentDescription = stringResource(
+                                    if (searchOpen) {
+                                        Res.string.work_item_search_close
+                                    } else {
+                                        Res.string.work_item_search_open
+                                    },
+                                ),
+                                onClick = {
+                                    searchOpen = !searchOpen
+                                    // Closing is also a reset. A query that outlives its field would
+                                    // leave the board filtered by a control that is no longer on
+                                    // screen, with the lanes simply missing cards and nothing to
+                                    // explain why.
+                                    if (!searchOpen) {
+                                        query = ""
+                                        focusManager.clearFocus()
+                                    }
                                 },
-                                blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
-                                projectTags = projection.project?.tags.orEmpty(),
-                                cardTrailing = { item ->
+                                tint = if (searchOpen) ttAccent() else ttLabel(),
+                                modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
+                            )
+                        }
+                        ttGlassIconButton(
+                            image = ttActionIcons.person,
+                            contentDescription = stringResource(Res.string.board_my_tasks),
+                            onClick = onToggleMyTasks,
+                            tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                            modifier = Modifier.testTag(ProjectBoardMyTasksTag),
+                        )
+                    }
+                }
+
+                // Only with a project on screen: a field over "no project selected" would filter
+                // nothing and offer a control whose list does not exist yet. Immediately under the
+                // header row and above the banner, so the header's own order is identity first,
+                // then the control over the list it filters.
+                // Compact header only: on a wide one the field is already in the header row, and
+                // composing it here as well would put two fields on screen with one query.
+                if (projection.project != null && !wideHeader) {
+                    SearchReveal(visible = searchOpen) {
+                        searchField(Modifier.fillMaxWidth().horizontalGutter())
+                    }
+                }
+
+                errorMessage?.let { message ->
+                    ttBanner(
+                        message = message,
+                        onDismiss = onDismissError,
+                        modifier = Modifier.fillMaxWidth().horizontalGutter(),
+                    )
+                }
+
+                if (projection.project == null && !isLoading) {
+                    ProjectsEmptyState(
+                        title = stringResource(Res.string.board_no_project_title),
+                        body = stringResource(Res.string.board_no_project_body),
+                        modifier = Modifier.horizontalGutter(),
+                    )
+                } else if (appliedQuery.isNotBlank() && shown.isEmpty) {
+                    // A query that matches nothing replaces the lane row rather than emptying it:
+                    // six empty lanes read as "this board is empty", which is a different and false
+                    // statement. With a blank query the lanes are untouched, empty ones included.
+                    ProjectsEmptyState(
+                        title = stringResource(Res.string.work_item_search_empty_title),
+                        body = stringResource(Res.string.work_item_search_empty_body),
+                        modifier = Modifier.horizontalGutter().testTag(ProjectBoardEmptySearchTag),
+                    )
+                } else {
+                    val leadingChromeInset = LocalLeadingChromeScrollUnderInset.current
+                    val gutterDp = ttSpacing.xxl + leadingChromeInset
+                    val scrollState = rememberScrollState()
+                    val laneCount = shown.columns.size
+                    val flingBehavior = rememberLaneSnapFlingBehavior(scrollState, laneCount)
+                    val density = LocalDensity.current
+                    val gutterPx = with(density) { gutterDp.toPx() }
+                    val stridePx = with(density) { boardLaneStride.toPx() }
+                    val laneWidthPx = with(density) { columnWidth.toPx() }
+                    val edgePx = with(density) { 56.dp.toPx() }
+                    val scrollStepPx = with(density) { 10.dp.toPx() }
+
+                    var viewport by remember { mutableStateOf(Rect.Zero) }
+
+                    /** Maps pointer offset to target column status key, or null if outside drop boundaries. */
+                    fun laneAt(pointer: Offset): String? {
+                        val row = viewport
+                        if (row.width <= 0f || pointer.y < row.top || pointer.y > row.bottom) return null
+                        val contentX = pointer.x - row.left - gutterPx + scrollState.value
+                        if (contentX < 0f) return null
+                        val index = floor(contentX / stridePx).toInt()
+                        if (index !in 0 until laneCount) return null
+                        return if (contentX - index * stridePx <= laneWidthPx) {
+                            shown.columns[index].status.id
+                        } else {
+                            null
+                        }
+                    }
+
+                    val drag = BoardCardDrag(
+                        draggingItemID = dragState.item?.id,
+                        onStart = { item, bounds, grab ->
+                            // Terminal items cannot be dragged onto the board; ignore if already busy
+                            if (movingItemID == null && !item.status.isTerminal) {
+                                dragState.start(item, bounds, grab)
+                                dragState.retarget(laneAt(dragState.pointer))
+                            }
+                        },
+                        onDrag = { delta ->
+                            dragState.move(delta)
+                            dragState.retarget(laneAt(dragState.pointer))
+                        },
+                        onEnd = {
+                            val ended = dragState.end()
+                            if (ended != null) {
+                                val (dragged, target) = ended
+                                // The card's lane is the catalog entry it resolves to, or its
+                                // category's key on a catalog-free board: comparing against the
+                                // raw statusKey alone makes a card with no key look like it moved.
+                                val currentLane = shown.project?.statusFor(dragged)?.id
+                                    ?: dragged.statusKey
+                                    ?: dragged.status.wireValue
+                                if (target != null && target != currentLane) {
+                                    onMove(dragged.id, target)
+                                }
+                            }
+                        },
+                        onCancel = { dragState.cancel() },
+                    )
+
+                    // Auto-scroll horizontal row when dragging near the viewport edges
+                    LaunchedEffect(dragState.isDragging) {
+                        if (!dragState.isDragging) return@LaunchedEffect
+                        while (true) {
+                            withFrameNanos { }
+                            if (!dragState.isDragging) break
+                            val pointer = dragState.pointer
+                            val row = viewport
+                            if (row.width <= 0f) continue
+                            val dx = when {
+                                pointer.x < row.left + edgePx -> -scrollStepPx
+                                pointer.x > row.right - edgePx -> scrollStepPx
+                                else -> 0f
+                            }
+                            if (dx != 0f) {
+                                val consumed = scrollState.scrollBy(dx)
+                                if (consumed != 0f) dragState.retarget(laneAt(pointer))
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .then(
+                                if (leadingChromeInset > 0.dp) {
+                                    Modifier.layout { measurable, constraints ->
+                                        val extraWidth = leadingChromeInset.roundToPx()
+                                        val placeable = measurable.measure(
+                                            constraints.copy(
+                                                maxWidth = constraints.maxWidth + extraWidth,
+                                            ),
+                                        )
+                                        layout(placeable.width - extraWidth, placeable.height) {
+                                            placeable.placeRelative(-extraWidth, 0)
+                                        }
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .clipToBounds()
+                            .onGloballyPositioned { viewport = it.boundsInRoot() },
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .horizontalScroll(state = scrollState, flingBehavior = flingBehavior)
+                                .testTag(ProjectBoardColumnsTag),
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            LaneRowSpacer(gutterDp)
+                            shown.columns.forEachIndexed { index, column ->
+                                if (index > 0) LaneRowSpacer(ttSpacing.md)
+                                BoardColumnView(
+                                    column = column,
+                                    onSelect = { onSelect(it.id) },
+                                    onCopy = onCopy,
+                                    onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status.id) } } else null,
+                                    modifier = Modifier,
+                                    assigneeName = { item ->
+                                        item.assigneeID?.let { assigneeNames[it] }
+                                    },
+                                    blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
+                                    projectTags = projection.project?.tags.orEmpty(),
+                                    cardTrailing = { item ->
+                                        BoardCardActions(
+                                            item = item,
+                                            movingItemID = movingItemID,
+                                            showMoveActions = showMoveActions,
+                                            onFileAway = onFileAway,
+                                            onMove = onMove,
+                                            destinations = shown.columns.map { it.status },
+                                        )
+                                    },
+                                    drag = drag,
+                                    isDropTarget = dragState.target == column.status.id,
+                                )
+                            }
+                            LaneRowSpacer(ttSpacing.xxl)
+                        }
+
+                        // Ghost card rendered outside lane hierarchy to prevent cross-column clipping
+                        val dragged = dragState.item
+                        if (dragged != null && dragState.cardSize.width > 0) {
+                            val ghostTopLeft = dragState.pointer - viewport.topLeft - dragState.grab
+                            WorkItemCard(
+                                item = dragged,
+                                onClick = {},
+                                onCopy = {},
+                                modifier = Modifier
+                                    .offset {
+                                        IntOffset(ghostTopLeft.x.roundToInt(), ghostTopLeft.y.roundToInt())
+                                    }
+                                    .width(with(density) { dragState.cardSize.width.toDp() })
+                                    .graphicsLayer {
+                                        scaleX = 1.02f
+                                        scaleY = 1.02f
+                                        shadowElevation = 24.dp.toPx()
+                                        shape = RoundedCornerShape(ttRadius.surface)
+                                        clip = false
+                                    },
+                                trailing = {
                                     BoardCardActions(
-                                        item = item,
+                                        item = dragged,
                                         movingItemID = movingItemID,
                                         showMoveActions = showMoveActions,
                                         onFileAway = onFileAway,
@@ -413,47 +468,11 @@ fun ProjectBoardScreen(
                                         destinations = shown.columns.map { it.status },
                                     )
                                 },
-                                drag = drag,
-                                isDropTarget = dragState.target == column.status.id,
+                                assigneeName = dragged.assigneeID?.let { assigneeNames[it] },
+                                blockedByKeys = blockedByKeys[dragged.id].orEmpty(),
+                                projectTags = projection.project?.tags.orEmpty(),
                             )
                         }
-                        LaneRowSpacer(ttSpacing.xxl)
-                    }
-
-                    // Ghost card rendered outside lane hierarchy to prevent cross-column clipping
-                    val dragged = dragState.item
-                    if (dragged != null && dragState.cardSize.width > 0) {
-                        val ghostTopLeft = dragState.pointer - viewport.topLeft - dragState.grab
-                        WorkItemCard(
-                            item = dragged,
-                            onClick = {},
-                            onCopy = {},
-                            modifier = Modifier
-                                .offset {
-                                    IntOffset(ghostTopLeft.x.roundToInt(), ghostTopLeft.y.roundToInt())
-                                }
-                                .width(with(density) { dragState.cardSize.width.toDp() })
-                                .graphicsLayer {
-                                    scaleX = 1.02f
-                                    scaleY = 1.02f
-                                    shadowElevation = 24.dp.toPx()
-                                    shape = RoundedCornerShape(ttRadius.surface)
-                                    clip = false
-                                },
-                            trailing = {
-                                BoardCardActions(
-                                    item = dragged,
-                                    movingItemID = movingItemID,
-                                    showMoveActions = showMoveActions,
-                                    onFileAway = onFileAway,
-                                    onMove = onMove,
-                                    destinations = shown.columns.map { it.status },
-                                )
-                            },
-                            assigneeName = dragged.assigneeID?.let { assigneeNames[it] },
-                            blockedByKeys = blockedByKeys[dragged.id].orEmpty(),
-                            projectTags = projection.project?.tags.orEmpty(),
-                        )
                     }
                 }
             }
@@ -625,3 +644,13 @@ fun BoardMoveTag(item: WorkItem, statusKey: String): String =
     "${BoardMoveActionsTag(item)}.$statusKey"
 
 private val MIN_FLANGE_VELOCITY_DP = 400.dp
+
+/**
+ * The width at which the board header keeps the project identity and the two actions on one
+ * row with room for a field between them. The backlog header uses the same number, so the two
+ * screens switch arrangement together.
+ */
+private val BoardHeaderWideMinimumWidth = 700.dp
+
+/** How much of a wide header the field takes when open: a search box, not a second title. */
+private val BoardSearchFieldWidth = 300.dp
