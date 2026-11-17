@@ -3,7 +3,7 @@
   "hosts": {
     "jvmTest": {
       "target": "jvm",
-      "tests": 2245,
+      "tests": 2248,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
@@ -12,7 +12,7 @@
     },
     "iosSimulatorArm64Test": {
       "target": "iosSimulatorArm64",
-      "tests": 2183,
+      "tests": 2186,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
@@ -21,10 +21,10 @@
     },
     "testAndroidHostTest": {
       "target": "androidHost",
-      "tests": 1860,
+      "tests": 1863,
       "failures": 0,
       "errors": 0,
-      "skipped": 41,
+      "skipped": 42,
       "failed": [],
       "resultFiles": 157
     }

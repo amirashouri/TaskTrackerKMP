@@ -175,6 +175,43 @@ class GlassFillRampTest {
         }
     }
 
+    /**
+     * An opaque tint is a control's own fill, so lowering the glass slider must not erase it.
+     *
+     * The bug this pins: `fillRamp` crossed *every* tint to the reduced surface as intensity
+     * fell, so a prominent accent button — an opaque accent behind a white `ttOnAccent` label —
+     * became an opaque near-white pill at 20% glass in light appearance. The label stayed white
+     * and the control read as having no background at all. Only a translucent wash has a neutral
+     * to arrive at; an opaque fill has only itself.
+     */
+    @Test
+    fun `an opaque tint keeps its colour as intensity drops`() {
+        for (appearance in appearances) {
+            for (intensity in listOf(1f, 0.75f, 0.5f, 0f)) {
+                val tint = appearance.accent
+                val stops = ttGlass.fillRamp(
+                    tint = tint,
+                    canvas = appearance.canvas,
+                    accent = appearance.accent,
+                    thickness = ttGlass.GlassThickness.THICK,
+                    intensity = intensity,
+                    reducedSurface = appearance.surface,
+                )
+
+                val top = stops.first()
+                assertEquals(
+                    "${channel(tint.red)},${channel(tint.green)},${channel(tint.blue)}",
+                    "${channel(top.red)},${channel(top.green)},${channel(top.blue)}",
+                    "at intensity $intensity on the ${appearance.name} canvas a " +
+                        "prominent fill's top stop is ${describe(top)} where the tint it was " +
+                        "given is ${describe(tint)}. An opaque tint carries the white " +
+                        "ttOnAccent label, so crossing it to the reduced surface is how the " +
+                        "button's background disappears in light appearance",
+                )
+            }
+        }
+    }
+
     /** [top] at [alpha] over [bottom], which is what the fill does to whatever is behind it. */
     private fun over(bottom: Color, top: Color, alpha: Float): Color = Color(
         red = top.red * alpha + bottom.red * (1f - alpha),

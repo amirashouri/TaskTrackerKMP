@@ -121,7 +121,23 @@ object ttGlass {
         object THICK : GlassThickness(0.65f)
     }
 
-    /** Computes dual-stop vertical color gradient for unbased glass surfaces. */
+    /**
+     * Computes dual-stop vertical color gradient for unbased glass surfaces.
+     *
+     * ## Why an opaque tint does not cross to [reducedSurface]
+     *
+     * [reducedSurface] is the neutral a *translucent* fill arrives at when transparency is
+     * reduced: with the glass gone there is nothing left to tint, so the surface becomes the
+     * page's own surface. An explicitly opaque [tint] is not that case — it is the control's own
+     * fill, and in this app it carries a white label (`ttOnAccent`). Crossing it to the neutral
+     * at a lower intensity turned a prominent accent button into a near-white pill with white
+     * text in light appearance, which is exactly what "the action button has no background"
+     * looked like. So the cross-fade is skipped for an opaque tint and transparency is reduced
+     * to the tint itself: still solid, still the colour the label was contrasted against.
+     *
+     * At full intensity the two branches are identical, so this only touches the range where the
+     * glass slider is lowered.
+     */
     fun fillRamp(
         tint: Color?,
         canvas: Color,
@@ -134,7 +150,7 @@ object ttGlass {
         val shipped = (tint?.alpha ?: thickness.baseAlpha).coerceIn(0f, 1f)
         val i = intensity.coerceIn(0f, 1f)
         val alpha = lerpFloat(1f, shipped, i)
-        val crossed = lerp(reducedSurface, top, i)
+        val crossed = if (tint != null && tint.alpha >= 1f) top else lerp(reducedSurface, top, i)
         return listOf(
             crossed.copy(alpha = alpha),
             lerp(crossed, canvas, FILL_FADE * i).copy(alpha = alpha),

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.width
 import kotlin.math.abs
@@ -120,6 +122,57 @@ class GlassIntensityRenderTest {
                     "${hex(measured.canvas.red)}, so it is not between the two: a see-through " +
                     "fill has to be a blend of the accent and the page behind it, and this one is " +
                     "not showing the page",
+            )
+        }
+    }
+
+    /**
+     * A prominent fill keeps the white label legible at the slider's low end.
+     *
+     * This is the light-appearance defect: a prominent accent surface carries `ttOnAccent`
+     * (white), and crossing its opaque tint to the reduced surface at low intensity turned it
+     * into a near-white slab with white text — the control looked like it had no background.
+     * The assertion is the rendered contrast between what is actually on screen and the label,
+     * not the token arithmetic, because that is the property the user reports.
+     */
+    @Test
+    fun aProminentFillStaysUnderItsWhiteLabelAtLowIntensity() = rasterising {
+        for (scheme in APPEARANCES) {
+            var reading: Color? = null
+            runComposeUiTest {
+                setContent {
+                    ttTheme(scheme, glassIntensity = LOW_INTENSITY) {
+                        Box(Modifier.fillMaxSize().background(Color.White)) {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(40.dp)
+                                    .ttGlassSurface(
+                                        shape = RectangleShape,
+                                        tint = ttAccent(),
+                                        thickness = ttGlass.GlassThickness.THICK,
+                                    )
+                                    .testTag(PROMINENT_TAG),
+                            )
+                        }
+                    }
+                }
+                waitForIdle()
+                val frame = onRoot().captureToImage().toPixelMap()
+                val root = onRoot().getBoundsInRoot()
+                val scale = frame.width.toFloat() / max(root.right.value, 1f)
+                reading = centreOf(onNodeWithTag(PROMINENT_TAG).getBoundsInRoot(), scale, frame)
+            }
+
+            val fill = requireNotNull(reading) { "no prominent fill was captured in ${scheme.name}" }
+            val ratio = contrastRatio(fill, ttOnAccent)
+            assertTrue(
+                ratio >= TEXT_CONTRAST_MINIMUM,
+                "at $LOW_INTENSITY intensity the prominent fill in ${scheme.name} appearance " +
+                    "rendered ${fill.hex()} against the white ttOnAccent label, a contrast of " +
+                    "${(ratio * 100).toInt() / 100.0}:1 — below the ${TEXT_CONTRAST_MINIMUM}:1 " +
+                    "bar. Reducing transparency must keep an opaque tint's colour, not cross it " +
+                    "to the neutral, which is how this control loses its background",
             )
         }
     }
@@ -242,6 +295,11 @@ class GlassIntensityRenderTest {
     )
 
     private companion object {
+        /** The low mark `GlassIntensityRenderTest` was reported at, used for the prominent fill. */
+        const val LOW_INTENSITY = 0.2f
+
+        const val PROMINENT_TAG = "glassIntensity.prominent"
+
         const val FULL_TAG = "glassIntensity.full"
         const val FIFTH_TAG = "glassIntensity.fifth"
         const val ZERO_TAG = "glassIntensity.zero"
