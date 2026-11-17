@@ -943,7 +943,13 @@ fun ttGlassAddButton(
     }
 }
 
-/** Compact circular glass action button with icon glyph. */
+/**
+ * Compact circular glass action button with icon glyph.
+ *
+ * [size] and [iconSize] exist for the one control that is an annotation rather than the
+ * primary action beside it — the info button in a settings row, drawn at the row's own
+ * icon-well scale instead of the 44dp a standalone action needs.
+ */
 @Composable
 fun ttGlassIconButton(
     image: ImageVector,
@@ -952,9 +958,11 @@ fun ttGlassIconButton(
     tint: Color = ttLabel(),
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    size: Dp = ttSpacing.iconButtonSize,
+    iconSize: Dp = ttIconSize.tab,
 ) {
     GlassRoundAction(
-        size = ttSpacing.iconButtonSize,
+        size = size,
         contentDescription = contentDescription,
         enabled = enabled,
         onClick = onClick,
@@ -964,7 +972,7 @@ fun ttGlassIconButton(
             image = image,
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(ttIconSize.tab),
+            modifier = Modifier.size(iconSize),
         )
     }
 }

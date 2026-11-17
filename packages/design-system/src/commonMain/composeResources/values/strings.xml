@@ -873,7 +873,17 @@
     <string name="settings_agent_stopped">Stopped</string>
     <string name="settings_agent_host_desktop">Desktop</string>
     <string name="settings_agent_host_remote">Remote / VPS</string>
-    <string name="settings_agent_empty">No machine has been paired yet.</string>
+    <!--
+      Behind the ! beside the Agent row's status: what the one-word value means for the
+      person reading it. One sentence per state, because the row has room for one.
+    -->
+    <string name="settings_agent_status_info">About agent status</string>
+    <!-- The state, then what it means: the row no longer spells the state out on its own. -->
+    <string name="settings_agent_status_info_line">%1$s — %2$s</string>
+    <string name="settings_agent_info_not_set_up">No machine is paired yet. Set one up to let the server hand tasks to your own computer.</string>
+    <string name="settings_agent_info_running">A paired machine is online and taking tasks now.</string>
+    <string name="settings_agent_info_offline">No paired machine is reachable, so new tasks wait until one reconnects.</string>
+    <string name="settings_agent_info_stopped">An administrator paused the agent. No new tasks are handed out until it is started again.</string>
     <string name="settings_agent_stop">Stop</string>
     <string name="settings_agent_start">Start</string>
     <string name="settings_agent_setup">Set up agent</string>

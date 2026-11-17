@@ -27,6 +27,7 @@ import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttIcon
+import com.tasktracker.designsystem.ttInfoButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttMonospacedDigits
@@ -54,15 +55,33 @@ internal fun SettingsSection(
     )
 }
 
-/** A compact label/value row with the leading symbol and trailing setting value. */
+/**
+ * An explanation carried by a row's value, for the settings whose state needs a sentence.
+ *
+ * One object rather than two nullable strings, because a bubble with no spoken label is a
+ * button a screen reader cannot name — the pairing is the point, so it cannot be half-given.
+ */
+internal data class SettingsRowInfo(
+    val text: String,
+    val contentDescription: String,
+)
+
+/**
+ * A compact label/value row with the leading symbol and trailing setting value.
+ *
+ * [value] is nullable because a row can carry its state in [info] instead: the agent's status
+ * is one word that needs a sentence behind it, so the row shows the `!` and the bubble does the
+ * explaining rather than setting a lone "Running" at the end of the line.
+ */
 @Composable
 internal fun SettingsIconRow(
     label: String,
-    value: String,
+    value: String? = null,
     icon: ImageVector,
     modifier: Modifier = Modifier,
     valueColor: Color = ttLabelSecondary(),
     iconTint: Color = ttAccent(),
+    info: SettingsRowInfo? = null,
 ) {
     Row(
         modifier = modifier
@@ -80,13 +99,25 @@ internal fun SettingsIconRow(
             SettingsIconWell(icon = icon, tint = iconTint)
             ttText(text = label, style = ttTypography.body, color = ttLabel())
         }
-        ttText(
-            text = value,
-            style = ttTypography.subheadline.ttMonospacedDigits(),
-            color = valueColor,
-            textAlign = TextAlign.End,
-            maxLines = 1,
-        )
+        if (value != null || info != null) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (value != null) {
+                    ttText(
+                        text = value,
+                        style = ttTypography.subheadline.ttMonospacedDigits(),
+                        color = valueColor,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                    )
+                }
+                if (info != null) {
+                    ttInfoButton(text = info.text, contentDescription = info.contentDescription)
+                }
+            }
+        }
     }
 }
 

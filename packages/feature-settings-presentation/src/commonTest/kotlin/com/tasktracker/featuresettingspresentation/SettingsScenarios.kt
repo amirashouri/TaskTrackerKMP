@@ -57,9 +57,14 @@ import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.UserStatus
 import com.tasktracker.resources.Res
+import com.tasktracker.designsystem.TTInfoButtonTag
+import com.tasktracker.designsystem.TTInfoPopupTag
 import com.tasktracker.resources.settings_activity_idle
 import com.tasktracker.resources.settings_activity_syncing
 import com.tasktracker.resources.settings_activity_waiting
+import com.tasktracker.resources.settings_agent_info_running
+import com.tasktracker.resources.settings_agent_running
+import com.tasktracker.resources.settings_agent_status_info_line
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
 import com.tasktracker.resources.settings_outcome_offline
@@ -583,6 +588,37 @@ object SettingsScenarios {
 
         assertEquals(1, membersTaps, "the Manage Members row must dispatch its own command")
         assertEquals(1, projectsTaps, "the Manage Projects row must dispatch its own command")
+    }
+
+    /**
+     * The agent's one-word status is explained by the ! beside it, in a bubble on the row
+     * itself rather than a paragraph that would take over the list.
+     */
+    val theAgentStatusExplainsItselfBehindTheInfoButton: suspend ComposeUiTest.() -> Unit = {
+        val machine = scenarioAgentMachine()
+        screenShowing(
+            isAdmin = false,
+            agentOverview = AgentOverview(
+                machines = listOf(machine),
+                observedAt = Instant.parse("2026-11-03T12:00:30Z"),
+            ),
+        )
+
+        onNodeWithTag(SettingsAgentRowTag).performScrollTo().assertIsDisplayed()
+        onNodeWithTag(TTInfoPopupTag).assertDoesNotExist()
+        // The row no longer spells the state out beside the !; the bubble carries it.
+        onNodeWithText(getString(Res.string.settings_agent_running)).assertDoesNotExist()
+
+        onNodeWithTag(TTInfoButtonTag).performClick()
+
+        onNodeWithTag(TTInfoPopupTag).assertIsDisplayed()
+        onNodeWithText(
+            getString(
+                Res.string.settings_agent_status_info_line,
+                getString(Res.string.settings_agent_running),
+                getString(Res.string.settings_agent_info_running),
+            ),
+        ).assertIsDisplayed()
     }
 
     /**

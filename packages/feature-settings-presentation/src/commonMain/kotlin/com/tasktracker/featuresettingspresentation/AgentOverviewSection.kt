@@ -54,11 +54,14 @@ import com.tasktracker.resources.common_done
 import com.tasktracker.resources.copied_to_clipboard
 import com.tasktracker.resources.settings_agent_copy_code
 import com.tasktracker.resources.settings_agent_copy_command
-import com.tasktracker.resources.settings_agent_empty
 import com.tasktracker.resources.settings_agent_empty_state
 import com.tasktracker.resources.settings_agent_failure
 import com.tasktracker.resources.settings_agent_host_desktop
 import com.tasktracker.resources.settings_agent_host_remote
+import com.tasktracker.resources.settings_agent_info_not_set_up
+import com.tasktracker.resources.settings_agent_info_offline
+import com.tasktracker.resources.settings_agent_info_running
+import com.tasktracker.resources.settings_agent_info_stopped
 import com.tasktracker.resources.settings_agent_offline
 import com.tasktracker.resources.settings_agent_running
 import com.tasktracker.resources.settings_agent_section
@@ -103,6 +106,8 @@ import com.tasktracker.resources.settings_agent_setup_workspace_hint
 import com.tasktracker.resources.settings_agent_setup_workspace_label
 import com.tasktracker.resources.settings_agent_start
 import com.tasktracker.resources.settings_agent_stop
+import com.tasktracker.resources.settings_agent_status_info
+import com.tasktracker.resources.settings_agent_status_info_line
 import com.tasktracker.resources.settings_agent_stopped
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -138,8 +143,17 @@ internal fun AgentOverviewSection(
     SettingsSection {
         SettingsIconRow(
             label = stringResource(Res.string.settings_agent_section),
-            value = agentStateLabel(overview.state),
             icon = ttSettingsIcons.sync,
+            // No trailing status word: the state needs a sentence, and the bubble behind the
+            // ! carries both. A lone "Running" there said the least of the three.
+            info = SettingsRowInfo(
+                text = stringResource(
+                    Res.string.settings_agent_status_info_line,
+                    agentStateLabel(overview.state),
+                    agentStateInfo(overview.state),
+                ),
+                contentDescription = stringResource(Res.string.settings_agent_status_info),
+            ),
             modifier = modifier.testTag(SettingsAgentRowTag),
         )
 
@@ -174,16 +188,6 @@ internal fun AgentOverviewSection(
                     )
                 }
             }
-        }
-
-        if (overview.liveMachines.isEmpty()) {
-            SettingsDivider()
-            ttText(
-                text = stringResource(Res.string.settings_agent_empty),
-                style = ttTypography.footnote,
-                color = ttLabelSecondary(),
-                modifier = Modifier.testTag(SettingsAgentEmptyTag),
-            )
         }
 
         // Pairing is a server operation — it mints the machine's credential — so
@@ -721,12 +725,22 @@ private fun agentStateLabel(state: AgentState): String = stringResource(
     },
 )
 
+/** What this state means, behind the ! beside the row's value. */
+@Composable
+private fun agentStateInfo(state: AgentState): String = stringResource(
+    when (state) {
+        AgentState.NotConfigured -> Res.string.settings_agent_info_not_set_up
+        AgentState.Running -> Res.string.settings_agent_info_running
+        AgentState.Offline -> Res.string.settings_agent_info_offline
+        AgentState.Stopped -> Res.string.settings_agent_info_stopped
+    },
+)
+
 /** The banner's sentence, shown by the screen when a stop/start is refused. */
 @Composable
 internal fun agentFailureLabel(): String = stringResource(Res.string.settings_agent_failure)
 
 const val SettingsAgentRowTag = "settings.agent.row"
-const val SettingsAgentEmptyTag = "settings.agent.empty"
 const val SettingsAgentSetupRowTag = "settings.agent.setup"
 const val SettingsAgentSetupSheetTag = "settings.agent.setup.sheet"
 const val SettingsAgentSetupProjectTagPrefix = "settings.agent.setup.project."

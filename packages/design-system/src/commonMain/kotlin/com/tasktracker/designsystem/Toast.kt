@@ -25,10 +25,15 @@ fun ttToast(
         shape = RoundedCornerShape(ttRadius.banner),
         modifier = modifier
             .testTag(TTToastTag)
-            .semantics { liveRegion = LiveRegionMode.Polite }
-            .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
+            .semantics { liveRegion = LiveRegionMode.Polite },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // Padding belongs to the content, not to the surface's modifier: chained before
+        // `ttGlassSurface` it shrank the glass to the text and left the sentence flush
+        // against the rim.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.lg),
+        ) {
             ttText(
                 text = message,
                 style = ttTypography.footnote,

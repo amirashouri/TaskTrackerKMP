@@ -120,6 +120,10 @@ abstract class SettingsViewScenarios {
         runComposeUiTest(block = SettingsScenarios.anAdminSeesTheManagementEntriesAndTheyDispatch)
 
     @Test
+    fun theAgentStatusExplainsItselfBehindTheInfoButton() =
+        runComposeUiTest(block = SettingsScenarios.theAgentStatusExplainsItselfBehindTheInfoButton)
+
+    @Test
     fun theAgentStatusIsVisibleToAMemberWithoutCommands() =
         runComposeUiTest(block = SettingsScenarios.theAgentStatusIsVisibleToAMemberWithoutCommands)
 

@@ -498,6 +498,19 @@ object ttActionIcons {
         close()
     }
 
+    /**
+     * A bare exclamation mark, for the info button that explains a row's value.
+     *
+     * Drawn without a surrounding disc because the glass button already supplies the circle:
+     * a ring inside a ring would read as two controls nested in each other. The stem is the same
+     * 3-unit weight as [add] and [remove], so it sits in the action family rather than looking
+     * like a warning glyph borrowed from somewhere else.
+     */
+    val info: ImageVector = icon("Info") {
+        solidRoundRect(10.5f, 4.0f, 13.5f, 15.0f, radius = 1.5f)
+        solidRoundRect(10.5f, 17.0f, 13.5f, 20.0f, radius = 1.5f)
+    }
+
     /** Opposing outward arrows representing expanding a sheet to full screen. */
     val expand: ImageVector = icon("Expand") {
         moveTo(14.0f, 4.0f)
