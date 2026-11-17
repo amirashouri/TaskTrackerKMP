@@ -225,6 +225,8 @@ internal fun ProjectsEmptyState(
     modifier: Modifier = Modifier,
     image: ImageVector? = null,
     action: (@Composable () -> Unit)? = null,
+    /** Tag for the title alone, for callers whose empty state is one of several on screen. */
+    titleModifier: Modifier = Modifier,
 ) {
     Column(
         modifier = modifier
@@ -257,6 +259,7 @@ internal fun ProjectsEmptyState(
             style = ttTypography.titleSmall,
             color = ttLabel(),
             textAlign = TextAlign.Center,
+            modifier = titleModifier,
         )
         // ttBodyLabel(), not ttLabelSecondary(): BodyLabelContrastTest measures this copy
         // against the canvas, and it is the only thing an empty screen has to say.

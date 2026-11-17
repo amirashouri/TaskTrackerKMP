@@ -58,6 +58,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.board_empty_column
+import com.tasktracker.resources.board_empty_column_body
 import com.tasktracker.resources.board_sort_by_date
 import com.tasktracker.resources.board_sort_by_priority
 import org.jetbrains.compose.resources.stringResource
@@ -133,11 +134,17 @@ fun BoardColumnView(
             verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
             if (column.isEmpty) {
-                ttText(
-                    text = stringResource(Res.string.board_empty_column),
-                    style = ttTypography.footnote,
-                    color = ttLabelSecondary(),
-                    modifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),
+                // The same empty state the backlog uses, so an empty lane reads as a considered
+                // state rather than a stray caption at the top of the glass. No badge: there is
+                // no per-column glyph, and four or five of them on a fresh board would be the
+                // loudest thing on the screen.
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.board_empty_column),
+                    body = stringResource(Res.string.board_empty_column_body),
+                    modifier = Modifier.fillMaxWidth(),
+                    // The lane keeps its own tag on the sentence it is identified by, so the
+                    // four empty lanes stay addressable individually.
+                    titleModifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),
                 )
             } else {
                 sortedItems.forEach { item ->
