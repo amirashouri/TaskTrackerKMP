@@ -49,6 +49,7 @@ import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.BoardColumn
@@ -58,7 +59,6 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.board_empty_column
-import com.tasktracker.resources.board_empty_column_body
 import com.tasktracker.resources.board_sort_by_date
 import com.tasktracker.resources.board_sort_by_priority
 import org.jetbrains.compose.resources.stringResource
@@ -135,13 +135,15 @@ fun BoardColumnView(
         ) {
             if (column.isEmpty) {
                 // The same empty state the backlog uses, so an empty lane reads as a considered
-                // state rather than a stray caption at the top of the glass. No badge: there is
-                // no per-column glyph, and four or five of them on a fresh board would be the
-                // loudest thing on the screen.
+                // state rather than a stray caption at the top of the glass. One sentence and the
+                // board's glyph, not a heading over a paragraph: a lane is 300dp wide, so a
+                // second line wrapped under every empty lane and four of them read as one block
+                // of prose.
                 ProjectsEmptyState(
                     title = stringResource(Res.string.board_empty_column),
-                    body = stringResource(Res.string.board_empty_column_body),
                     modifier = Modifier.fillMaxWidth(),
+                    image = ttTabIcons.board,
+                    titleStyle = ttTypography.body,
                     // The lane keeps its own tag on the sentence it is identified by, so the
                     // four empty lanes stay addressable individually.
                     titleModifier = Modifier.testTag(BoardColumnEmptyTag(column.status)),

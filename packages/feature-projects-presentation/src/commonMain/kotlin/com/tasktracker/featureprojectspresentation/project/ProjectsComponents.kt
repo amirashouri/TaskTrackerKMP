@@ -29,6 +29,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -217,16 +218,21 @@ internal fun ProjectsTextField(
  * `onClick`, so the caller keeps the wording of its own screen and the component stays about
  * layout; nullable, because a filtered list ("no matching tasks") has no single action to
  * offer.
+ *
+ * [body] is nullable because a narrow empty region (a board lane, 300dp wide) has room for one
+ * sentence and a glyph, not a heading and a paragraph.
  */
 @Composable
 internal fun ProjectsEmptyState(
     title: String,
-    body: String,
+    body: String? = null,
     modifier: Modifier = Modifier,
     image: ImageVector? = null,
     action: (@Composable () -> Unit)? = null,
     /** Tag for the title alone, for callers whose empty state is one of several on screen. */
     titleModifier: Modifier = Modifier,
+    /** Style of [title]; a caller with a single line can drop the semibold heading weight. */
+    titleStyle: TextStyle = ttTypography.titleSmall,
 ) {
     Column(
         modifier = modifier
@@ -256,19 +262,21 @@ internal fun ProjectsEmptyState(
         }
         ttText(
             text = title,
-            style = ttTypography.titleSmall,
+            style = titleStyle,
             color = ttLabel(),
             textAlign = TextAlign.Center,
             modifier = titleModifier,
         )
-        // ttBodyLabel(), not ttLabelSecondary(): BodyLabelContrastTest measures this copy
-        // against the canvas, and it is the only thing an empty screen has to say.
-        ttText(
-            text = body,
-            style = ttTypography.subheadline,
-            color = ttBodyLabel(),
-            textAlign = TextAlign.Center,
-        )
+        body?.let { bodyText ->
+            // ttBodyLabel(), not ttLabelSecondary(): BodyLabelContrastTest measures this copy
+            // against the canvas, and it is the only thing an empty screen has to say.
+            ttText(
+                text = bodyText,
+                style = ttTypography.subheadline,
+                color = ttBodyLabel(),
+                textAlign = TextAlign.Center,
+            )
+        }
         action?.let { button ->
             Box(modifier = Modifier.padding(top = ttSpacing.md)) { button() }
         }
