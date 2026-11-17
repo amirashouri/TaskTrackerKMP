@@ -101,7 +101,14 @@ fun TTBottomSheetScaffold(
                                 // this window needs 776dp for a full form, so the 760dp
                                 // cap makes it scroll 16dp: the measured centre reads
                                 // low and the action row lands below the viewport.
-                                .padding(horizontal = 24.dp, vertical = 56.dp)
+                                //
+                                // 32dp above and below, not 56: the clearance is split with
+                                // the card's own inner inset (see the content column below),
+                                // so the form sits exactly where it always did — same total
+                                // 56dp — while the glass card grows around it and the title
+                                // and action row are read against the card's edges rather
+                                // than against its rim.
+                                .padding(horizontal = 24.dp, vertical = 32.dp)
                         } else {
                             Modifier
                                 .fillMaxWidth()
@@ -138,14 +145,18 @@ fun TTBottomSheetScaffold(
                     .then(if (scrollable) Modifier.verticalScroll(scrollState) else Modifier),
             ) {
                 Column(
-                    // A window's form fills the scroll viewport, so its own vertical inset
-                    // would be the one part scrolled out of view, leaving the tagged form
-                    // that far below the window's centre. The window's 56dp outer padding
-                    // supplies the clearance instead; bottom sheets keep their inset.
-                    modifier = Modifier.padding(
-                        horizontal = 24.dp,
-                        vertical = if (isWindow) 0.dp else 24.dp,
-                    ),
+                    // The same inset for both presentations. A window used to get no vertical
+                    // one, on the argument that its 56dp outer padding already supplied the
+                    // clearance — but that padding is outside the glass card, so a window's
+                    // title and its last row sat directly on the card's edges, and the arrow
+                    // of a scrollbar ran into them. The inset is inside the card because that
+                    // is the edge the content is read against.
+                    //
+                    // The card grows by these two insets, and the window's outer padding gives
+                    // them back (56dp to 32dp), so a form's position and its height budget are
+                    // unchanged and `aWideShellCentresTheSheetLikeAWindow` still measures a
+                    // centred window.
+                    modifier = Modifier.padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
                     content = content,
                 )

@@ -24,8 +24,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import com.tasktracker.designsystem.LocalSheetPresentation
-import com.tasktracker.designsystem.SheetPresentation
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -114,20 +112,12 @@ private fun BacklogSortContent(
     onOrderChange: (BacklogSortOrder) -> Unit,
     onDismissRequest: () -> Unit,
 ) {
-    // A bottom sheet's content already sits 24dp inside the glass, but a window's clearance is
-    // outside the card instead, so its title and Done row would sit on the card's edge — the one
-    // arrangement where the sheet reads as clipped rather than as a form. Add what each
-    // presentation is short of: a full inset in the window, a little breathing room in the
-    // sheet above the scaffold's own padding.
-    val verticalInset = if (LocalSheetPresentation.current == SheetPresentation.Window) {
-        ttSpacing.xxxl
-    } else {
-        ttSpacing.md
-    }
+    // No inset of its own: the scaffold puts 24dp between the card's edges and this content in
+    // both presentations, so the title and the Done row are read against the glass rather than
+    // against the card's rim.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = verticalInset)
             .testTag(BacklogSortSheetTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
