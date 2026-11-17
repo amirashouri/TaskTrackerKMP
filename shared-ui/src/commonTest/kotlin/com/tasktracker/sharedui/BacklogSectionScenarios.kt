@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.BacklogSortBasis
 import com.tasktracker.domain.Priority
@@ -29,6 +30,7 @@ import com.tasktracker.featureprojectspresentation.BacklogSortControlsTag
 import com.tasktracker.featureprojectspresentation.BacklogSortCreatedTag
 import com.tasktracker.featureprojectspresentation.BacklogSortDirectionTag
 import com.tasktracker.featureprojectspresentation.BacklogSortDoneTag
+import com.tasktracker.featureprojectspresentation.BacklogSortKeyGlyphTileTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPositionTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BacklogSortSheetTag
@@ -53,6 +55,7 @@ import com.tasktracker.resources.backlog_sort_label_pair
 import com.tasktracker.resources.backlog_sort_label_priority_asc
 import com.tasktracker.resources.backlog_sort_label_priority_desc
 import org.jetbrains.compose.resources.getString
+import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -478,6 +481,18 @@ object BacklogSectionScenarios {
         onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
         onNodeWithTag(BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = true))
             .assertIsSelected()
+        // On/off is a shape as well as a tint: the active key carries a filled glyph tile,
+        // the inactive one does not. A palette that renders the two inks alike cannot erase it.
+        assertTrue(
+            onAllNodesWithTag(BacklogSortKeyGlyphTileTag(BacklogSortBasis.Priority), useUnmergedTree = true)
+                .fetchSemanticsNodes().size == 1,
+            "the active priority key has no glyph tile; its on state is only a tint again",
+        )
+        assertTrue(
+            onAllNodesWithTag(BacklogSortKeyGlyphTileTag(BacklogSortBasis.CreatedAt), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty(),
+            "the inactive created key carries a glyph tile; it reads as active",
+        )
 
         // A newly chosen key refines the order instead of replacing it: it arrives second, so
         // the list keeps reading by priority.
@@ -492,6 +507,25 @@ object BacklogSectionScenarios {
             .assertTextEquals(getString(Res.string.backlog_sort_position_first))
         onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.CreatedAt))
             .assertTextEquals(getString(Res.string.backlog_sort_position_then))
+        // The swap control shares the direction chips' tap grid. The old chip was 20dp tall
+        // inside a 44dp row: the word read as a label, and the target was half its neighbour.
+        val positionBounds = onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.Priority))
+            .fetchSemanticsNode().boundsInRoot
+        val directionBounds = onNodeWithTag(
+            BacklogSortDirectionTag(BacklogSortBasis.Priority, descending = true),
+        ).fetchSemanticsNode().boundsInRoot
+        val minTargetPx = with(density) { ttSpacing.iconButtonSize.toPx() }
+        assertTrue(
+            positionBounds.height >= minTargetPx && positionBounds.width >= minTargetPx * 1.5f,
+            "the First/Then chip measured ${positionBounds.height} x ${positionBounds.width}px; " +
+                "it needs at least ${minTargetPx}px of height and 1.5 times that " +
+                "in width to be a target beside the named direction chips",
+        )
+        assertTrue(
+            abs(positionBounds.height - directionBounds.height) <= 1f,
+            "the First/Then chip is ${positionBounds.height}px tall beside a " +
+                "${directionBounds.height}px direction chip; controls in one row must share a grid",
+        )
         onNodeWithTag(BacklogSortPositionTag(BacklogSortBasis.CreatedAt)).performClick()
         waitForIdle()
         onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(newest, priority))
@@ -508,6 +542,11 @@ object BacklogSectionScenarios {
         onNodeWithTag(BacklogSortCreatedTag).performClick()
         waitForIdle()
         onNodeWithTag(BacklogSortCreatedTag).assertIsNotSelected()
+        assertTrue(
+            onAllNodesWithTag(BacklogSortKeyGlyphTileTag(BacklogSortBasis.CreatedAt), useUnmergedTree = true)
+                .fetchSemanticsNodes().isEmpty(),
+            "switching a key off left its glyph tile behind, so the shape still says active",
+        )
         onNodeWithTag(BacklogSortControlsTag).assertTextEquals(label(lowestPriority))
         assertFirstRowsAre(lowMiddle, mediumNew)
 

@@ -567,6 +567,35 @@ object ttActionIcons {
     }
 
     /**
+     * Two opposed arrows, for the control that swaps the two sort keys.
+     *
+     * Drawn as two closed contours on the same 24-unit grid as [sort], with the up arrow at
+     * 4.5..11.5 and the down arrow at 12.5..19.5. They deliberately do not touch: this file
+     * fills even-odd, and two arrows whose shafts crossed would cancel in the overlap and
+     * leave a hole in the middle of a 12dp glyph. Keeping them in separate columns also means
+     * the direction of each arrow stays readable when the glyph is inset in a caption-sized
+     * chip, where a single stacked double-arrow reads as a vertical line.
+     */
+    val swap: ImageVector = icon("Swap") {
+        moveTo(8.0f, 4.5f)
+        lineTo(11.5f, 8.0f)
+        lineTo(9.4f, 8.0f)
+        lineTo(9.4f, 18.0f)
+        lineTo(6.6f, 18.0f)
+        lineTo(6.6f, 8.0f)
+        lineTo(4.5f, 8.0f)
+        close()
+        moveTo(16.0f, 19.5f)
+        lineTo(12.5f, 16.0f)
+        lineTo(14.6f, 16.0f)
+        lineTo(14.6f, 6.0f)
+        lineTo(17.4f, 6.0f)
+        lineTo(17.4f, 16.0f)
+        lineTo(19.5f, 16.0f)
+        close()
+    }
+
+    /**
      * A flag on a pole, for "sort by priority".
      *
      * One contour rather than a pole plus a pennant: the two would overlap at the pole, and

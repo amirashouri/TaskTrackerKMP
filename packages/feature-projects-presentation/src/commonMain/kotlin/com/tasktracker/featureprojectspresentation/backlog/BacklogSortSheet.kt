@@ -1,11 +1,13 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -24,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -69,6 +72,12 @@ import org.jetbrains.compose.resources.stringResource
  * two directions came out as controls a user had to decode. Here each fact is its own target:
  * the card is the key's on/off, the two direction chips name both directions in words, and the
  * position chip says "First" or "Then" and swaps the two keys. Nothing is inferred from a colour.
+ *
+ * The key's on/off also has a *shape*, not just a tint: the leading glyph sits in a filled tile
+ * while the key is active and loses the tile when it is off. Two greys a theme can render close
+ * together must not be the only difference between "this key applies" and "it does not".
+ * Likewise the position chip is a full-height control with a swap glyph, not a coloured word —
+ * its tap changes the order, and the affordance has to say so without a screen reader.
  *
  * ## The rules this enforces, and the ones it drops
  *
@@ -195,12 +204,31 @@ private fun BacklogSortRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
         ) {
-            ttIcon(
-                image = sortBasisGlyph(basis),
-                contentDescription = null,
-                tint = if (isActive) ttAccent() else ttLabelSecondary(),
-                modifier = Modifier.size(ttIconSize.tab),
-            )
+            // A filled tile, not just an accent tint, marks an active key. The old row changed
+            // only the glyph's ink from secondary to accent; on the dark Classic palette those
+            // two greys are close enough that the on/off state was effectively colour-only.
+            // The tile is also a shape cue, so it survives any accent a user picks.
+            Box(
+                modifier = Modifier
+                    .size(BacklogKeyGlyphTileSize)
+                    .then(
+                        if (isActive) {
+                            Modifier
+                                .background(ttAccent(), RoundedCornerShape(ttRadius.row))
+                                .testTag(BacklogSortKeyGlyphTileTag(basis))
+                        } else {
+                            Modifier
+                        },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                ttIcon(
+                    image = sortBasisGlyph(basis),
+                    contentDescription = null,
+                    tint = if (isActive) ttOnAccent else ttLabelSecondary(),
+                    modifier = Modifier.size(ttIconSize.close),
+                )
+            }
             ttText(
                 text = stringResource(sortBasisName(basis)),
                 style = ttTypography.callout,
@@ -273,7 +301,21 @@ private fun DirectionOption(
     }
 }
 
-/** "First" / "Then": where this key sits, and the control that swaps the pair. */
+/**
+ * "First" / "Then": where this key sits, and the control that swaps the pair.
+ *
+ * A full control, not a coloured word. It was a 20dp-high caption in `ttAccent()` on an
+ * untinted glass lens — and an untinted lens takes the accent as its top fill stop, so the
+ * ink and its own backdrop were the same hue at roughly half opacity. Under the muted dark
+ * accent the word all but disappeared. It now takes the same pairing as a selected
+ * direction chip: an opaque accent fill carrying `ttOnAccent` white ink, a pairing the design
+ * system holds to 4.5:1 for every palette in both appearances. The swap glyph makes the tap
+ * visible; "First"/"Then" alone named a state while the action lived only in the
+ * content description.
+ *
+ * The height and minimum width matter as much as the ink: the two direction chips beside it
+ * are 44dp, and a 20dp target in the same row read as a label rather than something to press.
+ */
 @Composable
 private fun PositionChip(
     basis: BacklogSortBasis,
@@ -289,24 +331,42 @@ private fun PositionChip(
     )
     Box(
         modifier = Modifier
-            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+            .heightIn(min = ttSpacing.iconButtonSize)
+            .defaultMinSize(minWidth = BacklogPositionChipMinWidth)
+            .ttGlassSurface(
+                shape = RoundedCornerShape(ttRadius.control),
+                tint = ttAccent(),
+            )
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.xxs)
+            .padding(horizontal = ttSpacing.md)
             .testTag(BacklogSortPositionTag(basis))
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        ttText(
-            text = stringResource(
-                if (isLeading) {
-                    Res.string.backlog_sort_position_first
-                } else {
-                    Res.string.backlog_sort_position_then
-                },
-            ),
-            style = ttTypography.captionEmphasised,
-            color = ttAccent(),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            ttText(
+                text = stringResource(
+                    if (isLeading) {
+                        Res.string.backlog_sort_position_first
+                    } else {
+                        Res.string.backlog_sort_position_then
+                    },
+                ),
+                style = ttTypography.captionEmphasised,
+                color = ttOnAccent,
+                maxLines = 1,
+                modifier = Modifier.testTag(BacklogSortPositionLabelTag(basis)),
+            )
+            ttIcon(
+                image = ttActionIcons.swap,
+                contentDescription = null,
+                tint = ttOnAccent,
+                modifier = Modifier.size(ttIconSize.close),
+            )
+        }
     }
 }
 
@@ -389,3 +449,17 @@ fun BacklogSortDirectionTag(basis: BacklogSortBasis, descending: Boolean): Strin
 /** The "First"/"Then" chip of one key's row. */
 fun BacklogSortPositionTag(basis: BacklogSortBasis): String =
     "backlog.sort.position.${basis.name.lowercase()}"
+
+/** The chip's label, so a rendered-ink test can sample it without guessing where the glyphs are. */
+fun BacklogSortPositionLabelTag(basis: BacklogSortBasis): String =
+    "backlog.sort.position.label.${basis.name.lowercase()}"
+
+/** Present only while the key is active: the shape that carries on/off besides the tint. */
+fun BacklogSortKeyGlyphTileTag(basis: BacklogSortBasis): String =
+    "backlog.sort.key.tile.${basis.name.lowercase()}"
+
+/** The position chip shares the direction chips' 44dp height, and is wide enough for word + glyph. */
+private val BacklogPositionChipMinWidth = 72.dp
+
+/** The filled tile behind an active key's glyph. 24dp, so a 12dp glyph has a clear rim. */
+private val BacklogKeyGlyphTileSize = 24.dp
