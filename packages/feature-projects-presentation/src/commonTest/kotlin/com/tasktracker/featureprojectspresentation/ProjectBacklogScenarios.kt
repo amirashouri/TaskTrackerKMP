@@ -246,6 +246,71 @@ object ProjectBacklogScenarios {
     }
 
     /**
+     * The filter row and the search field are the same control width as the section picker, and
+     * the field sits below the sort row rather than above the picker.
+     *
+     * ## The defect this exists for
+     *
+     * The picker is capped at `ttSpacing.pickerMaxWidth` so a desktop does not stretch three
+     * labels into a bar across the page; the sort row and the field below it were plain
+     * `fillMaxWidth`, so the header stacked a capped control, a full-page band and a full-page
+     * field. On a wide window that is three different widths on three consecutive rows, which is
+     * what "does not look nice on a desktop" looked like. The cap is the picker's own sizing
+     * system, so all three now share it.
+     *
+     * The order is asserted as geometry, not as source order: the field is the filter for the
+     * list, and it belongs after the order controls, not between the add action and the picker.
+     * The equality of widths is what carries across hosts — a phone window is under the cap, so
+     * every control fills it and the assertion still holds there.
+     */
+    val theSortAndSearchRowsShareThePickersWidth: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {})
+        waitForIdle()
+
+        val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val sort = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            abs(sort.width - picker.width) <= EDGE_TOLERANCE_PX,
+            "the sort row is ${sort.width}px wide under a ${picker.width}px picker, so the " +
+                "header stacks two different control widths: sort=$sort picker=$picker",
+        )
+        assertTrue(
+            abs(sort.left - picker.left) <= EDGE_TOLERANCE_PX,
+            "the sort row starts at ${sort.left}px and the picker at ${picker.left}px, so the " +
+                "two controls do not share a column: sort=$sort picker=$picker",
+        )
+        assertTrue(
+            sort.top >= picker.bottom - EDGE_TOLERANCE_PX,
+            "the sort row (${sort.top}..${sort.bottom}) is drawn above or through the section " +
+                "picker (${picker.top}..${picker.bottom}) instead of below it",
+        )
+
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+
+        val search = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            abs(search.width - picker.width) <= EDGE_TOLERANCE_PX,
+            "the search field is ${search.width}px wide under a ${picker.width}px picker, so " +
+                "it is a full-page band rather than the header's control width: " +
+                "search=$search picker=$picker",
+        )
+        assertTrue(
+            abs(search.left - picker.left) <= EDGE_TOLERANCE_PX,
+            "the search field starts at ${search.left}px and the picker at ${picker.left}px, " +
+                "so they do not share a column: search=$search picker=$picker",
+        )
+        assertTrue(
+            search.top >= sort.bottom - EDGE_TOLERANCE_PX,
+            "the search field (${search.top}..${search.bottom}) is drawn above the sort row " +
+                "(${sort.top}..${sort.bottom}) instead of below it, so the field sits between " +
+                "the add action and the section picker again",
+        )
+    }
+
+    /**
      * Copying a row raises the confirmation, and it leaves on its own.
      *
      * The clock is stopped for the click so the two states can both be observed: with

@@ -75,6 +75,7 @@ fun BacklogSortControls(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .testTag(BacklogSortControlsTag)
             .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
             .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xs),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -204,6 +205,7 @@ private fun SortButton(
     }
 }
 
+const val BacklogSortControlsTag = "backlog.sort.controls"
 const val BacklogSortLabelTag = "backlog.sort.label"
 const val BacklogSortPriorityTag = "backlog.sort.priority"
 const val BacklogSortCreatedTag = "backlog.sort.created"

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -349,19 +350,6 @@ fun ProjectBacklogScreen(
                             )
                         }
                     }
-                    // Inside the measured column, so the list's top inset grows with the field and
-                    // the first row still starts below the header rather than behind it. The reveal
-                    // is the reason the inset is measured at all: it changes while the field unfolds.
-                    SearchReveal(visible = searchOpen) {
-                        ttSearchField(
-                            value = query,
-                            onValueChange = { query = it },
-                            hint = stringResource(Res.string.work_item_search_placeholder),
-                            modifier = Modifier.fillMaxWidth().testTag(ProjectBacklogSearchFieldTag),
-                            fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
-                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                        )
-                    }
                     errorMessage?.let { message ->
                         ttBanner(message = message, onDismiss = onDismissError)
                     }
@@ -396,7 +384,28 @@ fun ProjectBacklogScreen(
                                 currentSortOrder = next
                                 onSortOrderChanged(next)
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            // The picker above is capped at `pickerMaxWidth`; the filter row and the
+                            // field below it take the same cap so the header is one column of
+                            // controls on a desktop instead of three widths stacked on each other.
+                            modifier = Modifier.widthIn(max = ttSpacing.pickerMaxWidth),
+                        )
+                    }
+                    // Inside the measured column, so the list's top inset grows with the field and
+                    // the first row still starts below the header rather than behind it. The reveal
+                    // is the reason the inset is measured at all: it changes while the field unfolds.
+                    // Below the sort row, not above the section picker: the field is a filter for
+                    // the list, and the order of the header is what you are looking at, then how it
+                    // is ordered, then how it is narrowed.
+                    SearchReveal(visible = searchOpen) {
+                        ttSearchField(
+                            value = query,
+                            onValueChange = { query = it },
+                            hint = stringResource(Res.string.work_item_search_placeholder),
+                            modifier = Modifier
+                                .widthIn(max = ttSpacing.pickerMaxWidth)
+                                .testTag(ProjectBacklogSearchFieldTag),
+                            fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                         )
                     }
                 }

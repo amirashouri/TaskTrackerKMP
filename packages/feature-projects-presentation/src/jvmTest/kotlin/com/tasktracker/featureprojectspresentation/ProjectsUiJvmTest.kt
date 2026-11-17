@@ -190,6 +190,11 @@ class ProjectsUiJvmTest {
     fun theSectionPickerSharesTheHeadersLeadingEdge() =
         runComposeUiTest(block = ProjectBacklogScenarios.theSectionPickerSharesTheHeadersLeadingEdge)
 
+    /** The sort row and the field share the picker's width, and the field is below the sort. */
+    @Test
+    fun theSortAndSearchRowsShareThePickersWidth() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theSortAndSearchRowsShareThePickersWidth)
+
     /** One board column: the resolver boards into it on the tap, with no picker. */
     @Test
     fun puttingOnBoardWithASingleColumnBoardsDirectly() =
