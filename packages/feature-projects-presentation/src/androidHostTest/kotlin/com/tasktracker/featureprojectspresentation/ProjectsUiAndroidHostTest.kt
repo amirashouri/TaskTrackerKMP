@@ -582,4 +582,14 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun closingTheBacklogSearchClearsTheQuery() = runComposeUiTest(block = WorkItemSearchScenarios.closingTheBacklogSearchClearsTheQuery)
+
+    /** A wide header puts the sprint picker between the project selector and the add action. */
+    @Test
+    fun theWideSprintHeaderPutsThePickerBetweenTheSelectorAndTheAction() =
+        runComposeUiTest(block = SprintListScenarios.theWideHeaderPutsThePickerBetweenTheSelectorAndTheAction)
+
+    /** A compact header keeps the sprint picker on its own row under the actions. */
+    @Test
+    fun theCompactSprintHeaderKeepsThePickerBelowTheActions() =
+        runComposeUiTest(block = SprintListScenarios.theCompactHeaderKeepsThePickerBelowTheActions)
 }

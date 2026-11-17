@@ -2,9 +2,11 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -18,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -45,6 +48,10 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Screen displaying project sprints segmented into Active (In-Progress, Scheduled, Finished) and Archived lists.
+ *
+ * On a wide window the Active/Archive picker shares the header's first row, between the project
+ * switcher and the add action — the same arrangement as the backlog's section picker — and falls
+ * back to its own row below the actions when the header is too narrow to hold both.
  */
 @Composable
 fun SprintListScreen(
@@ -64,108 +71,148 @@ fun SprintListScreen(
     onSelectProject: ((ProjectID) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    // Hoisted above the measured header so the picker can live in either arrangement without
+    // its selection being reconstructed when the window crosses the wide threshold.
+    var section by remember { mutableStateOf(SprintSection.Active) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .testTag(SprintListScreenTag),
     ) {
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = ttSpacing.xxl)
                 .padding(top = ttSpacing.screenGutterLarge),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-            ) {
-                onOpenSwitcher?.let { openSwitcher ->
-                    ProjectSwitcherButton(
-                        project = project,
-                        onClick = openSwitcher,
-                        modifier = Modifier.weight(1f),
-                        projects = projects,
-                        onSelectProject = onSelectProject,
-                    )
-                }
-                ttGlassIconButton(
-                    image = ttActionIcons.add,
-                    contentDescription = stringResource(Res.string.sprint_list_new),
-                    onClick = onNewSprint,
-                    modifier = Modifier.testTag(SprintListNewTag),
+            // The same rule as the backlog header: a wide window puts the section picker on the
+            // selector's row, between the project switcher and the add action. Below this width
+            // there is not enough room for the picker and the action without squeezing the project
+            // name, so the header keeps its stacked phone arrangement.
+            val wideHeader = maxWidth >= SprintHeaderWideMinimumWidth
+            val sectionPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
+                TTGlassSegmentedPicker(
+                    options = listOf(SprintSection.Active, SprintSection.Archived),
+                    selection = section,
+                    onSelect = { section = it },
+                    modifier = pickerModifier.testTag(SprintListSectionsTag),
+                    title = { option ->
+                        when (option) {
+                            SprintSection.Active -> "Active"
+                            SprintSection.Archived -> "Archive"
+                        }
+                    },
                 )
             }
-            errorMessage?.let { message ->
-                ttBanner(message = message, onDismiss = onDismissError)
-            }
-            var section by remember { mutableStateOf(SprintSection.Active) }
-            TTGlassSegmentedPicker(
-                options = listOf(SprintSection.Active, SprintSection.Archived),
-                selection = section,
-                onSelect = { section = it },
-                title = { option ->
-                    when (option) {
-                        SprintSection.Active -> "Active"
-                        SprintSection.Archived -> "Archive"
-                    }
-                },
-            )
-            when (section) {
-                // null represents initial load in flight; true triggers empty state
-                SprintSection.Active -> if (activeIsEmpty == true) {
-                    ProjectsEmptyState(
-                        title = stringResource(Res.string.sprint_list_empty_title),
-                        body = stringResource(Res.string.sprint_list_empty_body),
-                        image = ttTabIcons.sprints,
-                        action = {
-                            ttGlassButton(
-                                label = stringResource(Res.string.sprint_list_new),
-                                onClick = onNewSprint,
-                                style = TTGlassButtonStyle(prominent = true),
-                            )
-                        },
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-                    ) {
-                        InProgressSection(
-                            rows = inProgressRows,
-                            onOpen = onOpen,
-                        )
-                        ScheduledSection(
-                            rows = scheduledRows,
-                            onOpen = onOpen,
-                        )
-                        FinishedSection(
-                            rows = finishedRows,
-                            onOpen = onOpen,
-                        )
-                    }
-                }
 
-                SprintSection.Archived -> if (archivedIsEmpty == true) {
-                    ProjectsEmptyState(
-                        title = stringResource(Res.string.sprint_list_empty_title),
-                        body = stringResource(Res.string.sprint_list_empty_body),
-                        image = ttTabIcons.sprints,
-                        action = {
-                            ttGlassButton(
-                                label = stringResource(Res.string.sprint_list_new),
-                                onClick = onNewSprint,
-                                style = TTGlassButtonStyle(prominent = true),
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+            ) {
+                // One row whether or not there is a switcher to fill its left side: the + keeps
+                // the trailing edge it has always had.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    if (onOpenSwitcher != null) {
+                        ProjectSwitcherButton(
+                            project = project,
+                            onClick = onOpenSwitcher,
+                            // On a wide header the switcher wraps its own content and the
+                            // picker's weighted box takes the rest: weighting the switcher
+                            // instead would leave its unused share as a gap *before* the box,
+                            // so the picker would centre in the wrong space. On a compact
+                            // header it still fills the row.
+                            modifier = if (wideHeader) Modifier else Modifier.weight(1f),
+                            projects = projects,
+                            onSelectProject = onSelectProject,
+                        )
+                    } else {
+                        Spacer(if (wideHeader) Modifier else Modifier.weight(1f))
+                    }
+                    if (wideHeader) {
+                        // Centred in the gap between the selector and the add action: the box
+                        // spans exactly that gap, so centring the capped picker inside it leaves
+                        // equal space at either end.
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            sectionPicker(Modifier)
+                        }
+                    }
+                    ttGlassIconButton(
+                        image = ttActionIcons.add,
+                        contentDescription = stringResource(Res.string.sprint_list_new),
+                        onClick = onNewSprint,
+                        modifier = Modifier.testTag(SprintListNewTag),
+                    )
+                }
+                errorMessage?.let { message ->
+                    ttBanner(message = message, onDismiss = onDismissError)
+                }
+                // Compact header: the picker keeps its own row under the actions.
+                if (!wideHeader) {
+                    sectionPicker(Modifier)
+                }
+                when (section) {
+                    // null represents initial load in flight; true triggers empty state
+                    SprintSection.Active -> if (activeIsEmpty == true) {
+                        ProjectsEmptyState(
+                            title = stringResource(Res.string.sprint_list_empty_title),
+                            body = stringResource(Res.string.sprint_list_empty_body),
+                            image = ttTabIcons.sprints,
+                            action = {
+                                ttGlassButton(
+                                    label = stringResource(Res.string.sprint_list_new),
+                                    onClick = onNewSprint,
+                                    style = TTGlassButtonStyle(prominent = true),
+                                )
+                            },
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                        ) {
+                            InProgressSection(
+                                rows = inProgressRows,
+                                onOpen = onOpen,
                             )
-                        },
-                    )
-                } else {
-                    SprintSectionList(
-                        rows = archivedRows,
-                        onOpen = onOpen,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                            ScheduledSection(
+                                rows = scheduledRows,
+                                onOpen = onOpen,
+                            )
+                            FinishedSection(
+                                rows = finishedRows,
+                                onOpen = onOpen,
+                            )
+                        }
+                    }
+
+                    SprintSection.Archived -> if (archivedIsEmpty == true) {
+                        ProjectsEmptyState(
+                            title = stringResource(Res.string.sprint_list_empty_title),
+                            body = stringResource(Res.string.sprint_list_empty_body),
+                            image = ttTabIcons.sprints,
+                            action = {
+                                ttGlassButton(
+                                    label = stringResource(Res.string.sprint_list_new),
+                                    onClick = onNewSprint,
+                                    style = TTGlassButtonStyle(prominent = true),
+                                )
+                            },
+                        )
+                    } else {
+                        SprintSectionList(
+                            rows = archivedRows,
+                            onOpen = onOpen,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         }
@@ -175,6 +222,17 @@ fun SprintListScreen(
 const val SprintListScreenTag = "sprints.list"
 const val SprintListTag = "sprints.list.rows"
 const val SprintListNewTag = "sprints.list.new"
+const val SprintListSectionsTag = "sprints.list.sections"
+
+/**
+ * The header width at which the Active/Archive picker joins the selector's row.
+ *
+ * Above the picker's own `pickerMaxWidth` cap plus the add action and a usable project name.
+ * Below it the header keeps the stacked phone arrangement rather than squeezing the project name
+ * to a few characters. Matches the backlog header's threshold so the two tabs switch arrangement
+ * at the same window width.
+ */
+private val SprintHeaderWideMinimumWidth = 700.dp
 
 @Composable
 private fun SprintSectionHeader(
