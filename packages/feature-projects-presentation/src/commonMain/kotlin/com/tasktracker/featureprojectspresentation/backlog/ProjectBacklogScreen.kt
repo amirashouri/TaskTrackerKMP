@@ -1,5 +1,8 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,9 +13,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -27,7 +35,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.designsystem.ttGlass
+import com.tasktracker.designsystem.ttGlassSurface
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -170,6 +182,42 @@ fun ProjectBacklogScreen(
         headerHeightPx.toDp()
     } + ttSpacing.lg
 
+    // One scroll position per segment: the housing has to read the list that is actually on
+    // screen, and a shared position would carry the backlog's offset onto the archive.
+    val backlogListState = rememberLazyListState()
+    val kanbanListState = rememberLazyListState()
+    val archivedListState = rememberLazyListState()
+    val activeListState = when (currentSection) {
+        BacklogSection.Backlog -> backlogListState
+        BacklogSection.Kanban -> kanbanListState
+        BacklogSection.Archived -> archivedListState
+    }
+
+    // True only while a row's top has passed the housing's bottom edge. Rows rest one `lg`
+    // below the card, so at scroll position zero nothing is behind it and the housing stays
+    // absent — the effect marks content passing underneath, not the header's presence.
+    //
+    // `LazyListItemInfo.offset` is measured from the viewport minus the list's content padding,
+    // not from the top of the screen: at rest the first row reports 0 even though it is drawn
+    // below the header. So the card's bottom edge is the reserved `lg` gap, and a row is under
+    // the housing once it has been scrolled up into that gap.
+    val rowGapPx = with(LocalDensity.current) { ttSpacing.lg.toPx() }
+    val rowsUnderHeader by remember(activeListState) {
+        derivedStateOf {
+            val firstVisible = activeListState.layoutInfo.visibleItemsInfo.firstOrNull()
+            firstVisible != null && firstVisible.offset.toFloat() < -rowGapPx
+        }
+    }
+    val housingAlpha by animateFloatAsState(
+        targetValue = if (rowsUnderHeader) 1f else 0f,
+        animationSpec = if (LocalReducedMotion.current) {
+            snap()
+        } else {
+            tween(durationMillis = HEADER_HOUSING_FADE_MILLIS)
+        },
+        label = "backlogHeaderHousing",
+    )
+
     ClipboardCopyHost(
         modifier = modifier.testTag(ProjectBacklogScreenTag),
     ) { onCopy ->
@@ -178,6 +226,7 @@ fun ProjectBacklogScreen(
             when (currentSection) {
                 BacklogSection.Backlog -> BacklogSectionList(
                     projection = shown,
+                    listState = backlogListState,
                     sortOrder = currentSortOrder,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
@@ -193,6 +242,7 @@ fun ProjectBacklogScreen(
                 )
                 BacklogSection.Kanban -> KanbanSectionList(
                     projection = shown,
+                    listState = kanbanListState,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     searchQuery = appliedQuery,
@@ -206,6 +256,7 @@ fun ProjectBacklogScreen(
                 )
                 BacklogSection.Archived -> ArchivedSectionList(
                     projection = shown,
+                    listState = archivedListState,
                     busyItemID = busyItemID,
                     isLoading = isLoading,
                     searchQuery = appliedQuery,
@@ -217,113 +268,137 @@ fun ProjectBacklogScreen(
                 )
             }
 
-            Column(
+            // The header's housing card. It is always in the layout but only painted while a row
+            // is behind it, so its appearance shifts nothing. The card's outer inset and its own
+            // inner padding add up to `xxl`, keeping every control on the leading edge the rows
+            // use; the bottom inset is extra room the list's measured top inset accounts for.
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onSizeChanged { headerHeightPx = it.height }
-                    .padding(horizontal = ttSpacing.xxl)
-                    .padding(top = ttSpacing.screenGutterLarge),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                    .padding(horizontal = ttSpacing.md)
+                    .padding(top = ttSpacing.screenGutterLarge - ttSpacing.md),
             ) {
-                // One row whether or not there is a switcher to fill its left side: the search
-                // toggle has to be reachable either way, and the + keeps the trailing edge it
-                // has always had, so the toggle is inserted before it rather than after.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                if (housingAlpha > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .alpha(housingAlpha)
+                            // Thin, because the trackers inside are already glass: this is a
+                            // backdrop for them, not a second full-strength surface.
+                            .ttGlassSurface(
+                                shape = RoundedCornerShape(ttRadius.surface),
+                                thickness = ttGlass.GlassThickness.THIN,
+                            )
+                            .testTag(ProjectBacklogHeaderHousingTag),
+                    )
+                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(ttSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
                 ) {
-                    if (onOpenSwitcher != null) {
-                        ProjectSwitcherButton(
-                            project = projection.project,
-                            onClick = onOpenSwitcher,
-                            modifier = Modifier.weight(1f),
-                            projects = projects,
-                            onSelectProject = onSelectProject,
-                        )
-                    } else {
-                        Spacer(Modifier.weight(1f))
-                    }
-                    ttGlassIconButton(
-                        image = ttActionIcons.search,
-                        contentDescription = stringResource(
-                            if (searchOpen) {
-                                Res.string.work_item_search_close
-                            } else {
-                                Res.string.work_item_search_open
+                    // One row whether or not there is a switcher to fill its left side: the search
+                    // toggle has to be reachable either way, and the + keeps the trailing edge it
+                    // has always had, so the toggle is inserted before it rather than after.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                    ) {
+                        if (onOpenSwitcher != null) {
+                            ProjectSwitcherButton(
+                                project = projection.project,
+                                onClick = onOpenSwitcher,
+                                modifier = Modifier.weight(1f),
+                                projects = projects,
+                                onSelectProject = onSelectProject,
+                            )
+                        } else {
+                            Spacer(Modifier.weight(1f))
+                        }
+                        ttGlassIconButton(
+                            image = ttActionIcons.search,
+                            contentDescription = stringResource(
+                                if (searchOpen) {
+                                    Res.string.work_item_search_close
+                                } else {
+                                    Res.string.work_item_search_open
+                                },
+                            ),
+                            onClick = {
+                                searchOpen = !searchOpen
+                                // Closing resets the query too, for the reason the board's doc gives:
+                                // a filter that outlives its field leaves rows missing with nothing
+                                // on screen to say why.
+                                if (!searchOpen) {
+                                    query = ""
+                                    focusManager.clearFocus()
+                                }
                             },
-                        ),
-                        onClick = {
-                            searchOpen = !searchOpen
-                            // Closing resets the query too, for the reason the board's doc gives:
-                            // a filter that outlives its field leaves rows missing with nothing
-                            // on screen to say why.
-                            if (!searchOpen) {
-                                query = ""
-                                focusManager.clearFocus()
+                            tint = if (searchOpen) ttAccent() else ttLabel(),
+                            modifier = Modifier.testTag(ProjectBacklogSearchToggleTag),
+                        )
+                        onAddTask?.let { addTask ->
+                            ttGlassIconButton(
+                                image = ttActionIcons.add,
+                                contentDescription = stringResource(Res.string.board_add_task),
+                                onClick = addTask,
+                                modifier = Modifier.testTag(BacklogAddTaskTag),
+                            )
+                        }
+                    }
+                    // Inside the measured column, so the list's top inset grows with the field and
+                    // the first row still starts below the header rather than behind it. The reveal
+                    // is the reason the inset is measured at all: it changes while the field unfolds.
+                    SearchReveal(visible = searchOpen) {
+                        ttSearchField(
+                            value = query,
+                            onValueChange = { query = it },
+                            hint = stringResource(Res.string.work_item_search_placeholder),
+                            modifier = Modifier.fillMaxWidth().testTag(ProjectBacklogSearchFieldTag),
+                            fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                        )
+                    }
+                    errorMessage?.let { message ->
+                        ttBanner(message = message, onDismiss = onDismissError)
+                    }
+                    TTGlassSegmentedPicker(
+                        options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
+                        selection = currentSection,
+                        onSelect = { currentSection = it },
+                        modifier = Modifier.testTag(ProjectBacklogSectionsTag),
+                        title = { option ->
+                            when (option) {
+                                BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
+                                BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
+                                BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
                             }
                         },
-                        tint = if (searchOpen) ttAccent() else ttLabel(),
-                        modifier = Modifier.testTag(ProjectBacklogSearchToggleTag),
+                        testTag = { option ->
+                            when (option) {
+                                BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
+                                BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
+                                BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
+                            }
+                        }
                     )
-                    onAddTask?.let { addTask ->
-                        ttGlassIconButton(
-                            image = ttActionIcons.add,
-                            contentDescription = stringResource(Res.string.board_add_task),
-                            onClick = addTask,
-                            modifier = Modifier.testTag(BacklogAddTaskTag),
+                    if (currentSection == BacklogSection.Backlog) {
+                        BacklogSortControls(
+                            order = currentSortOrder,
+                            onToggle = { basis ->
+                                // Update first, report second: the list has to re-read in the same
+                                // frame as the tap, and the report is what remembers it, which may
+                                // outlive this screen.
+                                val next = currentSortOrder.toggled(basis)
+                                currentSortOrder = next
+                                onSortOrderChanged(next)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
-                }
-                // Inside the measured column, so the list's top inset grows with the field and
-                // the first row still starts below the header rather than behind it. The reveal
-                // is the reason the inset is measured at all: it changes while the field unfolds.
-                SearchReveal(visible = searchOpen) {
-                    ttSearchField(
-                        value = query,
-                        onValueChange = { query = it },
-                        hint = stringResource(Res.string.work_item_search_placeholder),
-                        modifier = Modifier.fillMaxWidth().testTag(ProjectBacklogSearchFieldTag),
-                        fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
-                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                    )
-                }
-                errorMessage?.let { message ->
-                    ttBanner(message = message, onDismiss = onDismissError)
-                }
-                TTGlassSegmentedPicker(
-                    options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
-                    selection = currentSection,
-                    onSelect = { currentSection = it },
-                    modifier = Modifier.testTag(ProjectBacklogSectionsTag),
-                    title = { option ->
-                        when (option) {
-                            BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
-                            BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
-                            BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
-                        }
-                    },
-                    testTag = { option ->
-                        when (option) {
-                            BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
-                            BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
-                            BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
-                        }
-                    }
-                )
-                if (currentSection == BacklogSection.Backlog) {
-                    BacklogSortControls(
-                        order = currentSortOrder,
-                        onToggle = { basis ->
-                            // Update first, report second: the list has to re-read in the same
-                            // frame as the tap, and the report is what remembers it, which may
-                            // outlive this screen.
-                            val next = currentSortOrder.toggled(basis)
-                            currentSortOrder = next
-                            onSortOrderChanged(next)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
             }
             // The column picker, open only while the resolver has decided it cannot board without
@@ -347,6 +422,7 @@ fun ProjectBacklogScreen(
 @Composable
 private fun BacklogSectionList(
     projection: BacklogSectionedProjection,
+    listState: LazyListState,
     sortOrder: BacklogSortOrder,
     busyItemID: WorkItemID?,
     isLoading: Boolean,
@@ -375,6 +451,7 @@ private fun BacklogSectionList(
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogListTag),
+            state = listState,
             contentPadding = PaddingValues(
                 top = contentTopInset,
                 bottom = ttSpacing.xl + tabBarInset,
@@ -399,6 +476,7 @@ private fun BacklogSectionList(
 @Composable
 private fun KanbanSectionList(
     projection: BacklogSectionedProjection,
+    listState: LazyListState,
     busyItemID: WorkItemID?,
     isLoading: Boolean,
     searchQuery: String,
@@ -424,6 +502,7 @@ private fun KanbanSectionList(
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogKanbanListTag),
+            state = listState,
             contentPadding = PaddingValues(
                 top = contentTopInset,
                 bottom = ttSpacing.xl + tabBarInset,
@@ -450,6 +529,7 @@ private fun KanbanSectionList(
 @Composable
 private fun ArchivedSectionList(
     projection: BacklogSectionedProjection,
+    listState: LazyListState,
     busyItemID: WorkItemID?,
     isLoading: Boolean,
     searchQuery: String,
@@ -472,6 +552,7 @@ private fun ArchivedSectionList(
     } else {
         LazyColumn(
             modifier = modifier.testTag(ProjectBacklogArchivedListTag),
+            state = listState,
             contentPadding = PaddingValues(
                 top = contentTopInset,
                 bottom = ttSpacing.xl + LocalTabBarScrollUnderInset.current,
@@ -581,5 +662,9 @@ const val ProjectBacklogSearchFieldTag = "backlog.search"
 const val ProjectBacklogSearchToggleTag = "backlog.search.toggle"
 const val ProjectBacklogSearchInputTag = "backlog.search.input"
 const val BacklogAddTaskTag = "backlog.addTask"
+const val ProjectBacklogHeaderHousingTag = "backlog.header.housing"
+
+/** How long the header's housing takes to fade in or out as rows pass under it. */
+private const val HEADER_HOUSING_FADE_MILLIS = 160
 
 fun SectionIndicatorTag(label: String): String = "backlog.section.$label"

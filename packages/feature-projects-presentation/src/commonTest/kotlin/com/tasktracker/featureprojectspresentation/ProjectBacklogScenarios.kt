@@ -183,6 +183,33 @@ object ProjectBacklogScenarios {
     }
 
     /**
+     * The header's housing appears only while rows are behind it, and goes away at rest.
+     *
+     * The housing is a backdrop for rows scrolling under the header, not chrome the screen always
+     * wears. At scroll position zero the rows begin below the card, so there is nothing to blur and
+     * drawing one would put a panel of empty glass around controls that already carry their own.
+     * The node is composed only above zero alpha, so both halves of that - present when scrolled,
+     * absent at rest - are readable from the semantics tree rather than inferred from a pixel.
+     */
+    val theHeaderHousingAppearsOnlyWhenRowsScrollUnderIt: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {})
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogHeaderHousingTag).assertDoesNotExist()
+
+        onNodeWithTag(ProjectBacklogListTag).performTouchInput { swipeUp() }
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogHeaderHousingTag).assertIsDisplayed()
+
+        // Back to the top: the rows are clear of the header again, so the housing must go with them.
+        onNodeWithTag(ProjectBacklogListTag).performScrollToIndex(0)
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogHeaderHousingTag).assertDoesNotExist()
+    }
+
+    /**
      * The section picker shares the header's leading edge, and the sort row's.
      *
      * ## The defect this exists for

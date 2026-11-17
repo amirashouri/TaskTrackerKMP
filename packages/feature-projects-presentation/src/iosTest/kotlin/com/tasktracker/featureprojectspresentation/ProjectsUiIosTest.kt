@@ -206,6 +206,11 @@ class ProjectsUiIosTest {
     fun theBacklogListScrollsUnderTheHeader() =
         runComposeUiTest(block = ProjectBacklogScenarios.theListScrollsUnderTheHeader)
 
+    /** The header's glass housing appears only while rows are scrolled under it. */
+    @Test
+    fun theHeaderHousingAppearsOnlyWhenRowsScrollUnderIt() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theHeaderHousingAppearsOnlyWhenRowsScrollUnderIt)
+
     @Test
     fun theSectionPickerSharesTheHeadersLeadingEdge() =
         runComposeUiTest(block = ProjectBacklogScenarios.theSectionPickerSharesTheHeadersLeadingEdge)
