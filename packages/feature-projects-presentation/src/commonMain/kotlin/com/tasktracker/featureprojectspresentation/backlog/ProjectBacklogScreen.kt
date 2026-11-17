@@ -5,12 +5,14 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -34,6 +36,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalReducedMotion
@@ -41,6 +44,7 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.domain.BacklogSortBasis
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -294,31 +298,47 @@ fun ProjectBacklogScreen(
                             .testTag(ProjectBacklogHeaderHousingTag),
                     )
                 }
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(ttSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
-                ) {
-                    // One row whether or not there is a switcher to fill its left side: the search
-                    // toggle has to be reachable either way, and the + keeps the trailing edge it
-                    // has always had, so the toggle is inserted before it rather than after.
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                    ) {
-                        if (onOpenSwitcher != null) {
-                            ProjectSwitcherButton(
-                                project = projection.project,
-                                onClick = onOpenSwitcher,
-                                modifier = Modifier.weight(1f),
-                                projects = projects,
-                                onSelectProject = onSelectProject,
-                            )
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    // A wide window puts the section picker on the selector's row and the search
+                    // field beside the sort row; below this width there is not enough room for the
+                    // picker and the two icon actions without squeezing the project name, so the
+                    // header keeps its stacked phone arrangement.
+                    val wideHeader = maxWidth >= BacklogHeaderWideMinimumWidth
+                    val sectionPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
+                        TTGlassSegmentedPicker(
+                            options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
+                            selection = currentSection,
+                            onSelect = { currentSection = it },
+                            modifier = pickerModifier.testTag(ProjectBacklogSectionsTag),
+                            title = { option ->
+                                when (option) {
+                                    BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
+                                    BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
+                                    BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
+                                }
+                            },
+                            testTag = { option ->
+                                when (option) {
+                                    BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
+                                    BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
+                                    BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
+                                }
+                            },
+                        )
+                    }
+                    val searchField: @Composable (Modifier) -> Unit = { fieldModifier ->
+                        ttSearchField(
+                            value = query,
+                            onValueChange = { query = it },
+                            hint = stringResource(Res.string.work_item_search_placeholder),
+                            modifier = fieldModifier
+                                .heightIn(min = BacklogFilterRowHeight)
+                                .testTag(ProjectBacklogSearchFieldTag),
+                            fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
+                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+                        )
+                    }
+                    val searchToggle: @Composable (Modifier) -> Unit = { toggleModifier ->
                         ttGlassIconButton(
                             image = ttActionIcons.search,
                             contentDescription = stringResource(
@@ -339,74 +359,151 @@ fun ProjectBacklogScreen(
                                 }
                             },
                             tint = if (searchOpen) ttAccent() else ttLabel(),
-                            modifier = Modifier.testTag(ProjectBacklogSearchToggleTag),
+                            modifier = toggleModifier.testTag(ProjectBacklogSearchToggleTag),
                         )
-                        onAddTask?.let { addTask ->
-                            ttGlassIconButton(
-                                image = ttActionIcons.add,
-                                contentDescription = stringResource(Res.string.board_add_task),
-                                onClick = addTask,
-                                modifier = Modifier.testTag(BacklogAddTaskTag),
-                            )
-                        }
                     }
-                    errorMessage?.let { message ->
-                        ttBanner(message = message, onDismiss = onDismissError)
+                    val onSortToggle: (BacklogSortBasis) -> Unit = { basis ->
+                        // Update first, report second: the list has to re-read in the same frame
+                        // as the tap, and the report is what remembers it, which may outlive this
+                        // screen.
+                        val next = currentSortOrder.toggled(basis)
+                        currentSortOrder = next
+                        onSortOrderChanged(next)
                     }
-                    TTGlassSegmentedPicker(
-                        options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
-                        selection = currentSection,
-                        onSelect = { currentSection = it },
-                        modifier = Modifier.testTag(ProjectBacklogSectionsTag),
-                        title = { option ->
-                            when (option) {
-                                BacklogSection.Backlog -> stringResource(Res.string.backlog_section_backlog)
-                                BacklogSection.Kanban -> stringResource(Res.string.backlog_section_kanban)
-                                BacklogSection.Archived -> stringResource(Res.string.backlog_section_archived)
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(ttSpacing.md),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                    ) {
+                        // One row whether or not there is a switcher to fill its left side: the search
+                        // toggle has to be reachable either way, and the + keeps the trailing edge it
+                        // has always had, so the toggle is inserted before it rather than after.
+                        //
+                        // On a wide header the section picker joins this row, between the project
+                        // selector and the two icon actions: it is a destination switch, so it belongs
+                        // beside the project it switches within, not below the actions.
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                        ) {
+                            if (onOpenSwitcher != null) {
+                                ProjectSwitcherButton(
+                                    project = projection.project,
+                                    onClick = onOpenSwitcher,
+                                    // On a wide header the switcher wraps its own content and
+                                    // the picker's weighted box takes the rest: weighting the
+                                    // switcher instead would leave its unused share as a gap
+                                    // *before* the box, so the picker would centre in the wrong
+                                    // space. On a compact header it still fills the row.
+                                    modifier = if (wideHeader) Modifier else Modifier.weight(1f),
+                                    projects = projects,
+                                    onSelectProject = onSelectProject,
+                                )
+                            } else {
+                                Spacer(if (wideHeader) Modifier else Modifier.weight(1f))
                             }
-                        },
-                        testTag = { option ->
-                            when (option) {
-                                BacklogSection.Backlog -> SectionIndicatorTag(stringResource(Res.string.backlog_section_backlog))
-                                BacklogSection.Kanban -> SectionIndicatorTag(stringResource(Res.string.backlog_section_kanban))
-                                BacklogSection.Archived -> SectionIndicatorTag(stringResource(Res.string.backlog_section_archived))
+                            if (wideHeader) {
+                                // Centred in the gap between the selector and the add action:
+                                // the box spans exactly that gap, so centring the capped picker
+                                // inside it leaves equal space at either end. The search toggle
+                                // is not in this row — it sits in the sort row's trailing slot
+                                // below, so the field grows where the toggle already was.
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    sectionPicker(Modifier)
+                                }
+                            } else {
+                                searchToggle(Modifier)
+                            }
+                            onAddTask?.let { addTask ->
+                                ttGlassIconButton(
+                                    image = ttActionIcons.add,
+                                    contentDescription = stringResource(Res.string.board_add_task),
+                                    onClick = addTask,
+                                    modifier = Modifier.testTag(BacklogAddTaskTag),
+                                )
                             }
                         }
-                    )
-                    if (currentSection == BacklogSection.Backlog) {
-                        BacklogSortControls(
-                            order = currentSortOrder,
-                            onToggle = { basis ->
-                                // Update first, report second: the list has to re-read in the same
-                                // frame as the tap, and the report is what remembers it, which may
-                                // outlive this screen.
-                                val next = currentSortOrder.toggled(basis)
-                                currentSortOrder = next
-                                onSortOrderChanged(next)
-                            },
-                            // The picker above is capped at `pickerMaxWidth`; the filter row and the
-                            // field below it take the same cap so the header is one column of
-                            // controls on a desktop instead of three widths stacked on each other.
-                            modifier = Modifier.widthIn(max = ttSpacing.pickerMaxWidth),
-                        )
-                    }
-                    // Inside the measured column, so the list's top inset grows with the field and
-                    // the first row still starts below the header rather than behind it. The reveal
-                    // is the reason the inset is measured at all: it changes while the field unfolds.
-                    // Below the sort row, not above the section picker: the field is a filter for
-                    // the list, and the order of the header is what you are looking at, then how it
-                    // is ordered, then how it is narrowed.
-                    SearchReveal(visible = searchOpen) {
-                        ttSearchField(
-                            value = query,
-                            onValueChange = { query = it },
-                            hint = stringResource(Res.string.work_item_search_placeholder),
-                            modifier = Modifier
-                                .widthIn(max = ttSpacing.pickerMaxWidth)
-                                .testTag(ProjectBacklogSearchFieldTag),
-                            fieldModifier = Modifier.testTag(ProjectBacklogSearchInputTag),
-                            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
-                        )
+                        errorMessage?.let { message ->
+                            ttBanner(message = message, onDismiss = onDismissError)
+                        }
+                        // Compact header: the picker keeps its own row under the actions, the sort
+                        // row fills the column, and the field unfolds below it. The wide branch below
+                        // is not a wider version of this one — it rearranges the same controls.
+                        if (!wideHeader) {
+                            sectionPicker(Modifier)
+                        }
+                        if (wideHeader) {
+                            // One row for every section, not one per section: the sort row is a
+                            // Backlog control, but the search slot beside it is not. Keeping the row
+                            // composed means switching to Kanban or Archived leaves the field in the
+                            // row it was opened in, and it also lets the reveal animate in every
+                            // section. With no sort row the spacer gives the field the full width,
+                            // because there is nothing else in the row to share it with.
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                // Centre, now that the sort row and the field share one height: the
+                                // toggle is the one shorter control, and centring it puts its glyph on
+                                // the row's centre line instead of four dp above it.
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                            ) {
+                                if (currentSection == BacklogSection.Backlog) {
+                                    BacklogSortControls(
+                                        order = currentSortOrder,
+                                        onToggle = onSortToggle,
+                                        // Whatever the field and toggle do not take: closed, that
+                                        // is the whole header width, which is what "fill the
+                                        // width" means here.
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    SearchRevealBeside(visible = searchOpen) {
+                                        searchField(Modifier.fillMaxWidth(DESKTOP_SEARCH_FIELD_FRACTION))
+                                    }
+                                } else {
+                                    // No sort row: the field is the row, not a portion of it. The
+                                    // weighted box gives it everything the toggle does not use,
+                                    // and still lets the reveal travel from zero width. The leading
+                                    // inset mirrors the row's gap to the toggle, so the field is
+                                    // not flush against the header edge on one side and spaced on
+                                    // the other.
+                                    Box(
+                                        Modifier
+                                            .weight(1f)
+                                            .padding(start = ttSpacing.sm),
+                                    ) {
+                                        SearchRevealBeside(visible = searchOpen) {
+                                            searchField(Modifier.fillMaxWidth())
+                                        }
+                                    }
+                                }
+                                // The toggle keeps the trailing edge, under the add action, and
+                                // becomes the close control while the field is open — it never
+                                // leaves the row, so the field grows beside it instead of over the
+                                // only way to dismiss the search.
+                                searchToggle(Modifier)
+                            }
+                        } else {
+                            if (currentSection == BacklogSection.Backlog) {
+                                BacklogSortControls(
+                                    order = currentSortOrder,
+                                    onToggle = onSortToggle,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            // Inside the measured column, so the list's top inset grows with the field
+                            // and the first row still starts below the header rather than behind it.
+                            // The reveal is the reason the inset is measured at all: it changes while
+                            // the field unfolds.
+                            SearchReveal(visible = searchOpen) {
+                                searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
+                            }
+                        }
                     }
                 }
             }
@@ -675,5 +772,34 @@ const val ProjectBacklogHeaderHousingTag = "backlog.header.housing"
 
 /** How long the header's housing takes to fade in or out as rows pass under it. */
 private const val HEADER_HOUSING_FADE_MILLIS = 160
+
+/**
+ * The header width at which the picker joins the selector's row.
+ *
+ * Above the picker's own `pickerMaxWidth` cap plus two icon actions and a usable project name.
+ * The shell calls a window wide from 840dp; a sidebar takes 280dp of that, so the narrowest
+ * wide window still leaves this much content column. Below it the header keeps the stacked
+ * phone arrangement rather than squeezing the project name to a few characters.
+ */
+private val BacklogHeaderWideMinimumWidth = 700.dp
+
+/**
+ * The share of the desktop header row the search field takes when it is open.
+ *
+ * Large enough for a query with a clear button, small enough that the sort row it sits beside
+ * still shows its summary and both chips. Expressed as a fraction rather than a width so the
+ * split travels with the window instead of leaving a fixed gap on one side.
+ */
+private const val DESKTOP_SEARCH_FIELD_FRACTION = 0.42f
+
+/**
+ * The height every control in the filter row is given.
+ *
+ * The sort row's own height: a [ttSpacing.iconButtonSize] chip plus its vertical padding. The
+ * search field's default minimum is shorter than that, and beside the sort row the two controls
+ * read as misaligned — a 48dp field against 52dp of glass — even though their tops agree. One
+ * height for both means their centres do too, and the toggle's 44dp chip centres inside it.
+ */
+private val BacklogFilterRowHeight = ttSpacing.iconButtonSize + ttSpacing.xs * 2
 
 fun SectionIndicatorTag(label: String): String = "backlog.section.$label"

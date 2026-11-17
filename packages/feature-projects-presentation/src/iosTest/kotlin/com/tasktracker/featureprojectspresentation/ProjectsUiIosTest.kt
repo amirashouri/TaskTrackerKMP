@@ -220,6 +220,21 @@ class ProjectsUiIosTest {
     fun theSortAndSearchRowsShareThePickersWidth() =
         runComposeUiTest(block = ProjectBacklogScenarios.theSortAndSearchRowsShareThePickersWidth)
 
+    /** A wide header puts the picker between the project selector and the two icon actions. */
+    @Test
+    fun theWideHeaderPutsThePickerBetweenTheSelectorAndTheActions() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theWideHeaderPutsThePickerBetweenTheSelectorAndTheActions)
+
+    /** Opening the search beside the sort row makes room for it with travel, not a jump. */
+    @Test
+    fun theWideSearchShrinksTheSortRowAsItReveals() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theWideSearchShrinksTheSortRowAsItReveals)
+
+    /** A section switch leaves the open field in the same row and trailing slot. */
+    @Test
+    fun theWideSearchKeepsItsSlotAcrossSections() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theWideSearchKeepsItsSlotAcrossSections)
+
     /** One board column: the resolver boards into it on the tap, with no picker. */
     @Test
     fun puttingOnBoardWithASingleColumnBoardsDirectly() =

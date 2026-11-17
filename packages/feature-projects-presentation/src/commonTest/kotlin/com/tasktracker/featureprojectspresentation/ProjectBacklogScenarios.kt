@@ -17,7 +17,7 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.ComposeUiTest
@@ -40,6 +40,10 @@ import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.backlog_section_backlog
+import com.tasktracker.resources.backlog_section_kanban
+import org.jetbrains.compose.resources.getString
 import kotlin.math.abs
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -224,7 +228,9 @@ object ProjectBacklogScenarios {
      * surface's own `md` inset and the glass is the row's leading edge.
      */
     val theSectionPickerSharesTheHeadersLeadingEdge: suspend ComposeUiTest.() -> Unit = {
-        backlogShowing(items = backlogItems(), onAddTask = {})
+        // A compact header: on a wide one the picker is in the selector's row by design and
+        // this stack no longer exists — see the wide-header scenario below.
+        backlogShowing(items = backlogItems(), onAddTask = {}, width = COMPACT_HEADER_WIDTH)
 
         val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
         val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
@@ -264,7 +270,9 @@ object ProjectBacklogScenarios {
      * every control fills it and the assertion still holds there.
      */
     val theSortAndSearchRowsShareThePickersWidth: suspend ComposeUiTest.() -> Unit = {
-        backlogShowing(items = backlogItems(), onAddTask = {})
+        // The compact stack. The wide arrangement is a row, not a column of equal widths, and
+        // has its own scenario below.
+        backlogShowing(items = backlogItems(), onAddTask = {}, width = COMPACT_HEADER_WIDTH)
         waitForIdle()
 
         val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
@@ -307,6 +315,250 @@ object ProjectBacklogScenarios {
             "the search field (${search.top}..${search.bottom}) is drawn above the sort row " +
                 "(${sort.top}..${sort.bottom}) instead of below it, so the field sits between " +
                 "the add action and the section picker again",
+        )
+        // The compact layout stacks these, so their heights are not forced by a shared row;
+        // they still have to agree, or the two layouts of the same field read as two controls.
+        assertTrue(
+            abs(search.height - sort.height) <= EDGE_TOLERANCE_PX,
+            "the compact search field is ${search.height}px tall against a ${sort.height}px " +
+                "sort row, so the field is shorter in this layout than in the wide one: " +
+                "search=$search sort=$sort",
+        )
+    }
+
+    /**
+     * A wide header is one row: selector, section picker, then the two icon actions.
+     *
+     * ## The arrangement this pins
+     *
+     * On a desktop the picker used to keep the phone stack, so the header spent a whole row on
+     * a control that belongs beside the project it switches within. The wide branch centres it
+     * in the gap between the selector and the add action, and gives the sort row the full width
+     * underneath. The search toggle is deliberately *not* in this row: it sits in the sort row's
+     * trailing slot, under the add action, so the field opens where the toggle already is.
+     *
+     * Read as relationships between rectangles, not absolute x positions, so the assertion says
+     * "between" rather than a number that only holds at one window size. The viewport is forced
+     * wider than the host on purpose: the Android and iOS hosts are phone-sized, and a plain
+     * width would be coerced back to them and silently measure the compact header.
+     */
+    val theWideHeaderPutsThePickerBetweenTheSelectorAndTheActions: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {}, width = WIDE_HEADER_WIDTH)
+        waitForIdle()
+
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
+        val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val toggle = onNodeWithTag(ProjectBacklogSearchToggleTag).fetchSemanticsNode().boundsInRoot
+        val add = onNodeWithTag(BacklogAddTaskTag).fetchSemanticsNode().boundsInRoot
+        val sort = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            picker.left >= switcher.right - EDGE_TOLERANCE_PX,
+            "the section picker starts at ${picker.left}px and the project selector ends at " +
+                "${switcher.right}px, so the picker is not on the selector's row to its right: " +
+                "picker=$picker switcher=$switcher",
+        )
+        assertTrue(
+            picker.top < switcher.bottom && switcher.top < picker.bottom,
+            "the section picker (${picker.top}..${picker.bottom}) and the project selector " +
+                "(${switcher.top}..${switcher.bottom}) do not overlap vertically, so they are " +
+                "stacked rather than sharing a row",
+        )
+        assertTrue(
+            add.left >= picker.right - EDGE_TOLERANCE_PX,
+            "the add action is at ${add.left}px, left of the picker's right edge " +
+                "${picker.right}px, so the picker is not between the selector and the add " +
+                "action: picker=$picker add=$add",
+        )
+        val gapCentre = (switcher.right + add.left) / 2f
+        val pickerCentre = (picker.left + picker.right) / 2f
+        assertTrue(
+            abs(pickerCentre - gapCentre) <= EDGE_TOLERANCE_PX,
+            "the picker's centre is at ${pickerCentre}px where the gap between the selector " +
+                "(${switcher.right}px) and the add action (${add.left}px) is centred at " +
+                "${gapCentre}px, so the picker is not in the middle of that space: " +
+                "picker=$picker switcher=$switcher add=$add",
+        )
+        assertTrue(
+            toggle.top >= add.bottom - EDGE_TOLERANCE_PX,
+            "the search toggle (${toggle.top}..${toggle.bottom}) is not below the add action " +
+                "(ends at ${add.bottom}px), so it is still in the top row",
+        )
+        assertTrue(
+            abs(toggle.right - add.right) <= EDGE_TOLERANCE_PX,
+            "the search toggle ends at ${toggle.right}px and the add action at " +
+                "${add.right}px, so the toggle is not in the trailing slot under the add " +
+                "action: toggle=$toggle add=$add",
+        )
+        assertTrue(
+            sort.top >= picker.bottom - EDGE_TOLERANCE_PX,
+            "the sort row (${sort.top}..${sort.bottom}) is not below the header row " +
+                "(ends at ${picker.bottom}px), so it is sharing the row instead of filling the " +
+                "width underneath it",
+        )
+        // Full width means the toggle is the only thing it shares the row with: one gap
+        // between the sort row and the trailing toggle, and nothing else.
+        val rowGap = densityPixels(ttSpacing.sm)
+        assertTrue(
+            abs(sort.left - switcher.left) <= EDGE_TOLERANCE_PX &&
+                abs(sort.right + rowGap - toggle.left) <= EDGE_TOLERANCE_PX * 2,
+            "the sort row is ${sort.left}..${sort.right}px where the header row it sits under " +
+                "spans ${switcher.left}..${toggle.left}px before the toggle, so it does not " +
+                "fill the header's width: sort=$sort switcher=$switcher toggle=$toggle",
+        )
+    }
+
+    /**
+     * Opening the search beside the sort row shrinks the sort row with travel, not a jump.
+     *
+     * The wide header puts the field in the sort row, so the two controls share one width: the
+     * field's slot grows and the sort row's `weight` gives the space back. The sample is taken
+     * half way through the reveal with the clock stopped: at that point the sort row must be
+     * narrower than it was closed and wider than it settles, and the field must already exist.
+     * A build that resized in one frame would sit at one end, which is the defect this exists
+     * for.
+     */
+    val theWideSearchShrinksTheSortRowAsItReveals: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {}, width = WIDE_HEADER_WIDTH)
+        waitForIdle()
+
+        val sortClosed = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+
+        val sortOpen = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+        val fieldOpen = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+
+        assertTrue(
+            sortOpen.width < sortClosed.width - EDGE_TOLERANCE_PX,
+            "the sort row is ${sortOpen.width}px wide with the field open against " +
+                "${sortClosed.width}px closed, so the field did not take any of its width: " +
+                "sort=$sortOpen field=$fieldOpen",
+        )
+        assertTrue(
+            fieldOpen.left >= sortOpen.right - EDGE_TOLERANCE_PX,
+            "the field starts at ${fieldOpen.left}px and the sort row ends at ${sortOpen.right}px, " +
+                "so they are not beside each other: sort=$sortOpen field=$fieldOpen",
+        )
+        assertTrue(
+            fieldOpen.top < sortOpen.bottom && sortOpen.top < fieldOpen.bottom,
+            "the field (${fieldOpen.top}..${fieldOpen.bottom}) and the sort row " +
+                "(${sortOpen.top}..${sortOpen.bottom}) do not overlap vertically, so the field " +
+                "is not in the sort row",
+        )
+
+        // One height for the row's three controls, or the shorter field and the toggle read as
+        // sitting on a different line from the sort row.
+        val toggle = onNodeWithTag(ProjectBacklogSearchToggleTag).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            abs(fieldOpen.height - sortOpen.height) <= EDGE_TOLERANCE_PX,
+            "the field is ${fieldOpen.height}px tall against a ${sortOpen.height}px sort row, " +
+                "so the two controls do not share the row's height: field=$fieldOpen sort=$sortOpen",
+        )
+        val rowCentre = (sortOpen.top + sortOpen.bottom) / 2f
+        val toggleCentre = (toggle.top + toggle.bottom) / 2f
+        assertTrue(
+            abs(toggleCentre - rowCentre) <= EDGE_TOLERANCE_PX,
+            "the search toggle's centre is at ${toggleCentre}px where the row's centre is " +
+                "${rowCentre}px, so the button is not centred on the field and sort row it " +
+                "belongs to: toggle=$toggle row=$sortOpen",
+        )
+
+        // Close, then reopen with the clock stopped so "half way" is a real sample.
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        mainClock.advanceTimeBy(SEARCH_REVEAL_MILLIS / 2L)
+        mainClock.advanceTimeByFrame()
+
+        val sortMidway = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            sortMidway.width < sortClosed.width - EDGE_TOLERANCE_PX &&
+                sortMidway.width > sortOpen.width + EDGE_TOLERANCE_PX,
+            "half way through the reveal the sort row is ${sortMidway.width}px wide, between " +
+                "${sortOpen.width}px open and ${sortClosed.width}px closed it should be strictly " +
+                "between the two: the field snapped into place instead of making room with travel",
+        )
+        onNodeWithTag(ProjectBacklogSearchFieldTag).assertExists()
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /**
+     * Switching to Kanban or Archived keeps the open field in its row, and lets it take the
+     * width the sort row was using.
+     *
+     * The sort row is a Backlog control, so a section switch removes it; the field is not, so it
+     * must not move to another reveal. The wide header keeps one row for every section: Backlog
+     * is sort + field + toggle, and Kanban/Archived is field (filling the space) + toggle.
+     *
+     * Asserted as: same row (top), and in Kanban the field starts at the row's leading edge and
+     * ends where the toggle begins — the whole width, not the Backlog portion. That is the
+     * difference between "the field stayed put" and "the field was re-laid out by another
+     * parent", which is what the previous implementation did.
+     */
+    val theWideSearchKeepsItsSlotAcrossSections: suspend ComposeUiTest.() -> Unit = {
+        backlogShowing(items = backlogItems(), onAddTask = {}, width = WIDE_HEADER_WIDTH)
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+
+        val fieldBefore = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
+        onNodeWithTag(BacklogSortControlsTag).assertExists()
+
+        onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_kanban))).performClick()
+        waitForIdle()
+
+        val fieldOnKanban = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+        val toggle = onNodeWithTag(ProjectBacklogSearchToggleTag).fetchSemanticsNode().boundsInRoot
+        onNodeWithTag(BacklogSortControlsTag).assertDoesNotExist()
+
+        assertTrue(
+            abs(fieldBefore.top - fieldOnKanban.top) <= EDGE_TOLERANCE_PX,
+            "the search field moved rows on the section switch: it was at y " +
+                "${fieldBefore.top} and is now at ${fieldOnKanban.top}, so it is not in the " +
+                "sort row any more: before=$fieldBefore after=$fieldOnKanban",
+        )
+        val leadingInset = densityPixels(ttSpacing.sm)
+        assertTrue(
+            abs(fieldOnKanban.left - (switcher.left + leadingInset)) <= EDGE_TOLERANCE_PX * 2,
+            "on Kanban the field starts at ${fieldOnKanban.left}px instead of the row's " +
+                "leading edge ${switcher.left}px plus the row's own ${leadingInset}px inset, so " +
+                "it is either still taking only a portion of the row or flush against the " +
+                "header edge: field=$fieldOnKanban",
+        )
+        assertTrue(
+            fieldOnKanban.width > fieldBefore.width + EDGE_TOLERANCE_PX,
+            "on Kanban the field is ${fieldOnKanban.width}px wide against " +
+                "${fieldBefore.width}px in Backlog, so it did not take the width the sort row " +
+                "gave up: before=$fieldBefore after=$fieldOnKanban",
+        )
+        // The row spaces its children, so the field's right edge is one gap short of the toggle.
+        val rowGap = densityPixels(ttSpacing.sm)
+        assertTrue(
+            abs(fieldOnKanban.right + rowGap - toggle.left) <= EDGE_TOLERANCE_PX * 2,
+            "on Kanban the field ends at ${fieldOnKanban.right}px and the toggle begins at " +
+                "${toggle.left}px, so the field does not fill the row up to the toggle: " +
+                "field=$fieldOnKanban toggle=$toggle",
+        )
+
+        onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_backlog))).performClick()
+        waitForIdle()
+
+        onNodeWithTag(BacklogSortControlsTag).assertExists()
+        val fieldBack = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            abs(fieldBack.left - fieldBefore.left) <= EDGE_TOLERANCE_PX &&
+                abs(fieldBack.top - fieldBefore.top) <= EDGE_TOLERANCE_PX &&
+                abs(fieldBack.width - fieldBefore.width) <= EDGE_TOLERANCE_PX,
+            "returning to Backlog did not restore the field to the slot it left: " +
+                "before=$fieldBefore after=$fieldBack",
         )
     }
 
@@ -459,14 +711,16 @@ private fun ComposeUiTest.backlogShowing(
 ) {
     setContent {
         Themed {
-            // A fixed width is how the narrow-row scenario asks the screen the question a
-            // 320pt phone asks; the host's own window is wider than any phone. The default
-            // fills the test window, so the older scenarios' measured bounds are unchanged.
+            // A fixed width is how a scenario asks the screen a question about a phone or a
+            // desktop header; the host's own window is only one of those. `requiredWidth`, not
+            // `width`: a preferred width is coerced back to a phone-sized host, so the wide
+            // arrangement could never be rendered on the Android and iOS hosts. Only the left
+            // edge has to be on screen, and every control measured starts there.
             Box(
                 modifier = if (width == null) {
                     Modifier.fillMaxSize()
                 } else {
-                    Modifier.width(width).fillMaxHeight()
+                    Modifier.requiredWidth(width).fillMaxHeight()
                 },
             ) {
                 ProjectBacklogScreen(
@@ -654,6 +908,18 @@ private fun ComposeUiTest.backlogShowing(
  */
 private fun Project.withBoardStatuses(vararg statuses: StatusDefinition): Project =
     copy(statuses = statuses.toList())
+
+/** A header width under `BacklogHeaderWideMinimumWidth`, so the compact stack is in force. */
+private val COMPACT_HEADER_WIDTH = 400.dp
+
+/**
+ * A header width over `BacklogHeaderWideMinimumWidth`.
+ *
+ * Imposed with `requiredWidth` by [backlogShowing], because the host windows are phone-sized
+ * and a preferred width would be coerced back down — the wide arrangement would never be
+ * rendered and the scenario would pass against a compact header it never asked for.
+ */
+private val WIDE_HEADER_WIDTH = 900.dp
 
 /** Two board columns a resolver test can hand a project: a single Todo lane, and a Todo + doing pair. */
 private val singleBoardStatus = listOf(

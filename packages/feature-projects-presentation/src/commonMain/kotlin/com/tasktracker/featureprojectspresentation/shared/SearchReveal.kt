@@ -4,9 +4,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -76,6 +78,50 @@ internal fun SearchReveal(
                 shrinkVertically(
                     animationSpec = tween(SEARCH_REVEAL_MILLIS),
                     shrinkTowards = Alignment.Top,
+                )
+        },
+    ) {
+        content()
+    }
+}
+
+/**
+ * The same reveal, unfolding sideways into a row rather than downwards into a column.
+ *
+ * The desktop header puts the sort row and the search field beside each other, so opening the
+ * field has to make room for it rather than push rows down. `expandHorizontally` grows the
+ * field's slot from zero width while the sort row's `weight` gives the space back frame by
+ * frame, which is the shrink the eye reads as one control making room for another.
+ *
+ * Durations and the reduced-motion rule are shared with [SearchReveal] on purpose: the two
+ * layouts of the same field must not unfold at different speeds, and reduced motion removes the
+ * travel rather than the field.
+ */
+@Composable
+internal fun SearchRevealBeside(
+    visible: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val reducedMotion = LocalReducedMotion.current
+
+    AnimatedVisibility(
+        visible = visible,
+        enter = if (reducedMotion) {
+            EnterTransition.None
+        } else {
+            fadeIn(animationSpec = tween(SEARCH_FADE_IN_MILLIS)) +
+                expandHorizontally(
+                    animationSpec = tween(SEARCH_REVEAL_MILLIS),
+                    expandFrom = Alignment.End,
+                )
+        },
+        exit = if (reducedMotion) {
+            ExitTransition.None
+        } else {
+            fadeOut(animationSpec = tween(SEARCH_FADE_OUT_MILLIS)) +
+                shrinkHorizontally(
+                    animationSpec = tween(SEARCH_REVEAL_MILLIS),
+                    shrinkTowards = Alignment.End,
                 )
         },
     ) {
