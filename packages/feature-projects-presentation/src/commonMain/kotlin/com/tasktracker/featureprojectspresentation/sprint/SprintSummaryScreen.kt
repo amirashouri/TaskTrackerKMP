@@ -70,6 +70,11 @@ fun SprintSummaryScreen(
                 color = ttLabel(),
                 modifier = Modifier.weight(1f),
             )
+            // Read from the summary's own flag, never from the two totals: the screen and the
+            // sprint's card must agree about the same sprint.
+            if (summary.didHitGoal == true) {
+                SprintCompleteBadge()
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),

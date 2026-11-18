@@ -132,21 +132,54 @@ private fun AppMarkGlyph() {
                 )
             }
         }
-        val path = Path().apply {
-            moveTo(AppMarkDefaults.SHORT_ARM_X * w, AppMarkDefaults.VERTEX_Y * h)
-            lineTo(AppMarkDefaults.VERTEX_X * w, AppMarkDefaults.VERTEX_Y * h)
-            lineTo(AppMarkDefaults.TIP_X * w, AppMarkDefaults.TIP_Y * h)
-        }
-        drawPath(
-            path = path,
-            color = ink,
-            style = Stroke(
-                width = AppMarkDefaults.CHECK_STROKE * unit,
-                cap = StrokeCap.Round,
-                join = StrokeJoin.Round,
-            ),
+        // The same call [AppMarkCheck] makes, so the mark and a badge using it cannot show
+        // two different checkmarks. `unit` because the tile is square: the fractions are of
+        // its width and height alike.
+        drawAppMarkCheck(tint = ink, origin = Offset.Zero, scale = unit)
+    }
+}
+
+/**
+ * The mark's checkmark: two round-capped segments from the same tile fractions the launcher's
+ * icon uses, drawn at [scale] units per fraction with its first point at [origin].
+ *
+ * A stroke rather than a filled outline, because that is what the mark is: the original draws
+ * the check as a path with `StrokeCap.Round` and `StrokeJoin.Round`, and reproducing those two
+ * round terminals and the round joint as a filled contour would be a second drawing that could
+ * drift from this one. Every caller gets this one shape.
+ *
+ * [scale] is a single number, not a width and a height, for the same reason: the check lives
+ * on a square tile, and letting the two axes scale independently would allow a squashed
+ * checkmark that no constant in [AppMarkDefaults] describes.
+ */
+internal fun DrawScope.drawAppMarkCheck(
+    tint: Color,
+    origin: Offset,
+    scale: Float,
+) {
+    val path = Path().apply {
+        moveTo(
+            origin.x + AppMarkDefaults.SHORT_ARM_X * scale,
+            origin.y + AppMarkDefaults.VERTEX_Y * scale,
+        )
+        lineTo(
+            origin.x + AppMarkDefaults.VERTEX_X * scale,
+            origin.y + AppMarkDefaults.VERTEX_Y * scale,
+        )
+        lineTo(
+            origin.x + AppMarkDefaults.TIP_X * scale,
+            origin.y + AppMarkDefaults.TIP_Y * scale,
         )
     }
+    drawPath(
+        path = path,
+        color = tint,
+        style = Stroke(
+            width = AppMarkDefaults.CHECK_STROKE * scale,
+            cap = StrokeCap.Round,
+            join = StrokeJoin.Round,
+        ),
+    )
 }
 
 /** The geometry, named so a preview and the real component cannot disagree. */
