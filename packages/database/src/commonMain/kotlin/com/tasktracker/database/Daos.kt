@@ -72,6 +72,32 @@ interface OutboxDao {
     suspend fun deleteByIds(ids: List<String>)
 
     /**
+     * Drops the unsent upserts a newer snapshot of the same entity has replaced.
+     *
+     * The queue holds *state*, not operations: `OutboxRecord.payload` is the whole entity,
+     * so an upsert that has not left the device is obsolete the moment a newer one for the
+     * same id is queued. Keeping both is not harmless — [claimable] breaks a `createdAt` tie
+     * by `id`, and an id is a random uuid, so two writes made by one user action at one
+     * instant can reach the server in either order and the older snapshot then wins. Work
+     * items are the entity this happens to: assigning one to a sprint moves it and then
+     * edits it, and both writes carry the full item.
+     *
+     * Only `pending` and `failed`. An `inFlight` row is held by the sync engine right now,
+     * and a `dead` row is a failure the user is being shown, whose only route back is their
+     * own control ([revive]) — neither is this write's to discard.
+     */
+    @Query(
+        """
+        DELETE FROM outbox
+        WHERE entityKind = :entityKind
+          AND entityID = :entityID
+          AND operation = 'upsert'
+          AND status IN ('pending', 'failed')
+        """,
+    )
+    suspend fun deleteSupersededUpserts(entityKind: String, entityID: String)
+
+    /**
      * A retryable failure, dead-lettering whatever has run out of attempts.
      *
      * The attempt was already counted when the row was claimed, so exceeding the cap is

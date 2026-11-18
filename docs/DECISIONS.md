@@ -19,6 +19,7 @@ Permanent architectural invariants and design constraints. A rule lives here onl
 5. **Verdicts Match by Entry ID:** Match by ID, never queue index. Unmentioned IDs trigger retry; duplicate IDs invalidate the verdict.
 6. **Session-End Safety:** Sign-out mid-push releases in-flight rows; never mark them dead-lettered.
 7. **Terminal State Contract:** `resolvedAt != null` **strictly if and only if** `isTerminal`. Enforce on both read and write paths.
+8. **Coalesced Work-Item Snapshots:** A queued work-item upsert deletes any `pending`/`failed` upsert of the same item in the same transaction. The outbox carries **state, not history**, and `claimable` breaks a same-`createdAt` tie on a random uuid — so two snapshots from one user action can reach the server in either order and the older one wins the pull. `inFlight` and `dead` rows are never withdrawn. Do not assert queue *growth* for a work-item write; assert one row per item and its payload.
 
 ## 3. General Code Constraints
 * **Composable File Boundary:** Exactly one public `@Composable` per file, matching the filename. No Material3 (TaskTracker uses custom Liquid Glass tokens).

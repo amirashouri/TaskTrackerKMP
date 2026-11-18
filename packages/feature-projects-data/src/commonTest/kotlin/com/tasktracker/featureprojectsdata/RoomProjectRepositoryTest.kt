@@ -1210,8 +1210,6 @@ class RoomSprintRepositoryTest {
         val second = harness.repository.createWorkItem(
             project.id, "Two", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
         )
-        val depthBefore = harness.queueDepth()
-
         val changed = harness.repository.setWorkItemSprint(
             workItemIDs = listOf(first.id, second.id),
             sprintID = Patch.Of(sprint.id),
@@ -1223,12 +1221,84 @@ class RoomSprintRepositoryTest {
         assertEquals(listOf(first.rank, second.rank), changed.map { it.rank })
 
         // Each item is an edit, and each edit has to be queued — a bulk UPDATE produces no
-        // payload for the queue, which is why this goes through the mapping.
-        assertEquals(depthBefore + 2, harness.queueDepth())
+        // payload for the queue, which is why this goes through the mapping. Exactly one row
+        // per item, because the snapshot the create left is superseded in place: two rows at
+        // one `createdAt` are ordered by a random id, and the older one still names no
+        // sprint.
+        val snapshots = harness.queued()
+            .filter { it.entityKind == "workItem" }
+            .map { harness.decodeWorkItem(it) }
+            .groupBy { it.id }
+        assertEquals(setOf(first.id, second.id), snapshots.keys)
+        assertTrue(snapshots.values.all { it.size == 1 })
+        assertEquals(setOf(sprint.id), snapshots.values.map { it.single().sprintID }.toSet())
         assertEquals(
             setOf(sprint.id),
             changed.map { item -> harness.repository.sprintWorkItems(sprint.id).first { it.id == item.id }.sprintID }.toSet(),
         )
+    }
+
+    @Test
+    fun movingAnItemOntoTheBoardAndIntoASprintLeavesOneQueuedSnapshotOfTheFinalState() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val sprint = harness.repository.createSprint(
+            project.id, "Sprint 1", 21, null, Moments.start, Moments.day, null, Moments.start,
+        )
+        val item = harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Backlog, null, Priority.Medium, null, null, null, null, Moments.start,
+        )
+        val depthBefore = harness.queueDepth()
+
+        // The two writes `AddWorkItemsToSprint` makes, at the one instant the use case hands
+        // both of them: onto the board as Todo, then into the sprint.
+        harness.repository.moveWorkItem(item.id, WorkItemStatus.Todo, null, null, Moments.later)
+        harness.repository.setWorkItemSprint(listOf(item.id), Patch.Of(sprint.id), Moments.later)
+
+        // The burst leaves the queue exactly as deep as it was: the create, the move onto
+        // the board and the assignment are all the same item's *state*, so the row the item
+        // already had is replaced by the final snapshot instead of a second row joining it.
+        // Two rows would share `createdAt` and be ordered by the random id in
+        // `newOutboxID`, so the older one — `sprintID` still null — could be pushed last,
+        // and the pull would then take the item off the board *and* out of the backlog
+        // while leaving it in the sprint picker.
+        assertEquals(depthBefore, harness.queueDepth())
+        val queued = harness.queued()
+            .single { it.entityKind == "workItem" && it.entityID == item.id.stringValue }
+        val payload = harness.decodeWorkItem(queued)
+        assertEquals(WorkItemStatus.Todo, payload.status)
+        assertEquals(sprint.id, payload.sprintID)
+
+        // The row the server would receive is the row the user is looking at.
+        assertEquals(payload, assertNotNull(harness.repository.workItem(item.id)))
+    }
+
+    @Test
+    fun aNewerSnapshotWithdrawsOnlyUnsentRowsAndLeavesInFlightOrDeadOnesAlone() = runTest {
+        val harness = Harness()
+        val project = harness.repository.createProject("Apollo", "APO", "", Moments.start)
+        val item = harness.repository.createWorkItem(
+            project.id, "One", "", WorkItemStatus.Todo, null, Priority.Medium, null, null, null, null, Moments.start,
+        )
+        val created = harness.queued().single { it.entityKind == "workItem" }
+        // A push in progress: the engine is holding this row, so it is not the repository's
+        // to withdraw underneath it.
+        harness.database.outboxDao().update(listOf(created.copy(status = "inFlight")))
+
+        harness.repository.moveWorkItem(item.id, WorkItemStatus.InProgress, null, null, Moments.later)
+
+        val rows = harness.queued().filter { it.entityKind == "workItem" }
+        assertEquals(2, rows.size)
+        assertEquals(setOf("inFlight", "pending"), rows.map { it.status }.toSet())
+
+        // And a row the user is being shown as failed keeps its payload until they act on
+        // it: discarding a refusal silently would hide that the change was ever rejected.
+        harness.database.outboxDao().reject(listOf(rows.single { it.status == "pending" }.id), "refused")
+        harness.repository.moveWorkItem(item.id, WorkItemStatus.InReview, null, null, Moments.muchLater)
+
+        val after = harness.queued().filter { it.entityKind == "workItem" }
+        assertEquals(3, after.size)
+        assertEquals(1, after.count { it.status == "dead" })
     }
 
     @Test
