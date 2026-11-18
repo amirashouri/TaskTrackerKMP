@@ -1,6 +1,9 @@
 package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -242,21 +245,27 @@ object ProjectEditorScenarios {
     /**
      * The tag catalog reuses its composer for edits. The callback must carry the existing id
      * and the newly picked icon: work items hold ids, so a changed id would orphan every task
-     * that already uses this tag.
+     * that already uses this tag. Cancel must leave the draft without saving, and removing the
+     * row being edited must clear the draft so Add cannot recreate it with a fresh id.
      */
     val theTagCatalogSectionEditsAnExistingIcon: suspend ComposeUiTest.() -> Unit = {
         val tag = ProjectTag(name = "Bug", color = TagColor.Red, icon = TagIcon.Bug)
+        var currentTags by mutableStateOf(listOf(tag))
+        var additions = emptyList<String>()
         var updates = emptyList<Triple<String, String, TagIcon>>()
         setContent {
             ttTheme(ThemeScheme.Light) {
                 ProjectTagsSection(
-                    tags = listOf(tag),
-                    onAdd = { _, _, _ -> true },
+                    tags = currentTags,
+                    onAdd = { name, _, _ ->
+                        additions = additions + name
+                        true
+                    },
                     onUpdate = { id, name, _, icon ->
                         updates = updates + Triple(id.stringValue, name, icon)
                         true
                     },
-                    onRemove = {},
+                    onRemove = { currentTags = emptyList() },
                 )
             }
         }
@@ -272,6 +281,22 @@ object ProjectEditorScenarios {
             listOf(Triple(tag.id.stringValue, "Bug", TagIcon.Server)),
             updates,
             "the edit keeps the tag id and name and sends the newly chosen icon",
+        )
+
+        onNodeWithTag(AdminProjectTagEditTag(tag)).performClick()
+        onNodeWithTag(AdminProjectTagCancelTag).performClick()
+        onNodeWithTag(AdminProjectTagAddTag).assertIsDisplayed()
+        assertEquals(1, updates.size, "Cancel must leave the draft without saving")
+
+        onNodeWithTag(AdminProjectTagEditTag(tag)).performClick()
+        onNodeWithTag(AdminProjectTagRemoveTag(tag)).performClick()
+        onNodeWithTag(AdminProjectTagAddTag).assertIsDisplayed()
+        onNodeWithTag(AdminProjectTagAddTag).performClick()
+        onNodeWithTag(AdminProjectTagErrorTag).assertIsDisplayed()
+        assertEquals(
+            emptyList<String>(),
+            additions,
+            "removing the edited tag cleared its draft, so Add did not recreate it",
         )
     }
 

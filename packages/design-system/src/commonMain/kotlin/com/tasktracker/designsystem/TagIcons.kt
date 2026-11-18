@@ -145,7 +145,7 @@ object ttTagIcons {
         close()
     }
 
-    /** A bar chart on a baseline: four rising bars with clear gaps. */
+    /** A bar chart on a baseline: four bars with clear gaps. */
     val dataAnalysis: ImageVector = tagIcon("TagDataAnalysis") {
         tagRoundRect(3.6f, 19.4f, 20.4f, 20.5f, 0.5f)
         tagRoundRect(4.6f, 13.2f, 7.6f, 18.8f, 0.7f)

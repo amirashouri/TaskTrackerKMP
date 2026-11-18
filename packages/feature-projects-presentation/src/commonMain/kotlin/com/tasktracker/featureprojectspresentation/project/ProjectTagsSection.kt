@@ -48,6 +48,7 @@ import com.tasktracker.domain.TagRules
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.admin_project_tags_add
 import com.tasktracker.resources.admin_project_tags_body
+import com.tasktracker.resources.admin_project_tags_cancel
 import com.tasktracker.resources.admin_project_tags_color
 import com.tasktracker.resources.admin_project_tags_duplicate
 import com.tasktracker.resources.admin_project_tags_edit
@@ -65,9 +66,11 @@ import org.jetbrains.compose.resources.stringResource
 const val AdminProjectTagsSectionTag = "admin.projectEditor.tags"
 fun AdminProjectTagRowTag(tag: ProjectTag): String = "admin.projectEditor.tag.${tag.id.stringValue}"
 fun AdminProjectTagEditTag(tag: ProjectTag): String = "${AdminProjectTagRowTag(tag)}.edit"
+fun AdminProjectTagRemoveTag(tag: ProjectTag): String = "${AdminProjectTagRowTag(tag)}.remove"
 const val AdminProjectTagNameFieldTag = "admin.projectEditor.tagName"
 const val AdminProjectTagAddTag = "admin.projectEditor.tagAdd"
 const val AdminProjectTagSaveTag = "admin.projectEditor.tagSave"
+const val AdminProjectTagCancelTag = "admin.projectEditor.tagCancel"
 const val AdminProjectTagErrorTag = "admin.projectEditor.tagError"
 fun AdminProjectTagColorTag(color: TagColor): String = "admin.projectEditor.tagColor.${color.wireValue}"
 fun AdminProjectTagIconTag(icon: TagIcon): String = "admin.projectEditor.tagIcon.${icon.wireValue}"
@@ -95,7 +98,7 @@ fun ProjectTagsSection(
     var attempted by remember { mutableStateOf(false) }
 
     val editing = tags.firstOrNull { it.id == editingID }
-    val refusal = refusalFor(draftName, tags, editingID)
+    val refusal = refusalFor(draftName, tags, editing?.id)
 
     fun resetDraft() {
         draftName = ""
@@ -132,6 +135,7 @@ fun ProjectTagsSection(
                 ExistingTagRow(
                     tag = tag,
                     isEditing = tag.id == editingID,
+                    canEdit = !isBusy,
                     onEdit = {
                         editingID = tag.id
                         draftName = tag.name
@@ -139,7 +143,13 @@ fun ProjectTagsSection(
                         draftIcon = tag.icon
                         attempted = false
                     },
-                    onRemove = { onRemove(tag.id) },
+                    onRemove = {
+                        // Removing the row being edited must clear its draft. Otherwise the
+                        // composer flips back to Add with the dead tag's values still loaded,
+                        // and adding them again creates a new id that orphans its work items.
+                        if (tag.id == editingID) resetDraft()
+                        onRemove(tag.id)
+                    },
                 )
             }
         }
@@ -211,6 +221,11 @@ fun ProjectTagsSection(
             ) {
                 if (editing != null) {
                     ttGlassButton(
+                        label = stringResource(Res.string.admin_project_tags_cancel),
+                        onClick = { resetDraft() },
+                        modifier = Modifier.testTag(AdminProjectTagCancelTag),
+                    )
+                    ttGlassButton(
                         label = stringResource(Res.string.admin_project_tags_save),
                         onClick = {
                             if (!isBusy && refusal == null && onUpdate(
@@ -254,6 +269,7 @@ fun ProjectTagsSection(
 private fun ExistingTagRow(
     tag: ProjectTag,
     isEditing: Boolean,
+    canEdit: Boolean,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -277,12 +293,15 @@ private fun ExistingTagRow(
             image = ttActionIcons.edit,
             contentDescription = stringResource(Res.string.admin_project_tags_edit, tag.name),
             onClick = onEdit,
+            enabled = canEdit,
             modifier = Modifier.testTag(AdminProjectTagEditTag(tag)),
         )
         ttGlassIconButton(
             image = ttActionIcons.trash,
             contentDescription = stringResource(Res.string.admin_project_tags_remove, tag.name),
             onClick = onRemove,
+            enabled = canEdit,
+            modifier = Modifier.testTag(AdminProjectTagRemoveTag(tag)),
         )
     }
 }

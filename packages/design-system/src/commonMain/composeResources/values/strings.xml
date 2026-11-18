@@ -812,6 +812,7 @@
     <string name="admin_project_tags_add">Add tag</string>
     <string name="admin_project_tags_edit">Edit %1$s</string>
     <string name="admin_project_tags_save">Save tag</string>
+    <string name="admin_project_tags_cancel">Cancel</string>
     <string name="admin_project_tags_remove">Remove %1$s</string>
     <string name="admin_project_tags_name_required">Give the tag a name.</string>
     <string name="admin_project_tags_duplicate">A tag with that name already exists.</string>
