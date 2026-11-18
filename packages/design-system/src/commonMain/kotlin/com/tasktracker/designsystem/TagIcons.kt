@@ -13,7 +13,7 @@ import androidx.compose.ui.unit.dp
  * ## Why these are hand-drawn, like the tab and action sets
  *
  * Same rejection as [ttTabIcons]: no icon dependency, no icon font, no traced SF Symbols.
- * These are eight plain geometric drawings, chosen to stay legible at the 12dp a chip draws
+ * These are twelve plain geometric drawings, chosen to stay legible at the 12dp a chip draws
  * them at — a bug built out of a body, a head and six notched legs rather than a detailed
  * pictogram, because at 12dp the detail is the first thing to turn into a smudge.
  *
@@ -124,8 +124,69 @@ object ttTagIcons {
         tagCircle(12f, 3.6f, 1.3f)
     }
 
+    /** Three rack units, each with an outlined chassis and a status lamp in its cut-out. */
+    val server: ImageVector = tagIcon("TagServer") {
+        for (top in listOf(2.6f, 9.4f, 16.2f)) {
+            tagOutlinedRoundRect(4f, top, 20f, top + 5.2f, 1.2f, 1.3f)
+            // The lamp sits inside the chassis hole, so even-odd paints it back in.
+            tagCircle(6.8f, top + 2.6f, 0.9f)
+        }
+    }
+
+    /** A megaphone: a body, a handle below it, and a flared horn to the right. */
+    val marketing: ImageVector = tagIcon("TagMarketing") {
+        tagRoundRect(3.8f, 8.4f, 11.6f, 15.4f, 1.2f)
+        // A hair of air between body, handle and horn: overlap would cancel under even-odd.
+        tagRoundRect(6.2f, 15.8f, 10.2f, 20.8f, 1f)
+        moveTo(12.1f, 6.2f)
+        lineTo(20.6f, 3.2f)
+        lineTo(20.6f, 16.8f)
+        lineTo(12.1f, 13.8f)
+        close()
+    }
+
+    /** A bar chart on a baseline: four rising bars with clear gaps. */
+    val dataAnalysis: ImageVector = tagIcon("TagDataAnalysis") {
+        tagRoundRect(3.6f, 19.4f, 20.4f, 20.5f, 0.5f)
+        tagRoundRect(4.6f, 13.2f, 7.6f, 18.8f, 0.7f)
+        tagRoundRect(9.2f, 9.6f, 12.2f, 18.8f, 0.7f)
+        tagRoundRect(13.8f, 5.8f, 16.8f, 18.8f, 0.7f)
+        tagRoundRect(18.2f, 11.4f, 21f, 18.8f, 0.7f)
+    }
+
+    /** A diagonal pencil: nib, body and eraser abut edge to edge, never overlap. */
+    val design: ImageVector = tagIcon("TagDesign") {
+        moveTo(4.8f, 20.2f)
+        lineTo(8.6f, 15.6f)
+        lineTo(11.4f, 18.4f)
+        close()
+        moveTo(8.6f, 15.6f)
+        lineTo(15.8f, 8.4f)
+        lineTo(18.6f, 11.2f)
+        lineTo(11.4f, 18.4f)
+        close()
+        moveTo(15.8f, 8.4f)
+        lineTo(17.9f, 6.3f)
+        lineTo(20.7f, 9.1f)
+        lineTo(18.6f, 11.2f)
+        close()
+    }
+
     /** Every glyph, in the order the picker offers them. */
-    val all: List<ImageVector> = listOf(bug, mobile, sparkle, bolt, star, flag, book, bell)
+    val all: List<ImageVector> = listOf(
+        bug,
+        mobile,
+        sparkle,
+        bolt,
+        star,
+        flag,
+        book,
+        bell,
+        server,
+        marketing,
+        dataAnalysis,
+        design,
+    )
 }
 
 /** Builds one 24-unit glyph from a single filled path. See [ttTabIcons]' own builder. */

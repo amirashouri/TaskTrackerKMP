@@ -183,6 +183,31 @@ class AdminProjectEditorModelTest {
     }
 
     @Test
+    fun `new tag icons keep their wire keys and survive an editor save`() = runTest {
+        val newIcons = listOf(
+            TagIcon.Server,
+            TagIcon.Marketing,
+            TagIcon.DataAnalysis,
+            TagIcon.Design,
+        )
+        assertEquals(
+            listOf("server", "marketing", "dataanalysis", "design"),
+            newIcons.map { it.wireValue },
+        )
+        assertTrue(newIcons.all { TagIcon.fromWireValue(it.wireValue) == it })
+
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        for (icon in newIcons) {
+            assertTrue(model.addTag(icon.name, TagColor.Blue, icon))
+            assertEquals(icon, model.tags.last().icon)
+        }
+        assertTrue(model.save())
+        assertEquals(newIcons, port.updateCalls.single().first.tags.map { it.icon })
+    }
+
+    @Test
     fun `the tag composer refuses a blank name a duplicate and a full catalog`() = runTest {
         val model = AdminProjectEditorModel(id, port())
         model.load()
