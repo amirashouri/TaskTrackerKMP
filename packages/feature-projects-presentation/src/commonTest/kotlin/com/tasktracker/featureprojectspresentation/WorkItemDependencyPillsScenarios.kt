@@ -3,8 +3,12 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTheme
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The dependency section of the work item editor: one pill per blocker, wrapping, each with a
@@ -99,4 +103,41 @@ object WorkItemDependencyPillsScenarios {
         onNodeWithTag(WorkItemDependsPillTag(blockers[3])).assertIsDisplayed()
         onNodeWithTag(WorkItemDependsAddTag).assertIsDisplayed()
     }
+
+    /**
+     * The remove cross sits inside a row that opens the blocker. A glyph-sized cross makes
+     * a click just off the X fall through to the row's open action, which is worse than doing
+     * nothing: the user asked to remove and gets navigation instead. Its own node must be a
+     * full button-sized target.
+     */
+    val theRemoveCrossHasAFullHitAreaWithoutOpeningTheBlocker: suspend ComposeUiTest.() -> Unit = {
+        val blocker = testWorkItem(projectID = testProject().id, key = "AP-9", title = "Blocker")
+        var opened = 0
+        var removed = 0
+
+        setContent {
+            ttTheme(scheme = ThemeScheme.Dark) {
+                WorkItemDependencyPills(
+                    blockers = listOf(blocker),
+                    onOpenBlocker = { opened += 1 },
+                    onRemoveBlocker = { removed += 1 },
+                    onAddClick = {},
+                )
+            }
+        }
+
+        val remove = onNodeWithTag(WorkItemDependsRemoveTag(blocker))
+            .fetchSemanticsNode().boundsInRoot
+        val minimum = with(density) { ttSpacing.iconButtonSize.toPx() }
+        assertTrue(
+            remove.width >= minimum - HALF_PIXEL && remove.height >= minimum - HALF_PIXEL,
+            "the remove cross is ${remove.width}x${remove.height}px against a ${minimum}px minimum",
+        )
+
+        onNodeWithTag(WorkItemDependsRemoveTag(blocker)).performClick()
+        assertEquals(1, removed, "the cross should remove the blocker")
+        assertEquals(0, opened, "the cross must not fall through to the row's open action")
+    }
+
+    private const val HALF_PIXEL = 0.5f
 }
