@@ -193,21 +193,48 @@ jobs:
       - name: Generate Xcode project
         run: cd iosApp && xcodegen generate
 
+      # A named device is a trap on this runner. The macos-15 image ships iPhone 17/18
+      # with iOS 26.5+ runtimes, so `name=iPhone 16` matched nothing — and xcodebuild
+      # does not fail on a destination that matches nothing, it falls back to "My Mac"
+      # and errors there ("Xcode doesn't support My Mac's macOS 15.8.2"). The generic
+      # destination asks for any simulator of the right platform, so an image update
+      # that renames the iPhone line cannot silently rot this step.
+      #
+      # `ARCHS=arm64`: Release sets ONLY_ACTIVE_ARCH=NO, so a generic simulator
+      # destination resolves to `ARCHS = arm64 x86_64` — and :shared-ui links only
+      # iosSimulatorArm64, because Compose 1.12.1 publishes no Intel simulator
+      # variant, so that slice cannot link. This has to be the `ARCHS` build setting,
+      # not `-arch`: xcodebuild rejects `-arch` alongside `-destination` with
+      # "destination implies architecture, architecture must not also be specified".
+      #
+      # `-derivedDataPath build`: without it the product lands in
+      # ~/Library/Developer/Xcode/DerivedData, and the upload below finds an empty
+      # `iosApp/build/` — a green job that ships nothing.
       - name: Build iOS for arm64 simulator
         run: |
           cd iosApp
           xcodebuild -project TaskTracker.xcodeproj \
             -scheme TaskTracker \
             -configuration Release \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination 'generic/platform=iOS Simulator' \
+            ARCHS=arm64 \
+            -derivedDataPath build \
             build
+
+      # Zipped, not the bare .app: a bundle uploaded as a directory arrives as a tree
+      # of files rather than something a user can drop on a simulator.
+      - name: Package the simulator app
+        run: |
+          cd iosApp/build/Build/Products/Release-iphonesimulator
+          ditto -c -k --sequesterRsrc --keepParent TaskTracker.app \
+            "TaskTracker-${RELEASE_TAG}-ios-simulator.zip"
 
       - name: Upload iOS build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-build
-          path: iosApp/build/
-          if-no-files-found: warn
+          path: iosApp/build/Build/Products/Release-iphonesimulator/*.zip
+          if-no-files-found: error
 
   release:
     name: Create GitHub Release

@@ -32,9 +32,11 @@ Prebuilt installers are published on every release tag. Grab the latest from
 | **macOS** | `TaskTracker-<version>.dmg` |
 | **Windows** | `TaskTracker-<version>.msi` |
 | **Linux** | `TaskTracker-<version>.deb` |
-| **iOS** | Build from source (Quick Start below) — no release asset yet |
+| **iOS** | Simulator build only — `TaskTracker-<version>-ios-simulator.zip` in the release's workflow run (see note below) |
 
 > The Android APK is a **debug** build; enable "Install from unknown sources" if prompted. On macOS the app is not notarized, so the first launch needs right-click → Open.
+
+> **iOS** ships a **simulator** build, not an installable `.ipa`. There is no paid Apple Developer Program account behind this project, so there is no App Store or TestFlight listing and no signed on-device build: unzip the artifact from the release's workflow run and drag `TaskTracker.app` onto a booted simulator. Running it on a physical iPhone means re-signing it with your own Apple ID — a free one works, but its certificate has to be renewed every 7 days.
 
 Prefer to build it yourself? Jump to [Quick Start](#-quick-start) below.
 
