@@ -3,12 +3,12 @@
   "hosts": {
     "jvmTest": {
       "target": "jvm",
-      "tests": 2262,
+      "tests": 2263,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "failed": [],
-      "resultFiles": 196
+      "resultFiles": 197
     },
     "iosSimulatorArm64Test": {
       "target": "iosSimulatorArm64",
