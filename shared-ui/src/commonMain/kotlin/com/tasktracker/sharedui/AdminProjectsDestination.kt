@@ -260,6 +260,7 @@ private fun AdminProjectEditor(
             ProjectTagsSection(
                 tags = model.tags,
                 onAdd = model::addTag,
+                onUpdate = model::updateTag,
                 onRemove = model::removeTag,
                 isBusy = model.isSaving,
             )

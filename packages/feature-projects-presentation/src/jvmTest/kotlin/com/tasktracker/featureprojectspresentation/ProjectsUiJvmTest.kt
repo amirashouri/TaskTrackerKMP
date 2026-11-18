@@ -374,6 +374,10 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = ProjectEditorScenarios.addingAStageSendsTheComposerValues)
 
     @Test
+    fun theTagCatalogSectionEditsAnExistingIcon() =
+        runComposeUiTest(block = ProjectEditorScenarios.theTagCatalogSectionEditsAnExistingIcon)
+
+    @Test
     fun cancellingACleanWorkItemEditorClosesIt() =
         runComposeUiTest(block = WorkItemEditorScenarios.cancellingACleanEditorClosesIt)
 

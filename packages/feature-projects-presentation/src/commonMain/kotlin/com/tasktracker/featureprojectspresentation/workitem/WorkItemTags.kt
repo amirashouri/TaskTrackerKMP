@@ -82,6 +82,10 @@ internal fun TagIcon.vector(): ImageVector = when (this) {
     TagIcon.Flag -> ttTagIcons.flag
     TagIcon.Book -> ttTagIcons.book
     TagIcon.Bell -> ttTagIcons.bell
+    TagIcon.Server -> ttTagIcons.server
+    TagIcon.Marketing -> ttTagIcons.marketing
+    TagIcon.DataAnalysis -> ttTagIcons.dataAnalysis
+    TagIcon.Design -> ttTagIcons.design
 }
 
 @Composable

@@ -226,6 +226,10 @@ enum class TagIcon {
     @SerialName("flag") Flag,
     @SerialName("book") Book,
     @SerialName("bell") Bell,
+    @SerialName("server") Server,
+    @SerialName("marketing") Marketing,
+    @SerialName("dataanalysis") DataAnalysis,
+    @SerialName("design") Design,
     ;
 
     /** The stable value on the wire. */

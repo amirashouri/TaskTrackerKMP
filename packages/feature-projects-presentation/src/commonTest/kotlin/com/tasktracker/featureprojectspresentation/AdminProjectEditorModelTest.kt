@@ -183,6 +183,86 @@ class AdminProjectEditorModelTest {
     }
 
     @Test
+    fun `new tag icons keep their wire keys and survive an editor save`() = runTest {
+        val newIcons = listOf(
+            TagIcon.Server,
+            TagIcon.Marketing,
+            TagIcon.DataAnalysis,
+            TagIcon.Design,
+        )
+        assertEquals(
+            listOf("server", "marketing", "dataanalysis", "design"),
+            newIcons.map { it.wireValue },
+        )
+        assertTrue(newIcons.all { TagIcon.fromWireValue(it.wireValue) == it })
+
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        for (icon in newIcons) {
+            assertTrue(model.addTag(icon.name, TagColor.Blue, icon))
+            assertEquals(icon, model.tags.last().icon)
+        }
+        assertTrue(model.save())
+        assertEquals(newIcons, port.updateCalls.single().first.tags.map { it.icon })
+    }
+
+    @Test
+    fun `editing a tag keeps its id and updates every task that references it`() = runTest {
+        val original = ProjectTag(randomTagID(), "Bug", TagColor.Red, TagIcon.Bug)
+        val seeded = project().apply { tags = listOf(original) }
+        val port = RecordingAdminProjectsPort(
+            projectByID = mapOf(id to AdminProject(seeded, "v1")),
+            updateResult = { updated, _ -> AdminProject(updated, "v2") },
+        )
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        assertFalse(model.hasChanges)
+
+        // A task stores only the id, so its tagIDs do not change when the catalog entry does.
+        val taskTagIDs = listOf(original.id)
+        repeat(TagRules.MAX_PER_PROJECT - 1) { index ->
+            assertTrue(model.addTag("Extra $index", TagColor.Gray, TagIcon.Book))
+        }
+        assertTrue(
+            model.updateTag(original.id, "  Bug  ", TagColor.Teal, TagIcon.Server),
+            "a full catalog must not block an edit",
+        )
+
+        val updated = model.tags.first { it.id == original.id }
+        assertEquals(original.id, updated.id)
+        assertEquals("Bug", updated.name)
+        assertEquals(TagColor.Teal, updated.color)
+        assertEquals(TagIcon.Server, updated.icon)
+        assertEquals(
+            TagIcon.Server,
+            model.tags.resolveFor(taskTagIDs).single().icon,
+            "the unchanged task reference must resolve to the edited icon",
+        )
+        assertTrue(model.hasChanges)
+
+        assertTrue(model.save())
+        assertTrue(port.updateCalls.single().first.tags.contains(updated))
+    }
+
+    @Test
+    fun `an edit that changes nothing leaves the draft clean`() = runTest {
+        val bug = ProjectTag(randomTagID(), "Bug", TagColor.Red, TagIcon.Bug)
+        val mobile = ProjectTag(randomTagID(), "Mobile", TagColor.Blue, TagIcon.Mobile)
+        val seeded = project().apply { tags = listOf(bug, mobile) }
+        val model = AdminProjectEditorModel(
+            id,
+            RecordingAdminProjectsPort(projectByID = mapOf(id to AdminProject(seeded, "v1"))),
+        )
+        model.load()
+
+        assertFalse(model.updateTag(bug.id, "Mobile", TagColor.Red, TagIcon.Bug))
+        assertFalse(model.updateTag(bug.id, "   ", TagColor.Red, TagIcon.Bug))
+        assertTrue(model.updateTag(bug.id, "  Bug  ", bug.color, bug.icon))
+        assertFalse(model.hasChanges, "trimming to the same tag is not an edit")
+    }
+
+    @Test
     fun `the tag composer refuses a blank name a duplicate and a full catalog`() = runTest {
         val model = AdminProjectEditorModel(id, port())
         model.load()
