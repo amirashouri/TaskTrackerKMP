@@ -1545,9 +1545,29 @@ class RoomProjectRepository(
         )
     }
 
-    /** As [enqueueProject]. */
+    /**
+     * As [enqueueProject], and coalesced: a newer snapshot supersedes any unsent upsert of
+     * the same item.
+     *
+     * A work item is the one entity a single user action writes more than once —
+     * [setWorkItemSprint] moves the item onto the board and then assigns it, and a save
+     * edits it and then moves it — and each write queues the item's *complete* state. Left
+     * as two rows they share `createdAt` and are ordered by the random id in
+     * [newOutboxID], so the older snapshot can be pushed last; the pull then applies the
+     * server's copy and silently undoes the newer write. An item added to a sprint came back
+     * as an untriaged `ToDo`, visible neither in the backlog nor on the board. Since the
+     * payload is a snapshot there is nothing in the older row worth keeping, so it is
+     * dropped here, in the caller's transaction, and the queue ends up saying what the user
+     * meant.
+     */
     private suspend fun enqueueWorkItem(item: WorkItem, userID: String?, now: Instant) {
         val payload = JSONCoding.json.encodeToString(WorkItem.serializer(), item)
+        // Before the insert, not after: the statement must not be able to see the row this
+        // call is about to add.
+        database.outboxDao().deleteSupersededUpserts(
+            entityKind = OutboxEntity.WorkItem.wireValue,
+            entityID = item.id.stringValue,
+        )
         database.outboxDao().insert(
             NewOutboxEntry(
                 id = newOutboxID(OutboxEntity.WorkItem, item.id.stringValue, OutboxOperation.Upsert),
