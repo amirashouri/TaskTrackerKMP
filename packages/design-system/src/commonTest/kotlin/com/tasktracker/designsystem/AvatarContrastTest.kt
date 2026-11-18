@@ -89,6 +89,102 @@ class AvatarContrastTest {
     }
 
     /**
+     * The palette stacks must stay readable too, and this is the same measurement.
+     *
+     * A tint is an 18% wash of a *hue*, and the dark-appearance values in [TagTint] are bright
+     * on purpose (they have to clear a black canvas), so the wash behind the initials is a
+     * different background from the accent's in every appearance. Nothing about the accent's
+     * measured 15.80:1 and 18.62:1 carries over to them, and a hue that failed would fail
+     * quietly: the discs still lay out, the stack still reads as a stack, and only the letters
+     * inside one of them are hard to read.
+     *
+     * Two full cycles of the palette, so a tenth hue added later is covered without this file
+     * having to name the count.
+     */
+    @Test
+    fun everyAvatarTintKeepsTheInitialsReadable() = rasterising {
+        for (scheme in APPEARANCES) {
+            var readings: Map<Int, Reading> = emptyMap()
+            runComposeUiTest { readings = readTints(scheme = scheme) }
+            assertTrue(
+                readings.size == TINT_CASES,
+                "measured ${readings.size} of $TINT_CASES palette discs in ${scheme.name} " +
+                    "appearance",
+            )
+            for ((index, measured) in readings) {
+                assertTrue(
+                    measured.ratio >= TEXT_CONTRAST_MINIMUM,
+                    "avatar tint #$index in ${scheme.name} appearance renders " +
+                        "${measured.ink.hex()} on ${measured.fill.hex()}, which is " +
+                        "${measured.ratio.ratioText()} to 1 - below the " +
+                        "${TEXT_CONTRAST_MINIMUM} to 1 text this size needs. The tint at that " +
+                        "index in ttAvatarTints is what to look at",
+                )
+            }
+        }
+    }
+
+    /**
+     * One disc per palette tint, each rendered twice — inked and blanked — as the cases row is.
+     */
+    private fun ComposeUiTest.readTints(scheme: ThemeScheme): Map<Int, Reading> {
+        setContent {
+            ttTheme(scheme) {
+                Box(Modifier.fillMaxSize().background(ttCanvas())) {
+                    Column {
+                        TintRow(inked = true)
+                        TintRow(inked = false)
+                    }
+                }
+            }
+        }
+        waitForIdle()
+
+        val frame = onRoot().captureToImage()
+        val pixels = frame.toPixelMap()
+        val root = onRoot().getBoundsInRoot()
+        val scale = frame.width.toFloat() / max(root.right.value, 1f)
+
+        return (0 until TINT_CASES).associateWith { index ->
+            val inkedBounds = onNodeWithTag(tintTag(index, inked = true)).getBoundsInRoot()
+            val blankedBounds = onNodeWithTag(tintTag(index, inked = false)).getBoundsInRoot()
+            val blankedWindow = blankedBounds.toWindow(scale)
+            val blank = blankedWindow.pixels(pixels)
+            val inked = inkedBounds.toWindow(scale).pixels(pixels)
+
+            val interior = blankedWindow.interiorOffsets()
+            val fill = interior
+                .map { blank[it] }
+                .groupingBy { it }.eachCount().maxBy { it.value }.key
+            val glyph = interior.maxBy { abs(relativeLuminance(inked[it]) - relativeLuminance(blank[it])) }
+            val ink = inked[glyph]
+
+            Reading(ink = ink, fill = fill, ratio = contrastRatio(ink, fill))
+        }
+    }
+
+    /** One row of palette-tinted discs, spaced by `offset` for the same reason [RowOfDiscs] is. */
+    @Composable
+    private fun TintRow(inked: Boolean) {
+        val tints = ttAvatarTints(TINT_CASES)
+        Box {
+            tints.forEachIndexed { index, tint ->
+                ttInitialsAvatar(
+                    initials = if (inked) TINT_CASE_INITIALS else BLANK,
+                    size = ttAvatarSize.avatar,
+                    tint = tint,
+                    modifier = Modifier
+                        .offset(x = (ttAvatarSize.avatar + PITCH) * index)
+                        .testTag(tintTag(index, inked = inked)),
+                )
+            }
+        }
+    }
+
+    private fun tintTag(index: Int, inked: Boolean) =
+        "avatar/tint/${if (inked) "inked" else "blanked"}/$index"
+
+    /**
      * Renders one appearance's twin frames and measures every case in them.
      *
      * The stack's own cases are measured rather than a convenient sample: `AR` is the widest
@@ -222,6 +318,12 @@ class AvatarContrastTest {
 
         /** The widest initials a real name makes, the narrowest, and the overflow chip. */
         val CASES = listOf("AR", "A", "+2")
+
+        /** Two full cycles of [ttAvatarTints]' nine-hue palette. */
+        const val TINT_CASES = 18
+
+        /** The widest run a 24dp disc holds, so the glyph is measured at its hardest. */
+        const val TINT_CASE_INITIALS = "AR"
 
         /** Draws no glyph, so the twin frame is the disc alone. */
         const val BLANK = " "

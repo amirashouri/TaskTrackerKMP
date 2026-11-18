@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import com.tasktracker.designsystem.ttAvatarDescription
+import com.tasktracker.designsystem.ttAvatarTints
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttInitialsStack
 import com.tasktracker.core.UserID
@@ -11,7 +12,14 @@ import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_assignees_description
 import org.jetbrains.compose.resources.pluralStringResource
 
-/** Overlapping initials stack representing active assignees on the board header. */
+/**
+ * Overlapping initials stack representing active assignees on the board header.
+ *
+ * Coloured per position rather than all in the accent: the discs overlap by 8dp, so a single
+ * hue made a board with three or more assignees read as one blue smear. Each person gets the
+ * next hue in [ttAvatarTints], which also guarantees that two discs side by side are never the
+ * same colour.
+ */
 @Composable
 internal fun AssigneeStack(
     names: List<String>,
@@ -21,6 +29,7 @@ internal fun AssigneeStack(
 
     ttInitialsStack(
         initials = names.map { ttInitialsFor(it) },
+        tints = ttAvatarTints(names.size),
         modifier = modifier.ttAvatarDescription(
             pluralStringResource(
                 Res.plurals.board_assignees_description,

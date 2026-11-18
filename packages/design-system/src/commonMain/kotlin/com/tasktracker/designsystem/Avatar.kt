@@ -52,13 +52,26 @@ fun ttInitialsAvatar(
     }
 }
 
-/** Horizontal overlapping stack of avatar discs with an overflow counter chip. */
+/**
+ * Horizontal overlapping stack of avatar discs with an overflow counter chip.
+ *
+ * [tints] colours the discs positionally: disc *i* is drawn in `tints[i]`, and a disc past the
+ * end of the list falls back to the accent. The overlapping stack is the one place where two
+ * neighbouring discs are read as a pair — they are 16dp apart and 8dp of one is under the
+ * other — so a caller with a set of *people* passes one tint per person (see [ttAvatarTints]) and
+ * the discs stop reading as a single blue blur. `null` keeps the old single-accent look for the
+ * callers that are showing one thing rather than a set.
+ *
+ * The overflow chip keeps the accent deliberately: it is not a person, and giving it a hue out
+ * of the same palette would make "+2 more" look like a member.
+ */
 @Composable
 fun ttInitialsStack(
     initials: List<String>,
     modifier: Modifier = Modifier,
     maxVisible: Int = ttAvatarStackDefaults.maxVisible,
     size: Dp = ttAvatarSize.avatar,
+    tints: List<Color>? = null,
 ) {
     if (initials.isEmpty()) return
 
@@ -78,6 +91,7 @@ fun ttInitialsStack(
                 modifier = Modifier
                     .zIndex((shown.size - index).toFloat())
                     .testTag(DISC_TAG),
+                tint = tints?.getOrNull(index),
                 initialsInset = inset,
             )
         }
@@ -92,6 +106,46 @@ fun ttInitialsStack(
         }
     }
 }
+
+/**
+ * One tint per disc for a stack of [count] people, resolved for the appearance being drawn.
+ *
+ * ## Positional, and that is a decision
+ *
+ * The alternative — a colour derived from the member's id — is stable as the list changes, and
+ * it cannot promise what this is for: two people byte-identical in nothing but their hash
+ * collide, and a collision lands *beside itself* in a sorted stack, which is the one place the
+ * eye compares two discs. Cycling a palette by position makes "the disc next to this one is a
+ * different colour" true by construction, for any count, at any position.
+ *
+ * ## The hues, and why they are [TagTint]'s
+ *
+ * They are the same closed set the tags use, resolved through [ttTagTint] so each hue has its
+ * light-appearance and dark-appearance value and the avatar cannot pick a colour that only
+ * works on one canvas. Gray is left out: it is the one hue in that set that reads as "no
+ * colour", and a stack of them would look like the single-accent version with extra steps.
+ *
+ * The order alternates colour families rather than walking the enum, so the first four discs
+ * of a small board are blue, orange, green and purple — not four neighbouring hues that a
+ * 24dp disc washes out into the same blue-grey.
+ */
+@Composable
+fun ttAvatarTints(count: Int): List<Color> = List(count) { index ->
+    ttTagTint(AVATAR_TINTS[index % AVATAR_TINTS.size])
+}
+
+/** The cycling order [ttAvatarTints] draws from. See its note on the order. */
+private val AVATAR_TINTS: List<TagTint> = listOf(
+    TagTint.Blue,
+    TagTint.Orange,
+    TagTint.Green,
+    TagTint.Purple,
+    TagTint.Teal,
+    TagTint.Pink,
+    TagTint.Indigo,
+    TagTint.Amber,
+    TagTint.Red,
+)
 
 object ttAvatarStackDefaults {
     val maxVisible: Int = 4
