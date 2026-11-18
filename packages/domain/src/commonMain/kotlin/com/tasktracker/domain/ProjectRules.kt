@@ -21,7 +21,10 @@ object ProjectRules {
 
     const val MAX_NAME_LENGTH = 120
     const val MAX_DETAILS_LENGTH = 4_000
+    const val MAX_REPO_URL_LENGTH = 2_048
     val KEY_PREFIX_LENGTH = 2..10
+
+    private val REPO_URL_SCHEMES = setOf("http", "https", "ssh")
 
     @Throws(AppError::class)
     fun normaliseName(raw: String): String {
@@ -60,6 +63,52 @@ object ProjectRules {
         val allowed = trimmed.all { (it.code in 0x00..0x7F) && (it.isLetter() || it.isDigit()) }
         if (!allowed) {
             throw AppError.Validation("A key prefix can only contain letters and digits.")
+        }
+        return trimmed
+    }
+
+    /**
+     * A project's optional repository URL, or `null` when there is none.
+     *
+     * The same rule the server applies when it stores one, and applied here for a reason the
+     * server's copy cannot serve: a create is offline-first, so the URL is written to the local
+     * row and pushed later. A value the server will refuse comes back as a dead-lettered change
+     * hours afterwards, with nothing on screen saying which field was wrong. Refusing it at the
+     * field is the only place the person who typed it can be told.
+     *
+     * Only `http`, `https` and `ssh`, because those are what an agent can hand to git. A URL
+     * with a password is refused rather than stripped: it is a secret, and it would otherwise
+     * reach the sync change log and the agent brief.
+     */
+    @Throws(AppError::class)
+    fun normaliseRepoUrl(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        if (trimmed.length > MAX_REPO_URL_LENGTH) {
+            throw AppError.Validation("Repository URLs are limited to $MAX_REPO_URL_LENGTH characters.")
+        }
+        if (trimmed.any { it == '\r' || it == '\n' || it == '\t' }) {
+            throw AppError.Validation("A repository URL cannot contain control characters.")
+        }
+        val schemeEnd = trimmed.indexOf("://")
+        if (schemeEnd <= 0) {
+            throw AppError.Validation("A repository URL must start with http://, https:// or ssh://.")
+        }
+        if (trimmed.substring(0, schemeEnd).lowercase() !in REPO_URL_SCHEMES) {
+            throw AppError.Validation("A repository URL must use http, https or ssh.")
+        }
+        val authority = trimmed.substring(schemeEnd + 3)
+            .substringBefore('/')
+            .substringBefore('?')
+            .substringBefore('#')
+        if (authority.isEmpty()) {
+            throw AppError.Validation("A repository URL needs a host.")
+        }
+        // `git@host` is the conventional SSH form, so a username alone is fine; a colon before
+        // the `@` is a password, which is not.
+        val userInfo = authority.substringBefore('@')
+        if ('@' in authority && ':' in userInfo) {
+            throw AppError.Validation("A repository URL must not embed a password.")
         }
         return trimmed
     }

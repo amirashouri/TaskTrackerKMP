@@ -385,6 +385,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String,
         now: Instant,
         memberIDs: List<UserID>,
+        repoUrl: String?,
     ): Project {
         var projectID: ProjectID? = null
         return writing({ ProjectChange(ProjectChange.Kind.Projects, projectID!!) }) {
@@ -393,6 +394,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
             keyPrefix = keyPrefix,
             name = name,
             details = details,
+            repoUrl = repoUrl,
             memberIDs = memberIDs,
             createdAt = now,
             updatedAt = now,

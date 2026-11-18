@@ -96,6 +96,46 @@ class ProjectEditorModelTest {
         assertEquals(created.id, model.savedProjectID)
     }
 
+    /**
+     * The repository URL a create form collected reaches the row the push is built from.
+     *
+     * The row is the payload: a URL the model never passed is a URL the create push cannot
+     * send, which is what made the field inert before it was wired end to end.
+     */
+    @Test
+    fun `a repository URL typed on a new form is saved`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = ProjectEditorModel(null, repository, TestDateProvider())
+        model.onNameChanged("Apollo")
+        model.onRepoUrlChanged("  https://github.com/acme/apollo.git  ")
+
+        assertTrue(model.hasChanges, "a repository URL is work the form would lose")
+        assertTrue(model.save())
+        assertEquals(
+            "https://github.com/acme/apollo.git",
+            repository.storedProjects().single().repoUrl,
+            "the create sent no repository URL, so the first push could not carry one",
+        )
+    }
+
+    /**
+     * A URL the server would refuse is refused at the field instead.
+     *
+     * The create is offline-first: a password-bearing URL would otherwise land on the local
+     * row and dead-letter the push hours later, with nothing on screen naming the field.
+     */
+    @Test
+    fun `a password in the repository URL is refused before anything is stored`() = runTest {
+        val repository = FakeProjectRepository()
+        val model = ProjectEditorModel(null, repository, TestDateProvider())
+        model.onNameChanged("Apollo")
+        model.onRepoUrlChanged("https://user:secret@example.com/repo.git")
+
+        assertFalse(model.save())
+        assertEquals(emptyList(), repository.writes, "the invalid create reached the store")
+        assertNotNull(model.errorMessage)
+    }
+
     @Test
     fun `members are saved on create and duplicates collapse`() = runTest {
         val repository = FakeProjectRepository()

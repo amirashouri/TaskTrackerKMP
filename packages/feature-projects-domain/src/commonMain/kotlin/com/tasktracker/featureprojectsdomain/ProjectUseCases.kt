@@ -39,16 +39,22 @@ class CreateProject(
         keyPrefix: String,
         details: String = "",
         memberIDs: List<UserID> = emptyList(),
+        repoUrl: String? = null,
     ): Project {
         val name = ProjectRules.normaliseName(name)
         val keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix)
         val details = ProjectRules.normaliseDetails(details)
+        // Normalised here as well as by the store, because a caller that reaches the use case
+        // must not be able to put a password-bearing URL on the row that the push would then
+        // be refused for.
+        val repoUrl = repoUrl?.let(ProjectRules::normaliseRepoUrl)
         return repository.createProject(
             name = name,
             keyPrefix = keyPrefix,
             details = details,
             now = dateProvider.now(),
             memberIDs = memberIDs,
+            repoUrl = repoUrl,
         )
     }
 }

@@ -84,6 +84,35 @@ class ProjectRulesTest {
     }
 
     @Test
+    fun aRepositoryUrlIsOptionalAndTrimmed() {
+        assertNull(ProjectRules.normaliseRepoUrl(""))
+        assertNull(ProjectRules.normaliseRepoUrl("   "))
+        assertEquals(
+            "https://github.com/acme/demo.git",
+            ProjectRules.normaliseRepoUrl("  https://github.com/acme/demo.git "),
+        )
+        // `git@host` is the conventional SSH form, so a username is not a credential.
+        assertEquals("ssh://git@github.com/acme/demo.git", ProjectRules.normaliseRepoUrl("ssh://git@github.com/acme/demo.git"))
+    }
+
+    @Test
+    fun aRepositoryUrlMustBeOneAnAgentCouldHandToGit() {
+        // No scheme means no transport, and an unsupported one is a dead end for the agent.
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("github.com/acme/demo") }
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("ftp://github.com/acme/demo") }
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("https://") }
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("https://example.com/" + "a".repeat(ProjectRules.MAX_REPO_URL_LENGTH)) }
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("https://example.com/a\nb") }
+    }
+
+    @Test
+    fun aPasswordInARepositoryUrlIsRefusedRatherThanStripped() {
+        // Stripping would still have read the secret, and the server refuses it outright: a
+        // client that sent one would dead-letter its create instead of naming the field.
+        assertFailsWith<AppError> { ProjectRules.normaliseRepoUrl("https://user:secret@example.com/repo.git") }
+    }
+
+    @Test
     fun workItemKeysAreBuiltFromThePrefixAndAOneBasedSequence() {
         assertEquals("TT-1", ProjectRules.workItemKey("TT", 1).rawValue)
         assertEquals("TT-142", ProjectRules.workItemKey("TT", 142).rawValue)

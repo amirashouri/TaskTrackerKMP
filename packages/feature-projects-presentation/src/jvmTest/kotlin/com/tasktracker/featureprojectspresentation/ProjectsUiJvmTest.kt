@@ -369,6 +369,16 @@ class ProjectsUiJvmTest {
     fun cancellingADirtyProjectSheetAsks() =
         runComposeUiTest(block = ProjectEditorScenarios.cancellingADirtyProjectSheetAsksBeforeDiscarding)
 
+    /** A member's edit cannot save a repository URL, so its form must not offer the field. */
+    @Test
+    fun theMemberProjectEditSheetOffersNoRepositoryField() =
+        runComposeUiTest(block = ProjectEditorScenarios.theMemberProjectEditSheetOffersNoRepositoryField)
+
+    /** The admin's form keeps the field it can save, and its text reaches the model. */
+    @Test
+    fun theAdminProjectFormKeepsTheRepositoryField() =
+        runComposeUiTest(block = ProjectEditorScenarios.theAdminProjectFormKeepsTheRepositoryField)
+
     @Test
     fun theStatusCatalogSectionEditsAndRemovesStages() =
         runComposeUiTest(block = ProjectEditorScenarios.theStatusCatalogSectionEditsAndRemovesStages)

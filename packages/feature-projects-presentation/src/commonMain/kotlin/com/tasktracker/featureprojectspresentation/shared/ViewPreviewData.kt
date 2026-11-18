@@ -599,10 +599,12 @@ private class PreviewRepository(
         details: String,
         now: Instant,
         memberIDs: List<UserID>,
+        repoUrl: String?,
     ): Project = Project(
         keyPrefix = keyPrefix,
         name = name,
         details = details,
+        repoUrl = repoUrl,
         memberIDs = memberIDs,
         createdAt = now,
         updatedAt = now,

@@ -55,7 +55,18 @@ fun NewProjectForm(
     onKeyPrefixChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     repoUrl: String = "",
-    onRepoUrlChanged: (String) -> Unit = {},
+    /**
+     * Null hides the repository field.
+     *
+     * A **create** can carry one — the project's first push is the only point at which no row
+     * exists for an admin route to have written it to — and an **edit** cannot, because after
+     * that the URL is admin-route metadata. So the member's edit form has nowhere to put what
+     * the field would collect. It used to render there anyway with a no-op handler: a text
+     * field that took keystrokes no model ever saw and no save ever sent. Callers pass a
+     * handler exactly when they can save the value, the way `ProjectEditorScreen` treats
+     * `agentEnabled`.
+     */
+    onRepoUrlChanged: ((String) -> Unit)? = null,
     agentEnabled: Boolean = false,
     onAgentEnabledChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,
@@ -107,19 +118,22 @@ fun NewProjectForm(
             minLines = DETAILS_MIN_LINES,
             imeAction = ImeAction.Next,
         )
-        ProjectsTextField(
-            title = stringResource(Res.string.project_repo_url_label),
-            value = repoUrl,
-            onValueChange = onRepoUrlChanged,
-            placeholder = stringResource(Res.string.project_repo_url_placeholder),
-            keyboardType = KeyboardType.Uri,
-            imeAction = ImeAction.Next,
-        )
-        ttText(
-            text = stringResource(Res.string.project_repo_url_hint),
-            style = ttTypography.footnote,
-            color = ttLabelSecondary(),
-        )
+        if (onRepoUrlChanged != null) {
+            ProjectsTextField(
+                title = stringResource(Res.string.project_repo_url_label),
+                value = repoUrl,
+                onValueChange = onRepoUrlChanged,
+                fieldTag = NewProjectRepoUrlTag,
+                placeholder = stringResource(Res.string.project_repo_url_placeholder),
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Next,
+            )
+            ttText(
+                text = stringResource(Res.string.project_repo_url_hint),
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+            )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -200,5 +214,6 @@ const val NewProjectCreateTag = "projects.newForm.create"
 const val NewProjectCancelTag = "projects.newForm.cancel"
 const val NewProjectFormErrorTag = "projects.newForm.error"
 const val NewProjectAgentEnabledTag = "projects.newForm.agentEnabled"
+const val NewProjectRepoUrlTag = "projects.newForm.repoUrl"
 
 private const val DETAILS_MIN_LINES = 3

@@ -58,6 +58,16 @@ interface ProjectRepositoryPort {
         details: String,
         now: Instant,
         memberIDs: List<UserID> = emptyList(),
+        /**
+         * The optional repository URL the create form collected.
+         *
+         * Only a create carries one. The server stores it from the push that creates the
+         * project — nothing else can, for a project that does not exist yet — and after that
+         * the URL is admin-route metadata, which is why [updateProject] takes none. Normalised
+         * by the caller and again by the store, so a direct port call cannot put a value on the
+         * row that the push would then be refused for.
+         */
+        repoUrl: String? = null,
     ): Project
 
     suspend fun updateProject(

@@ -32,7 +32,8 @@ fun NewProjectSheet(
     onKeyPrefixChanged: (String) -> Unit,
     onDetailsChanged: (String) -> Unit,
     repoUrl: String = "",
-    onRepoUrlChanged: (String) -> Unit = {},
+    /** Null hides the repository field; only a create and the admin routes can save it. See `NewProjectForm`. */
+    onRepoUrlChanged: ((String) -> Unit)? = null,
     agentEnabled: Boolean = false,
     onAgentEnabledChanged: (Boolean) -> Unit = {},
     onSave: () -> Unit,

@@ -184,6 +184,11 @@ fun ProjectsHost(
                 onNameChanged = editor::onNameChanged,
                 onKeyPrefixChanged = editor::onKeyPrefixChanged,
                 onDetailsChanged = editor::onDetailsChanged,
+                repoUrl = editor.repoUrl,
+                // The repository field is a create's alone: the first push is the only point
+                // at which no row exists for an admin route to have written the URL to, so an
+                // edit cannot save one and the field would be another one that does nothing.
+                onRepoUrlChanged = if (editor.isCreating) editor::onRepoUrlChanged else null,
                 // The project editor's picker is NOT scoped to the project's members — it is the control
                 // that edits that membership, so scoping it would make every new member
                 // unreachable. `assignableMembersFor` belongs to the pickers that consume

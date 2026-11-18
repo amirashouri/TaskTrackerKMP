@@ -239,6 +239,7 @@ class RoomProjectRepository(
         details: String,
         now: Instant,
         memberIDs: List<UserID>,
+        repoUrl: String?,
     ): Project {
         val stamp = currentUserStamp()
         val project = Project(
@@ -246,6 +247,10 @@ class RoomProjectRepository(
             keyPrefix = ProjectRules.normaliseKeyPrefix(keyPrefix),
             name = ProjectRules.normaliseName(name),
             details = ProjectRules.normaliseDetails(details),
+            // Set here rather than by the caller so the row and the queued payload agree: the
+            // payload is the whole project, so a URL the row did not carry is a URL the create
+            // push cannot send.
+            repoUrl = ProjectRules.normaliseRepoUrl(repoUrl.orEmpty()),
             memberIDs = (memberIDs + listOfNotNull(stamp?.let(::parseUserID))).distinct(),
             createdAt = now,
             updatedAt = now,

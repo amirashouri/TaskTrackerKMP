@@ -300,6 +300,66 @@ object ProjectEditorScenarios {
         )
     }
 
+    /**
+     * The member's **edit** sheet draws no repository field.
+     *
+     * A create can carry one — the project's first push is the only point at which no row
+     * exists for an admin route to have written the URL to — and an edit cannot, because after
+     * that the URL is admin-route metadata. The field used to render on this sheet anyway with
+     * a no-op handler: keystrokes no model saw and no save carried. It is drawn only when the
+     * caller supplies a handler now, and this sheet supplies none.
+     */
+    val theMemberProjectEditSheetOffersNoRepositoryField: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                projectSheet(
+                    hasUnsavedChanges = false,
+                    onCancel = {},
+                    onDismissRequest = {},
+                    isCreating = false,
+                )
+            }
+        }
+
+        onNodeWithTag(NewProjectRepoUrlTag).assertDoesNotExist()
+    }
+
+    /**
+     * The admin's form still draws the repository field, and a keystroke reaches the model.
+     *
+     * The other half of the same condition: an absence-only test would also pass if the field
+     * had been deleted from the form outright, which would take the admin's repository URL with
+     * it. This one pins that the field is present and live where something can save it.
+     */
+    val theAdminProjectFormKeepsTheRepositoryField: suspend ComposeUiTest.() -> Unit = {
+        var repoUrl by mutableStateOf("")
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                NewProjectForm(
+                    name = "Apollo Programme",
+                    keyPrefix = "AP",
+                    details = "Two milestones.",
+                    canSave = true,
+                    onNameChanged = {},
+                    onKeyPrefixChanged = {},
+                    onDetailsChanged = {},
+                    repoUrl = repoUrl,
+                    onRepoUrlChanged = { repoUrl = it },
+                    onSave = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        onNodeWithTag(NewProjectRepoUrlTag).performTextInput("https://github.com/acme/apollo.git")
+
+        assertEquals(
+            "https://github.com/acme/apollo.git",
+            repoUrl,
+            "the admin form's repository field did not hand its text to the model",
+        )
+    }
+
     @Composable
     private fun editor(hasUnsavedChanges: Boolean, onCancel: () -> Unit) {
         ProjectEditorScreen(
@@ -321,12 +381,14 @@ object ProjectEditorScenarios {
         hasUnsavedChanges: Boolean,
         onCancel: () -> Unit,
         onDismissRequest: () -> Unit,
+        isCreating: Boolean = true,
     ) {
         NewProjectSheet(
             name = "Apollo Programme",
             keyPrefix = "AP",
             details = "Two milestones.",
             canSave = true,
+            isCreating = isCreating,
             onNameChanged = {},
             onKeyPrefixChanged = {},
             onDetailsChanged = {},

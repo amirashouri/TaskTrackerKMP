@@ -48,6 +48,16 @@ class ProjectEditorModel(
     var details: String by mutableStateOf(existing?.details.orEmpty())
         private set
 
+    /**
+     * The repository URL the create form collected.
+     *
+     * Only a create can send one: the project's first push is the only point at which no row
+     * exists for an admin route to have written the URL to. That is why the editor sheet hides
+     * this field when it is editing, and why [save] passes it on the create branch alone.
+     */
+    var repoUrl: String by mutableStateOf(existing?.repoUrl.orEmpty())
+        private set
+
     var memberIDs: List<UserID> by mutableStateOf(originalMemberIDs)
         private set
 
@@ -68,6 +78,7 @@ class ProjectEditorModel(
             name.isNotBlank() ||
                     keyPrefix.isNotBlank() ||
                     details.isNotBlank() ||
+                    repoUrl.isNotBlank() ||
                     memberIDs != originalMemberIDs ||
                     statuses != originalStatuses
         } else {
@@ -95,6 +106,10 @@ class ProjectEditorModel(
 
     fun onDetailsChanged(value: String) {
         details = value
+    }
+
+    fun onRepoUrlChanged(value: String) {
+        repoUrl = value
     }
 
     fun onMemberIDsChanged(value: List<UserID>) {
@@ -164,7 +179,13 @@ class ProjectEditorModel(
         if (!canSave) return false
         val saved = reporting {
             if (isCreating) {
-                createProject(name = name, keyPrefix = keyPrefix, details = details, memberIDs = memberIDs)
+                createProject(
+                    name = name,
+                    keyPrefix = keyPrefix,
+                    details = details,
+                    memberIDs = memberIDs,
+                    repoUrl = repoUrl,
+                )
             } else {
                 updateProject(
                     id = requireNotNull(savedProjectID),

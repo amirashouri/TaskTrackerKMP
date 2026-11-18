@@ -407,6 +407,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String,
         now: Instant,
         memberIDs: List<UserID>,
+        repoUrl: String?,
     ): Project {
         throwIfFailing()
         return lock.withLock {
@@ -414,6 +415,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 keyPrefix = keyPrefix,
                 name = name,
                 details = details,
+                repoUrl = repoUrl,
                 memberIDs = memberIDs,
                 createdAt = now,
                 updatedAt = now,
