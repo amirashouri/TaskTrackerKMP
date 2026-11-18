@@ -409,4 +409,48 @@ class SprintListModelTest {
         assertEquals(expected.committedStoryPoints, row.committedStoryPoints)
         assertEquals(expected.achievedStoryPoints, row.achievedStoryPoints)
     }
+
+    @Test
+    fun `a row's complete badge is the summary's own verdict`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val hit = testSprint(project.id, name = "Hit", goalStoryPoints = 5)
+        val short = testSprint(project.id, name = "Short", goalStoryPoints = 5)
+        val noGoal = testSprint(project.id, name = "No goal", goalStoryPoints = 0)
+        repository.seed(hit)
+        repository.seed(short)
+        repository.seed(noGoal)
+        // Exactly at the goal, which is the case a card comparing with `>` would get wrong —
+        // that is why the row reads the domain's flag instead of comparing for itself.
+        repository.seed(
+            testWorkItem(
+                projectID = project.id,
+                key = "AP-1",
+                status = WorkItemStatus.Done,
+                storyPoints = 5,
+                sprintID = hit.id,
+            ),
+        )
+        repository.seed(
+            testWorkItem(
+                projectID = project.id,
+                key = "AP-2",
+                status = WorkItemStatus.Done,
+                storyPoints = 4,
+                sprintID = short.id,
+            ),
+        )
+
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        val rows = model.inProgressRows.associateBy { it.sprint.name }
+        assertEquals(true, rows.getValue("Hit").didHitGoal)
+        assertEquals(false, rows.getValue("Short").didHitGoal)
+        // `null`, not `false`: a sprint nobody gave a target has not missed one, and the card
+        // must not show a verdict it invented.
+        assertNull(rows.getValue("No goal").didHitGoal)
+    }
 }

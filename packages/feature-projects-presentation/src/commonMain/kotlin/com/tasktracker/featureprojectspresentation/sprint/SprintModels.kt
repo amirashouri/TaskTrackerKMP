@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintGoal
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.domain.sprintSummary
@@ -17,6 +18,11 @@ import kotlin.time.Instant
 
 /**
  * Sprint list row containing window dates, raw point totals, and derived progress fractions.
+ *
+ * [didHitGoal] is carried from [sprintSummary] rather than derived here, for the same reason
+ * the summary screen reads it from the value: the `>=` that decides a hit lives in
+ * [SprintGoal.didHitGoal], and a card that compared the two numbers itself could disagree
+ * with the summary about the same sprint.
  */
 data class SprintListRow(
     val sprint: Sprint,
@@ -24,6 +30,8 @@ data class SprintListRow(
     val endDate: LocalDate,
     val committedStoryPoints: Int,
     val achievedStoryPoints: Int,
+    /** `null` when the sprint had no goal set. See [SprintGoal.didHitGoal]. */
+    val didHitGoal: Boolean? = null,
 ) {
     val hasGoal: Boolean get() = sprint.goalStoryPoints > 0
 
@@ -88,6 +96,7 @@ class SprintListModel(
                 endDate = sprintLocalDate(sprint.endDate, timeZone),
                 committedStoryPoints = summary.committedStoryPoints,
                 achievedStoryPoints = summary.achievedStoryPoints,
+                didHitGoal = summary.didHitGoal,
             )
         }
 

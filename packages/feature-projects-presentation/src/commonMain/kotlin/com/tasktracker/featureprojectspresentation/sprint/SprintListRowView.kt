@@ -33,7 +33,7 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * List row representing a sprint, displaying name, date window, story point progress,
- * and lifecycle status badge (Open/Finished).
+ * lifecycle status badge (Open/Finished), and a complete badge once its goal is reached.
  */
 @Composable
 fun SprintListRowView(
@@ -68,6 +68,11 @@ fun SprintListRowView(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            // The hit is `true` only for a sprint that was given a goal and reached it, so a
+            // sprint with no goal shows the status badge alone rather than a verdict.
+            if (row.didHitGoal == true) {
+                SprintCompleteBadge()
+            }
             SprintStatusBadge(isFinished = row.sprint.isFinished)
         }
         ttText(
