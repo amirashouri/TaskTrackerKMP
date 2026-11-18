@@ -826,16 +826,27 @@ fun ttGlassButton(
                 tint = resolvedTint,
                 thickness = if (style.prominent) ttGlass.GlassThickness.THICK else ttGlass.GlassThickness.STANDARD,
             )
-            .padding(
-                vertical = ttSpacing.buttonPaddingV,
-                horizontal = ttSpacing.buttonPaddingH,
-            )
+            // The click comes before the padding, so the pressable region is the pill that is
+            // drawn rather than the label inside it. Applied the other way round the padding is
+            // inert to input: the glass reaches `buttonPaddingH` past each end of the word, and
+            // a mouse click on that strip does not reach the button at all — no press feedback
+            // and no action, which reads as a button whose target is its text. That is the
+            // report `ttGlassButton` came back with twice (the forgot-password cancel and the
+            // work-item editor's action row), and `TTGlassSegmentedPicker`'s cell in this file
+            // carries the same note for the same reason.
+            //
+            // Nothing here changes the control's size: padding consumes the same space on
+            // either side of `clickable`, so the pill and the row it sits in measure as before.
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
                 enabled = interactive,
                 role = Role.Button,
                 onClick = onClick,
+            )
+            .padding(
+                vertical = ttSpacing.buttonPaddingV,
+                horizontal = ttSpacing.buttonPaddingH,
             ),
         contentAlignment = Alignment.Center,
     ) {

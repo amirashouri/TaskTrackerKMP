@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -126,6 +127,14 @@ private fun DependencyPill(
                     role = Role.Button,
                     onClickLabel = stringResource(Res.string.work_item_depends_remove, item.key.toString()),
                     onClick = onRemove,
+                )
+                // This cross is nested in the row that opens the item. Without its own
+                // button-sized node a click just off the glyph opens the blocker instead
+                // of removing it.
+                .padding(ttSpacing.xs)
+                .sizeIn(
+                    minWidth = ttSpacing.iconButtonSize,
+                    minHeight = ttSpacing.iconButtonSize,
                 )
                 .testTag(WorkItemDependsRemoveTag(item)),
         )

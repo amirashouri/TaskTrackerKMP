@@ -331,6 +331,10 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = MemberPickerMembershipScenarios.anAssigneeWhoLeftTheProjectStillRendersTheirPill)
 
     @Test
+    fun thePillsRemoveCrossHasAFullHitArea() =
+        runComposeUiTest(block = MemberPickerMembershipScenarios.thePillsRemoveCrossHasAFullHitArea)
+
+    @Test
     fun aCardWithABlockerNamesIt() = runComposeUiTest(block = WorkItemCardDependenciesScenarios.aCardWithABlockerNamesIt)
 
     @Test
@@ -505,6 +509,9 @@ class ProjectsUiAndroidHostTest {
 
     @Test
     fun wrappingPillsDoNotOverflowTheFirstRow() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.wrappingPillsDoNotOverflowTheFirstRow)
+
+    @Test
+    fun theRemoveCrossHasAFullHitAreaWithoutOpeningTheBlocker() = runComposeUiTest(block = WorkItemDependencyPillsScenarios.theRemoveCrossHasAFullHitAreaWithoutOpeningTheBlocker)
 
     @Test
     fun eachBucketSegmentReadsItsOwnBucket() = runComposeUiTest(block = AdminProjectsListScenarios.eachBucketSegmentReadsItsOwnBucket)

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.tasktracker.core.UserID
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureteamsdomain.User
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -102,7 +103,44 @@ object MemberPickerMembershipScenarios {
         onNodeWithTag(MemberPickerPillRemoveTag(former.id)).assertIsDisplayed()
     }
 
+    /**
+     * The remove cross is a button, so its hit area must not stop at the glyph.
+     *
+     * `testTag` and `clickable` are on the same Box, so its semantics bounds are the clickable
+     * area. A glyph-sized Box leaves the glass around the cross inert; the 44dp minimum is the
+     * same target the design system gives every standalone icon button.
+     */
+    val thePillsRemoveCrossHasAFullHitArea: suspend ComposeUiTest.() -> Unit = {
+        val member = user(aliceId, "Alice Ahmed")
+        var remaining: List<UserID>? = null
+
+        setContent {
+            Themed {
+                MemberPicker(
+                    title = "Members",
+                    selectedIDs = listOf(member.id),
+                    onSelectedIDsChanged = { remaining = it },
+                    searchMembers = { emptyList() },
+                    resolveSelected = { ids -> if (member.id in ids) listOf(member) else emptyList() },
+                    tagPrefix = "membersUnderTest",
+                )
+            }
+        }
+
+        val remove = onNodeWithTag(MemberPickerPillRemoveTag(member.id))
+            .fetchSemanticsNode().boundsInRoot
+        val minimum = with(density) { ttSpacing.iconButtonSize.toPx() }
+        assertTrue(
+            remove.width >= minimum - HALF_PIXEL && remove.height >= minimum - HALF_PIXEL,
+            "the remove cross is ${remove.width}x${remove.height}px against a ${minimum}px minimum",
+        )
+
+        onNodeWithTag(MemberPickerPillRemoveTag(member.id)).performClick()
+        assertEquals(emptyList<UserID>(), remaining, "clicking the cross should remove the member")
     }
+
+    private const val HALF_PIXEL = 0.5f
+}
 
 /**
  * The whole reason the seam exists: a filtered search and an unfiltered resolution differ.
