@@ -804,12 +804,14 @@
     <string name="work_item_tags_manage">Manage tags</string>
 
     <string name="admin_project_tags_title">Tags</string>
-    <string name="admin_project_tags_body">Members can put up to five of these on a task. Only an administrator can create or remove them.</string>
+    <string name="admin_project_tags_body">Members can put up to five of these on a task. Only an administrator can create, edit or remove them. Editing a tag updates every task that uses it.</string>
     <string name="admin_project_tags_empty">No tags yet. Add the first one below.</string>
     <string name="admin_project_tags_name">Tag name</string>
     <string name="admin_project_tags_color">Colour</string>
     <string name="admin_project_tags_icon">Icon</string>
     <string name="admin_project_tags_add">Add tag</string>
+    <string name="admin_project_tags_edit">Edit %1$s</string>
+    <string name="admin_project_tags_save">Save tag</string>
     <string name="admin_project_tags_remove">Remove %1$s</string>
     <string name="admin_project_tags_name_required">Give the tag a name.</string>
     <string name="admin_project_tags_duplicate">A tag with that name already exists.</string>

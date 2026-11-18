@@ -166,6 +166,21 @@ class AdminProjectEditorModel(
         tags = tags.filterNot { it.id == id }
     }
 
+    /**
+     * Validates against [TagRules] and replaces a tag in place. The id is kept: work items
+     * carry tag ids, so changing the catalog entry updates every task that uses this tag.
+     */
+    fun updateTag(id: TagID, name: String, color: TagColor, icon: TagIcon): Boolean {
+        val current = tags.firstOrNull { it.id == id } ?: return false
+        if (!TagRules.isNameValid(name)) return false
+        val normalised = TagRules.normaliseName(name)
+        if (tags.any { it.id != id && it.name.equals(normalised, ignoreCase = true) }) return false
+        val updated = current.copy(name = normalised, color = color, icon = icon)
+        if (updated == current) return true
+        tags = tags.map { if (it.id == id) updated else it }
+        return true
+    }
+
     /** Validates against [StatusRules] and appends a status if its name is unique. */
     fun addStatus(
         name: String,

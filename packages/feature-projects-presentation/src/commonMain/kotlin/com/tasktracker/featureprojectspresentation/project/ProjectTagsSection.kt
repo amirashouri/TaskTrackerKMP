@@ -50,33 +50,40 @@ import com.tasktracker.resources.admin_project_tags_add
 import com.tasktracker.resources.admin_project_tags_body
 import com.tasktracker.resources.admin_project_tags_color
 import com.tasktracker.resources.admin_project_tags_duplicate
+import com.tasktracker.resources.admin_project_tags_edit
 import com.tasktracker.resources.admin_project_tags_empty
 import com.tasktracker.resources.admin_project_tags_icon
 import com.tasktracker.resources.admin_project_tags_max
 import com.tasktracker.resources.admin_project_tags_name
 import com.tasktracker.resources.admin_project_tags_name_required
 import com.tasktracker.resources.admin_project_tags_remove
+import com.tasktracker.resources.admin_project_tags_save
 import com.tasktracker.resources.admin_project_tags_title
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 const val AdminProjectTagsSectionTag = "admin.projectEditor.tags"
 fun AdminProjectTagRowTag(tag: ProjectTag): String = "admin.projectEditor.tag.${tag.id.stringValue}"
+fun AdminProjectTagEditTag(tag: ProjectTag): String = "${AdminProjectTagRowTag(tag)}.edit"
 const val AdminProjectTagNameFieldTag = "admin.projectEditor.tagName"
 const val AdminProjectTagAddTag = "admin.projectEditor.tagAdd"
+const val AdminProjectTagSaveTag = "admin.projectEditor.tagSave"
 const val AdminProjectTagErrorTag = "admin.projectEditor.tagError"
 fun AdminProjectTagColorTag(color: TagColor): String = "admin.projectEditor.tagColor.${color.wireValue}"
 fun AdminProjectTagIconTag(icon: TagIcon): String = "admin.projectEditor.tagIcon.${icon.wireValue}"
 
 /**
- * Admin project tag catalog: displays configured project tags with delete controls
- * and provides a composer to add new tags with color and icon pickers.
+ * Admin project tag catalog: displays configured project tags with edit and delete controls
+ * and provides a composer to add new tags or edit an existing one. Selecting a tag's Edit
+ * button loads it into the same composer — name, colour and icon — with Save replacing Add,
+ * mirroring the workflow-stage catalog.
  */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun ProjectTagsSection(
     tags: List<ProjectTag>,
     onAdd: (name: String, color: TagColor, icon: TagIcon) -> Boolean,
+    onUpdate: (id: TagID, name: String, color: TagColor, icon: TagIcon) -> Boolean,
     onRemove: (TagID) -> Unit,
     modifier: Modifier = Modifier,
     isBusy: Boolean = false,
@@ -84,9 +91,19 @@ fun ProjectTagsSection(
     var draftName by remember { mutableStateOf("") }
     var draftColor by remember { mutableStateOf(TagColor.Blue) }
     var draftIcon by remember { mutableStateOf(TagIcon.Bug) }
+    var editingID by remember { mutableStateOf<TagID?>(null) }
     var attempted by remember { mutableStateOf(false) }
 
-    val refusal = refusalFor(draftName, tags)
+    val editing = tags.firstOrNull { it.id == editingID }
+    val refusal = refusalFor(draftName, tags, editingID)
+
+    fun resetDraft() {
+        draftName = ""
+        draftColor = TagColor.Blue
+        draftIcon = TagIcon.Bug
+        editingID = null
+        attempted = false
+    }
 
     Column(
         modifier = modifier.fillMaxWidth().testTag(AdminProjectTagsSectionTag),
@@ -112,7 +129,18 @@ fun ProjectTagsSection(
             )
         } else {
             for (tag in tags) {
-                ExistingTagRow(tag = tag, onRemove = { onRemove(tag.id) })
+                ExistingTagRow(
+                    tag = tag,
+                    isEditing = tag.id == editingID,
+                    onEdit = {
+                        editingID = tag.id
+                        draftName = tag.name
+                        draftColor = tag.color
+                        draftIcon = tag.icon
+                        attempted = false
+                    },
+                    onRemove = { onRemove(tag.id) },
+                )
             }
         }
         Column(
@@ -181,29 +209,54 @@ fun ProjectTagsSection(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
             ) {
-                ttGlassButton(
-                    label = stringResource(Res.string.admin_project_tags_add),
-                    onClick = {
-                        if (!isBusy) {
-                            val added = refusal == null && onAdd(draftName, draftColor, draftIcon)
-                            if (added) {
-                                draftName = ""
-                                attempted = false
+                if (editing != null) {
+                    ttGlassButton(
+                        label = stringResource(Res.string.admin_project_tags_save),
+                        onClick = {
+                            if (!isBusy && refusal == null && onUpdate(
+                                    editing.id,
+                                    TagRules.normaliseName(draftName),
+                                    draftColor,
+                                    draftIcon,
+                                )) {
+                                resetDraft()
                             } else {
                                 attempted = true
                             }
-                        }
-                    },
-                    modifier = Modifier.testTag(AdminProjectTagAddTag),
-                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
-                )
+                        },
+                        modifier = Modifier.testTag(AdminProjectTagSaveTag),
+                        style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
+                    )
+                } else {
+                    ttGlassButton(
+                        label = stringResource(Res.string.admin_project_tags_add),
+                        onClick = {
+                            if (!isBusy) {
+                                val added = refusal == null && onAdd(draftName, draftColor, draftIcon)
+                                if (added) {
+                                    draftName = ""
+                                    attempted = false
+                                } else {
+                                    attempted = true
+                                }
+                            }
+                        },
+                        modifier = Modifier.testTag(AdminProjectTagAddTag),
+                        style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ExistingTagRow(tag: ProjectTag, onRemove: () -> Unit) {
+private fun ExistingTagRow(
+    tag: ProjectTag,
+    isEditing: Boolean,
+    onEdit: () -> Unit,
+    onRemove: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -217,8 +270,14 @@ private fun ExistingTagRow(tag: ProjectTag, onRemove: () -> Unit) {
         ttText(
             text = tag.name,
             style = ttTypography.body,
-            color = ttLabel(),
+            color = if (isEditing) ttAccent() else ttLabel(),
             modifier = Modifier.weight(1f),
+        )
+        ttGlassIconButton(
+            image = ttActionIcons.edit,
+            contentDescription = stringResource(Res.string.admin_project_tags_edit, tag.name),
+            onClick = onEdit,
+            modifier = Modifier.testTag(AdminProjectTagEditTag(tag)),
         )
         ttGlassIconButton(
             image = ttActionIcons.trash,
@@ -286,10 +345,14 @@ private fun IconChoice(icon: TagIcon, color: TagColor, selected: Boolean, onClic
 }
 
 /** Evaluates [TagRules] and returns localized error resource if draft is invalid, or null if accepted. */
-private fun refusalFor(name: String, tags: List<ProjectTag>): StringResource? = when {
+private fun refusalFor(
+    name: String,
+    tags: List<ProjectTag>,
+    editingID: TagID?,
+): StringResource? = when {
     !TagRules.isNameValid(name) -> Res.string.admin_project_tags_name_required
-    tags.size >= TagRules.MAX_PER_PROJECT -> Res.string.admin_project_tags_max
-    tags.any { it.name.equals(TagRules.normaliseName(name), ignoreCase = true) } ->
+    editingID == null && tags.size >= TagRules.MAX_PER_PROJECT -> Res.string.admin_project_tags_max
+    tags.any { it.id != editingID && it.name.equals(TagRules.normaliseName(name), ignoreCase = true) } ->
         Res.string.admin_project_tags_duplicate
     else -> null
 }

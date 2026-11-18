@@ -16,7 +16,9 @@ import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.domain.StatusDefinition
+import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.TagColor
+import com.tasktracker.domain.TagIcon
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.test.assertEquals
 
@@ -234,6 +236,42 @@ object ProjectEditorScenarios {
             Triple("Ready", WorkItemStatus.Todo, TagColor.Blue),
             added,
             "the composer sends its name, the selected category and the selected colour",
+        )
+    }
+
+    /**
+     * The tag catalog reuses its composer for edits. The callback must carry the existing id
+     * and the newly picked icon: work items hold ids, so a changed id would orphan every task
+     * that already uses this tag.
+     */
+    val theTagCatalogSectionEditsAnExistingIcon: suspend ComposeUiTest.() -> Unit = {
+        val tag = ProjectTag(name = "Bug", color = TagColor.Red, icon = TagIcon.Bug)
+        var updates = emptyList<Triple<String, String, TagIcon>>()
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                ProjectTagsSection(
+                    tags = listOf(tag),
+                    onAdd = { _, _, _ -> true },
+                    onUpdate = { id, name, _, icon ->
+                        updates = updates + Triple(id.stringValue, name, icon)
+                        true
+                    },
+                    onRemove = {},
+                )
+            }
+        }
+
+        onNodeWithTag(AdminProjectTagEditTag(tag)).performClick()
+        onNodeWithTag(AdminProjectTagSaveTag).assertIsDisplayed()
+        onNodeWithTag(AdminProjectTagAddTag).assertDoesNotExist()
+
+        onNodeWithTag(AdminProjectTagIconTag(TagIcon.Server)).performClick()
+        onNodeWithTag(AdminProjectTagSaveTag).performClick()
+
+        assertEquals(
+            listOf(Triple(tag.id.stringValue, "Bug", TagIcon.Server)),
+            updates,
+            "the edit keeps the tag id and name and sends the newly chosen icon",
         )
     }
 
