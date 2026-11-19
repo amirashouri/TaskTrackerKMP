@@ -55,11 +55,19 @@ object ttTypography {
         lineHeight = 41.sp,
     )
 
-    /** 22sp — a screen's own title. Not used by the original; here so a title ramp exists. */
+    /**
+     * 24sp — a screen's own title, one visible step above [titleSmall]'s 20sp.
+     *
+     * It was 22sp, two points from [titleSmall] and both semibold: at a glance the two roles
+     * were the same heading, so a call site could pick either without the screen changing.
+     * Widening rather than merging keeps the existing sheet and screen titles at their role
+     * and moves only this token; 24 * 28/22 rounds to the 31sp line height below, preserving
+     * the 1.27 ratio the scale was built on.
+     */
     val title: TextStyle = TextStyle(
-        fontSize = 22.sp,
+        fontSize = 24.sp,
         fontWeight = FontWeight.SemiBold,
-        lineHeight = 28.sp,
+        lineHeight = 31.sp,
     )
 
     /** 20sp — a section heading inside a screen. Not used by the original. */
