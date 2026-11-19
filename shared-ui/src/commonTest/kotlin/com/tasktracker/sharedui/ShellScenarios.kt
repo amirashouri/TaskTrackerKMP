@@ -90,6 +90,7 @@ import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
+import com.tasktracker.featureprojectspresentation.ProjectMembersSectionTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
@@ -3891,7 +3892,9 @@ object ShellScenarios {
     val aSelectedAdminProjectOpensTheEditorBesideTheList: suspend ComposeUiTest.() -> Unit =
         wide@{
             val router = Router()
-            val project = shellTestProject(name = "Apollo")
+            val admin = shellTestMember(email = "admin@example.com").copy(displayName = "Admin")
+            val amir = shellTestMember(email = "amir@example.com").copy(displayName = "Amir")
+            val project = shellTestProject(name = "Apollo").copy(memberIDs = listOf(admin.id))
             setUpShell(
                 session = ScriptedSession(restored = signedIn()),
                 router = router,
@@ -3900,6 +3903,7 @@ object ShellScenarios {
                 adminProjectsPort = FakeAdminProjectsPort(
                     seeded = listOf(shellTestAdminProject(project = project)),
                 ),
+                memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
                 width = DESKTOP_WIDTH,
             )
             waitForIdle()
@@ -3924,6 +3928,16 @@ object ShellScenarios {
                     "${editor.left.value}dp, so the editor is not in the pane beside the list. A " +
                     "detail pane that drew the list again would satisfy every presence assertion",
             )
+
+            // The edit page is the only place an administrator can add a colleague to a project
+            // that already exists: the create form has this picker, and without it here a
+            // project was stuck with whichever members it was created with.
+            onNodeWithTag(ProjectMembersSectionTag).performScrollTo().assertIsDisplayed()
+            onNodeWithTag(ProjectMembersSectionTag).performClick()
+            waitForIdle()
+            onNodeWithTag(MemberPickerMenuTag(ProjectMembersSectionTag)).assertIsDisplayed()
+            onNodeWithTag(MemberPickerRowTag(ProjectMembersSectionTag, admin.id)).assertIsDisplayed()
+            onNodeWithTag(MemberPickerRowTag(ProjectMembersSectionTag, amir.id)).assertIsDisplayed()
         }
 
     /**

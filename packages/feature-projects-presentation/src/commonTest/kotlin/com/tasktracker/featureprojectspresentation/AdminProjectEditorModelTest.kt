@@ -129,6 +129,32 @@ class AdminProjectEditorModelTest {
     }
 
     @Test
+    fun `editing the roster marks the editor dirty and the save carries the members`() = runTest {
+        val port = port()
+        val model = AdminProjectEditorModel(id, port)
+        model.load()
+        val second = randomUserID()
+
+        assertEquals(listOf(memberID), model.memberIDs, "the roster is seeded from the server's row")
+        assertFalse(model.hasChanges)
+
+        model.onMemberIDsChanged(listOf(memberID, second, second))
+
+        assertEquals(
+            listOf(memberID, second),
+            model.memberIDs,
+            "the same person twice is one member",
+        )
+        assertTrue(model.hasChanges, "a roster edit is a reason to enable Save")
+        assertTrue(model.save())
+        assertEquals(
+            listOf(memberID, second),
+            port.updateCalls.single().first.memberIDs,
+            "an added member must reach the server, or the project stays single-member",
+        )
+    }
+
+    @Test
     fun `a second save carries the version the first one returned`() = runTest {
         val port = RecordingAdminProjectsPort(
             projectByID = mapOf(id to AdminProject(project(), "v1")),

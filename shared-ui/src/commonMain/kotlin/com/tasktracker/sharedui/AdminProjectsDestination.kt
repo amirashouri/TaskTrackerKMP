@@ -21,6 +21,7 @@ import com.tasktracker.featureprojectspresentation.NewProjectForm
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
 import com.tasktracker.featureprojectspresentation.ProjectAgentSection
 import com.tasktracker.featureprojectspresentation.ProjectEditorScreen
+import com.tasktracker.featureprojectspresentation.ProjectMembersSection
 import com.tasktracker.featureprojectspresentation.ProjectStatusesSection
 import com.tasktracker.featureprojectspresentation.ProjectTagsSection
 import com.tasktracker.featureprojectspresentation.defaultStatusCatalog
@@ -140,6 +141,8 @@ fun AdminProjectsDestination(
                         projectID = projectID,
                         adminProjectsPort = adminProjectsPort,
                         agentPairingPort = agentPairingPort,
+                        searchMembers = searchMembers,
+                        resolveSelected = resolveSelected,
                         onClose = closeEditor,
                         scope = scope,
                     )
@@ -154,6 +157,8 @@ fun AdminProjectsDestination(
             projectID = projectID,
             adminProjectsPort = adminProjectsPort,
             agentPairingPort = agentPairingPort,
+            searchMembers = searchMembers,
+            resolveSelected = resolveSelected,
             onClose = closeEditor,
             scope = scope,
         )
@@ -211,6 +216,8 @@ private fun AdminProjectEditor(
     projectID: ProjectID,
     adminProjectsPort: AdminProjectsPort,
     agentPairingPort: AgentPairingPort?,
+    searchMembers: suspend (String) -> List<User>,
+    resolveSelected: suspend (List<UserID>) -> List<User>,
     onClose: () -> Unit,
     scope: CoroutineScope,
 ) {
@@ -254,6 +261,14 @@ private fun AdminProjectEditor(
         hasUnsavedChanges = model.hasChanges,
         errorMessage = model.errorMessage,
         isBusy = model.isSaving,
+        membersSection = {
+            ProjectMembersSection(
+                selectedMemberIDs = model.memberIDs,
+                onMemberIDsChanged = model::onMemberIDsChanged,
+                searchMembers = searchMembers,
+                resolveSelected = resolveSelected,
+            )
+        },
         // Only the admin editor gets the catalog composer; the member editor passes no slot at
         // all. See ProjectEditorScreen's `tagsSection`.
         tagsSection = {

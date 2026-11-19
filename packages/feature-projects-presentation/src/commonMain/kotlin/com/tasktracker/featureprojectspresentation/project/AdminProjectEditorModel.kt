@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.AppError
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.TagID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomTagID
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.StatusDefinition
@@ -47,6 +48,7 @@ class AdminProjectEditorModel(
     private var originalAgentEnabled: Boolean = false
     private var originalTags: List<ProjectTag> = emptyList()
     private var originalStatuses: List<StatusDefinition> = emptyList()
+    private var originalMemberIDs: List<UserID> = emptyList()
 
     var isLoading: Boolean by mutableStateOf(true)
         private set
@@ -83,13 +85,26 @@ class AdminProjectEditorModel(
     var statuses: List<StatusDefinition> by mutableStateOf(emptyList())
         private set
 
+    /**
+     * The project's roster, as the admin editor's own draft.
+     *
+     * The roster is not part of [Project]'s editable surface on the member-facing form, so this
+     * model is the one place an administrator can add a colleague to a project that already
+     * exists. The create form has carried a member picker since it shipped; the edit page had no
+     * section for it, which left a project created before its second member was known
+     * permanently single-member.
+     */
+    var memberIDs: List<UserID> by mutableStateOf(emptyList())
+        private set
+
     val hasChanges: Boolean
         get() = name.trim() != originalName ||
                 details.trim() != originalDetails ||
                 repoUrl.trim().takeIf { it.isNotEmpty() } != originalRepoUrl ||
                 agentEnabled != originalAgentEnabled ||
                 tags != originalTags ||
-                statuses != originalStatuses
+                statuses != originalStatuses ||
+                memberIDs != originalMemberIDs
 
     val canSave: Boolean
         get() = seeded != null && name.isNotBlank() && hasChanges
@@ -117,11 +132,13 @@ class AdminProjectEditorModel(
             agentEnabled = found.project.agentEnabled
             tags = found.project.tags.map { it.copy() }
             statuses = catalog.map { it.copy() }
+            memberIDs = found.project.memberIDs
             originalName = found.project.name.trim()
             originalDetails = found.project.details.trim()
             originalRepoUrl = found.project.repoUrl
             originalAgentEnabled = found.project.agentEnabled
             originalTags = found.project.tags.map { it.copy() }
+            originalMemberIDs = found.project.memberIDs
             // The seed is the project's *effective* catalog, so inheriting it is not an edit:
             // Save stays disabled until the admin actually changes something.
             originalStatuses = catalog.map { it.copy() }
@@ -150,6 +167,11 @@ class AdminProjectEditorModel(
 
     fun onAgentEnabledChanged(value: Boolean) {
         agentEnabled = value
+    }
+
+    /** The roster draft; duplicates are dropped because the same person twice is one member. */
+    fun onMemberIDsChanged(value: List<UserID>) {
+        memberIDs = value.distinct()
     }
 
     /** Validates against [TagRules] and appends tag if name is unique (case-insensitive). */
@@ -260,6 +282,7 @@ class AdminProjectEditorModel(
                             statuses.map { it.copy(name = StatusRules.normaliseName(it.name)) }
                                 .filter { it.name.isNotEmpty() },
                         ),
+                        memberIDs = memberIDs,
                     ),
                     current.version,
                 )
@@ -272,12 +295,14 @@ class AdminProjectEditorModel(
             agentEnabled = saved.project.agentEnabled
             tags = saved.project.tags.map { it.copy() }
             statuses = saved.project.statuses.map { it.copy() }
+            memberIDs = saved.project.memberIDs
             originalName = saved.project.name.trim()
             originalDetails = saved.project.details.trim()
             originalRepoUrl = saved.project.repoUrl
             originalAgentEnabled = saved.project.agentEnabled
             originalTags = saved.project.tags.map { it.copy() }
             originalStatuses = saved.project.statuses.map { it.copy() }
+            originalMemberIDs = saved.project.memberIDs
             return true
         } finally {
             isSaving = false
