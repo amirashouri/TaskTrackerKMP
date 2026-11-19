@@ -1343,6 +1343,30 @@ internal suspend fun resolveDirectoryMembers(
     return ids.mapNotNull { id -> activeByID[id] ?: localByID[id] }
 }
 
+/**
+ * Project membership as the server has it, for a picker that may only offer project members.
+ *
+ * The local project row is a sync snapshot: an admin can add a colleague through the admin
+ * screen well before that change has been pulled onto this device. Intersecting the live
+ * directory with that stale row hides the colleague from the sprint roster, so the admin API
+ * is asked first whenever it is bound. A failed or absent admin read keeps the local row —
+ * a non-admin still gets the offline-filtered list rather than an error.
+ */
+private suspend fun freshProjectForMembers(
+    environment: ProjectEnvironment,
+    projectID: ProjectID,
+    local: Project?,
+): Project? {
+    val port = environment.adminProjectsPort ?: return local
+    return try {
+        port.project(projectID)?.project ?: local
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: AppError) {
+        local
+    }
+}
+
 /** One project's board. */
 @Composable
 private fun BoardDestination(
@@ -1998,7 +2022,7 @@ private fun SprintDetailDestination(
         editingName = model.editingMember?.let { memberNames[it.userID] },
         searchMembers = { query ->
             assignableMembersFor(
-                project = currentProject,
+                project = freshProjectForMembers(environment, projectID, currentProject),
                 directory = searchDirectoryMembers(environment, query),
             )
         },

@@ -1302,8 +1302,10 @@ object ShellScenarios {
      *
      * No `TeamPort` is bound here, which is the offline/session-only directory: it can name
      * the admin and nobody else. The live member list supplied to the shell is the one that
-     * knows Amir. Before the picker read that list, this scenario showed only the admin row
-     * even though the project's own member list held both people.
+     * knows Amir. The local project row is deliberately the stale snapshot this bug arrived
+     * with — only the admin — while the admin API already has both people. Before the picker
+     * read either of those live sources, this scenario showed only the admin row even though
+     * Amir was a project member on the server.
      */
     val theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory: suspend ComposeUiTest.() -> Unit = {
         val admin = shellTestMember(email = "admin@example.com").copy(displayName = "Admin")
@@ -1312,7 +1314,7 @@ object ShellScenarios {
         val project = shellTestProject(name = "Apollo").copy(
             memberIDs = listOf(admin.id, amir.id),
         )
-        projects.seed(project)
+        projects.seed(project.copy(memberIDs = listOf(admin.id)))
         val sprint = shellTestSprint(projectID = project.id)
         projects.seedSprint(sprint)
 
@@ -1321,6 +1323,7 @@ object ShellScenarios {
             projects = projects,
             settings = FakeShellSettingsPort(),
             memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
+            adminProjectsPort = FakeAdminProjectsPort(listOf(shellTestAdminProject(project))),
         )
         waitForIdle()
         onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
