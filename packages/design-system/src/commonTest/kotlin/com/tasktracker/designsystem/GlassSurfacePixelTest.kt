@@ -361,12 +361,25 @@ class GlassSurfacePixelTest {
      * ## What is read
      *
      * The fringe is chromatic in a way the material is not: the rim is white, and the fill is
-     * a blue-leaning accent, so an achromatic top edge has `blue >= red` and `green - red` of
-     * only a few levels. The fringe's red line produces a pixel where `red > blue`, and its
-     * green line — drawn at 1.5x the red and blue alpha — produces a `green - red` spike.
-     * Measured at density 3 on the JVM: `red - blue = +4`, `green - red = +22` with the fix,
-     * and `-9` / `+5` without it. The test therefore fails on the bug, not merely on a
-     * changed screenshot.
+     * blue-leaning, so an achromatic top edge has `blue > red`. The fringe's red line pulls
+     * that edge toward red, and its green line — drawn at 1.5x the red and blue alpha —
+     * produces a `green - red` spike.
+     *
+     * ## Why the red line is read as a shift, not absolute dominance
+     *
+     * The original assertion was `red > blue` on the measured pixel, which held while the
+     * default dark accent was a near-grey (`#5F6873`, blue-red 20 levels). A chromatic navy
+     * fill leans blue by about 35 levels, more than a 5.6% red line can overcome: the fringe
+     * now measures `red - blue = -19` absolute, but shifts the edge 16 levels redder than the
+     * fill just below it. Absolute dominance would need nearly tripling `DISPERSION_ALPHA`
+     * and painting a red edge rather than a refraction hint. The gate therefore holds the
+     * fringe's actual contract — a red shift against the fill — and still fails when the dark
+     * branch does not run.
+     *
+     * Measured at density 3 on the JVM with the chromatic accent: red shift **+22** and green
+     * spike **+34** with the fringe, **+10** and **+19** without it. The thresholds (15 and 25)
+     * sit between those pairs, so the booleans below are about the fringe rather than about
+     * the rim's antialiasing over a blue fill.
      *
      * `LocalSystemTheme` is the platform seam `isSystemInDarkTheme()` reads on JVM and iOS;
      * it is internal and deprecated in Compose Multiplatform 1.12.1, and this is the only
@@ -380,6 +393,7 @@ class GlassSurfacePixelTest {
         var followedDark = false
         var redOverBlue = Int.MIN_VALUE
         var greenOverRed = Int.MIN_VALUE
+        var baselineRedOverBlue = Int.MIN_VALUE
 
         rasterising {
             setContent {
@@ -418,6 +432,14 @@ class GlassSurfacePixelTest {
                 redOverBlue = max(redOverBlue, red - blue)
                 greenOverRed = max(greenOverRed, green - red)
             }
+
+            // Just below the band: the fill alone, with no rim or fringe over it. The fringe's
+            // red line is a shift against this, which is the part that is independent of how
+            // blue the accent happens to be.
+            val baselineY = (top + band + 6).coerceIn(0, frame.height - 1)
+            val baseline = frame[x, baselineY]
+            baselineRedOverBlue =
+                (baseline.red * 255f).roundToInt() - (baseline.blue * 255f).roundToInt()
         }
 
         assertTrue(
@@ -425,19 +447,25 @@ class GlassSurfacePixelTest {
             "the test forced the system appearance to Dark but ttIsDarkTheme() still reported " +
                 "light, so this measurement would be of the light branch and proves nothing",
         )
+        val redShift = redOverBlue - baselineRedOverBlue
+        println(
+            "system dark fringe: max red - blue $redOverBlue, fill baseline " +
+                "$baselineRedOverBlue, shift $redShift, green - red $greenOverRed",
+        )
         assertTrue(
-            redOverBlue >= 1,
-            "the top edge of a System-following glass surface in dark never became red-dominant " +
-                "(max red - blue = $redOverBlue). The dispersion fringe's red line is missing, " +
-                "which is what happens when ttGlassSurface asks the pinned scheme instead of " +
+            redShift >= 15,
+            "the top edge of a System-following glass surface in dark never shifted red " +
+                "against the fill (max red - blue $redOverBlue vs fill $baselineRedOverBlue, " +
+                "shift $redShift). The dispersion fringe's red line is missing, which is what " +
+                "happens when ttGlassSurface asks the pinned scheme instead of " +
                 "ttIsDarkTheme(): System is not Dark, so the dark-only branch never runs.",
         )
         assertTrue(
-            greenOverRed >= 8,
+            greenOverRed >= 25,
             "the top edge's green spike measured only $greenOverRed levels above red. The green " +
-                "dispersion line is drawn at 1.5x the red and blue alpha and measured +22 on the " +
-                "JVM with the fringe; +5 without it, so a near-zero value means the fringe is " +
-                "not painted for this appearance.",
+                "dispersion line is drawn at 1.5x the red and blue alpha and measured +34 on the " +
+                "JVM with the fringe; +19 without it, so a value near the latter means the fringe " +
+                "is not painted for this appearance.",
         )
     }
 
