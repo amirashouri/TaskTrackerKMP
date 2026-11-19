@@ -39,6 +39,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.TagRules
@@ -636,6 +637,74 @@ class RoomProjectRepository(
         return locked
     }
 
+    override suspend fun sprintMembers(sprintID: SprintID): List<SprintMember> =
+        database.sprintMemberDao().bySprint(sprintID.stringValue).mapNotNull { it.domainValue }
+
+    override suspend fun createSprintMember(
+        sprintID: SprintID,
+        userID: UserID,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember {
+        val sprint = readSprint(sprintID)
+        val stamp = currentUserStamp()
+        val member = SprintMember(
+            id = SprintMember.idFor(sprintID, userID),
+            projectID = sprint.projectID,
+            sprintID = sprintID,
+            userID = userID,
+            availableStoryPoints = maxOf(0, availableStoryPoints),
+            createdAt = now,
+            updatedAt = now,
+        )
+        inTransaction(database) {
+            database.sprintMemberDao().insert(member.toRecord())
+            enqueueSprintMember(member, stamp, now)
+        }
+        changeBus.announceSprints(sprint.projectID)
+        return member
+    }
+
+    override suspend fun updateSprintMember(
+        id: String,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember {
+        val stamp = currentUserStamp()
+        val updated = inTransaction(database) {
+            val existingRecord = database.sprintMemberDao().byID(id)
+                ?: throw AppError.Storage("No sprint member $id in the local store.")
+            val existing = existingRecord.domainValue
+                ?: throw AppError.Storage("Sprint member $id cannot be decoded.")
+            val value = SprintMember(
+                id = existing.id,
+                projectID = existing.projectID,
+                sprintID = existing.sprintID,
+                userID = existing.userID,
+                availableStoryPoints = maxOf(0, availableStoryPoints),
+                createdAt = existing.createdAt,
+                updatedAt = now,
+            )
+            database.sprintMemberDao().update(existingRecord.updatedFrom(value))
+            enqueueSprintMember(value, stamp, now)
+            value
+        }
+        changeBus.announceSprints(updated.projectID)
+        return updated
+    }
+
+    override suspend fun deleteSprintMember(id: String, now: Instant) {
+        val stamp = currentUserStamp()
+        val owner = inTransaction(database) {
+            val existing = database.sprintMemberDao().byID(id)?.domainValue
+                ?: throw AppError.Storage("No sprint member $id in the local store.")
+            database.sprintMemberDao().deleteByID(id)
+            enqueueDelete(OutboxEntity.SprintMember, id, stamp, now)
+            existing.projectID
+        }
+        changeBus.announceSprints(owner)
+    }
+
     /**
      * Moves items into a sprint, or back to the backlog.
      *
@@ -1040,6 +1109,11 @@ class RoomProjectRepository(
             if (parseSprintID(entityID) == null) return null
             val sprint = database.sprintDao().byID(entityID)?.domainValue ?: return null
             JSONCoding.json.encodeToString(Sprint.serializer(), sprint).encodeToByteArray()
+        }
+
+        OutboxEntity.SprintMember -> {
+            val member = database.sprintMemberDao().byID(entityID)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(SprintMember.serializer(), member).encodeToByteArray()
         }
 
         OutboxEntity.Comment -> {
@@ -1624,6 +1698,21 @@ class RoomProjectRepository(
                 id = newOutboxID(OutboxEntity.Sprint, sprint.id.stringValue, OutboxOperation.Upsert),
                 entity = OutboxEntity.Sprint,
                 entityID = sprint.id.stringValue,
+                operation = OutboxOperation.Upsert,
+                payload = payload.encodeToByteArray(),
+                createdAt = now,
+                userID = userID,
+            ).toRecord(),
+        )
+    }
+
+    private suspend fun enqueueSprintMember(member: SprintMember, userID: String?, now: Instant) {
+        val payload = JSONCoding.json.encodeToString(SprintMember.serializer(), member)
+        database.outboxDao().insert(
+            NewOutboxEntry(
+                id = newOutboxID(OutboxEntity.SprintMember, member.id, OutboxOperation.Upsert),
+                entity = OutboxEntity.SprintMember,
+                entityID = member.id,
                 operation = OutboxOperation.Upsert,
                 payload = payload.encodeToByteArray(),
                 createdAt = now,

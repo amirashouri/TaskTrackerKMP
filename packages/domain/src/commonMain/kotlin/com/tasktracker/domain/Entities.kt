@@ -435,6 +435,38 @@ data class Project(
 }
 
 /**
+ * One person's stated capacity in a sprint.
+ *
+ * Membership is a [WorkItem]-independent entity: a member may have no assigned
+ * tasks yet, and a work item's assignee may change without rewriting the
+ * roster. The id is composite — `<sprintID>:<userID>` — so a re-push updates one
+ * row rather than creating a second membership.
+ *
+ * [availableStoryPoints] is what the member offered for this sprint, not a
+ * promise the sprint will spend it. It is advisory: a roster whose sum exceeds
+ * the sprint goal warns rather than refuses, because capacity and committed
+ * work are different questions.
+ */
+@Serializable
+data class SprintMember(
+    val id: String,
+    val projectID: ProjectID,
+    val sprintID: SprintID,
+    val userID: UserID,
+    var availableStoryPoints: Int = 0,
+    val createdAt: Instant,
+    var updatedAt: Instant,
+) {
+    init {
+        if (availableStoryPoints < 0) availableStoryPoints = 0
+    }
+
+    companion object {
+        fun idFor(sprintID: SprintID, userID: UserID): String = "${sprintID.stringValue}:${userID.stringValue}"
+    }
+}
+
+/**
  * A time-boxed iteration of work: two goals, a window, an owner, and the tasks pulled into it.
  *
  * ## The goal is two fields, and they answer different questions

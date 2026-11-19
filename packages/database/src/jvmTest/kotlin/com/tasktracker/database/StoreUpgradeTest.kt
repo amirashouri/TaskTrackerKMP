@@ -19,8 +19,8 @@ import kotlinx.coroutines.runBlocking
  * version recorded on disk was always the one the binary expects and Room's upgrade path
  * was dead code. A defect in it could not fail anything — which is how one shipped. The
  * fallback was configured with two calls, and the second silently cancelled the first, so
- * opening an older store threw *"A migration from 3 to 4 was required but not found"*
- * instead of recreating it.
+ * opening an older store threw a "a migration from N to N+1 was required but not found"
+ * error instead of recreating it.
  *
  * File-backed, so `jvmTest`, for the same reason as [DatabaseLocationTest]: "a store from
  * another build" is a property of a file on disk, and reopening one is a thing only a real
@@ -40,9 +40,8 @@ class StoreUpgradeTest {
 
     @Test
     fun aStoreFromAnEarlierBuildIsRecreatedRatherThanRefused() = runBlocking {
-        // 3 is the version the reported failure named ("a migration from 3 to 4 was
-        // required but not found"); any lower number takes the identical path.
-        assertAStoreAtVersionIsRecreated(version = 3)
+        // The current schema is version 3; any lower number takes the upgrade path.
+        assertAStoreAtVersionIsRecreated(version = 2)
     }
 
     @Test

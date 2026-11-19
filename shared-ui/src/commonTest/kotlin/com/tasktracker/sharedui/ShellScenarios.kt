@@ -97,6 +97,8 @@ import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
 import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
+import com.tasktracker.featureprojectspresentation.SprintDetailSummaryTag
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressBackTag
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholderTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintEditorCancelTag
@@ -107,6 +109,7 @@ import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
 import com.tasktracker.featureprojectspresentation.SprintPickerRowTag
 import com.tasktracker.featureprojectspresentation.SprintPickerSheetTag
 import com.tasktracker.featureprojectspresentation.SprintRowTag
+import com.tasktracker.featureprojectspresentation.SprintSummaryMemberProgressTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.WorkItemCancelTag
@@ -1227,6 +1230,67 @@ object ShellScenarios {
             "system back at the tab root should be a no-op, not a pop",
         )
         onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * Member progress is pushed from the summary and its back button returns to the summary.
+     *
+     * The summary used to be local state inside the detail destination. Making it a route is
+     * what lets a screen above it pop back to it; this scenario is the proof that the stack,
+     * not just the pixels, tells that story.
+     */
+    val theSummaryOpensMemberProgressAndBackReturnsToTheSummary: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintDetailSummaryTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintSummaryDestinationTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintSummaryMemberProgressTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintMemberProgressDestinationTag).assertIsDisplayed()
+        assertEquals(
+            listOf(
+                AppRoute.SprintList(project.id),
+                AppRoute.SprintDetail(project.id, sprint.id),
+                AppRoute.SprintSummary(project.id, sprint.id),
+                AppRoute.SprintMemberProgress(project.id, sprint.id),
+            ),
+            router.path(AppTab.Sprints),
+        )
+
+        onNodeWithTag(SprintMemberProgressBackTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        assertEquals(
+            listOf(
+                AppRoute.SprintList(project.id),
+                AppRoute.SprintDetail(project.id, sprint.id),
+                AppRoute.SprintSummary(project.id, sprint.id),
+            ),
+            router.path(AppTab.Sprints),
+        )
+        onNodeWithTag(SprintSummaryDestinationTag).assertIsDisplayed()
     }
 
     /**
@@ -5064,6 +5128,8 @@ object ShellScenarios {
         // Appended, never inserted: the indices above are reached by name from
         // TaskTrackerAppScenarios, and this one is `[15]`.
         ShellScenarios.theBacklogSortSurvivesLeavingTheTab,
+        // Appended after [15]; this one is `[16]`.
+        ShellScenarios.theSummaryOpensMemberProgressAndBackReturnsToTheSummary,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

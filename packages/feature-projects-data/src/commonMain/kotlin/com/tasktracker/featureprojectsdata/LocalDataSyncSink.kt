@@ -12,6 +12,7 @@ import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.ProjectChange
@@ -96,6 +97,11 @@ class LocalDataSyncSink(
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
             }
 
+            OutboxEntity.SprintMember -> {
+                val owner = applySprintMember(change)
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = owner))
+            }
+
             // Announced as a work-item change, matching the local write's choice in
             // `RoomProjectRepository.addComment`: the open editor re-reads its thread, and
             // `null` — an unscoped announcement — is the documented case for "the project
@@ -131,6 +137,7 @@ class LocalDataSyncSink(
                 // would find a card belonging to a sprint that does not exist.
                 database.workItemDao().releaseFromSprint(id)
                 val projectID = parseProjectID(existing.projectID)
+                database.sprintMemberDao().deleteBySprint(id)
                 database.sprintDao().deleteByID(id)
                 projectID
             }
@@ -150,6 +157,30 @@ class LocalDataSyncSink(
             }
         }
         return sprint.projectID
+    }
+
+    /** Applies one roster row server-wins, without ever touching the outbox (class KDoc). */
+    private suspend fun applySprintMember(change: RemoteChange): ProjectID? {
+        if (change.operation == OutboxOperation.Delete) {
+            val id = change.entityID
+            val owner = inTransaction(database) {
+                val existing = database.sprintMemberDao().byID(id) ?: return@inTransaction null
+                database.sprintMemberDao().deleteByID(id)
+                parseProjectID(existing.projectID)
+            }
+            return owner
+        }
+
+        val member = decode(SprintMember.serializer(), change.payload, change.entity)
+        inTransaction(database) {
+            val existing = database.sprintMemberDao().byID(member.id)
+            if (existing == null) {
+                database.sprintMemberDao().insert(member.toRecord())
+            } else {
+                database.sprintMemberDao().update(existing.updatedFrom(member))
+            }
+        }
+        return member.projectID
     }
 
     /**
@@ -173,6 +204,7 @@ class LocalDataSyncSink(
                 // local one is `RoomProjectRepository.deleteProject`, which queues a delete
                 // row per sprint for exactly this path to receive.
                 for (sprint in database.sprintDao().byProject(id)) {
+                    database.sprintMemberDao().deleteBySprint(sprint.id)
                     database.sprintDao().deleteByID(sprint.id)
                 }
                 database.statusChangeDao().deleteByProject(id)

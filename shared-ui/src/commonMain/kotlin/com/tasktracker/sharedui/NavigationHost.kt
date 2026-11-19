@@ -100,6 +100,9 @@ import com.tasktracker.featureprojectspresentation.SprintEditorModel
 import com.tasktracker.featureprojectspresentation.SprintEditorPresentation
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
 import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressModel
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressScreen
+import com.tasktracker.featureprojectspresentation.SprintMemberSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
 import com.tasktracker.featureprojectspresentation.SprintListScreen
 import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
@@ -615,7 +618,9 @@ fun NavigationHost(
                             listPane = tabRoot,
                             detailPane = when {
                                 isNewSprintOpen -> newSprintPane
-                                backgroundPushed is AppRoute.SprintDetail -> pushedPane
+                                backgroundPushed is AppRoute.SprintDetail ||
+                                    backgroundPushed is AppRoute.SprintSummary ||
+                                    backgroundPushed is AppRoute.SprintMemberProgress -> pushedPane
                                 else -> noSprintSelected
                             },
                         )
@@ -990,6 +995,22 @@ private fun PushedRoute(
             environment = environment,
             scope = scope,
             preferences = preferences,
+        )
+
+        is AppRoute.SprintSummary -> SprintSummaryDestination(
+            projectID = route.projectID,
+            sprintID = route.sprintID,
+            router = router,
+            environment = environment,
+            scope = scope,
+        )
+
+        is AppRoute.SprintMemberProgress -> SprintMemberProgressDestination(
+            projectID = route.projectID,
+            sprintID = route.sprintID,
+            router = router,
+            environment = environment,
+            scope = scope,
         )
 
         // The outer host lifts every editor on top of the path that produced it, so this
@@ -1737,11 +1758,6 @@ private fun SprintDetailDestination(
         onDispose { model.stopObserving() }
     }
 
-    // The summary is the model's own value rather than a second read: the detail screen has
-    // already loaded the items, and re-reading them at the moment the summary is opened is
-    // how the two screens end up reporting different totals for the same sprint.
-    var isSummaryOpen by remember(sprintID) { mutableStateOf(false) }
-
     val detail = model.detail
     if (detail == null) {
         // Deliberately empty rather than an error banner: this is a sprint that is gone, not
@@ -1757,19 +1773,25 @@ private fun SprintDetailDestination(
         value = runCatching { environment.repository.project(projectID) }.getOrNull()
     }
 
+    val memberNames by produceState<Map<UserID, String>>(
+        emptyMap(),
+        detail.members,
+        environment.teamPort,
+    ) {
+        val ids = detail.members.map { it.userID }
+        value = if (ids.isEmpty()) {
+            emptyMap()
+        } else {
+            environment.teamPort?.users(ids)
+                ?.associate { it.id to it.preferredGreeting }
+                ?: emptyMap()
+        }
+    }
+
     // The editor over this sprint, opened by the card's edit button. Declared before the
     // screen because the screen's [SprintDetailScreen.onEdit] is what sets it.
     var isEditorVisible by remember(sprintID) { mutableStateOf(false) }
     var isEditorBusy by remember(sprintID) { mutableStateOf(false) }
-
-    if (isSummaryOpen) {
-        SprintSummaryScreen(
-            summary = detail.summary,
-            onBack = { isSummaryOpen = false },
-            modifier = Modifier.testTag(SprintSummaryDestinationTag),
-        )
-        return
-    }
 
     SprintDetailScreen(
         detail = detail,
@@ -1777,7 +1799,9 @@ private fun SprintDetailDestination(
         errorMessage = model.errorMessage,
         onFinish = { scope.launch { model.finish() } },
         onReopen = { scope.launch { model.reopen() } },
-        onViewSummary = { isSummaryOpen = true },
+        onViewSummary = {
+            router.push(AppRoute.SprintSummary(projectID = projectID, sprintID = sprintID))
+        },
         onDismissError = model::dismissError,
         onRemove = { scope.launch { model.removeSprint() } },
         onArchive = { scope.launch { model.archive() } },
@@ -1797,6 +1821,9 @@ private fun SprintDetailDestination(
         onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
         ownerName = ownerName,
         isAdmin = isAdmin,
+        memberNames = memberNames,
+        onAddMember = { model.openMemberSheet() },
+        onEditMember = { member -> model.openMemberSheet(member) },
     )
 
     // The editor over this sprint, opened by the card's edit button. Unlike
@@ -1898,10 +1925,121 @@ private fun SprintDetailDestination(
         onDismissed = model::closePicker,
         modifier = Modifier.fillMaxSize(),
     )
+
+    // Hosted unconditionally like the task picker so the sheet keeps its exit transition.
+    SprintMemberSheet(
+        visible = model.isMemberSheetVisible,
+        isEditing = model.editingMember != null,
+        selectedUserID = model.memberUserID,
+        availablePoints = model.availablePoints,
+        isBusy = model.isBusy,
+        onSelectedUserIDChanged = model::onMemberUserIDChanged,
+        onAvailablePointsChanged = model::onMemberPointsChanged,
+        onSave = { scope.launch { model.saveMember() } },
+        onRemove = model.editingMember?.let { member ->
+            { scope.launch { model.removeMember() } }
+        },
+        onDismissRequest = model::closeMemberSheet,
+        onDismissed = model::closeMemberSheet,
+        editingName = model.editingMember?.let { memberNames[it.userID] },
+        searchMembers = { query ->
+            assignableMembersFor(
+                project = currentProject,
+                directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
+            )
+        },
+        resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
-/** The summary, rendered in place of the detail screen. See [SprintDetailDestination]. */
+/** The summary, now its own pushed destination so progress can pop back to it. */
 const val SprintSummaryDestinationTag = "shell.sprintSummary"
+
+@Composable
+private fun SprintSummaryDestination(
+    projectID: ProjectID,
+    sprintID: SprintID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+) {
+    val model = remember(sprintID, environment) {
+        SprintDetailModel(
+            sprintID = sprintID,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+        )
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    val detail = model.detail ?: return
+    val memberNames by produceState<Map<UserID, String>>(
+        emptyMap(),
+        detail.members,
+        environment.teamPort,
+    ) {
+        val ids = detail.members.map { it.userID }
+        value = if (ids.isEmpty()) {
+            emptyMap()
+        } else {
+            environment.teamPort?.users(ids)
+                ?.associate { it.id to it.preferredGreeting }
+                ?: emptyMap()
+        }
+    }
+
+    SprintSummaryScreen(
+        summary = detail.summary,
+        onBack = {
+            val path = router.path(AppTab.Sprints)
+            if (path.size > 1) router.setPath(path.dropLast(1), AppTab.Sprints)
+        },
+        memberNames = memberNames,
+        onOpenMemberProgress = {
+            router.push(
+                AppRoute.SprintMemberProgress(projectID = projectID, sprintID = sprintID),
+            )
+        },
+        modifier = Modifier.testTag(SprintSummaryDestinationTag),
+    )
+}
+
+@Composable
+private fun SprintMemberProgressDestination(
+    projectID: ProjectID,
+    sprintID: SprintID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+) {
+    val model = remember(sprintID, environment, environment.teamPort) {
+        SprintMemberProgressModel(
+            sprintID = sprintID,
+            repository = environment.repository,
+            teamPort = environment.teamPort,
+        )
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    val view = model.view ?: return
+    SprintMemberProgressScreen(
+        view = view,
+        onBack = {
+            val path = router.path(AppTab.Sprints)
+            if (path.size > 1) router.setPath(path.dropLast(1), AppTab.Sprints)
+        },
+        modifier = Modifier.testTag(SprintMemberProgressDestinationTag),
+    )
+}
+
+const val SprintMemberProgressDestinationTag = "shell.sprintMemberProgress"
 
 /**
  * The work item editor, over whatever opened it.

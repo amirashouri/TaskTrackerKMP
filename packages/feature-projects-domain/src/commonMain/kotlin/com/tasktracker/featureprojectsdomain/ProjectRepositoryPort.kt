@@ -1,5 +1,6 @@
 package com.tasktracker.featureprojectsdomain
 
+import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
@@ -13,6 +14,7 @@ import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -49,6 +51,23 @@ interface ProjectRepositoryPort {
     suspend fun sprint(id: SprintID): Sprint?
 
     suspend fun sprintWorkItems(id: SprintID): List<WorkItem>
+
+    suspend fun sprintMembers(sprintID: SprintID): List<SprintMember> = emptyList()
+
+    suspend fun createSprintMember(
+        sprintID: SprintID,
+        userID: UserID,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember = throw AppError.Storage("This store does not hold sprint members.")
+
+    suspend fun updateSprintMember(
+        id: String,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember = throw AppError.Storage("This store does not hold sprint members.")
+
+    suspend fun deleteSprintMember(id: String, now: Instant) = Unit
 
     suspend fun seedSampleDataIfNeeded(): Boolean
 

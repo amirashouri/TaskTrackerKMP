@@ -52,6 +52,64 @@ object SprintGoal {
 }
 
 /**
+ * What one member delivered against the capacity they committed at planning.
+ *
+ * [finished] holds only `Done` items: [WorkItemStatus.isComplete] is the same
+ * delivered predicate [SprintGoal.achievedStoryPoints] uses, so the member rows
+ * and the sprint total can never disagree about what counted. A `Closed` item
+ * is still reported in [closed] — it left the flow and the member should not
+ * appear to have done nothing — but it earns no points.
+ */
+data class SprintMemberProgress(
+    val member: SprintMember,
+    val finished: List<WorkItem>,
+    val closed: List<WorkItem>,
+    val remainingCount: Int,
+    val deliveredStoryPoints: Int = finished.sumOf { it.storyPoints ?: 0 },
+) {
+    /** `null` when no capacity was stated; zero capacity is not a target to have missed. */
+    val progressFraction: Float?
+        get() = if (member.availableStoryPoints > 0) {
+            deliveredStoryPoints.toFloat() / member.availableStoryPoints.toFloat()
+        } else {
+            null
+        }
+}
+
+/** Per-member rows plus the work nobody claimed, so the points still reconcile. */
+data class SprintParticipation(
+    val members: List<SprintMemberProgress>,
+    val unassigned: List<WorkItem>,
+    val unassignedStoryPoints: Int = unassigned.sumOf { it.storyPoints ?: 0 },
+)
+
+/**
+ * Builds [SprintParticipation] from a roster and the sprint's own items.
+ *
+ * Pure and taking no clock, for the reason [sprintSummary] is: the same roster
+ * read twice must give the same answer. Duplicate ids collapse to the first
+ * row, and items assigned to somebody outside the roster are left out of every
+ * member's row rather than being silently attributed to the sprint owner.
+ */
+fun sprintParticipation(members: List<SprintMember>, items: List<WorkItem>): SprintParticipation {
+    val seen = mutableSetOf<String>()
+    val distinct = members.filter { seen.add(it.id) }
+    val rows = distinct.map { member ->
+        val assigned = items.filter { it.assigneeID == member.userID }
+        SprintMemberProgress(
+            member = member,
+            finished = assigned.filter { it.status.isComplete }.sortedBy { it.orderingKey },
+            closed = assigned.filter { it.status == WorkItemStatus.Closed }.sortedBy { it.orderingKey },
+            remainingCount = assigned.count { !it.status.isTerminal },
+        )
+    }
+    val membersByID = distinct.map { it.userID }.toSet()
+    val unassigned = items.filter { it.assigneeID == null || it.assigneeID !in membersByID }
+        .sortedBy { it.orderingKey }
+    return SprintParticipation(members = rows, unassigned = unassigned)
+}
+
+/**
  * What a finished sprint came to.
  *
  * A value rather than a live query, and the reason is timing: the summary has to be true
@@ -74,6 +132,8 @@ data class SprintSummary(
     val achievedStoryPoints: Int,
     /** `null` when the sprint had no goal set. See [SprintGoal.didHitGoal]. */
     val didHitGoal: Boolean?,
+    /** Per-member delivery, derived from [items] and the sprint's roster. */
+    val participation: SprintParticipation = SprintParticipation(emptyList(), emptyList()),
 ) {
     /** Whether the sprint holds nothing at all, which is a different thing from a miss. */
     val isEmpty: Boolean get() = done.isEmpty() && incomplete.isEmpty()
@@ -95,7 +155,11 @@ data class SprintSummary(
  * Pure, and taking no clock: every instant in here comes from the caller's data, so the
  * whole value is testable on any day.
  */
-fun sprintSummary(sprint: Sprint, items: List<WorkItem>): SprintSummary {
+fun sprintSummary(
+    sprint: Sprint,
+    items: List<WorkItem>,
+    members: List<SprintMember> = emptyList(),
+): SprintSummary {
     val own = items.filter { it.sprintID == sprint.id }
     return SprintSummary(
         sprint = sprint,
@@ -107,5 +171,6 @@ fun sprintSummary(sprint: Sprint, items: List<WorkItem>): SprintSummary {
             achieved = SprintGoal.achievedStoryPoints(own),
             goal = sprint.goalStoryPoints,
         ),
+        participation = sprintParticipation(members, own),
     )
 }

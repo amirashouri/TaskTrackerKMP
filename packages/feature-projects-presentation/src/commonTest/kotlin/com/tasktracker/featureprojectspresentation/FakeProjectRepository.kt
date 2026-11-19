@@ -21,6 +21,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
 import com.tasktracker.domain.StatusChange
@@ -113,6 +114,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
      */
     private val blobBytes = mutableMapOf<AttachmentID, ByteArray>()
     private val storedSprints = mutableListOf<Sprint>()
+    private val storedMembers = mutableListOf<SprintMember>()
 
     /** Written, so a test can assert which use case ran and with what. */
     val writes = mutableListOf<String>()
@@ -185,6 +187,62 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun sprintWorkItems(id: SprintID): List<WorkItem> = locked {
         storedItems.filter { it.sprintID == id }.sortedBy { it.rank }.map { it.copy() }
+    }
+
+    override suspend fun sprintMembers(sprintID: SprintID): List<SprintMember> = locked {
+        storedMembers.filter { it.sprintID == sprintID }.map { it.copy() }
+    }
+
+    override suspend fun createSprintMember(
+        sprintID: SprintID,
+        userID: UserID,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember = writing({
+        ProjectChange(
+            ProjectChange.Kind.Sprints,
+            storedSprints.first { it.id == sprintID }.projectID,
+        )
+    }) {
+        failIfSet()
+        val sprint = storedSprints.first { it.id == sprintID }
+        val member = SprintMember(
+            id = SprintMember.idFor(sprintID, userID),
+            projectID = sprint.projectID,
+            sprintID = sprintID,
+            userID = userID,
+            availableStoryPoints = availableStoryPoints,
+            createdAt = now,
+            updatedAt = now,
+        )
+        storedMembers += member
+        writes += "createSprintMember"
+        member.copy()
+    }
+
+    override suspend fun updateSprintMember(
+        id: String,
+        availableStoryPoints: Int,
+        now: Instant,
+    ): SprintMember = writing({
+        val projectID = storedMembers.first { it.id == id }.projectID
+        ProjectChange(ProjectChange.Kind.Sprints, projectID)
+    }) {
+        failIfSet()
+        val existing = storedMembers.first { it.id == id }
+        existing.availableStoryPoints = availableStoryPoints
+        existing.updatedAt = now
+        writes += "updateSprintMember"
+        existing.copy()
+    }
+
+    override suspend fun deleteSprintMember(id: String, now: Instant) = writing({
+        val projectID = storedMembers.first { it.id == id }.projectID
+        ProjectChange(ProjectChange.Kind.Sprints, projectID)
+    }) {
+        failIfSet()
+        storedMembers.removeAll { it.id == id }
+        writes += "deleteSprintMember"
     }
 
     override suspend fun createSprint(

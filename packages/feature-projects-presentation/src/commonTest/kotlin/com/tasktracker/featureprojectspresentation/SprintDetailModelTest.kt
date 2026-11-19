@@ -14,6 +14,7 @@ import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -366,7 +367,7 @@ class SprintDetailModelTest {
     }
 
     @Test
-    fun `an open sprint has no summary screen to open`() = runTest {
+    fun `an open sprint also has a summary screen to open`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
@@ -380,10 +381,11 @@ class SprintDetailModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        // An open sprint still *has* a summary value — the detail screen shows the same two
-        // numbers — but there is no retrospective to open.
+        // The detail card and the summary report are the same model's arithmetic, but the
+        // report is now available throughout the sprint: an in-progress team needs the
+        // per-member view before the retrospective, not only after it.
         assertFalse(model.detail!!.summary.isEmpty)
-        assertFalse(model.detail!!.hasSummaryToShow)
+        assertTrue(model.detail!!.hasSummaryToShow)
     }
 
     @Test
@@ -666,5 +668,54 @@ class SprintDetailModelTest {
         assertTrue(model.canAddSelected, "and keeps the ticks")
         assertFalse(model.isBusy, "the wait is cleared even on failure")
         assertNull(repository.workItem(item.id)!!.sprintID)
+    }
+
+    @Test
+    fun `an unlocked sprint accepts a member and their available points`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isLocked = false, isFinished = false)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.openMemberSheet()
+        assertTrue(model.isMemberSheetVisible)
+        model.onMemberUserIDChanged(graceUserID)
+        model.onMemberPointsChanged("5")
+        assertTrue(model.saveMember())
+        advanceUntilIdle()
+
+        assertEquals(listOf("createSprintMember"), repository.writes)
+        assertEquals(1, model.detail!!.members.size)
+        assertEquals(5, model.detail!!.members.single().availableStoryPoints)
+    }
+
+    @Test
+    fun `a locked sprint refuses a member even when the sheet is bypassed`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isLocked = true, isFinished = false)
+        repository.seed(sprint)
+
+        val model = detailModel(repository, sprint.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        // The button is closed, and the write path refuses the same call made directly.
+        model.openMemberSheet()
+        assertFalse(model.isMemberSheetVisible)
+        model.onMemberUserIDChanged(graceUserID)
+        model.onMemberPointsChanged("3")
+        assertFalse(model.saveMember())
+        advanceUntilIdle()
+
+        assertTrue(repository.writes.isEmpty())
+        assertEquals(0, model.detail!!.members.size)
+        assertNotNull(model.errorMessage)
     }
 }

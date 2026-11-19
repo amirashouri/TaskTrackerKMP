@@ -145,6 +145,8 @@ fun ProjectsHost(
             is AppRoute.Archive,
             is AppRoute.SprintList,
             is AppRoute.SprintDetail,
+            is AppRoute.SprintSummary,
+            is AppRoute.SprintMemberProgress,
             is AppRoute.WorkItemEditor,
             AppRoute.Settings,
             // The admin sections are pushed onto the *Settings* stack and never onto this one,

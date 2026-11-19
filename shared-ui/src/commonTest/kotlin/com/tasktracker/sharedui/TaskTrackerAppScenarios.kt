@@ -177,6 +177,8 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun theBacklogSortSurvivesLeavingTheTab() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[15])
     @Test
+    fun theSummaryOpensMemberProgressAndBackReturnsToTheSummary() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[16])
+    @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test
     fun everyTabIsNamedAndCarriesTheTabRole() = runComposeUiTest(block = ShellScenarios.everyTabIsNamedAndCarriesTheTabRole)

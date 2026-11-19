@@ -17,7 +17,8 @@
 ## Files
 
 - `packages/domain/src/commonMain/kotlin/com/tasktracker/domain/Entities.kt` — `SprintMember`
-  and `Sprint.members` with a default.
+  as its own sync entity. `Sprint` deliberately gains no field: installed clients
+  strict-decode sprint payloads, so membership rides the separate `sprintMembers` scope.
 - `packages/domain/src/commonMain/kotlin/com/tasktracker/domain/SprintSummary.kt` — per-member
   arithmetic, derived from work items by `assigneeID`.
 - `packages/feature-projects-domain/.../ProjectRepositoryPort.kt` — member reads/writes.
@@ -44,16 +45,16 @@
 
 ## Contract
 
-- [ ] A member may be added/edited/removed only while `!isLocked && !isFinished`; the model
+- [x] A member may be added/edited/removed only while `!isLocked && !isFinished`; the model
       refuses a direct call even when the UI button is bypassed.
-- [ ] Per-member delivered points count `Done` items only; `Closed` items appear but earn no
+- [x] Per-member delivered points count `Done` items only; `Closed` items appear but earn no
       points; unestimated items contribute zero; unassigned items get a derived row.
-- [ ] The summary opens for scheduled, in-progress and finished sprints, and its member
+- [x] The summary opens for scheduled, in-progress and finished sprints, and its member
       section remains scrollable at compact widths.
-- [ ] Tapping "Member progress" reaches `AppRoute.SprintMemberProgress` and back returns to
+- [x] Tapping "Member progress" reaches `AppRoute.SprintMemberProgress` and back returns to
       the summary; shell scenario indices are append-only.
-- [ ] `RecordCompletenessTest` passes with the new column mapped in both directions.
-- [ ] No existing DTO gains a key; `sprintMember` rides only its own new scope.
+- [x] `RecordCompletenessTest` passes with the new column mapped in both directions.
+- [x] No existing DTO gains a key; `sprintMember` rides only its own new scope.
 - [ **KMP Constraint:** No platform-specific APIs introduced into `commonMain` without an
       explicit `expect/actual` contract.]
 
@@ -71,15 +72,23 @@
 
 ## Handoff
 
-- **Done:** branches and both specs created; design approved.
-- **Pending:** all implementation and validation above.
-- **Next step:** add `SprintMember` to the domain and extend `SprintSummary`.
-- **Gotchas:** `Sprint` is a strict-decoded DTO — default the new field and do not emit it
-  when empty. The architecture graph is an allow-list but no new edge is needed. A `remember`
-  inside a destination dies on tab switch; preferences and selections belong in the shell.
+- **Done:** domain arithmetic, repository port, guarded use cases, Room table/version 3 and
+  exported schema, mapping, local writes/outbox, sync sink/scope, strings, routing,
+  summary/progress screens, roster sheet, shell destinations, and scenario/model tests.
+  `scripts/check.sh full` is green on all three hosts: JVM 2283, iOS 2220, Android 1895
+  (44 skipped), zero failures. `test-baseline.json` was regenerated from that run and the
+  full gate was rerun green. `RecordCompletenessTest` passes on JVM and iOS.
+- **Pending:** final diff review and commit on `feat/sprint-member-summary`.
+- **Next step:** review the two-repo diff once more, then commit each branch; do not push.
+- **Gotchas:** the roster is a separate `sprintMember` entity, not a sprint field — adding a
+  key to `Sprint` would break installed clients. `SprintSummary` is now a pushed route rather
+  than local state so progress can pop back to it. The architecture graph is an allow-list
+  but no new edge is needed. A `remember` inside a destination dies on tab switch;
+  preferences and selections belong in the shell. A Compose scenario may call `setContent`
+  only once per Android host test; recompose through state instead.
 
 ## Risks / notes
 
-- `SprintSummaryScreen` currently has no scroll; adding rows will overflow unless its
-  container changes.
+- The summary scroll container is required: member rows and the existing Delivered section
+  are both present, so a fixed-height root would clip on compact screens.
 - Directory lookups resolve display names; the domain keeps ids only.
