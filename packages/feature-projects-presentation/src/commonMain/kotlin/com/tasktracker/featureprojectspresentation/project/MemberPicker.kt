@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -301,14 +300,9 @@ private fun MemberPill(
                     onClickLabel = stringResource(Res.string.member_picker_remove, name),
                     onClick = onRemove,
                 )
-                .padding(ttSpacing.xs)
-                // The cross sits on glass, so the glass around it must answer to the same
-                // remove action; a glyph-only target is a few pixels wide on Desktop.
-                .sizeIn(
-                    minWidth = ttSpacing.iconButtonSize,
-                    minHeight = ttSpacing.iconButtonSize,
-                )
+                .size(MEMBER_PILL_REMOVE_TARGET_SIZE)
                 .testTag(MemberPickerPillRemoveTag(id)),
+            contentAlignment = Alignment.Center,
         ) {
             ttIcon(
                 image = ttActionIcons.close,
@@ -319,6 +313,8 @@ private fun MemberPill(
         }
     }
 }
+
+private val MEMBER_PILL_REMOVE_TARGET_SIZE = 24.dp
 
 private class MemberPickerDropdownPositionProvider(
     private val gapPx: Int,

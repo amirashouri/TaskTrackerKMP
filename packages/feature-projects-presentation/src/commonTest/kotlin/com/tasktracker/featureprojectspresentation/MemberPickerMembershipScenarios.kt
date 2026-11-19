@@ -5,8 +5,8 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.UserID
-import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureteamsdomain.User
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -129,7 +129,7 @@ object MemberPickerMembershipScenarios {
 
         val remove = onNodeWithTag(MemberPickerPillRemoveTag(member.id))
             .fetchSemanticsNode().boundsInRoot
-        val minimum = with(density) { ttSpacing.iconButtonSize.toPx() }
+        val minimum = with(density) { 24.dp.toPx() }
         assertTrue(
             remove.width >= minimum - HALF_PIXEL && remove.height >= minimum - HALF_PIXEL,
             "the remove cross is ${remove.width}x${remove.height}px against a ${minimum}px minimum",
