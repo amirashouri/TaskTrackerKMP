@@ -152,3 +152,12 @@ fun ttStatusAway(): Color = ttFixedColours.statusAway(ttIsDarkTheme())
  * a name.
  */
 val ttSeparatorWidth: Dp = 1.dp
+
+/**
+ * The keyboard focus ring's stroke width.
+ *
+ * 2dp rather than [ttSeparatorWidth]'s 1dp: a focus ring is a state indicator, not a hairline
+ * between two surfaces, and it has to be obvious at a glance on a glass pill whose own rim is
+ * 0.5dp. Drawn inside the control's bounds so adding focus never moves the layout.
+ */
+val ttFocusRingWidth: Dp = 2.dp

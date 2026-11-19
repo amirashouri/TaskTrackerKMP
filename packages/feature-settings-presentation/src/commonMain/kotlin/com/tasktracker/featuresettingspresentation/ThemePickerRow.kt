@@ -26,6 +26,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
@@ -63,6 +64,7 @@ internal fun ThemePickerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .ttFocusRing()
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -138,6 +140,7 @@ internal fun ThemePickerOption(
         modifier = Modifier
             .fillMaxWidth()
             .dropdownOption(key = scheme)
+            .ttFocusRing()
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,

@@ -731,6 +731,7 @@ private fun FlowPickerChip(
         modifier = Modifier
             .clip(CircleShape)
             .onGloballyPositioned(onPositioned)
+            .ttFocusRing()
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -774,6 +775,7 @@ private fun Segment(
                 contentDescription = label
                 selected = isSelected
             }
+            .ttFocusRing(CircleShape)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -858,6 +860,7 @@ fun ttGlassButton(
             //
             // Nothing here changes the control's size: padding consumes the same space on
             // either side of `clickable`, so the pill and the row it sits in measure as before.
+            .ttFocusRing(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

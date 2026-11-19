@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
@@ -60,6 +61,7 @@ internal fun UserStatusPickerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .ttFocusRing()
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -150,6 +152,7 @@ private fun UserStatusOption(
         modifier = Modifier
             .fillMaxWidth()
             .dropdownOption(key = status)
+            .ttFocusRing()
             .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
