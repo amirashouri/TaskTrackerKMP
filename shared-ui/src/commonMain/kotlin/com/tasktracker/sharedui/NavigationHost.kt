@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -120,6 +121,8 @@ import com.tasktracker.featuresettingspresentation.SettingsModel
 import com.tasktracker.featuresettingspresentation.SettingsScreen
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
+import com.tasktracker.featureteamsdomain.User
+import com.tasktracker.featureteamsdomain.UserStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.scoped_choose_project
 import com.tasktracker.resources.scoped_no_project_body
@@ -135,6 +138,7 @@ import com.tasktracker.routing.Router
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -1284,6 +1288,61 @@ private fun rememberUserName(id: UserID?, teamPort: TeamPort?): String? {
     return name
 }
 
+/**
+ * The live account list for a picker that chooses an existing collaborator.
+ *
+ * `TeamPort.searchMembers` is the session cache when no backend is bound, and a
+ * server-backed `TeamPort` still answers from a directory cache that can predate an account
+ * added moments ago. The admin member list is fetched from the server on every call, so it is
+ * the honest source for a picker. `MemberAdminPort.searchMembers` is *not* used: it delegates
+ * to `TeamPort` and would carry the same staleness. A failed admin read falls back to the
+ * session directory rather than leaving the picker with no error surface and no rows.
+ */
+private suspend fun liveActiveMembers(environment: ProjectEnvironment): List<User>? {
+    val port = environment.memberAdminPort ?: return null
+    return try {
+        port.members(UserStatus.Active)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: AppError) {
+        null
+    }
+}
+
+/** A case-insensitive name-or-email match, sorted the way the directory itself sorts. */
+internal suspend fun searchDirectoryMembers(
+    environment: ProjectEnvironment,
+    query: String,
+): List<User> {
+    val active = liveActiveMembers(environment)
+    if (active != null) {
+        val needle = query.trim().lowercase()
+        return active
+            .filter { user ->
+                needle.isEmpty() ||
+                    user.displayName.orEmpty().lowercase().contains(needle) ||
+                    user.email.lowercase().contains(needle)
+            }
+            .sortedBy { it.preferredGreeting.lowercase() }
+    }
+    return environment.teamPort?.searchMembers(query).orEmpty()
+}
+
+/**
+ * Resolves selected ids without the search filter: a member removed from the active list
+ * must keep their name on an existing row. The live list is tried first, the session
+ * directory second, so a cached account never hides a newly fetched one.
+ */
+internal suspend fun resolveDirectoryMembers(
+    environment: ProjectEnvironment,
+    ids: List<UserID>,
+): List<User> {
+    if (ids.isEmpty()) return emptyList()
+    val activeByID = liveActiveMembers(environment).orEmpty().associateBy { it.id }
+    val localByID = environment.teamPort?.users(ids).orEmpty().associateBy { it.id }
+    return ids.mapNotNull { id -> activeByID[id] ?: localByID[id] }
+}
+
 /** One project's board. */
 @Composable
 private fun BoardDestination(
@@ -1776,16 +1835,11 @@ private fun SprintDetailDestination(
     val memberNames by produceState<Map<UserID, String>>(
         emptyMap(),
         detail.members,
-        environment.teamPort,
+        environment,
     ) {
         val ids = detail.members.map { it.userID }
-        value = if (ids.isEmpty()) {
-            emptyMap()
-        } else {
-            environment.teamPort?.users(ids)
-                ?.associate { it.id to it.preferredGreeting }
-                ?: emptyMap()
-        }
+        value = resolveDirectoryMembers(environment, ids)
+            .associate { it.id to it.preferredGreeting }
     }
 
     // The editor over this sprint, opened by the card's edit button. Declared before the
@@ -1945,10 +1999,10 @@ private fun SprintDetailDestination(
         searchMembers = { query ->
             assignableMembersFor(
                 project = currentProject,
-                directory = environment.teamPort?.searchMembers(query) ?: emptyList(),
+                directory = searchDirectoryMembers(environment, query),
             )
         },
-        resolveSelected = { ids -> environment.teamPort?.users(ids) ?: emptyList() },
+        resolveSelected = { ids -> resolveDirectoryMembers(environment, ids) },
         modifier = Modifier.fillMaxSize(),
     )
 }
@@ -1980,16 +2034,11 @@ private fun SprintSummaryDestination(
     val memberNames by produceState<Map<UserID, String>>(
         emptyMap(),
         detail.members,
-        environment.teamPort,
+        environment,
     ) {
         val ids = detail.members.map { it.userID }
-        value = if (ids.isEmpty()) {
-            emptyMap()
-        } else {
-            environment.teamPort?.users(ids)
-                ?.associate { it.id to it.preferredGreeting }
-                ?: emptyMap()
-        }
+        value = resolveDirectoryMembers(environment, ids)
+            .associate { it.id to it.preferredGreeting }
     }
 
     SprintSummaryScreen(

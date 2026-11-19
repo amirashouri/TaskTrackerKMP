@@ -1,6 +1,6 @@
 # sprint-member-summary — per-member sprint participation and progress
 
-- **status:** in-progress
+- **status:** done
 - **priority:** P1
 - **context:** Cross-repo feature approved in `ACK` on 2026-11-19. Companion spec in
   `../TaskTrackerServer/specs/sprint-member-summary.md`. The server must land first; this
@@ -53,6 +53,8 @@
       section remains scrollable at compact widths.
 - [x] Tapping "Member progress" reaches `AppRoute.SprintMemberProgress` and back returns to
       the summary; shell scenario indices are append-only.
+- [x] The roster picker offers every active project member from the live directory, not just
+      the signed-in account in the session cache.
 - [x] `RecordCompletenessTest` passes with the new column mapped in both directions.
 - [x] No existing DTO gains a key; `sprintMember` rides only its own new scope.
 - [ **KMP Constraint:** No platform-specific APIs introduced into `commonMain` without an
@@ -75,17 +77,21 @@
 - **Done:** domain arithmetic, repository port, guarded use cases, Room table/version 3 and
   exported schema, mapping, local writes/outbox, sync sink/scope, strings, routing,
   summary/progress screens, roster sheet, shell destinations, and scenario/model tests.
-  `scripts/check.sh full` is green on all three hosts: JVM 2283, iOS 2220, Android 1895
+  `scripts/check.sh full` is green on all three hosts: JVM 2284, iOS 2221, Android 1896
   (44 skipped), zero failures. `test-baseline.json` was regenerated from that run and the
-  full gate was rerun green. `RecordCompletenessTest` passes on JVM and iOS.
-- **Pending:** final diff review and commit on `feat/sprint-member-summary`.
-- **Next step:** review the two-repo diff once more, then commit each branch; do not push.
+  full gate was rerun green. `RecordCompletenessTest` passes on JVM and iOS. The roster picker
+  reads the live admin member list, and a shell scenario mutation-checked that the session-only
+  directory alone cannot populate it.
+- **Pending:** none — committed on `feat/sprint-member-summary`; not pushed.
+- **Next step:** merge server first, then this branch, then push only when asked.
 - **Gotchas:** the roster is a separate `sprintMember` entity, not a sprint field — adding a
   key to `Sprint` would break installed clients. `SprintSummary` is now a pushed route rather
   than local state so progress can pop back to it. The architecture graph is an allow-list
   but no new edge is needed. A `remember` inside a destination dies on tab switch;
   preferences and selections belong in the shell. A Compose scenario may call `setContent`
-  only once per Android host test; recompose through state instead.
+  only once per Android host test; recompose through state instead. A picker that chooses an
+  existing collaborator must read `MemberAdminPort.members(Active)` first: `TeamPort.searchMembers`
+  is session-only without a backend and can answer with just the signed-in admin.
 
 ## Risks / notes
 
