@@ -11,6 +11,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.tasktracker.core.UserID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomUserID
 import com.tasktracker.designsystem.ThemeScheme
@@ -20,6 +21,8 @@ import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintParticipation
 import com.tasktracker.domain.sprintSummary
 import com.tasktracker.domain.WorkItem
+import com.tasktracker.featureteamsdomain.User
+import com.tasktracker.featureteamsdomain.UserStatus
 import kotlin.test.assertTrue
 
 /**
@@ -114,6 +117,53 @@ object SprintMemberSummaryScenarios {
         onNodeWithText("5 of 8 pts").assertIsDisplayed()
         onNodeWithText("Ship the migration").assertIsDisplayed()
         onNodeWithText("Unclaimed work").assertIsDisplayed()
+    }
+
+    /**
+     * One capacity belongs to one person, so the roster picker is single-select.
+     *
+     * Picking a second name replaces the first rather than adding a pill beside it: the sheet
+     * owns one `availablePoints` value, and a selection of two would have to apply one number to
+     * two people on save.
+     */
+    val theMemberSheetPicksExactlyOnePersonForOneCapacity: suspend ComposeUiTest.() -> Unit = {
+        val ada = User(id = randomUserID(), email = "ada@example.com", status = UserStatus.Active)
+        val grace = User(id = randomUserID(), email = "grace@example.com", status = UserStatus.Active)
+        val selected = mutableStateOf<UserID?>(null)
+
+        setContent {
+            ttTheme(scheme = ThemeScheme.Dark) {
+                SprintMemberSheet(
+                    visible = true,
+                    isEditing = false,
+                    selectedUserID = selected.value,
+                    availablePoints = "",
+                    isBusy = false,
+                    onSelectedUserIDChanged = { selected.value = it },
+                    onAvailablePointsChanged = {},
+                    onSave = {},
+                    onRemove = null,
+                    onDismissRequest = {},
+                    onDismissed = {},
+                    searchMembers = { listOf(ada, grace) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        onNodeWithTag("sprints.member.picker").performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerRowTag("sprints.member.picker", ada.id)).performClick()
+        waitForIdle()
+
+        onNodeWithTag("sprints.member.picker").performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerRowTag("sprints.member.picker", grace.id)).performClick()
+        waitForIdle()
+
+        assertTrue(selected.value == grace.id, "the second pick replaces the first, it does not add")
+        onNodeWithTag(MemberPickerPillTag("sprints.member.picker", grace.id)).assertIsDisplayed()
+        onNodeWithTag(MemberPickerPillTag("sprints.member.picker", ada.id)).assertDoesNotExist()
     }
 
     val theMemberSheetOnlySavesAWholeNonNegativeCapacity: suspend ComposeUiTest.() -> Unit = {

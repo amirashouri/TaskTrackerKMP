@@ -459,6 +459,9 @@ class ProjectsUiIosTest {
     fun theProgressScreenShowsCapacityAndUnclaimedWork() = runComposeUiTest(block = SprintMemberSummaryScenarios.theProgressScreenShowsCapacityAndUnclaimedWork)
 
     @Test
+    fun theMemberSheetPicksExactlyOnePersonForOneCapacity() = runComposeUiTest(block = SprintMemberSummaryScenarios.theMemberSheetPicksExactlyOnePersonForOneCapacity)
+
+    @Test
     fun theMemberSheetOnlySavesAWholeNonNegativeCapacity() = runComposeUiTest(block = SprintMemberSummaryScenarios.theMemberSheetOnlySavesAWholeNonNegativeCapacity)
 
     @Test
