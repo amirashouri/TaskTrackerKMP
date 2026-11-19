@@ -447,7 +447,7 @@ fun NavigationHost(
                 // a row tapped behind an open form is what the pane shows: the pane is the last
                 // thing asked for, not a surface that outlives the request that replaced it.
                 var isNewSprintOpen by remember(tab) { mutableStateOf(false) }
-                LaunchedEffect(backgroundPushed) { isNewSprintOpen = false }
+                LaunchedEffect(path) { isNewSprintOpen = false }
 
                 // The tab's root and whatever is pushed onto it, as two values rather than two
                 // call sites, because there are now three arrangements and writing a ten-argument
@@ -466,6 +466,11 @@ fun NavigationHost(
                         // editor to itself and draws it as the sheet it always was.
                         requestNewSprint = if (layoutClass.isWide) {
                             { isNewSprintOpen = true }
+                        } else {
+                            null
+                        },
+                        onSprintOpened = if (layoutClass.isWide) {
+                            { isNewSprintOpen = false }
                         } else {
                             null
                         },
@@ -844,6 +849,7 @@ private fun TabRoot(
      * [SprintCreateEditor] for what the callback is wired to.
      */
     requestNewSprint: (() -> Unit)? = null,
+    onSprintOpened: (() -> Unit)? = null,
     /**
      * The member directory, for the Settings branch's change-password sheet.
      *
@@ -917,6 +923,7 @@ private fun TabRoot(
                 scope = scope,
                 preferences = preferences,
                 requestNewSprint = requestNewSprint,
+                onSprintOpened = onSprintOpened,
             )
         }
 
@@ -1617,6 +1624,7 @@ private fun SprintsDestination(
      * rather than in a window covering both panes. See [SprintCreateEditor].
      */
     requestNewSprint: (() -> Unit)? = null,
+    onSprintOpened: (() -> Unit)? = null,
 ) {
     val model = remember(projectID, environment) {
         SprintListModel(projectID, environment.repository, environment.dateProvider)
@@ -1658,6 +1666,7 @@ private fun SprintsDestination(
         errorMessage = model.errorMessage,
         project = currentProject,
         onOpen = { sprintID ->
+            onSprintOpened?.invoke()
             // `openSprint` rather than `push`, because the list belongs *underneath* the detail and a
             // `push` onto an empty stack — which is what a plain tab switch leaves — would
             // describe a sprint with nothing beneath it. One transition, so the stack is
