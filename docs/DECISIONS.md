@@ -123,10 +123,25 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   accepts name/goal/owner edits; a finished sprint is frozen either way.
   `windowLocked` is `isLocked || isFinished`, and anything using "active" as a
   proxy for "committed" must read the flag.
+- **Sprint membership rides its own sync entity.** `SprintMember` has its own Room
+  table, outbox row and `sprintMembers` pull scope; `Sprint` gains no field,
+  because installed clients strict-decode sprint payloads and an added key is a
+  decode failure. One row per `(sprintID, userID)`, a duplicate is an update and
+  `availableStoryPoints` is floored at zero. The edit guard is `!isLocked &&
+  !isFinished` in the model as well as in the UI — a hidden button is not a rule.
+- **Per-member progress is derived, never stored.** Delivered points count `Done`
+  items only; `Closed` items appear but earn nothing; unestimated items contribute
+  zero; unassigned items get a derived row. Work items stay the source of truth — a
+  per-member total would be a second answer that drifts.
 - **Directory policy is server-side.** A blank user search lists addable
   accounts while a typed search includes deleted authors. The client filters
   what it receives and must not "fix" that asymmetry; `RoomTeamRepository`
   stays the offline fallback that owns the signed-in identity.
+- **A teammate picker reads the admin directory, not the session.** Choosing an
+  existing collaborator reads `MemberAdminPort.members(Active)` first;
+  `TeamPort.searchMembers` is session-only without a backend and can answer with
+  just the signed-in admin, silently hiding the rest of the team. The domain keeps
+  ids only; display names resolve at lookup.
 - **Never swallow `CancellationException`.** Rethrow it, do not record a
   cancellation as a failure or raise a notice for a screen that is gone. A
   failed profile PATCH restores the last server-confirmed snapshot rather than

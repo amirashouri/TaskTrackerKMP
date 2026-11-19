@@ -33,17 +33,18 @@ no spec: the diff and commit history are its verification record.
 2. Copy `_template.md` to `<id>-<slug>.md` and fill it in with
    `status: pending`.
 3. Phase 1 (the ACK'd plan when required) supplies the spec's **Files** section.
-   Confirm scope, contract, validation, and affected test hosts; set
-   `status: in-progress` before implementation.
+   Confirm scope, contract, and validation; set `status: in-progress` before
+   implementation.
 4. Implement and verify. Keep the status `in-progress` while implementation,
    validation, or review remains. Update the handoff at the end of each session.
 5. Once the contract and required checks pass and diff review is approved,
-   promote any durable non-obvious decisions into `docs/DECISIONS.md`, and
-   **delete the spec** in the final task-branch update before merge. Do not leave
-   a `status: done` spec behind.
+   fill in **Promote** — the durable decisions move into `docs/DECISIONS.md` —
+   and **delete the spec** in the final task-branch commit before merge.
+   Deletion is the only way to finish a spec: there is no `done` status, so a
+   spec with nothing left to do is a spec that has not been deleted yet.
 
-`2.3-search-across-projects.md` is a worked example of the format.
-`_template.md` is the blank one.
+`_template.md` is the blank format; live specs in this directory are the worked
+examples, since a completed spec is deleted rather than archived.
 
 ## Reading budget
 
