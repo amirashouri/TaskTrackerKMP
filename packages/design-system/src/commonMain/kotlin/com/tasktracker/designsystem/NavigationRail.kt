@@ -353,28 +353,7 @@ private fun RailLens(
             // wearing a capsule's outline. Measured on the bar by `TabLensCornerTest`, which found
             // the wash reaching `#09` past the glass in the top-left corner on the light bar and
             // `#21` on the dark one.
-            .clip(CircleShape)
-            .drawBehind {
-                // `endY` spelled out: an unbounded `Brush.verticalGradient` collapses onto its last
-                // stop, and this element's height is not known when the brush is built.
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = ttGlass.TAB_LENS_ALPHA),
-                            Color.White.copy(
-                                alpha = ttGlass.TAB_LENS_ALPHA * (1f - ttGlass.TAB_LENS_FADE),
-                            ),
-                        ),
-                        startY = 0f,
-                        endY = size.height,
-                    ),
-                )
-            }
-            .border(
-                width = ttGlass.hairlineWidth,
-                color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
-                shape = CircleShape,
-            ),
+            .ttGlassLens(CircleShape, washAlpha = ttGlass.TAB_LENS_ALPHA, rimAlpha = ttGlass.TAB_LENS_RIM_ALPHA),
     )
 }
 

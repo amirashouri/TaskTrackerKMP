@@ -316,29 +316,7 @@ private fun TabLens(
             // lens already remeasures and redraws every frame of its travel and settle and this
             // adds no allocation to that path. The rim is unaffected: `border` draws its own
             // outline and does not read the clip.
-            .clip(CircleShape)
-            .drawBehind {
-                // `endY` spelled out, for the reason documented on `ttGlassSurface`: an
-                // unbounded `Brush.verticalGradient` collapses onto its last stop, and this
-                // element's height is not known when the brush is built.
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = ttGlass.TAB_LENS_ALPHA),
-                            Color.White.copy(
-                                alpha = ttGlass.TAB_LENS_ALPHA * (1f - ttGlass.TAB_LENS_FADE),
-                            ),
-                        ),
-                        startY = 0f,
-                        endY = size.height,
-                    ),
-                )
-            }
-            .border(
-                width = ttGlass.hairlineWidth,
-                color = Color.White.copy(alpha = ttGlass.TAB_LENS_RIM_ALPHA),
-                shape = CircleShape,
-            ),
+            .ttGlassLens(CircleShape, washAlpha = ttGlass.TAB_LENS_ALPHA, rimAlpha = ttGlass.TAB_LENS_RIM_ALPHA),
     )
 }
 

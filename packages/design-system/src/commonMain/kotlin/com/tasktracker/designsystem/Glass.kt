@@ -305,15 +305,28 @@ fun Modifier.ttGlassLens(
         ((speed - velocityThreshold.value) * 0.01f).coerceIn(0f, maxBlurRadius.value)
     } else 0f
     val blurPx = with(density) { Dp(blurRadius).toPx() }
+    val isDark = ttIsDarkTheme()
+    val lensIntensity = 0.4f + 0.6f * intensity.coerceIn(0f, 1f)
+    val lensColor = if (isDark) Color.White else Color.Black
+    val effectiveWashAlpha = if (isDark) {
+        washAlpha * lensIntensity
+    } else {
+        (washAlpha * 0.5f).coerceAtMost(0.14f) * lensIntensity
+    }
+    val effectiveRimAlpha = if (isDark) {
+        rimAlpha * lensIntensity
+    } else {
+        (rimAlpha * 0.9f).coerceAtMost(0.28f) * lensIntensity
+    }
+
     return this
         .clip(shape)
         .drawBehind {
-            val lensAlpha = washAlpha * intensity.coerceIn(0f, 1f)
             drawRect(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = lensAlpha),
-                        Color.White.copy(alpha = lensAlpha * (1f - ttGlass.TAB_LENS_FADE)),
+                        lensColor.copy(alpha = effectiveWashAlpha),
+                        lensColor.copy(alpha = effectiveWashAlpha * (1f - ttGlass.TAB_LENS_FADE)),
                     ),
                     startY = 0f,
                     endY = size.height,
@@ -321,14 +334,13 @@ fun Modifier.ttGlassLens(
             )
             if (blurRadius > 0f) {
                 val trailAlpha = (blurRadius / maxBlurRadius.value * 0.15f).coerceIn(0f, 0.15f)
-                val direction = if (velocityX.value > 0) 1f else -1f
                 val trailWidth = (blurPx * 2f).coerceIn(0f, size.width * 0.5f)
                 val trailX = if (velocityX.value > 0) -trailWidth else 0f
                 drawRect(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            Color.White.copy(alpha = trailAlpha),
-                            Color.White.copy(alpha = 0f),
+                            lensColor.copy(alpha = trailAlpha),
+                            lensColor.copy(alpha = 0f),
                         ),
                         startX = 0f,
                         endX = trailWidth,
@@ -340,7 +352,7 @@ fun Modifier.ttGlassLens(
         }
         .border(
             width = ttGlass.hairlineWidth,
-            color = Color.White.copy(alpha = rimAlpha),
+            color = lensColor.copy(alpha = effectiveRimAlpha),
             shape = shape,
         )
 }
