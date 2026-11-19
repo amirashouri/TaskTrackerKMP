@@ -44,6 +44,9 @@ abstract class TaskTrackerWideScenarios {
     fun tappingASidebarProjectOpensItOnBoard() =
         runComposeUiTest(block = ShellScenarios.tappingASidebarProjectOpensItOnBoard)
     @Test
+    fun theSidebarLensRidesTheSelectedDestination() =
+        runComposeUiTest(block = ShellScenarios.theSidebarLensRidesTheSelectedDestination)
+    @Test
     fun aWideShellDrawsTheSprintListAndDetailSideBySide() =
         runComposeUiTest(block = ShellScenarios.aWideShellDrawsTheSprintListAndDetailSideBySide)
     @Test

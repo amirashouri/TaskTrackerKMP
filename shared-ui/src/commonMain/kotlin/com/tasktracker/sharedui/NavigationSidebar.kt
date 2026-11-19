@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,28 +23,40 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntRect
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.TTGlassSurface
+import com.tasktracker.designsystem.ttGlassLens
+import com.tasktracker.designsystem.ttGlassLensAlpha
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttIconSize
+import com.tasktracker.designsystem.ttLensPlacement
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSelectionLabelInk
-import com.tasktracker.designsystem.ttSelectionWash
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSurface
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectspresentation.PickableProject
@@ -51,6 +64,7 @@ import com.tasktracker.featureprojectspresentation.ProjectPickerModel
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.routing.AppTab
 import kotlinx.coroutines.CoroutineScope
+import kotlin.math.roundToInt
 
 @Composable
 internal fun NavigationSidebar(
@@ -63,7 +77,7 @@ internal fun NavigationSidebar(
     modifier: Modifier = Modifier,
 ) {
     // The same two inks the rail's cells use, for the same reason: both put a label on glass with
-    // an accent wash under the selected one. `TabLensContrastTest` holds the derivation and the
+    // the same selection lens under it. `TabLensContrastTest` holds the derivation and the
     // measured contrast on both rasterisers.
     val selectedInk = ttSelectionLabelInk(selected = true)
     val inactiveInk = ttSelectionLabelInk(selected = false)
@@ -74,6 +88,41 @@ internal fun NavigationSidebar(
         projectPicker.observe(coroutineScope)
         onDispose { projectPicker.stopObserving() }
     }
+
+    // The travelling lens needs two measurements and neither can be derived: where each
+    // destination row sits inside the panel, and the panel itself to measure them against.
+    //
+    // A row's place is not a formula. The project list above the work destinations is
+    // `weight(1f, fill = false)`, so it grows with the number of projects and pushes those rows
+    // down — a lens positioned from an index would sit on the row above whatever was selected.
+    //
+    // The rows hand over their `LayoutCoordinates` and the rectangles are built *here*, in
+    // composition, rather than inside the callbacks. That is the load-bearing detail: a callback
+    // that wanted the panel's coordinates would record nothing on the frame it happened to fire
+    // before the panel had been measured, the row would never move again, and the lens would be
+    // missing for the life of the composition. Read this way, the order the two arrive in does
+    // not matter, and the arrows below are the same `ttLensPlacement` the segmented pickers use.
+    val density = LocalDensity.current
+    val rowCoordinates = remember { mutableStateMapOf<AppTab, LayoutCoordinates>() }
+    var panelCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val panel = panelCoordinates
+    val rowRects: Map<AppTab, IntRect> = if (panel == null) {
+        emptyMap()
+    } else {
+        rowCoordinates.mapValues { (_, row) ->
+            val topLeft = panel.localPositionOf(row, Offset.Zero)
+            val left = topLeft.x.roundToInt()
+            val top = topLeft.y.roundToInt()
+            IntRect(
+                left = left,
+                top = top,
+                right = left + row.size.width,
+                bottom = top + row.size.height,
+            )
+        }
+    }
+    val lens = ttLensPlacement(rowRects, selected, density)
+    val lensShape = RoundedCornerShape(ttRadius.control)
 
     Box(
         modifier = modifier
@@ -87,6 +136,18 @@ internal fun NavigationSidebar(
         TTGlassSurface(
             shape = RoundedCornerShape(ttRadius.surface),
             thickness = ttGlass.GlassThickness.THIN,
+            base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
+            // The shadow and the glass are the *same* node, in that order, and the content inset is
+            // applied inside the panel rather than before both.
+            //
+            // Where the inset sits is not cosmetic. Both of these are draw modifiers on one node,
+            // so anything laid out between them makes them different rectangles: the shadow was
+            // cast by a panel 16dp larger than the glass, its unblurred middle was left uncovered
+            // on the left, top and bottom, and the band that showed through read as a smear of
+            // colour hugging a panel that otherwise floats. The tab bar has always cast its shadow
+            // from the very node the glass paints, which is why only this chrome had the band.
+            // `ttSpacing.hairlineInset` keeps the content clear of the rim; it belongs to the
+            // content, not to the silhouette.
             modifier = Modifier
                 .width(ShellSidebarWidth)
                 .fillMaxHeight()
@@ -95,81 +156,112 @@ internal fun NavigationSidebar(
                     shape = RoundedCornerShape(ttRadius.surface),
                     ambientColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
                     spotColor = accent.copy(alpha = ttGlass.TAB_BAR_SHADOW_ALPHA),
-                )
-                .padding(ttSpacing.hairlineInset)
-                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md),
+                ),
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onGloballyPositioned { panelCoordinates = it },
             ) {
-            // The index, at the head. It is the one destination that is not scoped to a project,
-            // so it opens the panel rather than sitting at the bottom with the work destinations.
-            // A heading here instead of a row was 8.1's shape, and it composed "Projects" twice —
-            // once as inert text, once as the row below — while hanging the same test tag on
-            // three nodes.
-            SidebarDestinationRow(
-                label = tabTitle(AppTab.Projects),
-                icon = tabIcon(AppTab.Projects),
-                isSelected = selected == AppTab.Projects,
-                selectedInk = selectedInk,
-                inactiveInk = inactiveInk,
-                onClick = { onSelect(AppTab.Projects) },
-                modifier = Modifier.testTag(SidebarButtonTag(AppTab.Projects)),
-            )
-
-            if (projectPicker.projects.isNotEmpty()) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .testTag(SidebarProjectListTag),
-                    contentPadding = PaddingValues(vertical = ttSpacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-                ) {
-                    items(projectPicker.projects, key = { it.id.stringValue }) { project ->
-                        SidebarProjectRow(
-                            project = project,
-                            isActive = activeProjectID == project.id,
-                            onClick = { onOpenProject(project.id) },
-                            selectedInk = selectedInk,
-                            inactiveInk = inactiveInk,
-                        )
-                    }
+                // Drawn before the rows and behind them, which is the bar's arrangement: the lens
+                // is a wash and a rim under the content it marks, not a chip on top of it. It is
+                // only composed once the row it marks has been measured — a lens born at the
+                // origin would slide in from the panel's top-left corner on the first frame.
+                if (selected in rowRects) {
+                    Box(
+                        modifier = Modifier
+                            .size(lens.width, lens.height)
+                            .offset(x = lens.x, y = lens.y)
+                            // The lens is addressable for the same reason the rail's is: a lens is
+                            // positioned by arithmetic that nothing else re-measures, so a test
+                            // that compares it with the row it marks is the only thing that can
+                            // see it land somewhere else.
+                            .testTag(SidebarLensTag)
+                            .ttGlassLens(lensShape, velocityX = lens.velocityX),
+                    )
                 }
-            }
 
-            Spacer(Modifier.height(ttSpacing.xl))
-
-            Column(
-                modifier = Modifier.padding(start = ttSpacing.lg),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-            ) {
-                for (tab in AppTab.entries) {
-                    if (!tab.isProjectScoped) continue
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(ttSpacing.hairlineInset)
+                        .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                ) {
+                    // The index, at the head. It is the one destination that is not scoped to a
+                    // project, so it opens the panel rather than sitting at the bottom with the
+                    // work destinations. A heading here instead of a row was 8.1's shape, and it
+                    // composed "Projects" twice — once as inert text, once as the row below —
+                    // while hanging the same test tag on three nodes.
                     SidebarDestinationRow(
-                        label = tabTitle(tab),
-                        icon = tabIcon(tab),
-                        isSelected = tab == selected,
+                        label = tabTitle(AppTab.Projects),
+                        icon = tabIcon(AppTab.Projects),
+                        isSelected = selected == AppTab.Projects,
                         selectedInk = selectedInk,
                         inactiveInk = inactiveInk,
-                        onClick = { onSelect(tab) },
-                        modifier = Modifier.testTag(SidebarButtonTag(tab)),
+                        onClick = { onSelect(AppTab.Projects) },
+                        modifier = Modifier
+                            .testTag(SidebarButtonTag(AppTab.Projects))
+                            .onGloballyPositioned { rowCoordinates[AppTab.Projects] = it },
+                    )
+
+                    if (projectPicker.projects.isNotEmpty()) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .testTag(SidebarProjectListTag),
+                            contentPadding = PaddingValues(vertical = ttSpacing.xs),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                        ) {
+                            items(projectPicker.projects, key = { it.id.stringValue }) { project ->
+                                SidebarProjectRow(
+                                    project = project,
+                                    isActive = activeProjectID == project.id,
+                                    onClick = { onOpenProject(project.id) },
+                                    selectedInk = selectedInk,
+                                    inactiveInk = inactiveInk,
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(ttSpacing.xl))
+
+                    Column(
+                        modifier = Modifier.padding(start = ttSpacing.lg),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                    ) {
+                        for (tab in AppTab.entries) {
+                            if (!tab.isProjectScoped) continue
+                            SidebarDestinationRow(
+                                label = tabTitle(tab),
+                                icon = tabIcon(tab),
+                                isSelected = tab == selected,
+                                selectedInk = selectedInk,
+                                inactiveInk = inactiveInk,
+                                onClick = { onSelect(tab) },
+                                modifier = Modifier
+                                    .testTag(SidebarButtonTag(tab))
+                                    .onGloballyPositioned { rowCoordinates[tab] = it },
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(ttSpacing.xl))
+
+                    SidebarDestinationRow(
+                        label = tabTitle(AppTab.Settings),
+                        icon = tabIcon(AppTab.Settings),
+                        isSelected = selected == AppTab.Settings,
+                        selectedInk = selectedInk,
+                        inactiveInk = inactiveInk,
+                        onClick = { onSelect(AppTab.Settings) },
+                        modifier = Modifier
+                            .testTag(SidebarButtonTag(AppTab.Settings))
+                            .onGloballyPositioned { rowCoordinates[AppTab.Settings] = it },
                     )
                 }
             }
-
-            Spacer(Modifier.height(ttSpacing.xl))
-
-            SidebarDestinationRow(
-                label = tabTitle(AppTab.Settings),
-                icon = tabIcon(AppTab.Settings),
-                isSelected = selected == AppTab.Settings,
-                selectedInk = selectedInk,
-                inactiveInk = inactiveInk,
-                onClick = { onSelect(AppTab.Settings) },
-                modifier = Modifier.testTag(SidebarButtonTag(AppTab.Settings)),
-            )
-        }
         }
     }
 }
@@ -184,11 +276,15 @@ private fun SidebarDestinationRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // The row draws no selection of its own. The panel's lens is one surface that travels between
+    // the rows — see `NavigationSidebar` — which is the bar's arrangement: one material under a
+    // moving selection, rather than a highlight that switches on in each cell in turn.
+    //
+    // The clip that used to bound the row's own wash went with it: with `indication = null` and
+    // nothing drawn here, a clip had no pixels of ours to bound.
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(ttRadius.control))
-            .ttSelectionWash(selected = isSelected)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -288,6 +384,16 @@ const val SidebarTag = "shell.sidebar"
  * a mixed-up query should find nothing rather than drive the wrong chrome.
  */
 fun SidebarButtonTag(tab: AppTab): String = "shell.sidebar.${tab.wireValue}"
+
+/**
+ * The selection lens that travels between the sidebar's destinations.
+ *
+ * Tagged for the reason [NavigationRailLensTag] is: the lens is placed by arithmetic over measured
+ * rectangles, so nothing but a comparison with the row it marks can tell that it landed somewhere
+ * else. Distinct from the rail's and the bar's tags because exactly one of the three chromes is
+ * composed at any width.
+ */
+const val SidebarLensTag = "shell.sidebar.lens"
 
 /**
  * The project switcher's scroll container.

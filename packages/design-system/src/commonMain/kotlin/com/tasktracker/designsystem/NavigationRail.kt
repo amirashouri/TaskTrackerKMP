@@ -221,7 +221,7 @@ fun <Tab> TTGlassNavigationRail(
                     travelPx = travel.value,
                     segment = segmentHeight,
                     railHeight = maxHeight,
-                    lensWidth = maxWidth - ttSpacing.tabBarLensInset * 2,
+                    lensWidth = maxWidth - ttSpacing.xs * 2,
                     lensHeight = segmentHeight - ttSpacing.tabBarLensInset * 2,
                     stretch = lensStretch(selectedIndex),
                 )
@@ -340,7 +340,7 @@ private fun RailLens(
             // lens leaning rather than a lens inset. Nothing similar is wanted on y: the travel
             // axis is exactly `top`, and adding the inset there would shift the lens off its own
             // destination by a full inset at every index.
-            .offset(y = top, x = ttSpacing.tabBarLensInset)
+            .offset(y = top, x = ttSpacing.xs)
             // The lens is addressable so its size can be compared with the cell it is marking.
             // Nothing asserted that before the rail grew to full height, and the defect it missed
             // is exactly that one: a lens 154dp tall over a 146dp cell looks correct from its top

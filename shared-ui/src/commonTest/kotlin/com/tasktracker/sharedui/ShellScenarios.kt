@@ -2650,6 +2650,81 @@ object ShellScenarios {
     }
 
     /**
+     * The sidebar's lens sits on the selected destination, and travels to the next one.
+     *
+     * The rail's lens scenario, in the other wide chrome, and held to the same two claims. `selected`
+     * on the row is a semantics property that a lens parked in the wrong place leaves untouched, and
+     * a lens that merely *moved* can have moved off the end — so the landing destination is checked
+     * before any tap (otherwise a lens that never travels and a lens born on the right row stay
+     * indistinguishable), and then the row's own bounds after the tap.
+     *
+     * The comparison is against the row's measured rectangle rather than an index, because a sidebar
+     * row's place is not arithmetic: the project list above the work destinations takes whatever room
+     * it needs, and a list of a different height moves everything under it. The fixture seeds two
+     * projects rather than one for that reason — a lens derived from the destination's position in
+     * `AppTab` would be right on an empty list and wrong the moment a project exists.
+     */
+    val theSidebarLensRidesTheSelectedDestination: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        projects.seed(shellTestProject(name = "Apollo", keyPrefix = "AP"))
+        projects.seed(shellTestProject(name = "Zenith", keyPrefix = "ZE"))
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+
+        val onLanding = onNodeWithTag(SidebarLensTag).getBoundsInRoot()
+        assertLensMarks(
+            what = "before anything is tapped",
+            lens = onLanding,
+            row = onNodeWithTag(SidebarButtonTag(AppTab.Projects)).getBoundsInRoot(),
+        )
+
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+
+        val afterTap = onNodeWithTag(SidebarLensTag).getBoundsInRoot()
+        assertTrue(
+            afterTap.top.value > onLanding.top.value,
+            "after tapping Settings the lens is at y=${afterTap.top.value}dp having started at " +
+                "y=${onLanding.top.value}dp — it did not travel down the panel. Settings is the last " +
+                "destination, so the lens should have passed the work destinations on its way",
+        )
+        assertLensMarks(
+            what = "after tapping Settings",
+            lens = afterTap,
+            row = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot(),
+        )
+    }
+
+    /**
+     * Asserts a lens is marking a row: the same rectangle to within [ONE_POINT].
+     *
+     * Four edges rather than a centre or a top edge. A lens that is right about where a row starts
+     * and wrong about how tall it is still reads as "roughly on the right row" to a top-edge check,
+     * which is the defect the rail's own lens assertion was written for.
+     */
+    private fun assertLensMarks(what: String, lens: DpRect, row: DpRect) {
+        val within = ONE_POINT
+        assertTrue(
+            kotlin.math.abs(lens.left.value - row.left.value) <= within &&
+                kotlin.math.abs(lens.top.value - row.top.value) <= within &&
+                kotlin.math.abs(lens.right.value - row.right.value) <= within &&
+                kotlin.math.abs(lens.bottom.value - row.bottom.value) <= within,
+            "$what the lens spans ${lens.left.value}..${lens.right.value}dp horizontally and " +
+                "${lens.top.value}..${lens.bottom.value}dp vertically, but the destination it should " +
+                "be marking spans ${row.left.value}..${row.right.value}dp and " +
+                "${row.top.value}..${row.bottom.value}dp. The lens is placed from measured rows " +
+                "rather than from an index, so a mismatch means it is marking the wrong row or is " +
+                "still in flight",
+        )
+    }
+
+    /**
      * A project tapped while Settings is selected still lands on Board.
      *
      * This is why the tap is `openProject(id, AppTab.Board)` rather than the default overload:

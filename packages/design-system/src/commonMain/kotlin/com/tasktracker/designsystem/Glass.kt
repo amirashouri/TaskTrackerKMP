@@ -463,7 +463,12 @@ fun Modifier.ttGlassCard(
     tint: Color? = null,
     cornerRadius: Dp = ttRadius.surface,
     thickness: ttGlass.GlassThickness = ttGlass.GlassThickness.STANDARD,
-): Modifier = ttGlassSurface(shape = RoundedCornerShape(cornerRadius), tint = tint, thickness = thickness)
+): Modifier = ttGlassSurface(
+    shape = RoundedCornerShape(cornerRadius),
+    tint = tint,
+    thickness = thickness,
+    base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
+)
 
 /**
  * Single slab segmented control sharing a unified glass selection lens.
