@@ -171,7 +171,11 @@ fun Modifier.ttGlassSurface(
     val canvas = ttCanvas()
     val intensity = LocalGlassIntensity.current
     val rim = ttGlassHairline()
-    val isDark = LocalThemeScheme.current == ThemeScheme.Dark
+    // `ttIsDarkTheme`, not `LocalThemeScheme.current == ThemeScheme.Dark`: the latter is
+    // false under `System` on a dark device, which skipped the dark-only dispersion fringe
+    // on exactly the devices that should show it. Every other material token already asks
+    // this question through `ttIsDarkTheme`.
+    val isDark = ttIsDarkTheme()
     val reducedMotion = LocalReducedMotion.current
     // Composition takes the controller object only; the roll State itself is read inside
     // the drawBehind below. The sensor updates at frame rate, so a composition-phase read
@@ -727,6 +731,7 @@ private fun FlowPickerChip(
         modifier = Modifier
             .clip(CircleShape)
             .onGloballyPositioned(onPositioned)
+            .ttFocusRing()
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -770,6 +775,7 @@ private fun Segment(
                 contentDescription = label
                 selected = isSelected
             }
+            .ttFocusRing(CircleShape)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -854,6 +860,7 @@ fun ttGlassButton(
             //
             // Nothing here changes the control's size: padding consumes the same space on
             // either side of `clickable`, so the pill and the row it sits in measure as before.
+            .ttFocusRing(CircleShape)
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,

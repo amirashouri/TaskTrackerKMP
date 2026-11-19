@@ -1,7 +1,11 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.ui.graphics.Color
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -200,8 +204,104 @@ class AccentContrastTest {
         )
     }
 
+    /**
+     * The dark accent has to be a colour, not a grey that happened to pass the bars.
+     *
+     * The two contrast tests above are the reason `#5F6873` existed: it cleared both bars and
+     * was neutral enough to look like a disabled control. The window they describe is narrow
+     * but it leaves room for chroma — this asserts the whole palette's dark values sit in it,
+     * so a future "just darken it until white passes" edit cannot quietly leave the window.
+     */
+    @Test
+    fun `every dark accent stays inside the dual-bar luminance window`() {
+        for (palette in AccentPalette.all) {
+            val luminance = relativeLuminance(palette.dark)
+            assertTrue(
+                luminance in 0.10..0.1833,
+                "${palette.title} dark ${palette.dark.hex()} has relative luminance " +
+                    "$luminance, outside 0.10..0.1833 - the window where a white label on it " +
+                    "and the fill on black can both clear their bars",
+            )
+        }
+    }
+
+    /**
+     * The default dark pair keeps the brand hue and enough saturation to read as colour.
+     *
+     * Both bars can be satisfied by a grey, and that is exactly what the previous values
+     * were: `#5F6873` and `#6C7582` measured saturation 0.037 and 0.106. The hue check is
+     * circular because the light value sits at 213°, close to the 0°/360° seam; a naive
+     * subtraction would call a one-degree crossing a 359-degree drift.
+     */
+    @Test
+    fun `the default dark accents keep the light value's hue and real chroma`() {
+        for (palette in listOf(AccentPalette.Classic, AccentPalette.ClassicLight)) {
+            val (hue, saturation) = hueAndSaturation(palette.dark)
+            val (lightHue, _) = hueAndSaturation(palette.light)
+            val drift = hueDistance(hue, lightHue)
+            assertTrue(
+                saturation >= 0.30,
+                "${palette.title} dark ${palette.dark.hex()} has HSL saturation " +
+                    "${saturation.ratioText()}; below 0.30 it reads as a neutral grey rather " +
+                    "than the palette's colour",
+            )
+            assertTrue(
+                drift <= 15.0,
+                "${palette.title} dark ${palette.dark.hex()} is $drift degrees from the " +
+                    "light value's hue; the dark accent must be the same brand colour",
+            )
+        }
+    }
+
+    /**
+     * The light values and the stored identities are the fixed point of the palette.
+     *
+     * Dark was the only thing this task was allowed to move. Pinning the light hexes and wire
+     * values makes an accidental light-mode change fail here rather than in a screenshot, and
+     * the wire value is what a stored preference contains — renaming it would silently reset
+     * every user's palette to Classic.
+     */
+    @Test
+    fun `light values and wire values are unchanged`() {
+        val expected = listOf(
+            Triple(AccentPalette.Classic, "classic", "#34537a"),
+            Triple(AccentPalette.ClassicLight, "classic-light", "#49688f"),
+            Triple(AccentPalette.Music, "music", "#b0004b"),
+            Triple(AccentPalette.Sunset, "sunset", "#a8320a"),
+            Triple(AccentPalette.Violet, "violet", "#5b21b6"),
+            Triple(AccentPalette.NavyBlue, "navy-blue", "#234d82"),
+        )
+        for ((palette, wire, light) in expected) {
+            assertEquals(wire, palette.wireValue, "${palette.name} wire value")
+            assertEquals(light, palette.light.hex(), "${palette.name} light value")
+        }
+    }
+
     /** A variant of the accent, paired with the name used to describe it in a failure. */
     private class Variant(val name: String, val color: Color)
+
+    /** Hue in degrees and HSL saturation, the two properties contrast arithmetic cannot see. */
+    private fun hueAndSaturation(color: Color): Pair<Double, Double> {
+        val r = color.red.toDouble()
+        val g = color.green.toDouble()
+        val b = color.blue.toDouble()
+        val high = max(r, max(g, b))
+        val low = min(r, min(g, b))
+        val delta = high - low
+        val lightness = (high + low) / 2
+        val saturation = if (delta == 0.0) 0.0 else delta / (1 - abs(2 * lightness - 1))
+        val hue = when (high) {
+            r -> 60 * (((g - b) / delta) % 6)
+            g -> 60 * ((b - r) / delta + 2)
+            else -> 60 * ((r - g) / delta + 4)
+        }.let { if (it < 0) it + 360 else it }
+        return hue to saturation
+    }
+
+    private fun hueDistance(first: Double, second: Double): Double {
+        val difference = abs(first - second) % 360
+        return min(difference, 360 - difference)
+    }
 
     private companion object {
         const val TEXT_CONTRAST_MINIMUM = 4.5

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntRect
 import com.tasktracker.designsystem.AccentPalette
+import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassLens
 import com.tasktracker.designsystem.ttGlassSurface
@@ -45,6 +48,9 @@ import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.resources.Res
+import com.tasktracker.resources.settings_accent_label
+import org.jetbrains.compose.resources.stringResource
 import kotlin.math.roundToInt
 
 @Composable
@@ -62,7 +68,7 @@ internal fun AccentPalettePickerRow(
         verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
     ) {
         ttText(
-            text = AccentPalette.pickerTitle,
+            text = stringResource(Res.string.settings_accent_label),
             style = ttTypography.subheadline,
             color = ttLabel(),
         )
@@ -86,69 +92,30 @@ internal fun AccentPalettePickerRow(
                 .padding(ttSpacing.hairlineInset)
                 .onGloballyPositioned { containerCoordinates = it },
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AccentPalette.all.forEach { palette ->
-                    val isSelected = palette == selected
-                    val cellShape = RoundedCornerShape(ttRadius.control)
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(cellShape)
-                            .selectable(selected = isSelected, role = Role.RadioButton) {
-                                onSelect(palette)
-                            }
-                            .onGloballyPositioned { coordinates ->
-                                val parent = containerCoordinates
-                                if (parent != null) {
-                                    val position = parent.localPositionOf(coordinates, Offset.Zero)
-                                    positions[palette] = IntRect(
-                                        left = position.x.roundToInt(),
-                                        top = position.y.roundToInt(),
-                                        right = position.x.roundToInt() + coordinates.size.width,
-                                        bottom = position.y.roundToInt() + coordinates.size.height,
-                                    )
-                                }
-                            },
+            // Three columns rather than six: at 320dp a six-cell row left roughly 48dp per
+            // cell, and two-line labels with an ellipsis were the only way "Classic Light"
+            // could fit. Two rows of three give each label about 96dp, so it reads in full on
+            // one line, and the cell grows to roughly 96x70dp — well past the 44dp target.
+            Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
+                AccentPalette.all.chunked(GRID_COLUMNS).forEach { rowPalettes ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = ttSpacing.sm),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag(AccentSwatchTag(palette))
-                                    .clip(CircleShape)
-                                    .background(
-                                        Brush.horizontalGradient(listOf(palette.light, palette.dark)),
-                                    )
-                                    .then(
-                                        if (isSelected) {
-                                            Modifier
-                                        } else {
-                                            Modifier.border(
-                                                width = 1.dp,
-                                                color = ttSeparator(),
-                                                shape = CircleShape,
-                                            )
-                                        },
-                                    ),
+                        rowPalettes.forEach { palette ->
+                            AccentCell(
+                                palette = palette,
+                                isSelected = palette == selected,
+                                onSelect = onSelect,
+                                positions = positions,
+                                containerCoordinates = containerCoordinates,
                             )
-                            ttText(
-                                text = palette.title,
-                                modifier = Modifier.testTag(AccentLabelTag(palette)),
-                                style = ttTypography.footnote,
-                                color = ttSelectionLabelInk(isSelected),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                textAlign = TextAlign.Center,
-                            )
+                        }
+                        // A seventh palette would start a third row; a short row is padded so
+                        // its cells keep the same width as the rows above.
+                        repeat(GRID_COLUMNS - rowPalettes.size) {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -171,6 +138,90 @@ internal fun AccentPalettePickerRow(
         }
     }
 }
+
+/**
+ * One palette cell, as a [RowScope] extension so `weight` means the row's width.
+ *
+ * This is not cosmetic. Written inline inside the row's `forEach`, both this row and the
+ * outer `Column` are implicit receivers with a `weight` member, and the Column's resolved:
+ * it means height there, so each cell measured at the row's full width and the three cells
+ * sat on top of one another. The receiver on this function makes the row's weight
+ * unambiguous, which is also why the lens rectangle is a cell rather than the whole row.
+ */
+@Composable
+private fun RowScope.AccentCell(
+    palette: AccentPalette,
+    isSelected: Boolean,
+    onSelect: (AccentPalette) -> Unit,
+    positions: MutableMap<AccentPalette, IntRect>,
+    containerCoordinates: LayoutCoordinates?,
+) {
+    val cellShape = RoundedCornerShape(ttRadius.control)
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .testTag(AccentCellTag(palette))
+            .clip(cellShape)
+            .ttFocusRing(cellShape)
+            .selectable(selected = isSelected, role = Role.RadioButton) {
+                onSelect(palette)
+            }
+            .onGloballyPositioned { coordinates ->
+                if (containerCoordinates != null) {
+                    val position = containerCoordinates.localPositionOf(coordinates, Offset.Zero)
+                    positions[palette] = IntRect(
+                        left = position.x.roundToInt(),
+                        top = position.y.roundToInt(),
+                        right = position.x.roundToInt() + coordinates.size.width,
+                        bottom = position.y.roundToInt() + coordinates.size.height,
+                    )
+                }
+            },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = ttSpacing.sm),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .testTag(AccentSwatchTag(palette))
+                    .clip(CircleShape)
+                    .background(
+                        Brush.horizontalGradient(listOf(palette.light, palette.dark)),
+                    )
+                    .then(
+                        if (isSelected) {
+                            Modifier
+                        } else {
+                            Modifier.border(
+                                width = 1.dp,
+                                color = ttSeparator(),
+                                shape = CircleShape,
+                            )
+                        },
+                    ),
+            )
+            ttText(
+                text = palette.title,
+                modifier = Modifier.testTag(AccentLabelTag(palette)),
+                style = ttTypography.footnote,
+                color = ttSelectionLabelInk(isSelected),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+private const val GRID_COLUMNS = 3
+
+/** The tag for one palette's whole tappable cell, so its 44dp target can be measured. */
+internal fun AccentCellTag(palette: AccentPalette): String = "settings.accent.cell.${palette.wireValue}"
 
 /** The tag for one palette's swatch, so a rendered test can read the glass lens off it. */
 internal fun AccentSwatchTag(palette: AccentPalette): String = "settings.accent.${palette.wireValue}"

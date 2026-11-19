@@ -46,6 +46,56 @@ class TypographyScaleTest {
     }
 
     /**
+     * No two roles anywhere in the scale share both size and weight.
+     *
+     * The neighbour check below is local; this is the scale-wide version, and it is what
+     * `title` at 22sp and `titleSmall` at 20sp were hiding: not identical, so the local test
+     * passed, but close enough that a caller could substitute one for the other with no
+     * visible result. A duplicate anywhere means two names for one appearance; the selected
+     * and emphasised variants are deliberately *different weights*, so they are not exempt.
+     */
+    @Test
+    fun `no two roles share both size and weight`() {
+        val roles = ttTypography.all
+        for (first in roles.indices) {
+            for (second in first + 1 until roles.size) {
+                val a = roles[first]
+                val b = roles[second]
+                assertTrue(
+                    a.fontSize != b.fontSize || a.fontWeight != b.fontWeight,
+                    "indices $first and $second are both ${a.fontSize} and " +
+                        "${a.fontWeight}, so the scale has two names for one appearance",
+                )
+            }
+        }
+    }
+
+    /**
+     * The heading roles are separated by a step a reader can see.
+     *
+     * Two points is within the rounding noise of the two rasterisers and reads as the same
+     * heading; four is the smallest step this scale uses between unrelated roles. The gap to
+     * [ttTypography.largeTitle] is checked too, so a future widening of `title` cannot close
+     * the ramp at the top instead of the bottom.
+     */
+    @Test
+    fun `the heading roles keep a visible step between them`() {
+        val small = ttTypography.titleSmall.fontSize.value
+        val title = ttTypography.title.fontSize.value
+        val large = ttTypography.largeTitle.fontSize.value
+        assertTrue(
+            title - small >= 4f,
+            "title ($title) is only ${title - small}sp above titleSmall ($small); that is " +
+                "within rounding and the two roles become interchangeable",
+        )
+        assertTrue(
+            large - title >= 8f,
+            "largeTitle ($large) is only ${large - title}sp above title ($title), so the " +
+                "top of the ramp has collapsed",
+        )
+    }
+
+    /**
      * A role is not a duplicate of the role above it.
      *
      * "Above it" rather than "any other", because the two pairs make duplicates correct and

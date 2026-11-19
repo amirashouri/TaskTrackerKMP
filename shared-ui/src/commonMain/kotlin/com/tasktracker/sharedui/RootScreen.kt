@@ -148,6 +148,9 @@ fun RootScreen(
     modifier: Modifier = Modifier,
     splashMinimumHoldMillis: Long = SPLASH_MINIMUM_HOLD_MILLIS,
     deepLinks: DeepLinkSource = appDeepLinks,
+    // Injected by tests; production reads the host once per composition, the same seam and
+    // the same timing as Reduce Motion. See [platformReduceTransparency].
+    reduceTransparency: Boolean = platformReduceTransparency(),
 ) {
     val router = remember(resolver) { resolver.resolve(Router::class) }
     // Handed to `ProvideAuthSession` for the sign-in form's own model. Not a subscription:
@@ -258,11 +261,14 @@ fun RootScreen(
     val themeScheme by preferences.themeScheme.collectAsState()
     val accentPalette by preferences.accentPalette.collectAsState()
     val rawGlassIntensity by preferences.glassIntensity.collectAsState()
-    val glassIntensity by animateFloatAsState(
+    val animatedGlassIntensity by animateFloatAsState(
         targetValue = rawGlassIntensity,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessLow),
         label = "glassIntensitySpring",
     )
+    // The OS wins, and the stored value is not touched: turning Reduce Transparency back off
+    // restores the animated value above with no write and no migration.
+    val glassIntensity = effectiveGlassIntensity(animatedGlassIntensity, reduceTransparency)
     val isDark = ttIsDarkTheme(themeScheme)
     SystemBarAppearance(isDark)
 

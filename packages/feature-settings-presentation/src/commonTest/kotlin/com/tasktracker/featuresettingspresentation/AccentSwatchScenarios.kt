@@ -3,6 +3,10 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
@@ -13,12 +17,21 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttTheme
+import kotlin.math.abs
 import kotlin.math.max
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -39,11 +52,12 @@ import kotlin.test.assertTrue
  * ## The vertical delta is the lens, and the base colour cancels out
  *
  * Each swatch is a *horizontal* colour gradient, so at any one column its top and bottom rows
- * are the same base colour. The lens is a *vertical* white wash — strongest at the top of the
- * cell, nearly gone at the bottom — so on the selected swatch the top row must read lighter than
- * the bottom row by the lens's falloff across the cell, and on an unselected swatch the two rows
- * must match. The comparison needs no second composition with the selection moved, which the
- * Android host's `setContent`-once rule would otherwise force.
+ * are the same base colour. The lens is a *vertical* wash — strongest at the top of the cell,
+ * nearly gone at the bottom — so on the selected swatch the two rows must differ by the lens's
+ * falloff across the cell, and on an unselected swatch they must match. The sign depends on
+ * the appearance (white lens in dark, black in light), so the assertion is on the magnitude.
+ * The comparison needs no second composition with the selection moved, which the Android
+ * host's `setContent`-once rule would otherwise force.
  *
  * ## Coverage is structural, not measured
  *
@@ -67,7 +81,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 object AccentSwatchScenarios {
 
-    /** The selected cell's pane is lighter at the top and covers both the swatch and the label. */
+    /** The selected cell's pane covers both the swatch and the label and has a top-to-bottom wash. */
     val theSelectedAccentSwatchCarriesTheGlassLens: suspend ComposeUiTest.() -> Unit = {
         // A real skip, not a return: this test measures pixels, and a host that measured
         // nothing must not be recorded as agreeing.
@@ -107,20 +121,114 @@ object AccentSwatchScenarios {
                     "top edge and below the label's bottom edge.",
             )
             assertTrue(
-                selectedDelta >= LENS_DELTA_BAR,
-                "the selected accent swatch's top row measured only $selectedDelta lighter than " +
-                    "its bottom row (sum of R+G+B). The lens is a white wash that is strongest " +
-                    "at the top of the cell and fades to a quarter at the bottom, so a selected " +
-                    "swatch must read lighter at the top by a clear margin. Near zero means the " +
-                    "lens is not painted and the swatch is a bare colour gradient again.",
+                abs(selectedDelta) >= LENS_DELTA_BAR,
+                "the selected accent swatch's top row differs from its bottom row by only " +
+                    "${abs(selectedDelta)} (sum of R+G+B) at the swatch's centre. The lens wash " +
+                    "runs top to bottom and fades to a quarter, so a selected swatch must show a " +
+                    "clear vertical gradient. Near zero means the lens is not painted and the " +
+                    "swatch is a bare colour gradient again. The sign follows the appearance: " +
+                    "the lens is white in dark and black in light, so the top is lighter in dark " +
+                    "and darker here.",
             )
             assertTrue(
-                unselectedDelta <= CONTROL_DELTA_BAR,
-                "the unselected accent swatch's top row measured $unselectedDelta lighter than " +
-                    "its bottom row, but it carries no lens: its fill is a *horizontal* " +
+                abs(unselectedDelta) <= CONTROL_DELTA_BAR,
+                "the unselected accent swatch's top row differs from its bottom row by " +
+                    "${abs(unselectedDelta)}, but it carries no lens: its fill is a *horizontal* " +
                     "gradient, so its top and bottom rows are the same colour. Above noise " +
                     "means a lens is being drawn on an unselected swatch.",
             )
+    }
+
+    /**
+     * The 3x2 grid gives every label room to read in full at the narrowest content width.
+     *
+     * The old six-cell row measured about 48dp per cell at 320dp and allowed two lines with
+     * an ellipsis; `C-Light` was the only abbreviation in an otherwise spelled-out block. This
+     * asks Compose's own text layout whether each label overflowed, rather than inspecting
+     * the source's `maxLines`, because the question is the measured width at 320dp.
+     *
+     * It also holds the 44dp target on the whole cell, not just the 32dp swatch: the visible
+     * circle is smaller than the thing a finger has to hit.
+     */
+    val theAccentLabelsReadInFullInAGrid: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH).background(ttCanvas())) {
+                    AccentPalettePickerRow(
+                        selected = AccentPalette.Classic,
+                        onSelect = {},
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        for (palette in AccentPalette.all) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            onNodeWithTag(AccentLabelTag(palette), useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            val cell = onNodeWithTag(AccentCellTag(palette), useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(
+                palette.title.length,
+                layout.getLineEnd(0, visibleEnd = true),
+                "${palette.title} is truncated at ${NARROW_CONTENT_WIDTH.value}dp " +
+                    "(visible line ends at character ${layout.getLineEnd(0, visibleEnd = true)} " +
+                    "of ${palette.title.length}, cell $cell). The grid must leave every " +
+                    "palette name in full.",
+            )
+            assertEquals(
+                1,
+                layout.lineCount,
+                "${palette.title} wraps onto ${layout.lineCount} lines at the narrowest width",
+            )
+
+            assertTrue(
+                cell.width.value >= 44f && cell.height.value >= 44f,
+                "${palette.title}'s tappable cell is ${cell.width}x${cell.height}dp, below the " +
+                    "44dp target even though its 32dp swatch clears it visually",
+            )
+        }
+    }
+
+    /**
+     * The lens still travels across the grid, including to the second row.
+     *
+     * The old layout was one row, so a horizontal lens animation was enough. Two rows add a
+     * vertical component, and `ttLensPlacement` is now fed rectangles on both; this selects a
+     * palette in the lower row and checks the pane ends up on its cell rather than partway.
+     */
+    val theLensTravelsToASecondRow: suspend ComposeUiTest.() -> Unit = {
+        var selected by mutableStateOf(AccentPalette.Classic)
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH)) {
+                    AccentPalettePickerRow(
+                        selected = selected,
+                        onSelect = { selected = it },
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue)).performClick()
+        mainClock.advanceTimeBy(2_000)
+        waitForIdle()
+
+        val cell = onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+            .getBoundsInRoot()
+        val pane = onNodeWithTag(AccentGlassTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+            .getBoundsInRoot()
+        assertTrue(
+            pane.left.value <= cell.left.value + 0.5f &&
+                pane.top.value <= cell.top.value + 0.5f &&
+                pane.right.value >= cell.right.value - 0.5f &&
+                pane.bottom.value >= cell.bottom.value - 0.5f,
+            "after selecting Navy Blue the lens pane ($pane) did not settle on its cell " +
+                "($cell). Two rows mean the lens has a vertical leg; a pane that stops on the " +
+                "first row means the placement still assumes one.",
+        )
     }
 
     /**
@@ -143,18 +251,25 @@ object AccentSwatchScenarios {
 
     private const val SAMPLE_INSET = 4f
 
+    /** The narrowest content width the appearance block is laid out for. */
+    private val NARROW_CONTENT_WIDTH = 320.dp
+
     /** Backdrop-noise headroom for the control row, which has no vertical variation at all. */
     private const val CONTROL_DELTA_BAR = 6
 
     /**
-     * The solid-fill lens's top stop is [com.tasktracker.designsystem.ttGlass.SOLID_LENS_ALPHA]
-     * (0.45) of white and its bottom stop a quarter of that, spread over the whole *cell* — so
-     * across the 32dp swatch, which sits near the top, the measured lift is smaller than when the
-     * lens hugged the circle. The JVM paints the selected Classic swatch at a lift of 62 on this
-     * 0…765 scale. The bar sits at half that, well clear of the unselected control's 0, and a
-     * revert to the tab-strength lens (0.14) would measure ~19 and fall short.
+     * The wash's sign is the appearance's, not the test's: `ttGlassLens` draws white in dark and
+     * black in light, so this light-appearance scenario measures a *negative* delta. The bar is
+     * on the magnitude for that reason.
+     *
+     * The lens's top stop is [com.tasktracker.designsystem.ttGlass.SOLID_LENS_ALPHA] (0.45) in
+     * dark, but light caps the effective wash at 0.14 of black and spreads it over the whole
+     * cell. Across the 32dp swatch near the top, JVM and iOS both measure **13** on this
+     * 0…765 scale; the bar at 10 leaves headroom above the unselected control's 0 while still
+     * failing if the pane stops being painted. (The previous bar of 30 assumed a white wash and
+     * was already red before the grid change.)
      */
-    private const val LENS_DELTA_BAR = 30
+    private const val LENS_DELTA_BAR = 10
 
     private fun channelSum(color: Color): Int {
         fun byte(v: Float) = (v * 255f).toInt()

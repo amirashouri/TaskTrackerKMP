@@ -63,6 +63,18 @@ private fun AmbientBackdropDarkPreview() {
 }
 
 /**
+ * One alternate palette, because the backdrop's second glow is now derived from it.
+ *
+ * A preview of Classic alone cannot show that: Classic is the palette the derivation was
+ * tuned to reproduce, so the wrong (hardcoded-blue) implementation looks identical under it.
+ */
+@Preview(name = "Backdrop, Sunset palette", showBackground = true)
+@Composable
+private fun AmbientBackdropSunsetPreview() {
+    ttPreviewSurface(ThemeScheme.Light, AccentPalette.Sunset) { Box(Modifier.fillMaxSize()) }
+}
+
+/**
  * The picker in both states, because a segmented control's bug is almost always a
  * *selected* one — the unselected half is the easy half to get right.
  */
@@ -395,9 +407,10 @@ private fun BottomSheetPreview() {
 @Composable
 internal fun ttPreviewSurface(
     scheme: ThemeScheme = ThemeScheme.System,
+    accentPalette: AccentPalette = AccentPalette.Classic,
     content: @Composable () -> Unit,
 ) {
-    ttTheme(scheme) {
+    ttTheme(scheme, accentPalette) {
         Box(modifier = Modifier.fillMaxSize().background(ttCanvas())) {
             // The backdrop is drawn for every preview, including the ones that are not about
             // it. A component previewed against a flat canvas is a component previewed

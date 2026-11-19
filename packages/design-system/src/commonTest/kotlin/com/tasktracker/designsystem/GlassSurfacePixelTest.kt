@@ -28,6 +28,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -58,7 +59,7 @@ import kotlin.test.assertTrue
  *
  * | | before, rendered | rendered, JVM | rendered, iOS |
  * | --- | --- | --- | --- |
- * | `ttLabelSecondary` on the glass fill, light | 2.88:1 | **3.09:1** | **3.09:1** |
+ * | `ttLabelSecondary` on the glass fill, light | 2.55:1 | **4.74:1** | to re-measure |
  * | the same caption, dark | 6.01:1 | **6.01:1** | **6.01:1** |
  * | the hairline against its own fill, light | 1.07:1 | **1.65:1** | **1.65:1** |
  * | the hairline against its own fill, dark | 1.54:1 | **1.54:1** | **1.54:1** |
@@ -120,9 +121,13 @@ class GlassSurfacePixelTest {
      * The sample is a quarter of the way down the card rather than its centre, because the
      * fill ramps from its strongest tint at the top to `FILL_FADE` toward the canvas at the
      * bottom. A caption sits near the top, so the top is the case that has to hold.
+     *
+     * The same token over the bare canvas is the control: it shows how much contrast the
+     * glass costs, which is the reason the light token is body ink at 78% rather than the
+     * platform's secondary grey.
      */
     @Test
-    fun `a caption on the rendered glass fill still clears the large-text bar`() {
+    fun `a caption on the rendered glass fill clears the body-text bar`() {
         assumeHostRasterisesText()
         val reading = requireNotNull(measureGlassFill(ThemeScheme.Light)) { NO_READING }
         val caption = over(reading.secondary, reading.secondaryAlpha, reading.fill)
@@ -134,18 +139,13 @@ class GlassSurfacePixelTest {
         )
 
         assertTrue(
-            ratio >= LARGE_TEXT_MINIMUM,
+            ratio >= TEXT_MINIMUM,
             "light appearance: a ttLabelSecondary caption composites to ${caption.hex()} over " +
                 "the *rendered* glass fill ${reading.fill.hex()}, which is ${ratio.ratioText()}:1" +
-                " - below the ${LARGE_TEXT_MINIMUM}:1 large-text bar, and worse than the " +
-                "${reading.secondaryOnCanvas.ratioText()}:1 the same token manages on the bare " +
-                "canvas.\nGlass is *costing* this caption contrast rather than adding " +
-                "any: the accent-tinted fill darkens toward the token's own grey, so putting a " +
-                "surface behind a secondary label makes it less legible, not more. The fill " +
-                "cannot be lightened without changing ttGlass.FILL_ALPHA for every card in the " +
-                "app, so the repair was the caption token: labelSecondaryLight was darkened off " +
-                "the platform grey to (52, 52, 58) at the same 60% alpha, which renders 3.09:1 " +
-                "here. If this fails, that token has been lightened back toward the platform grey.",
+                " - below the ${TEXT_MINIMUM}:1 body-text bar. The token carries 11-13sp " +
+                "captions, so this is not a large-text case. If it fails, labelSecondaryLight " +
+                "has drifted back toward the platform's 60% grey: at 60% it measured 2.55:1 " +
+                "over this fill, and the current body-ink value at 78% measures 4.74:1.",
         )
     }
 
@@ -340,6 +340,128 @@ class GlassSurfacePixelTest {
                 "The contract is a fade to ${ttGlass.RIM_BOTTOM_ALPHA} (accepted " +
                 "$FADE_MINIMUM..$FADE_MAXIMUM). A ratio near 1.0 means the rim paints flat; " +
                 "a ratio near 0 means the bottom boundary is the fill alone.",
+        )
+    }
+
+    /**
+     * A surface that follows the system into dark paints the dark-only dispersion fringe.
+     *
+     * ## The bug this pins
+     *
+     * `ttGlassSurface` used to ask `LocalThemeScheme.current == ThemeScheme.Dark`. Under
+     * `ThemeScheme.System` that is false even when the device is dark, so the dispersion
+     * fringe — the red/green/blue hairlines under the rim, drawn only in dark — disappeared
+     * for every user who left the appearance on the default. The pinned `Dark` setting drew
+     * it, which is how the difference survived: it looked correct to anybody testing the
+     * setting that is not the default.
+     *
+     * ## What is read
+     *
+     * The fringe is chromatic in a way the material is not: the rim is white, and the fill is
+     * blue-leaning, so an achromatic top edge has `blue > red`. The fringe's red line pulls
+     * that edge toward red, and its green line — drawn at 1.5x the red and blue alpha —
+     * produces a `green - red` spike.
+     *
+     * ## Why the red line is read as a shift, not absolute dominance
+     *
+     * The original assertion was `red > blue` on the measured pixel, which held while the
+     * default dark accent was a near-grey (`#5F6873`, blue-red 20 levels). A chromatic navy
+     * fill leans blue by about 35 levels, more than a 5.6% red line can overcome: the fringe
+     * now measures `red - blue = -19` absolute, but shifts the edge 16 levels redder than the
+     * fill just below it. Absolute dominance would need nearly tripling `DISPERSION_ALPHA`
+     * and painting a red edge rather than a refraction hint. The gate therefore holds the
+     * fringe's actual contract — a red shift against the fill — and still fails when the dark
+     * branch does not run.
+     *
+     * Measured at density 3 on the JVM with the chromatic accent: red shift **+22** and green
+     * spike **+34** with the fringe, **+10** and **+19** without it. The thresholds (15 and 25)
+     * sit between those pairs, so the booleans below are about the fringe rather than about
+     * the rim's antialiasing over a blue fill.
+     *
+     * [WithSystemDarkAppearance] is the test seam for this: the JVM and iOS actuals provide
+     * `LocalSystemTheme` (internal and deprecated in Compose Multiplatform 1.12.1), and Android
+     * has no such local, so its actual does nothing — the scenario skips there before it
+     * composes. That split is what keeps `commonTest` compiling on all three hosts.
+     */
+    @Test
+    fun `a surface following the system into dark carries the dispersion fringe`() {
+        assumeHostRasterisesText()
+        var followedDark = false
+        var redOverBlue = Int.MIN_VALUE
+        var greenOverRed = Int.MIN_VALUE
+        var baselineRedOverBlue = Int.MIN_VALUE
+
+        rasterising {
+            setContent {
+                WithSystemDarkAppearance {
+                    ttTheme(ThemeScheme.System) {
+                        followedDark = ttIsDarkTheme()
+                        CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
+                            Box(Modifier.fillMaxSize().background(ttCanvas())) {
+                                Box(
+                                    Modifier
+                                        .testTag(SYSTEM_CARD_TAG)
+                                        .size(240.dp)
+                                        .ttGlassSurface(
+                                            shape = RoundedCornerShape(ttRadius.surface),
+                                        ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            waitForIdle()
+
+            val frame = onRoot().captureToImage().toPixelMap()
+            val bounds = onNodeWithTag(SYSTEM_CARD_TAG).getBoundsInRoot()
+            val x = ((bounds.left.value + bounds.width.value / 2f) * RIM_DENSITY).toInt()
+                .coerceIn(0, frame.width - 1)
+            val top = (bounds.top.value * RIM_DENSITY).toInt()
+            val band = (ttGlass.hairlineWidth.value * RIM_DENSITY).toInt() + 4
+
+            for (y in (top - 1).coerceAtLeast(0)..(top + band).coerceAtMost(frame.height - 1)) {
+                val pixel = frame[x, y]
+                val red = (pixel.red * 255f).roundToInt()
+                val green = (pixel.green * 255f).roundToInt()
+                val blue = (pixel.blue * 255f).roundToInt()
+                redOverBlue = max(redOverBlue, red - blue)
+                greenOverRed = max(greenOverRed, green - red)
+            }
+
+            // Just below the band: the fill alone, with no rim or fringe over it. The fringe's
+            // red line is a shift against this, which is the part that is independent of how
+            // blue the accent happens to be.
+            val baselineY = (top + band + 6).coerceIn(0, frame.height - 1)
+            val baseline = frame[x, baselineY]
+            baselineRedOverBlue =
+                (baseline.red * 255f).roundToInt() - (baseline.blue * 255f).roundToInt()
+        }
+
+        assertTrue(
+            followedDark,
+            "the test forced the system appearance to Dark but ttIsDarkTheme() still reported " +
+                "light, so this measurement would be of the light branch and proves nothing",
+        )
+        val redShift = redOverBlue - baselineRedOverBlue
+        println(
+            "system dark fringe: max red - blue $redOverBlue, fill baseline " +
+                "$baselineRedOverBlue, shift $redShift, green - red $greenOverRed",
+        )
+        assertTrue(
+            redShift >= 15,
+            "the top edge of a System-following glass surface in dark never shifted red " +
+                "against the fill (max red - blue $redOverBlue vs fill $baselineRedOverBlue, " +
+                "shift $redShift). The dispersion fringe's red line is missing, which is what " +
+                "happens when ttGlassSurface asks the pinned scheme instead of " +
+                "ttIsDarkTheme(): System is not Dark, so the dark-only branch never runs.",
+        )
+        assertTrue(
+            greenOverRed >= 25,
+            "the top edge's green spike measured only $greenOverRed levels above red. The green " +
+                "dispersion line is drawn at 1.5x the red and blue alpha and measured +34 on the " +
+                "JVM with the fringe; +19 without it, so a value near the latter means the fringe " +
+                "is not painted for this appearance.",
         )
     }
 
@@ -701,7 +823,6 @@ val centerColor = Color(center.red, center.green, center.blue, 1f)
 
     private companion object {
         const val TEXT_MINIMUM = 4.5
-        const val LARGE_TEXT_MINIMUM = 2.5
 
         /**
          * How much lighter than its own fill the hairline has to be to count as a lit edge.
@@ -756,6 +877,7 @@ val centerColor = Color(center.red, center.green, center.blue, 1f)
                 "the pixel read returned nothing and the test would otherwise pass unmeasured"
 
         const val CARD_TAG = "glass.pixel.card"
+        const val SYSTEM_CARD_TAG = "glass.pixel.systemCard"
         const val WIDE_CARD_TAG = "glass.pixel.wideCard"
         const val BASE_CARD_TAG = "glass.pixel.baseCard"
 

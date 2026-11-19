@@ -348,6 +348,7 @@ private fun TabCell(
 
     Column(
         modifier = modifier
+            .ttFocusRing(CircleShape)
             .clickable(
                 // No indication, and this is the same call the picker scrim makes. The default
                 // one paints the pressed cell as a *rectangle* — the cell has no clip, so the

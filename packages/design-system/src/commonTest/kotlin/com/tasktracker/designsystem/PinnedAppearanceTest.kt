@@ -122,9 +122,10 @@ class PinnedAppearanceTest {
      * in RGB too, so an "are they different" assertion passes on both a correct value and
      * the bug. Asserting the *alpha* is the only check that distinguishes them.
      *
-     * These four are UIKit's, spelled out:
-     *  - `separator`: 0.29 on light, 0.36 on dark
-     *  - `secondaryLabel`: 0.60 on both
+     * These four, spelled out:
+     *  - `separator`: 0.29 on light, 0.36 on dark (UIKit)
+     *  - `secondaryLabel`: **0.78 on light**, 0.60 on dark. The light alpha is the one
+     *    deliberate departure from UIKit's 60%; see [ttFixedColours.labelSecondaryLight].
      */
     @Test
     fun `the pre-composited tokens carry the alpha the original resolved`() {
@@ -141,7 +142,7 @@ class PinnedAppearanceTest {
             message = "separatorDark alpha",
         )
         assertEquals(
-            expected = 0.60f,
+            expected = 0.78f,
             actual = alphaOf(ttFixedColours.labelSecondaryLight),
             absoluteTolerance = 0.005f,
             message = "labelSecondaryLight alpha",
@@ -199,34 +200,24 @@ class PinnedAppearanceTest {
     }
 
     /**
-     * The secondary label is dimmer than the label, and clears the bar it was chosen for.
+     * The secondary label is dimmer than the label, and clears the body-text bar.
      *
      * Both halves, because either alone is easy to satisfy by accident. A secondary label
      * with no alpha at all is *more* contrasty than the label and is "readable" — it just
      * is not secondary, and it silently becomes a second level in a hierarchy that has one.
-     * The upper bound is the one that catches it.
+     * The upper bound catches that.
      *
-     * ## The bar is 3:1, not 4.5:1, and that is a real finding rather than a convenience
+     * ## Why the bar is now 4.5:1
      *
-     * Composited over its canvas this token measures **3.68:1** on light and **6.36:1** on
-     * dark (the earlier revision of this comment claimed 3.64:1 on dark — wrong by a factor
-     * of 1.75, the same error `ThemeScheme` records). It does not meet WCAG AA's 4.5:1 for
-     * body text, and the reason it is still correct is that the token resolves UIKit's
-     * `secondaryLabel`, which does not meet it either: the platform's own grey composites to
-     * 3.44:1 on the light canvas, and the dark value is still the platform's pale grey at
-     * 60%. The light RGB is the one number that is *not* the platform's — it was darkened
-     * eight channels, from `(60, 60, 67)` to `(52, 52, 58)`, because a glass surface in
-     * light composites darker than the canvas and the platform grey measured 2.88:1 there,
-     * below even this bar (see `GlassSurfacePixelTest`). Raising the alpha until the token
-     * passes would make the port a worse match for the design it is porting, and the change
-     * belongs to the design rather than to the tokens.
+     * The token carries captions and footnotes at 11–13sp, below WCAG's definition of large
+     * text, so 4.5:1 is the bar it actually has to meet. It used to be held at 3:1 because
+     * the light value resolved UIKit's 60% grey and measured 3.68:1. The light token is now
+     * body ink at 78%, compositing to **8.31:1** on the canvas and **4.74:1** over the
+     * rendered glass, so it clears the body-text bar on both surfaces. Dark measures
+     * **6.36:1** and keeps the platform's 60%.
      *
-     * So the test holds the bar that was actually chosen, states the measured number, and
-     * records the consequence where a caller will meet it: **3:1 is WCAG's bar for large
-     * text only** (18pt, or 14pt bold). This token is 11–13sp in the scale, which is below
-     * that, so a screen that puts `ttLabelSecondary` on body copy ships a contrast
-     * regression. It is correct on footnotes and captions, and the original used it on
-     * exactly those. The full 4.5:1 label is [ttFixedColours.label].
+     * The hierarchy check stays: the light value is still visibly dimmer than [ttFixedColours.label],
+     * and that is what the upper bound protects.
      */
     @Test
     fun `the secondary label sits between the label and the background`() {
@@ -245,9 +236,9 @@ class PinnedAppearanceTest {
                 "the secondary label ($secondary:1) is not dimmer than the label ($primary:1)",
             )
             assertTrue(
-                secondary >= 3.0,
-                "the secondary label has $secondary:1 against the canvas, below even the " +
-                    "3:1 large-text bar it was chosen for",
+                secondary >= 4.5,
+                "the secondary label has $secondary:1 against the canvas, below the " +
+                    "4.5:1 body-text bar it now carries captions at",
             )
         }
     }

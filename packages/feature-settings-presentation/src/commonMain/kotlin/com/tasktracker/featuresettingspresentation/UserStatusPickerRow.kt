@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
@@ -60,6 +61,7 @@ internal fun UserStatusPickerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
+                .ttFocusRing()
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -76,17 +78,31 @@ internal fun UserStatusPickerRow(
             )
             Spacer(modifier = Modifier.weight(1f))
             val selectedColor = when (selected) {
-                UserStatus.Active -> ttStatusActive
-                UserStatus.Away -> ttStatusAway
-                UserStatus.BeRightBack -> ttStatusBeRightBack
-                UserStatus.Busy -> ttStatusBusy
-                else -> ttStatusActive
+                UserStatus.Active -> ttStatusActive()
+                UserStatus.Away -> ttStatusAway()
+                UserStatus.BeRightBack -> ttStatusBeRightBack()
+                UserStatus.Busy -> ttStatusBusy()
+                else -> ttStatusActive()
             }
-            ttText(
-                text = selected?.displayName ?: "Active",
-                style = ttTypography.subheadline,
-                color = selectedColor,
-            )
+            // The colour is the dot's job. Painting the name in it made a 15sp label at
+            // 1.94:1 (amber) and 2.68:1 (grey) on the light canvas; `ttLabel` is the ink the
+            // rest of the row already uses.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(selectedColor),
+                )
+                ttText(
+                    text = selected?.displayName ?: "Active",
+                    style = ttTypography.subheadline,
+                    color = ttLabel(),
+                )
+            }
             ttIcon(
                 image = ttActionIcons.chevronDown,
                 contentDescription = null,
@@ -125,10 +141,10 @@ private fun UserStatusOption(
     onClick: () -> Unit,
 ) {
     val statusColor = when (status) {
-        UserStatus.Active -> ttStatusActive
-        UserStatus.Away -> ttStatusAway
-        UserStatus.BeRightBack -> ttStatusBeRightBack
-        UserStatus.Busy -> ttStatusBusy
+        UserStatus.Active -> ttStatusActive()
+        UserStatus.Away -> ttStatusAway()
+        UserStatus.BeRightBack -> ttStatusBeRightBack()
+        UserStatus.Busy -> ttStatusBusy()
     }
     // Same ink rule as the theme options: the popup is a backed glass pane in both themes, so
     // the label is [ttSelectionLabelInk] — the token derived for a label under a selection wash.
@@ -136,6 +152,7 @@ private fun UserStatusOption(
         modifier = Modifier
             .fillMaxWidth()
             .dropdownOption(key = status)
+            .ttFocusRing()
             .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         verticalAlignment = Alignment.CenterVertically,

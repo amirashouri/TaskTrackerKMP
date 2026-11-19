@@ -257,6 +257,7 @@ fun AmbientBackdrop(modifier: Modifier = Modifier) {
     // every frame of a cross-fade.
     val canvas = ttCanvas()
     val accent = ttAccent()
+    val secondary = accentSecondaryGlow(accent)
 
     Box(
         modifier = modifier
@@ -265,7 +266,7 @@ fun AmbientBackdrop(modifier: Modifier = Modifier) {
             .clearAndSetSemantics { }
             .drawBehind {
                 drawRect(canvas)
-                drawAmbientCircles(accent = accent, canvas = canvas)
+                drawAmbientCircles(accent = accent, secondary = secondary, canvas = canvas)
             },
     )
 }
@@ -282,12 +283,20 @@ fun AmbientBackdrop(modifier: Modifier = Modifier) {
  * about another.
  *
  * The centres are expressed as `1.0 +` offsets rather than negative ones because the
- * original's circles hang off the corners: an offset of `-0.25w` from a centred circle is
- * the same point as a centre of `0.25w`, and the second circle's `0.45w` past the far edge
- * is `1.45w`. Both circles are therefore drawn partly off-canvas, which is what makes them
- * read as ambient light rather than as two discs.
+ * circles hang off the corners: an offset of `-0.25w` from a centred circle is the same
+ * point as a centre of `0.25w`, and the second circle sits just past the bottom-right
+ * corner. Both are therefore drawn partly off-canvas, which is what makes them read as
+ * ambient light rather than as two discs.
+ *
+ * ## The second circle used to paint nothing
+ *
+ * Its centre was `(1.45w, 1.55h)` with a `0.35w` radius, so its nearest edge was `1.10w`
+ * from the left — the whole circle was outside the canvas. That is why the hardcoded blue
+ * could survive six palettes: no pixel ever showed it. Pulling the centre to `(1.05w,
+ * 1.10h)` puts the falloff across the bottom-right corner without changing the diameter or
+ * the 10% alpha, and `AmbientBackdropPaletteTest` now reads the difference there.
  */
-private fun DrawScope.drawAmbientCircles(accent: Color, canvas: Color) {
+private fun DrawScope.drawAmbientCircles(accent: Color, secondary: Color, canvas: Color) {
     val w = size.width
     val h = size.height
 
@@ -319,7 +328,7 @@ private fun DrawScope.drawAmbientCircles(accent: Color, canvas: Color) {
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.Blue.copy(alpha = AmbientBackdropDefaults.SECONDARY_ALPHA),
+                secondary.copy(alpha = AmbientBackdropDefaults.SECONDARY_ALPHA),
                 canvas,
             ),
             center = Offset(
@@ -336,6 +345,36 @@ private fun DrawScope.drawAmbientCircles(accent: Color, canvas: Color) {
     )
 }
 
+/**
+ * The second glow: the accent's hue nudged cool rather than a fixed blue.
+ *
+ * A palette has to change the light in the room, not only the controls in it. The shift is
+ * +25° in HSV with the accent's own saturation and value, so Classic (213°) lands on 238° —
+ * within two degrees of the `Color.Blue` this replaces — while Sunset lands on orange and
+ * Violet on magenta. No branch and no second palette table: the accent is the only input.
+ *
+ * HSV rather than HSL because the shift is a rotation of hue at constant chroma, which is
+ * exactly what HSV's saturation/value pair holds; re-deriving lightness from an HSL triple
+ * would move the glow's brightness between palettes for no design reason.
+ */
+private fun accentSecondaryGlow(accent: Color): Color {
+    val high = maxOf(accent.red, maxOf(accent.green, accent.blue))
+    val low = minOf(accent.red, minOf(accent.green, accent.blue))
+    val delta = high - low
+    val hue = if (delta == 0f) {
+        0f
+    } else {
+        when (high) {
+            accent.red -> 60f * (((accent.green - accent.blue) / delta) % 6f)
+            accent.green -> 60f * ((accent.blue - accent.red) / delta + 2f)
+            else -> 60f * ((accent.red - accent.green) / delta + 4f)
+        }.let { if (it < 0f) it + 360f else it }
+    }
+    val saturation = if (high == 0f) 0f else delta / high
+    val shifted = (hue + AmbientBackdropDefaults.SECONDARY_HUE_SHIFT) % 360f
+    return Color.hsv(shifted, saturation, high)
+}
+
 /** The backdrop's geometry, so a preview cannot quietly draw a different one. */
 object AmbientBackdropDefaults {
 
@@ -346,10 +385,18 @@ object AmbientBackdropDefaults {
     const val PRIMARY_CENTRE_Y: Float = 0.35f
     const val PRIMARY_ALPHA: Float = 0.18f
 
-    /** Second circle: `0.7 × width` across, at `(0.45w, 0.55h)`, blue at 10%. */
+    /**
+     * Second circle: `0.7 × width` across, just past the bottom-right corner, at 10%.
+     *
+     * The centre used to be `(1.45w, 1.55h)`, which with a `0.35w` radius put the entire
+     * circle outside the canvas; see [drawAmbientCircles].
+     */
     const val SECONDARY_DIAMETER_FRACTION: Float = 0.7f
     const val SECONDARY_RADIUS_FRACTION: Float = SECONDARY_DIAMETER_FRACTION / 2f
-    const val SECONDARY_CENTRE_X: Float = 1.45f
-    const val SECONDARY_CENTRE_Y: Float = 1.55f
+    const val SECONDARY_CENTRE_X: Float = 1.05f
+    const val SECONDARY_CENTRE_Y: Float = 1.10f
     const val SECONDARY_ALPHA: Float = 0.10f
+
+    /** Degrees the accent's hue is rotated toward blue for the second glow. */
+    const val SECONDARY_HUE_SHIFT: Float = 25f
 }

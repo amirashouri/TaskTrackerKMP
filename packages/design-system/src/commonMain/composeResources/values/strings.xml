@@ -671,6 +671,7 @@
     <string name="settings_profile_save_failed">Could not save your profile. Check your connection and try again.</string>
 
     <string name="settings_theme_label">Theme</string>
+    <string name="settings_accent_label">Accent palette</string>
     <!--
       The glass amount. The label is the noun on its own rather than "Glass effect", because
       the row's readout already says how much; "Reduce Transparency" is the platform's own name

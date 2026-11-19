@@ -139,16 +139,14 @@ object ThemeOptionScenarios {
     }
 
     /**
-     * The second accent palette's caption shows whole by wrapping; it was clipped at one line.
+     * Both long palette names are on screen in full; the six-column row could not do that.
      *
-     * "Navy Blue" is the longest title still shipped (9 characters) on a six-column row. The
-     * screen is drawn at a fixed 320dp width, so that caption has to wrap. [AccentPalette.NavyBlue]
-     * and Music are the same font size, so the ratio of their text-box heights is a pure "how
-     * many lines" signal with no font or rasteriser dependency: two lines against one. A
-     * truncated caption collapses back to that one line and the ratio falls below the bar.
-     *
-     * "Classic Light" used to be this test's long title; it was shortened to "C-Light", which
-     * is why the old matcher found no node at all rather than measuring a clipped caption.
+     * This used to assert that "Navy Blue" wrapped onto two lines, because at 320dp a
+     * six-column row left about 48dp per caption and wrapping was the only way to show the
+     * whole word. The picker is a 3x2 grid now, so the contract is the opposite: both long
+     * names fit on one line and neither is abbreviated. `AccentSwatchScenarios` measures the
+     * text layout at the same width; this scenario keeps the full Settings page in the loop,
+     * so a regression that only appears after scrolling still has a witness.
      */
     val theLongAccentCaptionWrapsInsteadOfClipping: suspend ComposeUiTest.() -> Unit = {
         setContent {
@@ -177,23 +175,10 @@ object ThemeOptionScenarios {
         onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText("Navy Blue"))
         waitForIdle()
 
-        // The caption is read from the unmerged tree. `selectable` merges its descendants, so
-        // text matched in the merged tree is the whole palette column (swatch + caption +
-        // spacing); the unmerged text node is the caption and only the caption, whose height
-        // is a pure line count. "Music" is the shortest palette title: one line at 320dp on
-        // every host, so it is the reference a two-line caption should clearly beat. Asserting
-        // a ratio rather than an absolute height keeps the test independent of the theme's font
-        // metrics.
-        val twoLineCaption = onNodeWithText("Navy Blue", useUnmergedTree = true).getUnclippedBoundsInRoot().height.value
-        val oneLineCaption = onNodeWithText("Music", useUnmergedTree = true).getUnclippedBoundsInRoot().height.value
-        assertTrue(
-            twoLineCaption > oneLineCaption * 1.4f,
-            "the 'Navy Blue' caption measured ${twoLineCaption.roundToInt()}dp against " +
-                "'Music's single line at ${oneLineCaption.roundToInt()}dp — a wrapped caption " +
-                "is two lines and should beat one by a wide margin. A ratio near 1 means the " +
-                "caption was clipped back to one line (the defect: maxLines = 1 ended the " +
-                "longest palette's name in an ellipsis)",
-        )
+        // Unmerged, because `selectable` merges the caption into the palette cell; this is
+        // the text node itself, so finding it proves the shipped string is the full name.
+        onNodeWithText("Classic Light", useUnmergedTree = true).assertExists()
+        onNodeWithText("Navy Blue", useUnmergedTree = true).assertExists()
     }
 
     /**
