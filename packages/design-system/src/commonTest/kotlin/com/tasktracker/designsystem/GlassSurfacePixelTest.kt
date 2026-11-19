@@ -7,7 +7,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.SystemTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
@@ -28,6 +31,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -340,6 +344,101 @@ class GlassSurfacePixelTest {
                 "The contract is a fade to ${ttGlass.RIM_BOTTOM_ALPHA} (accepted " +
                 "$FADE_MINIMUM..$FADE_MAXIMUM). A ratio near 1.0 means the rim paints flat; " +
                 "a ratio near 0 means the bottom boundary is the fill alone.",
+        )
+    }
+
+    /**
+     * A surface that follows the system into dark paints the dark-only dispersion fringe.
+     *
+     * ## The bug this pins
+     *
+     * `ttGlassSurface` used to ask `LocalThemeScheme.current == ThemeScheme.Dark`. Under
+     * `ThemeScheme.System` that is false even when the device is dark, so the dispersion
+     * fringe — the red/green/blue hairlines under the rim, drawn only in dark — disappeared
+     * for every user who left the appearance on the default. The pinned `Dark` setting drew
+     * it, which is how the difference survived: it looked correct to anybody testing the
+     * setting that is not the default.
+     *
+     * ## What is read
+     *
+     * The fringe is chromatic in a way the material is not: the rim is white, and the fill is
+     * a blue-leaning accent, so an achromatic top edge has `blue >= red` and `green - red` of
+     * only a few levels. The fringe's red line produces a pixel where `red > blue`, and its
+     * green line — drawn at 1.5x the red and blue alpha — produces a `green - red` spike.
+     * Measured at density 3 on the JVM: `red - blue = +4`, `green - red = +22` with the fix,
+     * and `-9` / `+5` without it. The test therefore fails on the bug, not merely on a
+     * changed screenshot.
+     *
+     * `LocalSystemTheme` is the platform seam `isSystemInDarkTheme()` reads on JVM and iOS;
+     * it is internal and deprecated in Compose Multiplatform 1.12.1, and this is the only
+     * place in the suite that needs to force the answer instead of pinning a scheme.
+     */
+    @OptIn(InternalComposeUiApi::class)
+    @Suppress("DEPRECATION")
+    @Test
+    fun `a surface following the system into dark carries the dispersion fringe`() {
+        assumeHostRasterisesText()
+        var followedDark = false
+        var redOverBlue = Int.MIN_VALUE
+        var greenOverRed = Int.MIN_VALUE
+
+        rasterising {
+            setContent {
+                CompositionLocalProvider(LocalSystemTheme provides SystemTheme.Dark) {
+                    ttTheme(ThemeScheme.System) {
+                        followedDark = ttIsDarkTheme()
+                        CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
+                            Box(Modifier.fillMaxSize().background(ttCanvas())) {
+                                Box(
+                                    Modifier
+                                        .testTag(SYSTEM_CARD_TAG)
+                                        .size(240.dp)
+                                        .ttGlassSurface(
+                                            shape = RoundedCornerShape(ttRadius.surface),
+                                        ),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            waitForIdle()
+
+            val frame = onRoot().captureToImage().toPixelMap()
+            val bounds = onNodeWithTag(SYSTEM_CARD_TAG).getBoundsInRoot()
+            val x = ((bounds.left.value + bounds.width.value / 2f) * RIM_DENSITY).toInt()
+                .coerceIn(0, frame.width - 1)
+            val top = (bounds.top.value * RIM_DENSITY).toInt()
+            val band = (ttGlass.hairlineWidth.value * RIM_DENSITY).toInt() + 4
+
+            for (y in (top - 1).coerceAtLeast(0)..(top + band).coerceAtMost(frame.height - 1)) {
+                val pixel = frame[x, y]
+                val red = (pixel.red * 255f).roundToInt()
+                val green = (pixel.green * 255f).roundToInt()
+                val blue = (pixel.blue * 255f).roundToInt()
+                redOverBlue = max(redOverBlue, red - blue)
+                greenOverRed = max(greenOverRed, green - red)
+            }
+        }
+
+        assertTrue(
+            followedDark,
+            "the test forced the system appearance to Dark but ttIsDarkTheme() still reported " +
+                "light, so this measurement would be of the light branch and proves nothing",
+        )
+        assertTrue(
+            redOverBlue >= 1,
+            "the top edge of a System-following glass surface in dark never became red-dominant " +
+                "(max red - blue = $redOverBlue). The dispersion fringe's red line is missing, " +
+                "which is what happens when ttGlassSurface asks the pinned scheme instead of " +
+                "ttIsDarkTheme(): System is not Dark, so the dark-only branch never runs.",
+        )
+        assertTrue(
+            greenOverRed >= 8,
+            "the top edge's green spike measured only $greenOverRed levels above red. The green " +
+                "dispersion line is drawn at 1.5x the red and blue alpha and measured +22 on the " +
+                "JVM with the fringe; +5 without it, so a near-zero value means the fringe is " +
+                "not painted for this appearance.",
         )
     }
 
@@ -756,6 +855,7 @@ val centerColor = Color(center.red, center.green, center.blue, 1f)
                 "the pixel read returned nothing and the test would otherwise pass unmeasured"
 
         const val CARD_TAG = "glass.pixel.card"
+        const val SYSTEM_CARD_TAG = "glass.pixel.systemCard"
         const val WIDE_CARD_TAG = "glass.pixel.wideCard"
         const val BASE_CARD_TAG = "glass.pixel.baseCard"
 
