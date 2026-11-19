@@ -32,7 +32,7 @@ enum class AccentPalette(
     val dark: Color,
 ) {
     Classic("classic", "Classic", TaskTrackerAccent.Light, TaskTrackerAccent.Dark),
-    ClassicLight("classic-light", "C-Light", Color(0xFF49688F), Color(0xFF416A9A)),
+    ClassicLight("classic-light", "Classic Light", Color(0xFF49688F), Color(0xFF416A9A)),
     Music("music", "Music", Color(0xFFB0004B), Color(0xFFD81B60)),
     Sunset("sunset", "Sunset", Color(0xFFA8320A), Color(0xFFCA3F12)),
     Violet("violet", "Violet", Color(0xFF5B21B6), Color(0xFF8845D2)),
@@ -40,7 +40,6 @@ enum class AccentPalette(
     ;
 
     companion object {
-        const val pickerTitle: String = "Accent palette"
         val all: List<AccentPalette> = entries
 
         fun fromStoredValue(value: String?): AccentPalette =

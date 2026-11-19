@@ -3,6 +3,10 @@ package com.tasktracker.featuresettingspresentation
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
@@ -13,12 +17,20 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.DpRect
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttTheme
 import kotlin.math.max
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -124,6 +136,98 @@ object AccentSwatchScenarios {
     }
 
     /**
+     * The 3x2 grid gives every label room to read in full at the narrowest content width.
+     *
+     * The old six-cell row measured about 48dp per cell at 320dp and allowed two lines with
+     * an ellipsis; `C-Light` was the only abbreviation in an otherwise spelled-out block. This
+     * asks Compose's own text layout whether each label overflowed, rather than inspecting
+     * the source's `maxLines`, because the question is the measured width at 320dp.
+     *
+     * It also holds the 44dp target on the whole cell, not just the 32dp swatch: the visible
+     * circle is smaller than the thing a finger has to hit.
+     */
+    val theAccentLabelsReadInFullInAGrid: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH).background(ttCanvas())) {
+                    AccentPalettePickerRow(
+                        selected = AccentPalette.Classic,
+                        onSelect = {},
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        for (palette in AccentPalette.all) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            onNodeWithTag(AccentLabelTag(palette), useUnmergedTree = true)
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            val layout = layouts.single()
+            val cell = onNodeWithTag(AccentCellTag(palette), useUnmergedTree = true).getBoundsInRoot()
+            assertEquals(
+                palette.title.length,
+                layout.getLineEnd(0, visibleEnd = true),
+                "${palette.title} is truncated at ${NARROW_CONTENT_WIDTH.value}dp " +
+                    "(visible line ends at character ${layout.getLineEnd(0, visibleEnd = true)} " +
+                    "of ${palette.title.length}, cell $cell). The grid must leave every " +
+                    "palette name in full.",
+            )
+            assertEquals(
+                1,
+                layout.lineCount,
+                "${palette.title} wraps onto ${layout.lineCount} lines at the narrowest width",
+            )
+
+            assertTrue(
+                cell.width.value >= 44f && cell.height.value >= 44f,
+                "${palette.title}'s tappable cell is ${cell.width}x${cell.height}dp, below the " +
+                    "44dp target even though its 32dp swatch clears it visually",
+            )
+        }
+    }
+
+    /**
+     * The lens still travels across the grid, including to the second row.
+     *
+     * The old layout was one row, so a horizontal lens animation was enough. Two rows add a
+     * vertical component, and `ttLensPlacement` is now fed rectangles on both; this selects a
+     * palette in the lower row and checks the pane ends up on its cell rather than partway.
+     */
+    val theLensTravelsToASecondRow: suspend ComposeUiTest.() -> Unit = {
+        var selected by mutableStateOf(AccentPalette.Classic)
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH)) {
+                    AccentPalettePickerRow(
+                        selected = selected,
+                        onSelect = { selected = it },
+                    )
+                }
+            }
+        }
+        waitForIdle()
+
+        onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue)).performClick()
+        mainClock.advanceTimeBy(2_000)
+        waitForIdle()
+
+        val cell = onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+            .getBoundsInRoot()
+        val pane = onNodeWithTag(AccentGlassTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+            .getBoundsInRoot()
+        assertTrue(
+            pane.left.value <= cell.left.value + 0.5f &&
+                pane.top.value <= cell.top.value + 0.5f &&
+                pane.right.value >= cell.right.value - 0.5f &&
+                pane.bottom.value >= cell.bottom.value - 0.5f,
+            "after selecting Navy Blue the lens pane ($pane) did not settle on its cell " +
+                "($cell). Two rows mean the lens has a vertical leg; a pane that stops on the " +
+                "first row means the placement still assumes one.",
+        )
+    }
+
+    /**
      * The difference between the swatch's top and bottom rows, as a sum of R+G+B, sampled one
      * column at the swatch's horizontal centre.
      *
@@ -142,6 +246,9 @@ object AccentSwatchScenarios {
     }
 
     private const val SAMPLE_INSET = 4f
+
+    /** The narrowest content width the appearance block is laid out for. */
+    private val NARROW_CONTENT_WIDTH = 320.dp
 
     /** Backdrop-noise headroom for the control row, which has no vertical variation at all. */
     private const val CONTROL_DELTA_BAR = 6

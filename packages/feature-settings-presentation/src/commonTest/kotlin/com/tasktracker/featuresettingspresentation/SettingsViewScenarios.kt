@@ -197,4 +197,12 @@ abstract class SettingsViewScenarios {
     @Test
     fun theMintedCodeIsShownAndCopyPutsItOnTheClipboard() =
         runComposeUiTest(block = SettingsScenarios.theMintedCodeIsShownAndCopyPutsItOnTheClipboard)
+
+    @Test
+    fun theAccentLabelsReadInFullInAGrid() =
+        runComposeUiTest(block = AccentSwatchScenarios.theAccentLabelsReadInFullInAGrid)
+
+    @Test
+    fun theLensTravelsToASecondRow() =
+        runComposeUiTest(block = AccentSwatchScenarios.theLensTravelsToASecondRow)
 }
