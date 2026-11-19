@@ -895,7 +895,75 @@ private fun ComposeUiTest.backlogShowing(
         onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
     }
 
+    /**
+     * On wide viewports (e.g. 1400dp), the backlog list container and rows are clamped
+     * to BacklogMaxContentWidth (960dp) and horizontally centered, rather than stretching infinitely.
+     */
+    val wideLayoutClampsContentWidthAndCenters: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems()
+        backlogShowing(items = items, onAddTask = {}, width = 1400.dp)
+        waitForIdle()
+
+        val screenNode = onNodeWithTag(ProjectBacklogScreenTag).fetchSemanticsNode()
+        val listNode = onNodeWithTag(ProjectBacklogListTag).fetchSemanticsNode()
+        val rowNode = onNested(WorkItemBacklogRowTag(items.first())).fetchSemanticsNode()
+
+        val maxAllowedPx = densityPixels(BacklogMaxContentWidth) + EDGE_TOLERANCE_PX
+        assertTrue(
+            listNode.size.width <= maxAllowedPx,
+            "list width should be clamped to at most $maxAllowedPx: actual=${listNode.size.width}",
+        )
+        assertTrue(
+            rowNode.size.width <= maxAllowedPx,
+            "row width should be clamped to at most $maxAllowedPx: actual=${rowNode.size.width}",
+        )
+
+        // Centred against the screen rather than the host window: the scenario asks for a
+        // 1400dp screen, which can be wider than the test host, so the host itself may be
+        // narrower than the screen under test.
+        val expectedLeft = screenNode.boundsInRoot.left +
+            (screenNode.size.width - listNode.size.width) / 2f
+        assertEquals(
+            expectedLeft,
+            listNode.boundsInRoot.left,
+            2f,
+            "list should be horizontally centered on wide viewports",
+        )
     }
+
+    /**
+     * The floating header is capped with the list, so its leading and trailing controls sit on the
+     * rows' edges rather than drifting out to the window's.
+     *
+     * Both edges are read against the list's own rectangle: the header's outer inset plus its inner
+     * padding is the list's `xxl` gutter, so a cap applied to only one of the two would show up
+     * here as a horizontal offset between the selector and the rows.
+     */
+    val wideLayoutHeaderAlignsWithListContent: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems()
+        backlogShowing(items = items, onAddTask = {}, width = 1400.dp)
+        waitForIdle()
+
+        val list = onNodeWithTag(ProjectBacklogListTag).fetchSemanticsNode().boundsInRoot
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode().boundsInRoot
+        val add = onNodeWithTag(BacklogAddTaskTag).fetchSemanticsNode().boundsInRoot
+
+        assertEquals(
+            list.left,
+            switcher.left,
+            2f,
+            "the header's leading control should share the list's left edge: " +
+                "list=$list switcher=$switcher",
+        )
+        assertEquals(
+            list.right,
+            add.right,
+            2f,
+            "the header's trailing action should share the list's right edge: " +
+                "list=$list add=$add",
+        )
+    }
+}
 
 /**
  * A project whose catalog lists the given [statuses], copied from [ViewPreviewData.seededProject]

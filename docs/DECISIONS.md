@@ -187,6 +187,27 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   overlap completely; mutate the behaviour, run both, and write down which one
   goes red. That is the only way to know a pair of tests is complementary.
 
+- **Wide layouts cap reading width at the shell's breakpoint, per module.** The
+  projects list, the backlog and the sprint list all switch at `840.dp` — the
+  value of `ShellExpandedMinimumWidth` — but each presentation module owns its
+  own constant (`ProjectsWideMinimumWidth`, `BacklogWideMinimumWidth`,
+  `SprintWideMinimumWidth`) because presentation may not import `shared-ui`.
+  Wide projects become a `LazyVerticalGrid(GridCells.Adaptive(340.dp))`; the
+  backlog and the sprint list stay one column capped at `960.dp` and centred
+  (`BacklogMaxContentWidth`, `SprintMaxContentWidth`), because their order is
+  the information and columns would destroy the scan.
+- **Cap the floating header and the list together.** The backlog header is
+  measured for the list's top inset, so the header's width cap and the list's
+  live in the same `BoxWithConstraints` and share one `Alignment.TopCenter`.
+  The header's outer `md` inset plus its inner `md` padding equals the list's
+  `xxl` gutter, which is what puts their controls on one leading edge; capping
+  only the list leaves the header on the window edge.
+- **A forced-width test must centre against the screen, not the host.**
+  `requiredWidth(1400.dp)` can exceed a phone-sized test host, and the root
+  centres the overflow, so `boundsInRoot.left` is not
+  `(windowWidth - contentWidth) / 2`. Read the screen node's own bounds and
+  compare centres.
+
 ### Product limits
 
 - **The project owns no infrastructure.** No wildcard domain, provisioning

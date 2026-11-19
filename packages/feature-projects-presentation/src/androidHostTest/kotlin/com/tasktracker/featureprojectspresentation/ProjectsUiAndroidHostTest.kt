@@ -204,6 +204,14 @@ class ProjectsUiAndroidHostTest {
     fun theNewProjectActionDoesNotCoverTheLastRowsDelete() =
         runComposeUiTest(block = ProjectsListScenarios.theNewProjectActionDoesNotCoverTheLastRowsDelete)
 
+    @Test
+    fun wideLayoutRendersEveryProjectInGrid() =
+        runComposeUiTest(block = ProjectsListScenarios.wideLayoutRendersEveryProjectInGrid)
+
+    @Test
+    fun wideLayoutDirectDeleteAsksConfirmation() =
+        runComposeUiTest(block = ProjectsListScenarios.wideLayoutDirectDeleteAsksConfirmation)
+
     /** The backlog's add action and its rows' trailing actions do not occupy the same pixels. The button used to float over them and win the touch. */
     @Test
     fun theAddActionDoesNotCoverTheLastRow() =
@@ -314,6 +322,14 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun puttingOnBoardWithoutACatalogBoardsToLegacyTodo() =
         runComposeUiTest(block = ProjectBacklogScenarios.puttingOnBoardWithoutACatalogBoardsToLegacyTodo)
+
+    @Test
+    fun wideLayoutClampsContentWidthAndCenters() =
+        runComposeUiTest(block = ProjectBacklogScenarios.wideLayoutClampsContentWidthAndCenters)
+
+    @Test
+    fun wideLayoutHeaderAlignsWithListContent() =
+        runComposeUiTest(block = ProjectBacklogScenarios.wideLayoutHeaderAlignsWithListContent)
 
     @Test
     fun showsTheKeyTitleAndPriority() = runComposeUiTest(block = WorkItemCardScenarios.showsTheKeyTitleAndPriority)
@@ -625,4 +641,9 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun theCompactSprintHeaderKeepsThePickerBelowTheActions() =
         runComposeUiTest(block = SprintListScenarios.theCompactHeaderKeepsThePickerBelowTheActions)
+
+    /** A desktop window caps the sprint header and rows and centres them. */
+    @Test
+    fun wideLayoutClampsSprintContentWidthAndCenters() =
+        runComposeUiTest(block = SprintListScenarios.wideLayoutClampsContentWidthAndCenters)
 }

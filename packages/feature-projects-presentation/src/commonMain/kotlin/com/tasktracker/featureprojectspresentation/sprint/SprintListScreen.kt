@@ -7,9 +7,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
@@ -20,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -75,14 +78,27 @@ fun SprintListScreen(
     // its selection being reconstructed when the window crosses the wide threshold.
     var section by remember { mutableStateOf(SprintSection.Active) }
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .testTag(SprintListScreenTag),
     ) {
+        // The same reading-width rule as the backlog: past the shell's expanded breakpoint the
+        // header and every section are one column, so the cap goes on the column that holds
+        // both. Below it the content keeps the window's width and the phone header arrangement.
+        val isWide = maxWidth >= SprintWideMinimumWidth
+        val contentModifier = if (isWide) {
+            Modifier
+                .widthIn(max = SprintMaxContentWidth)
+                .fillMaxWidth()
+                .fillMaxHeight()
+        } else {
+            Modifier.fillMaxSize()
+        }
+
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = contentModifier
+                .align(Alignment.TopCenter)
                 .padding(horizontal = ttSpacing.xxl)
                 .padding(top = ttSpacing.screenGutterLarge),
         ) {
@@ -223,6 +239,12 @@ const val SprintListScreenTag = "sprints.list"
 const val SprintListTag = "sprints.list.rows"
 const val SprintListNewTag = "sprints.list.new"
 const val SprintListSectionsTag = "sprints.list.sections"
+
+/** Minimum width at which the sprint list switches to wide desktop layout clamping. */
+val SprintWideMinimumWidth: Dp = 840.dp
+
+/** Maximum readable content width for the sprint header and its sections. */
+val SprintMaxContentWidth: Dp = 960.dp
 
 /**
  * The header width at which the Active/Archive picker joins the selector's row.

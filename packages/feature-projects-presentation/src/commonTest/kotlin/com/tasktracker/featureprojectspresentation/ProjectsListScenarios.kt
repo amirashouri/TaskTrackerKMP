@@ -1,5 +1,8 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
@@ -9,10 +12,10 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.SwipeDefaults
 import com.tasktracker.featureprojectsdomain.ProjectSummary
-import org.jetbrains.compose.resources.getString
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_delete
 import com.tasktracker.resources.project_remove_archive
@@ -21,7 +24,7 @@ import com.tasktracker.resources.project_remove_body_outstanding
 import com.tasktracker.resources.project_remove_title
 import com.tasktracker.resources.projects_empty_body
 import com.tasktracker.resources.projects_empty_title
-import androidx.compose.ui.geometry.Rect
+import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -297,6 +300,42 @@ object ProjectsListScenarios {
             )
         }
     }
+
+    /** On a wide screen, the grid container is rendered and every project card is displayed and clickable. */
+    val wideLayoutRendersEveryProjectInGrid: suspend ComposeUiTest.() -> Unit = {
+        val rows = rowsWith(
+            ProjectSummary(ViewPreviewData.seededProject, itemCount = 7),
+            ProjectSummary(ViewPreviewData.secondProject, itemCount = 1),
+        )
+        var opened: ProjectID? = null
+        listShowing(
+            rows = rows,
+            onOpen = { opened = it },
+            modifier = Modifier.requiredWidth(1000.dp),
+        )
+
+        onNodeWithTag(ProjectsListTag).assertIsDisplayed()
+        rows.forEach { onNodeWithTag(ProjectRowTag(it.summary)).assertIsDisplayed() }
+
+        onNodeWithTag(ProjectRowTag(rows[0].summary)).performClick()
+        assertEquals(rows[0].summary.id, opened, "clicking a project card in the grid opens it")
+    }
+
+    /** On a wide screen, clicking the direct delete button on a card triggers removal confirmation. */
+    val wideLayoutDirectDeleteAsksConfirmation: suspend ComposeUiTest.() -> Unit = {
+        val summary = ProjectSummary(ViewPreviewData.seededProject, itemCount = 7)
+        listShowing(
+            rows = rowsWith(summary, outstanding = 3),
+            modifier = Modifier.requiredWidth(1000.dp),
+        )
+
+        onNodeWithTag(ProjectRemoveTag(summary)).performClick()
+
+        onNodeWithTag(RemoveProjectConfirmationTag).assertIsDisplayed()
+        onNodeWithText(
+            getString(Res.string.project_remove_title, summary.name),
+        ).assertIsDisplayed()
+    }
 }
 
 /**
@@ -351,6 +390,7 @@ private fun ComposeUiTest.listShowing(
     onDismissRemove: () -> Unit = {},
     onOpen: (ProjectID) -> Unit = {},
     onNewProject: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     setContent {
         Themed {
@@ -365,6 +405,7 @@ private fun ComposeUiTest.listShowing(
                 onDismissNotice = {},
                 onDismissError = {},
                 onNewProject = onNewProject,
+                modifier = modifier,
             )
         }
     }

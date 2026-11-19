@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.domain.Sprint
 import kotlinx.datetime.LocalDate
 import kotlin.math.abs
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -112,6 +113,45 @@ object SprintListScenarios {
     }
 
     /**
+     * On a desktop-wide viewport the header and the sprint rows are capped together and centred.
+     *
+     * The cap is read against the list rather than the window: the list is the widest thing the
+     * section column draws, so a cap applied to the header alone or to the window without
+     * centring shows up as either an over-wide list or a list flush to one edge.
+     */
+    val wideLayoutClampsContentWidthAndCenters: suspend ComposeUiTest.() -> Unit = {
+        sprintListShowing(width = SPRINT_DESKTOP_WIDTH)
+        waitForIdle()
+
+        val screen = onNodeWithTag(SprintListScreenTag).fetchSemanticsNode()
+        val list = onNodeWithTag(SprintListTag).fetchSemanticsNode()
+        val switcher = onNodeWithTag(ProjectSwitcherTag).fetchSemanticsNode()
+
+        val maxAllowedPx = densityPixels(SprintMaxContentWidth) + EDGE_TOLERANCE_PX
+        assertTrue(
+            list.size.width <= maxAllowedPx,
+            "the sprint rows should be clamped to at most $maxAllowedPx: actual=${list.size.width}",
+        )
+
+        // Centred against the screen rather than the host window: the scenario asks for a
+        // desktop-width screen, which can be wider than the test host.
+        val expectedLeft = screen.boundsInRoot.left + (screen.size.width - list.size.width) / 2f
+        assertEquals(
+            expectedLeft,
+            list.boundsInRoot.left,
+            2f,
+            "the sprint list should be horizontally centered on wide viewports",
+        )
+        assertEquals(
+            list.boundsInRoot.left,
+            switcher.boundsInRoot.left,
+            2f,
+            "the header's leading control should share the list's left edge: " +
+                "list=${list.boundsInRoot} switcher=${switcher.boundsInRoot}",
+        )
+    }
+
+    /**
      * Half a pixel of slack for a bounds comparison.
      *
      * Layout works in integers at the host's density, but the comparison is in floating-point
@@ -125,6 +165,13 @@ private val SPRINT_COMPACT_WIDTH = 400.dp
 
 /** A header width over the screen's wide threshold. */
 private val SPRINT_WIDE_WIDTH = 900.dp
+
+/** A desktop width above the content cap, so both the clamp and the centring are observable. */
+private val SPRINT_DESKTOP_WIDTH = 1400.dp
+
+/** Converts a token width to the host's pixels, so a bounds assertion compares in one unit. */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.densityPixels(dp: Dp): Float = with(density) { dp.toPx() }
 
 /**
  * One active sprint, which is enough to keep the list out of its empty state — the scenarios
