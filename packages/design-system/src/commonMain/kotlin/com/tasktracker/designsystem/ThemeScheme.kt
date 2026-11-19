@@ -270,55 +270,30 @@ object ttFixedColours {
     val labelDark: Color = Color(0xFFFFFFFF)
 
     /**
-     * `ttLabelSecondary`: `secondaryLabel` at 60% — `(52, 52, 58)` on light and
-     * `(235, 235, 245)` on dark — rather than an opaque grey.
+     * `ttLabelSecondary`: a supporting label, composited the same way [separatorLight] is.
      *
-     * Pre-composited the same way [separatorLight] is, as an RGBA with alpha below 1, so a
-     * caller that draws it over a surface gets a colour that works on either background
-     * instead of one that only looks right on a single one. The `0x99` alpha is 0.60 of 255.
+     * ## The two appearances are not the same colour, or the same fraction
      *
-     * The 60% is what makes this token *secondary* — and it is also this token's one
-     * accessibility cost, which a caller needs before using it. Composited over its canvas
-     * it measures **3.68:1** on light and **6.36:1** on dark.
+     * Dark is UIKit's `secondaryLabel` at 60% — `(235, 235, 245)` at `0x99`, measuring
+     * **6.36:1** on the canvas. Light is body ink, `(28, 28, 30)`, at **78%** (`0xC7`):
+     * **8.31:1** on the canvas and **4.74:1** over the rendered glass fill.
      *
-     * The dark value is the platform's own pale grey; the light value is eight channels
-     * darker than the platform's `(60, 60, 67)`, and the glass surface below is why. The
-     * rest of the asymmetry is inherent to the colour pair, not a defect in the port:
-     * `secondaryLabel` is a *dark* grey at 60% on light and a *pale* grey at 60% on dark,
-     * and 60% of white text on black is a much lighter result than 60% of black text on
-     * white. Any statement about this token has to be per-appearance, and an averaged
-     * number would be a number for a pairing that never occurs.
+     * Light used to be `(52, 52, 58)` at 60%, the platform's `secondaryLabel` darkened by
+     * eight channels. That measured 3.68:1 on the canvas, but only **2.55:1** over the
+     * glass the captions actually sit on — the token carries 11–13sp supporting text and
+     * eleven project screens put it over a glass surface. Raising the alpha alone was not
+     * enough: at that RGB it needed about 95% to clear 4.5:1 over the glass, which is a
+     * secondary label in name only. Body ink at 78% clears both surfaces and still sits
+     * visibly below [labelLight]'s 21:1 on the canvas, which is the hierarchy this token
+     * exists to express.
      *
-     * So, per appearance:
-     *
-     *  - **light**: correct for footnotes, captions and other de-emphasised supporting
-     *    text at large sizes. Not correct for body copy — use [labelLight].
-     *  - **dark**: clears 4.5:1 against the canvas. Still not *preferred* for body copy,
-     *    because a caller that reads this token is reaching for de-emphasis; the fact that
-     *    dark happens to afford it is not a reason to use it as the default ink.
-     *
-     * One more surface, and it is the one that decided the light RGB: this token is
-     * **worse over glass than over the canvas**. An untinted glass surface composites to
-     * about `#C8D0DB` a quarter of the way down in light — darker than the canvas and
-     * therefore closer to the token's own grey. Eleven files in
-     * `:packages:feature-projects-presentation` use this token and all eleven also build
-     * glass surfaces, so this is not hypothetical. The platform grey measured **2.88:1**
-     * over that rendered fill, below even the 3:1 large-text bar, so the light RGB was
-     * darkened to `(52, 52, 58)`: the same caption now measures **3.09:1** over the glass
-     * fill and 3.68:1 over the bare canvas, on both rasterisers
-     * (`GlassSurfacePixelTest`). A caption on a glass card in light appearance is still
-     * the worst case in the app for this token, but it is now reachable at the numbers
-     * above.
-     *
-     * `PinnedAppearanceTest` asserts this token stays at or above 3:1 against the canvas in
-     * both appearances. It deliberately does **not** assert the exact ratio: it is the one
-     * place in this file where the guidance is per-appearance, so a single threshold is
-     * what the invariant actually is. The two figures above were measured rather than
-     * quoted; the earlier revision of this comment claimed 3.64:1 on dark, which was
-     * wrong by a factor of 1.75, and nothing caught it because the test only ever checked
-     * `>= 3f`.
+     * The asymmetry is inherent to the colour pair rather than a defect: `secondaryLabel`
+     * is a dark grey on light and a pale grey on dark, and 60% of white on black is much
+     * lighter than 60% of black on white. Any statement about this token has to be
+     * per-appearance. `GlassSurfacePixelTest` holds the glass reading and
+     * `PinnedAppearanceTest` holds the canvas pairing at 4.5:1.
      */
-    val labelSecondaryLight: Color = Color(0x9934343A)
+    val labelSecondaryLight: Color = Color(0xC71C1C1E)
     val labelSecondaryDark: Color = Color(0x99EBEBF5)
 
     /**

@@ -62,7 +62,7 @@ import kotlin.test.assertTrue
  *
  * | | before, rendered | rendered, JVM | rendered, iOS |
  * | --- | --- | --- | --- |
- * | `ttLabelSecondary` on the glass fill, light | 2.88:1 | **3.09:1** | **3.09:1** |
+ * | `ttLabelSecondary` on the glass fill, light | 2.55:1 | **4.74:1** | to re-measure |
  * | the same caption, dark | 6.01:1 | **6.01:1** | **6.01:1** |
  * | the hairline against its own fill, light | 1.07:1 | **1.65:1** | **1.65:1** |
  * | the hairline against its own fill, dark | 1.54:1 | **1.54:1** | **1.54:1** |
@@ -124,9 +124,13 @@ class GlassSurfacePixelTest {
      * The sample is a quarter of the way down the card rather than its centre, because the
      * fill ramps from its strongest tint at the top to `FILL_FADE` toward the canvas at the
      * bottom. A caption sits near the top, so the top is the case that has to hold.
+     *
+     * The same token over the bare canvas is the control: it shows how much contrast the
+     * glass costs, which is the reason the light token is body ink at 78% rather than the
+     * platform's secondary grey.
      */
     @Test
-    fun `a caption on the rendered glass fill still clears the large-text bar`() {
+    fun `a caption on the rendered glass fill clears the body-text bar`() {
         assumeHostRasterisesText()
         val reading = requireNotNull(measureGlassFill(ThemeScheme.Light)) { NO_READING }
         val caption = over(reading.secondary, reading.secondaryAlpha, reading.fill)
@@ -138,18 +142,13 @@ class GlassSurfacePixelTest {
         )
 
         assertTrue(
-            ratio >= LARGE_TEXT_MINIMUM,
+            ratio >= TEXT_MINIMUM,
             "light appearance: a ttLabelSecondary caption composites to ${caption.hex()} over " +
                 "the *rendered* glass fill ${reading.fill.hex()}, which is ${ratio.ratioText()}:1" +
-                " - below the ${LARGE_TEXT_MINIMUM}:1 large-text bar, and worse than the " +
-                "${reading.secondaryOnCanvas.ratioText()}:1 the same token manages on the bare " +
-                "canvas.\nGlass is *costing* this caption contrast rather than adding " +
-                "any: the accent-tinted fill darkens toward the token's own grey, so putting a " +
-                "surface behind a secondary label makes it less legible, not more. The fill " +
-                "cannot be lightened without changing ttGlass.FILL_ALPHA for every card in the " +
-                "app, so the repair was the caption token: labelSecondaryLight was darkened off " +
-                "the platform grey to (52, 52, 58) at the same 60% alpha, which renders 3.09:1 " +
-                "here. If this fails, that token has been lightened back toward the platform grey.",
+                " - below the ${TEXT_MINIMUM}:1 body-text bar. The token carries 11-13sp " +
+                "captions, so this is not a large-text case. If it fails, labelSecondaryLight " +
+                "has drifted back toward the platform's 60% grey: at 60% it measured 2.55:1 " +
+                "over this fill, and the current body-ink value at 78% measures 4.74:1.",
         )
     }
 
@@ -800,7 +799,6 @@ val centerColor = Color(center.red, center.green, center.blue, 1f)
 
     private companion object {
         const val TEXT_MINIMUM = 4.5
-        const val LARGE_TEXT_MINIMUM = 2.5
 
         /**
          * How much lighter than its own fill the hairline has to be to count as a lit edge.
