@@ -24,6 +24,8 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.designsystem.TTGlassButtonStyle
+import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBodyLabel
@@ -239,6 +241,7 @@ fun SprintDetailScreen(
                                 ),
                                 onClick = onToggleLock,
                                 enabled = !isBusy,
+                                style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                                 modifier = Modifier.testTag(SprintDetailLockTag),
                             )
                         }
@@ -248,6 +251,7 @@ fun SprintDetailScreen(
                                     label = stringResource(Res.string.sprint_remove),
                                     onClick = { pendingAction = SprintStatus.Scheduled },
                                     enabled = !isBusy && !detail.sprint.isLocked,
+                                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                                     modifier = Modifier.testTag(SprintDetailRemoveTag),
                                 )
                             }
@@ -256,6 +260,7 @@ fun SprintDetailScreen(
                                     label = stringResource(Res.string.sprint_finish),
                                     onClick = { pendingAction = SprintStatus.InProgress },
                                     enabled = !isBusy,
+                                    style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                                     modifier = Modifier.testTag(SprintDetailFinishTag),
                                 )
                             }
@@ -265,6 +270,7 @@ fun SprintDetailScreen(
                                         label = stringResource(Res.string.sprint_archive),
                                         onClick = { pendingAction = SprintStatus.Finished },
                                         enabled = !isBusy,
+                                        style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                                         modifier = Modifier.testTag(SprintDetailArchiveTag),
                                     )
                                 }
@@ -278,6 +284,7 @@ fun SprintDetailScreen(
                                 label = stringResource(Res.string.sprint_view_summary),
                                 onClick = onViewSummary,
                                 enabled = !isBusy,
+                                style = TTGlassButtonStyle(tint = ttAccent(), prominent = true),
                                 modifier = Modifier.testTag(SprintDetailSummaryTag),
                             )
                         }
