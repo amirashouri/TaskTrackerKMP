@@ -111,17 +111,28 @@ expect fun ttBodyLabel(): Color
  */
 val ttOnAccent: Color = Color.White
 
-/** Green, the reading state. */
-val ttStatusActive: Color = Color(0xFF43A047)
+/**
+ * Green, the reading state, per appearance.
+ *
+ * These four were plain values, so the same colour had to work on both canvases and the
+ * light appearance lost: amber measured 1.94:1 and grey 2.68:1 on white, where the settings
+ * row drew a 15sp status name in them. The pair now resolves like [ttError], and the values
+ * are in [ttFixedColours] so a test can read them without composing.
+ */
+@Composable
+fun ttStatusActive(): Color = ttFixedColours.statusActive(ttIsDarkTheme())
 
-/** Orange, the interrupted state. */
-val ttStatusBeRightBack: Color = Color(0xFFFFA726)
+/** Orange, the interrupted state, per appearance. See [ttStatusActive]. */
+@Composable
+fun ttStatusBeRightBack(): Color = ttFixedColours.statusBeRightBack(ttIsDarkTheme())
 
-/** Red, the unavailable state. */
-val ttStatusBusy: Color = Color(0xFFD32F2F)
+/** Red, the unavailable state, per appearance. See [ttStatusActive]. */
+@Composable
+fun ttStatusBusy(): Color = ttFixedColours.statusBusy(ttIsDarkTheme())
 
-/** Grey, the distant state. */
-val ttStatusAway: Color = Color(0xFF9E9E9E)
+/** Grey, the distant state, per appearance. See [ttStatusActive]. */
+@Composable
+fun ttStatusAway(): Color = ttFixedColours.statusAway(ttIsDarkTheme())
 
 /**
  * The stroke width that goes with [ttSeparator] — and with any other outline drawn between a

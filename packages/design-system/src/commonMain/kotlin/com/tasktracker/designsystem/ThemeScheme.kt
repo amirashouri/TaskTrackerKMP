@@ -379,6 +379,40 @@ object ttFixedColours {
     /** [errorLight] or [errorDark], for the appearance in force. */
     fun error(dark: Boolean): Color = if (dark) errorDark else errorLight
 
+    /**
+     * The four presence colours, per appearance.
+     *
+     * The first set was fixed Material 500/600 values. Measured on the light canvas, only the
+     * red cleared the text bar: amber was 1.94:1, grey 2.68:1 and green 3.30:1. The settings
+     * row painted a status *name* in these, so three of four were below 4.5:1 at 15sp.
+     *
+     * These pairs clear 4.5:1 on their own canvas and 3:1 on the card surface, so a status
+     * may be used as a dot or as a label without a second token. The dark values are the
+     * lighter Material 300/400 steps; the light ones are the 700/800 steps, which is the
+     * direction both appearances need.
+     */
+    val statusActiveLight: Color = Color(0xFF2E7D32)
+    val statusActiveDark: Color = Color(0xFF66BB6A)
+    val statusBeRightBackLight: Color = Color(0xFFA35F00)
+    val statusBeRightBackDark: Color = Color(0xFFFFB74D)
+    val statusBusyLight: Color = Color(0xFFC62828)
+    val statusBusyDark: Color = Color(0xFFEF5350)
+    val statusAwayLight: Color = Color(0xFF6B6B70)
+    val statusAwayDark: Color = Color(0xFFBDBDBD)
+
+    /** [statusActiveLight] or [statusActiveDark], for the appearance in force. */
+    fun statusActive(dark: Boolean): Color = if (dark) statusActiveDark else statusActiveLight
+
+    /** [statusBeRightBackLight] or [statusBeRightBackDark]. */
+    fun statusBeRightBack(dark: Boolean): Color =
+        if (dark) statusBeRightBackDark else statusBeRightBackLight
+
+    /** [statusBusyLight] or [statusBusyDark]. */
+    fun statusBusy(dark: Boolean): Color = if (dark) statusBusyDark else statusBusyLight
+
+    /** [statusAwayLight] or [statusAwayDark]. */
+    fun statusAway(dark: Boolean): Color = if (dark) statusAwayDark else statusAwayLight
+
     /** [labelLight] or [labelDark], for the appearance in force. */
     fun label(dark: Boolean): Color = if (dark) labelDark else labelLight
 
