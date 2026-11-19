@@ -100,8 +100,12 @@ abstract class SettingsViewScenarios {
      */
 
     @Test
-    fun theSelectedSchemeOptionIsWashedWithAccent() =
-        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionIsWashedWithAccent)
+    fun theSelectedSchemeOptionCarriesTheLens() =
+        runComposeUiTest(block = ThemeOptionScenarios.theSelectedSchemeOptionCarriesTheLens)
+
+    @Test
+    fun theDropdownPaneCoversThePageBehindIt() =
+        runComposeUiTest(block = ThemeOptionScenarios.theDropdownPaneCoversThePageBehindIt)
 
     @Test
     fun theLongAccentCaptionWrapsInsteadOfClipping() =

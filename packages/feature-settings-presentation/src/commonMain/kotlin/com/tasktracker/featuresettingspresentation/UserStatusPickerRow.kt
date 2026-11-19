@@ -21,7 +21,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -30,7 +29,6 @@ import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
-import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSettingsIcons
@@ -39,6 +37,7 @@ import com.tasktracker.designsystem.ttStatusActive
 import com.tasktracker.designsystem.ttStatusAway
 import com.tasktracker.designsystem.ttStatusBeRightBack
 import com.tasktracker.designsystem.ttStatusBusy
+import com.tasktracker.designsystem.ttSelectionLabelInk
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featuresettingsdomain.UserStatus
@@ -102,7 +101,7 @@ internal fun UserStatusPickerRow(
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
-                SettingsDropdownColumn {
+                SettingsDropdownColumn(selection = selected) {
                     UserStatus.all.forEach { status ->
                         UserStatusOption(
                             status = status,
@@ -131,12 +130,12 @@ private fun UserStatusOption(
         UserStatus.BeRightBack -> ttStatusBeRightBack
         UserStatus.Busy -> ttStatusBusy
     }
-    val isDarkTheme = ttIsDarkTheme()
-    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    // Same ink rule as the theme options: the popup is a backed glass pane in both themes, so
+    // the label is [ttSelectionLabelInk] — the token derived for a label under a selection wash.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .dropdownOptionSurface(isSelected = isSelected)
+            .dropdownOption(key = status)
             .selectable(selected = isSelected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = ttSpacing.xl, vertical = ttSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
@@ -151,7 +150,7 @@ private fun UserStatusOption(
         ttText(
             text = status.displayName,
             style = ttTypography.body,
-            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            color = ttSelectionLabelInk(selected = isSelected),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
         )

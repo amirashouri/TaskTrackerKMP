@@ -136,7 +136,10 @@ internal fun ResetCodeGenerator(
                         onDismissRequest = { expanded = false },
                         properties = PopupProperties(focusable = true),
                     ) {
-                        SettingsDropdownColumn(width = MemberDropdownWidth) {
+                        SettingsDropdownColumn(
+                            selection = panel.selectedID,
+                            width = MemberDropdownWidth,
+                        ) {
                             Column(
                                 modifier = Modifier
                                     .heightIn(max = MemberDropdownMaxHeight)
@@ -328,7 +331,7 @@ private fun ResetMemberOption(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .dropdownOptionSurface(isSelected = isSelected)
+            .dropdownOption(key = candidate.id)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,

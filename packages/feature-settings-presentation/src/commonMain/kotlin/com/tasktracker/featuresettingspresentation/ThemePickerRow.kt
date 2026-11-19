@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -29,10 +28,10 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
-import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSelectionLabelInk
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
@@ -99,7 +98,7 @@ internal fun ThemePickerRow(
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
-                SettingsDropdownColumn {
+                SettingsDropdownColumn(selection = selected) {
                     ThemeScheme.all.forEach { scheme ->
                         ThemePickerOption(
                             scheme = scheme,
@@ -119,10 +118,10 @@ internal fun ThemePickerRow(
 /**
  * One theme scheme, as a selectable option row in the theme dropdown.
  *
- * `internal`, not `private`, so the pixel test can compose one option in the main root
- * instead of opening the `Popup` — a popup is a second composition root, and mapping its
- * coordinates onto a captured frame is guesswork (`MonthArrowRenderTest` documents the same
- * rule for `TTDayGrid`).
+ * `internal`, not `private`, so the scenarios can compose the options inside
+ * [SettingsDropdownColumn] in the main root instead of opening the `Popup` — a popup is a
+ * second composition root, and mapping its coordinates onto a captured frame is guesswork
+ * (`MonthArrowRenderTest` documents the same rule for `TTDayGrid`).
  */
 @Composable
 internal fun ThemePickerOption(
@@ -130,12 +129,15 @@ internal fun ThemePickerOption(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val isDarkTheme = ttIsDarkTheme()
-    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    // [ttSelectionLabelInk], not a hand-picked white or accent: this label sits on the same kind
+    // of backdrop as the tab bar's — a glass pane with a selection wash under the marked row —
+    // and that token is the design system's arithmetic for exactly that backdrop, on both
+    // rasterisers. It used to be white in the light theme, where the panel had no backing and
+    // composited to a pale accent wash over the page; white on that measured about 2:1.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .dropdownOptionSurface(isSelected = isSelected)
+            .dropdownOption(key = scheme)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
@@ -149,7 +151,7 @@ internal fun ThemePickerOption(
         ttText(
             text = scheme.title,
             style = ttTypography.body,
-            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            color = ttSelectionLabelInk(selected = isSelected),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
         )

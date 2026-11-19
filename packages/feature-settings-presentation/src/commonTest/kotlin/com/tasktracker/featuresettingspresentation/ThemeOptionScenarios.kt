@@ -2,12 +2,18 @@ package com.tasktracker.featuresettingspresentation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -18,8 +24,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import com.tasktracker.designsystem.AccentPalette
@@ -30,94 +36,106 @@ import com.tasktracker.featuresettingsdomain.ConnectivitySummary
 import com.tasktracker.featuresettingsdomain.SyncActivity
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.test.assertTrue
 
 /**
- * The theme dropdown's selection wash and the accent caption, as scenarios.
+ * The theme dropdown's pane, its lens, and the accent caption, as scenarios.
  *
- * ## Why the wash is measured and not read off the modifier chain
+ * ## Where the dropdown's marking lives
  *
- * "The selected option carries an accent wash at [com.tasktracker.designsystem.ttGlass.SELECTION_WASH_ALPHA]"
- * is spelled in the code, but spelling is not drawing: the wash is a colour-and-alpha change on a row the test
- * cannot see through semantics, and a source-level assertion could not tell it apart from one
- * the compositor dropped. This is the case the repo's pixel rule exists for — a fill whose
- * absence reads as a defect (`rendered-ui-measurement`). The wash lives on a `Popup` in the
- * real screen, though, and a popup is a second composition root; mapping its coordinates onto a
- * captured frame is exactly the guesswork `MonthArrowRenderTest` warns about. So the scenario
- * does what that test does for `TTDayGrid`: it composes the extracted [ThemePickerOption] in
- * the *main* root, where bounds and frame share one coordinate space, and reads the wash there.
+ * The pane draws one glass lens under the selected option and springs it to the next — the same
+ * `ttLensPlacement`/`ttGlassLens` the navigation uses — so the marking is a thing with bounds of
+ * its own, not a fill on a row. That is what these scenarios assert, and it is why the old
+ * ancestor of this file, which measured an accent wash along each option's top edge, is gone
+ * with the wash: there is no per-row paint left to measure.
  *
- * ## Two rows, one assertion each, both measured against the known backdrop
- *
- * The scenario composes over an opaque [OptionBackdrop], so "painted" is a distance from one
- * known colour rather than from an expectation. Sampling only the top edge keeps the title ink
- * out of the measurement: in the dark theme the selected title is *also* accent coloured, so a
- * whole-row sample would pass a rowless-wash option that still showed an accent title. The top
- * six pixels of a 48dp-tall row contain no text — and none of the rounded corner, which is why
- * the bar for "painted" sits at 400 rather than at the strip's full width.
- *
- * The unselected assertion is the one that holds the removal: the option used to carry a
- * 1/2dp capsule border, and a hairline back on an unselected row is painted pixels along the
- * same edge, so it crosses the ≤16 bar the backdrop itself sits far under.
+ * The scenarios compose the extracted pieces in the *main* root rather than opening the real
+ * `Popup`. A popup is a second composition root, and mapping its coordinates onto a captured
+ * frame is guesswork — `MonthArrowRenderTest` documents the same rule for `TTDayGrid`. The
+ * backing scenario still reads pixels, over a deliberately hostile page (see
+ * [theDropdownPaneCoversThePageBehindIt]); the lens scenario needs only bounds, so it runs on
+ * every host, not only where a frame can be read back.
  */
 @OptIn(ExperimentalTestApi::class)
 object ThemeOptionScenarios {
 
-    /** The selected theme option is washed in accent; the others paint nothing at all. */
-    val theSelectedSchemeOptionIsWashedWithAccent: suspend ComposeUiTest.() -> Unit = {
-        // A real skip, not a return: this test measures pixels, and a host that measured
-        // nothing must not be recorded as agreeing.
-        assumeHostRasterisesText()
+    /**
+     * The selected theme option carries the pane's lens, and the lens travels on selection.
+     *
+     * This is the navigation's rule, in a popup. The options used to wash themselves — each row
+     * fading an accent fill in and out under its own text — and the pane now draws one glass lens
+     * under whichever row is selected and springs it to the next, the same `ttLensPlacement` and
+     * `ttGlassLens` the sidebar, rail and tab bar use.
+     *
+     * Asserted as geometry rather than as paint. The lens is a sibling of the rows, not a border
+     * on one, so comparing its bounds with the row's is what says it is marking the row the
+     * picker calls selected; a pixel sample of the row's own strip would have measured the lens
+     * wherever it happened to be parked. The first comparison happens before any tap, so a lens
+     * that never moves and a lens born on the wrong row stay different failures.
+     *
+     * `TabLensContrastTest` already holds the wash and rim *ink* on both rasterisers, which is
+     * why this scenario measures placement only — and can therefore run on every host rather
+     * than only where a frame can be read back.
+     */
+    val theSelectedSchemeOptionCarriesTheLens: suspend ComposeUiTest.() -> Unit = {
         setContent {
-                ttTheme(ThemeScheme.Dark) {
-                    // Opaque paper, so the wash is read against a known backdrop instead of
-                    // whatever the transparent area of a captured frame shows through to.
-                    Box(modifier = Modifier.fillMaxSize().background(OptionBackdrop)) {
-                        Column(modifier = Modifier.width(216.dp)) {
+            ttTheme(ThemeScheme.Dark) {
+                var selected by remember { mutableStateOf(ThemeScheme.System) }
+                Box(modifier = Modifier.fillMaxSize().background(OptionBackdrop)) {
+                    SettingsDropdownColumn(selection = selected) {
+                        ThemeScheme.all.forEach { scheme ->
                             ThemePickerOption(
-                                scheme = ThemeScheme.System,
-                                isSelected = true,
-                                onClick = {},
-                            )
-                            ThemePickerOption(
-                                scheme = ThemeScheme.Light,
-                                isSelected = false,
-                                onClick = {},
+                                scheme = scheme,
+                                isSelected = scheme == selected,
+                                onClick = { selected = scheme },
                             )
                         }
                     }
                 }
             }
-            waitForIdle()
+        }
+        waitForIdle()
 
-            val frame = onRoot().captureToImage().toPixelMap()
-            val root = onRoot().getBoundsInRoot()
-            val scale = frame.width.toFloat() / max(root.right.value, 1f)
-            val selected = onNodeWithTag(ThemeOptionTag(ThemeScheme.System)).getBoundsInRoot()
-            val unselected = onNodeWithTag(ThemeOptionTag(ThemeScheme.Light)).getBoundsInRoot()
+        assertLensMarks(what = "before anything is tapped", row = ThemeScheme.System)
 
-            val selectedPainted = paintedPixelsAlongTopEdge(frame, selected, scale, insetRows = 0)
-            // The rows are flush, so the selected row's wash edge antialiases a row or two into
-            // the next row's bounds. The unselected scan starts two rows inside its own edge so
-            // that bleed is not read as paint on the row below it.
-            val unselectedPainted = paintedPixelsAlongTopEdge(frame, unselected, scale, insetRows = 2)
+        onNodeWithTag(ThemeOptionTag(ThemeScheme.Dark)).performClick()
+        waitForIdle()
 
-            assertTrue(
-                selectedPainted >= 400,
-                "the selected theme option painted only $selectedPainted pixels of its top strip " +
-                    "against the $OptionBackdrop backdrop. A washless row is indistinguishable " +
-                    "from the glass, which is exactly the defect the ring used to prevent and " +
-                    "the accent title alone does not prevent — expected the accent-at-" +
-                    "${(ttGlass.SELECTION_WASH_ALPHA * 100).toInt()}% wash across a 216px row minus " +
-                    "its rounded corners (roughly 1000 pixels), saw $selectedPainted",
-            )
-            assertTrue(
-                unselectedPainted <= 16,
-                "the unselected theme option painted $unselectedPainted pixels of its top strip " +
-                    "against the $OptionBackdrop backdrop, but it has no wash and no border — " +
-                    "anything above backdrop noise is the capsule border creeping back",
-            )
+        val travelled = onNodeWithTag(SettingsDropdownLensTag).getBoundsInRoot()
+        val landing = onNodeWithTag(ThemeOptionTag(ThemeScheme.System)).getBoundsInRoot()
+        assertTrue(
+            travelled.top.value > landing.top.value,
+            "after choosing Dark the lens is at y=${travelled.top.value}dp having started at " +
+                "y=${landing.top.value}dp — it did not travel down the pane. Dark is the last " +
+                "option, so the lens should have passed Light on its way",
+        )
+        assertLensMarks(what = "after choosing Dark", row = ThemeScheme.Dark)
+    }
+
+    /**
+     * Asserts the pane's lens is marking an option: the same rectangle to within a point.
+     *
+     * Four edges, not a centre or a top edge — a lens that is right about where a row starts and
+     * wrong about how tall it is is still a lens bigger than the thing it marks.
+     */
+    private fun ComposeUiTest.assertLensMarks(what: String, row: ThemeScheme) {
+        val lens = onNodeWithTag(SettingsDropdownLensTag).getBoundsInRoot()
+        val option = onNodeWithTag(ThemeOptionTag(row)).getBoundsInRoot()
+        val within = 1f
+        assertTrue(
+            abs(lens.left.value - option.left.value) <= within &&
+                abs(lens.top.value - option.top.value) <= within &&
+                abs(lens.right.value - option.right.value) <= within &&
+                abs(lens.bottom.value - option.bottom.value) <= within,
+            "$what the lens spans ${lens.left.value}..${lens.right.value}dp horizontally and " +
+                "${lens.top.value}..${lens.bottom.value}dp vertically, but the ${row.title} " +
+                "option spans ${option.left.value}..${option.right.value}dp and " +
+                "${option.top.value}..${option.bottom.value}dp. The lens is placed from the rows' " +
+                "measured bounds, so a mismatch means it is marking the wrong row or is still in " +
+                "flight",
+        )
     }
 
     /**
@@ -178,56 +196,115 @@ object ThemeOptionScenarios {
         )
     }
 
-    // --- measurement ------------------------------------------------------------------------------
-
     /**
-     * How many pixels in a strip just inside the row's top edge differ from [OptionBackdrop].
+     * The dropdown is a pane, not a window: the page behind it does not read through its options.
      *
-     * The strip is [STRIP_ROWS] rows deep: deep enough for the wash plus the clip's own
-     * antialiasing at any host density, and shallow enough that text never reaches it.
-     * [insetRows] rows are skipped at the top so a flush neighbour's edge antialiasing is not
-     * counted — see the caller.
+     * This is the light theme's version of a defect the wash scenario above cannot see. The popup
+     * used to be unbacked glass, so its fill was the accent ramp at `THICK`'s alpha over whatever
+     * it happened to cover — a pale wash with *white* option labels on it, which left the options
+     * at roughly 2:1 and reading as shapes rather than as words. The fix was a backing surface
+     * (`DROPDOWN_BASE_ALPHA`) and the label token; this is the assertion that the backing is there.
+     *
+     * The measurement is a *spread* along one scanline, not a colour against a token. The pane is
+     * composed over a hard black-and-white striped backdrop; a pane that paints its own surface
+     * compresses those stripes to a few levels, and a pane that lets the page through reproduces
+     * them at roughly their own contrast. Checking the pane's fill against the surface token
+     * instead would have to re-derive the glass ramp — thickness, intensity, the white wash over a
+     * base — and would fail on a host whose rasteriser composites differently rather than on a
+     * regression. How much of the backdrop a pane lets through is a property of the pane alone.
+     *
+     * The scanline is inside the *unselected* row and inset from the pane's edges: the selected
+     * row's wash would add its own vertical variation, and the rim's hairline and the rounded
+     * corners live at the borders.
      */
-    private fun paintedPixelsAlongTopEdge(
-        frame: PixelMap,
-        bounds: DpRect,
-        scale: Float,
-        insetRows: Int,
-    ): Int {
-        val left = (bounds.left.value * scale).toInt().coerceAtLeast(0)
-        val right = (bounds.right.value * scale).toInt().coerceAtMost(frame.width - 1)
-        val top = (bounds.top.value * scale).toInt().coerceAtLeast(0)
-        val strip = (top + insetRows).coerceAtMost(frame.height - 1)
-        val bottom = (strip + STRIP_ROWS).coerceAtMost(frame.height - 1)
-        var count = 0
-        for (y in strip..bottom) {
-            for (x in left..right) {
-                if (channelDistance(frame[x, y], OptionBackdrop) > PAINTED_BAR) count++
+    val theDropdownPaneCoversThePageBehindIt: suspend ComposeUiTest.() -> Unit = {
+        assumeHostRasterisesText()
+        setContent {
+            ttTheme(ThemeScheme.Light) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawBehind {
+                            val bar = StripeBar.toPx()
+                            var x = 0f
+                            var painted = Color.White
+                            while (x < size.width) {
+                                drawRect(
+                                    color = painted,
+                                    topLeft = Offset(x, 0f),
+                                    size = Size(bar, size.height),
+                                )
+                                painted = if (painted == Color.White) Color.Black else Color.White
+                                x += bar
+                            }
+                        },
+                ) {
+                    SettingsDropdownColumn(selection = ThemeScheme.Dark) {
+                        ThemeScheme.all.forEach { scheme ->
+                            ThemePickerOption(
+                                scheme = scheme,
+                                isSelected = scheme == ThemeScheme.Dark,
+                                onClick = {},
+                            )
+                        }
+                    }
+                }
             }
         }
-        return count
-    }
+        waitForIdle()
 
-    /** The known backdrop the rows are composed over, so "painted" is one distance from it. */
-    private val OptionBackdrop = Color(0xFF1B1B1F)
+        val frame = onRoot().captureToImage().toPixelMap()
+        val root = onRoot().getBoundsInRoot()
+        val scale = frame.width.toFloat() / max(root.right.value, 1f)
+        // The middle option, which is not the selected one, so no wash crosses the scanline, and
+        // far enough from the pane's rounded corners that the borders play no part.
+        val row = onNodeWithTag(ThemeOptionTag(ThemeScheme.Light)).getBoundsInRoot()
+        val left = (row.left.value * scale).toInt() + PaneInsetPixels
+        val right = (row.right.value * scale).toInt() - PaneInsetPixels
+        // A few dp below the row's top edge, inside the strip no glyph reaches: a scanline through
+        // the row's middle would measure the option's own text, not the pane under it.
+        val y = ((row.top.value + ScanlineInset.value) * scale).toInt()
 
-    /**
-     * Distance from the backdrop above which a pixel counts as painted, measured rather than
-     * guessed: at [ttGlass.SELECTION_WASH_ALPHA] over 0xFF1B1B1F the *dimmest* palette's dark
-     * accent — the default Classic, 0xFF5F6873 — composites to a distance of 21, and the
-     * palette sweep runs 21…47. Backdrop pixels are exactly 0, so 12 sits between the two
-     * with margin on both sides.
-     */
-    private const val PAINTED_BAR = 12
+        var lightest = 0f
+        var darkest = 1f
+        for (x in left..right) {
+            val luminance = frame[x, y].red
+            lightest = max(lightest, luminance)
+            darkest = min(darkest, luminance)
+        }
+        val spread = ((lightest - darkest) * 255f).roundToInt()
 
-    private const val STRIP_ROWS = 6
-
-    private fun channelDistance(a: Color, b: Color): Int {
-        fun byte(v: Float) = (v * 255f).toInt()
-        return maxOf(
-            abs(byte(a.red) - byte(b.red)),
-            abs(byte(a.green) - byte(b.green)),
-            abs(byte(a.blue) - byte(b.blue)),
+        assertTrue(
+            spread <= COVERED_BAR,
+            "the red channel across the option row spans $spread of 255 under a black-and-white " +
+                "striped page, so the stripes are reading through the dropdown. A pane backed " +
+                "with its own surface lets about 6% of the page through, while an unbacked one " +
+                "reproduces most of the 255 — the light theme's translucent-popup defect: pale " +
+                "glass with white labels on it, legible as shapes rather than as words",
         )
     }
+
+    // --- measurement ------------------------------------------------------------------------------
+
+    /** The known backdrop the pane is composed over, so the page behind it is one known colour. */
+    private val OptionBackdrop = Color(0xFF1B1B1F)
+
+    /** How wide one stripe of the forensic backdrop is, and the pane's edge for a scanline. */
+    private val StripeBar = 8.dp
+
+    private const val PaneInsetPixels = 16
+
+    /** How far below an option row's top edge the pane's scanline is read. */
+    private val ScanlineInset = 3.dp
+
+    /**
+     * Spread across a scanline above which the pane is letting the page through.
+     *
+     * Measured rather than guessed, by running this scenario with the bar at 0. The backed pane
+     * measures 15 of 255 on a black-to-white stripe pair — the 6% `DROPDOWN_BASE_ALPHA` lets
+     * through — and the same pane with its backing removed measures 89. 40 sits above the first
+     * with room for a rasteriser's dither and far below the second.
+     */
+    private const val COVERED_BAR = 40
+
 }

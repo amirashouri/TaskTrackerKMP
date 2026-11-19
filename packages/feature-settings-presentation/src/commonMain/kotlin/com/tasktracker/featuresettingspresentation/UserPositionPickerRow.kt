@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,11 +26,11 @@ import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
-import com.tasktracker.designsystem.ttIsDarkTheme
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttSelectionLabelInk
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featuresettingsdomain.UserPosition
@@ -92,7 +91,7 @@ internal fun UserPositionPickerRow(
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
-                SettingsDropdownColumn {
+                SettingsDropdownColumn(selection = selected) {
                     UserPosition.all.forEach { position ->
                         UserPositionOption(
                             position = position,
@@ -115,12 +114,12 @@ private fun UserPositionOption(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
-    val isDarkTheme = ttIsDarkTheme()
-    val optionLabel = if (isDarkTheme) ttLabel() else Color.White
+    // Same ink rule as the theme options: the popup is a backed glass pane in both themes, so
+    // the label is [ttSelectionLabelInk] — the token derived for a label under a selection wash.
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .dropdownOptionSurface(isSelected = isSelected)
+            .dropdownOption(key = position)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
@@ -133,7 +132,7 @@ private fun UserPositionOption(
         ttText(
             text = position.displayName,
             style = ttTypography.body,
-            color = if (isSelected && isDarkTheme) ttAccent() else optionLabel,
+            color = ttSelectionLabelInk(selected = isSelected),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
         )
