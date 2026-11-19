@@ -1,8 +1,11 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,15 +22,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
+import com.tasktracker.designsystem.TTStoryPoints
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSeparator
+import com.tasktracker.designsystem.ttSeparatorWidth
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -176,11 +183,9 @@ private fun SprintPickerRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        ttText(
-            text = statusLabel(item.status),
-            style = ttTypography.caption,
-            color = ttLabelSecondary(),
-        )
+        PriorityBadge(priority = item.priority)
+        StoryPointsPill(points = item.storyPoints)
+        WorkItemStatusBadge(status = item.status)
         if (isSelected) {
             ttText(
                 text = "✓",
@@ -200,3 +205,24 @@ const val SprintPickerCancelTag = "sprints.picker.cancel"
 fun SprintPickerRowTag(item: WorkItem): String = "sprints.picker.row.${item.key}"
 
 private const val PICKER_TITLE_MAX_LINES = 2
+
+@Composable
+private fun StoryPointsPill(
+    points: Int?,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(ttRadius.row)
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(ttLabelSecondary().copy(alpha = STORY_POINTS_FILL_ALPHA))
+            .border(ttSeparatorWidth, ttSeparator(), shape)
+            .padding(horizontal = ttSpacing.sm, vertical = BADGE_PADDING_V),
+        contentAlignment = Alignment.Center,
+    ) {
+        TTStoryPoints(points = points)
+    }
+}
+
+private val BADGE_PADDING_V = 2.dp
+private const val STORY_POINTS_FILL_ALPHA = 0.08f
