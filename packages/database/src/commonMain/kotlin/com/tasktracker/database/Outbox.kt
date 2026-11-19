@@ -33,6 +33,12 @@ enum class OutboxEntity(val wireValue: String) {
      */
     Sprint("sprint"),
     /**
+     * One person's committed capacity in a sprint. A new entity rather than a
+     * field on `sprint`: installed clients strict-decode sprint payloads and
+     * would fail on a gained key.
+     */
+    SprintMember("sprintMember"),
+    /**
      * A comment, queued like any other entity.
      *
      * Unlike a status change — which is device-local and never queued — a comment is the

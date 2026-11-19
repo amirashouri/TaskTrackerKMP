@@ -14,7 +14,7 @@ import org.jetbrains.compose.resources.stringResource
  * Binds [MemberPicker] with project-specific labels and tags.
  */
 @Composable
-internal fun ProjectMembersSection(
+fun ProjectMembersSection(
     selectedMemberIDs: List<UserID>,
     onMemberIDsChanged: (List<UserID>) -> Unit,
     modifier: Modifier = Modifier,

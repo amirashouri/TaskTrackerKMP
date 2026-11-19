@@ -529,6 +529,38 @@
     <string name="sprint_summary_no_goal">No goal was set for this sprint</string>
     <string name="sprint_summary_none">None</string>
 
+    <!--
+      Sprint membership. Capacity is called "available story points" everywhere rather than
+      "estimate": it is what a person offered for the sprint window, while the task's own
+      story points are the value delivered against it.
+    -->
+    <string name="sprint_members_title">Members</string>
+    <string name="sprint_members_empty">No members have been added to this sprint yet.</string>
+    <string name="sprint_member_add">Add member</string>
+    <string name="sprint_member_edit">Edit %1$s</string>
+    <string name="sprint_member_remove">Remove %1$s</string>
+    <string name="sprint_member_sheet_title">Add a member</string>
+    <string name="sprint_member_sheet_edit_title">Edit member capacity</string>
+    <string name="sprint_member_picker_title">Member</string>
+    <string name="sprint_member_picker_placeholder">Search for a member</string>
+    <string name="sprint_member_available_label">Available story points</string>
+    <string name="sprint_member_available_points">%1$d pts available</string>
+    <string name="sprint_member_available_placeholder">Points available this sprint</string>
+    <string name="sprint_member_invalid_points">Enter zero or more whole story points.</string>
+    <string name="sprint_member_locked_note">The roster is fixed while the sprint is locked or finished.</string>
+    <string name="sprint_member_remove_confirm">Remove %1$s from this sprint?</string>
+    <string name="sprint_member_remove_confirm_body">Any tasks assigned to them must be reassigned first.</string>
+    <string name="sprint_member_progress_link">Member progress</string>
+    <string name="sprint_member_progress_title">%1$s — Member Progress</string>
+    <string name="sprint_member_progress_empty">No members have been added to this sprint yet.</string>
+    <string name="sprint_member_progress_delivered">%1$d of %2$d pts</string>
+    <string name="sprint_member_progress_no_capacity">No capacity set</string>
+    <string name="sprint_member_progress_finished">Finished tasks</string>
+    <string name="sprint_member_progress_closed">Closed tasks: %1$d</string>
+    <string name="sprint_member_progress_remaining">%1$d remaining</string>
+    <string name="sprint_member_progress_unassigned">Unassigned or unrostered work</string>
+    <string name="sprint_member_name_unknown">Unknown member</string>
+
     <!-- The project picker and the new-project sheet. -->
     <string name="picker_title">Choose a Project</string>
     <string name="picker_empty">There are no projects to choose from.</string>

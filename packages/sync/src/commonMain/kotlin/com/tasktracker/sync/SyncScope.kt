@@ -13,6 +13,12 @@ enum class SyncScope(val wireValue: String) {
     WorkItems("workItems"),
 
     /**
+     * Sprint membership. Its own stream so an installed client never receives
+     * a payload whose `sprintMember` entity it cannot apply.
+     */
+    SprintMembers("sprintMembers"),
+
+    /**
      * Attachment **metadata**, so an attachment another member added appears on a card
      * without the reader polling. The bytes do not travel here — they go through the blob
      * API — but the row that names the file is a change like any other.

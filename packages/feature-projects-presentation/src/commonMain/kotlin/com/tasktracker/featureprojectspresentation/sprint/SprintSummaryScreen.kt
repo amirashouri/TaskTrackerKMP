@@ -6,27 +6,40 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import com.tasktracker.core.UserID
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTStoryPoints
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBodyLabel
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.SprintMemberProgress
+import com.tasktracker.domain.SprintParticipation
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_cancel
 import com.tasktracker.resources.sprint_achieved
 import com.tasktracker.resources.sprint_committed
+import com.tasktracker.resources.sprint_member_name_unknown
+import com.tasktracker.resources.sprint_member_progress_delivered
+import com.tasktracker.resources.sprint_member_progress_link
+import com.tasktracker.resources.sprint_member_progress_no_capacity
+import com.tasktracker.resources.sprint_members_empty
+import com.tasktracker.resources.sprint_members_title
 import com.tasktracker.resources.sprint_summary_done
 import com.tasktracker.resources.sprint_summary_empty
 import com.tasktracker.resources.sprint_summary_hit
@@ -45,11 +58,20 @@ fun SprintSummaryScreen(
     summary: SprintSummary,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    memberNames: Map<UserID, String> = emptyMap(),
+    onOpenMemberProgress: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.screenGutterLarge)
+            .verticalScroll(rememberScrollState())
+            .padding(
+                horizontal = ttSpacing.xxl,
+                vertical = ttSpacing.screenGutterLarge,
+            )
+            // Padding after the scroll modifier is scrollable space, so the last member row
+            // can clear the tab bar instead of stopping behind it.
+            .padding(bottom = LocalTabBarScrollUnderInset.current)
             .testTag(SprintSummaryScreenTag),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
@@ -104,6 +126,12 @@ fun SprintSummaryScreen(
             },
             modifier = Modifier.testTag(SprintSummaryVerdictTag),
         )
+        SprintMemberSummarySection(
+            participation = summary.participation,
+            memberNames = memberNames,
+            onOpenMemberProgress = onOpenMemberProgress,
+            modifier = Modifier.testTag(SprintSummaryMembersTag),
+        )
         if (summary.isEmpty) {
             ttText(
                 text = stringResource(Res.string.sprint_summary_empty),
@@ -123,6 +151,98 @@ fun SprintSummaryScreen(
                 modifier = Modifier.testTag(SprintSummaryIncompleteTag),
             )
         }
+    }
+}
+
+@Composable
+private fun SprintMemberSummarySection(
+    participation: SprintParticipation,
+    memberNames: Map<UserID, String>,
+    onOpenMemberProgress: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttText(
+                text = stringResource(Res.string.sprint_members_title),
+                style = ttTypography.titleSmall,
+                color = ttLabel(),
+                modifier = Modifier.weight(1f),
+            )
+            ttGlassButton(
+                label = stringResource(Res.string.sprint_member_progress_link),
+                onClick = onOpenMemberProgress,
+                modifier = Modifier.testTag(SprintSummaryMemberProgressTag),
+            )
+        }
+        if (participation.members.isEmpty()) {
+            ttText(
+                text = stringResource(Res.string.sprint_members_empty),
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+            )
+        } else {
+            participation.members.forEach { row ->
+                SprintMemberSummaryRow(
+                    row = row,
+                    name = memberNames[row.member.userID]
+                        ?: stringResource(Res.string.sprint_member_name_unknown),
+                    modifier = Modifier.testTag(SprintSummaryMemberRowTag(row.member.id)),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SprintMemberSummaryRow(
+    row: SprintMemberProgress,
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    val capacity = row.member.availableStoryPoints
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttText(
+                text = name,
+                style = ttTypography.callout,
+                color = ttLabel(),
+                modifier = Modifier.weight(1f),
+            )
+            if (capacity > 0) {
+                ttText(
+                    text = stringResource(
+                        Res.string.sprint_member_progress_delivered,
+                        row.deliveredStoryPoints,
+                        capacity,
+                    ),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                )
+            } else {
+                ttText(
+                    text = stringResource(Res.string.sprint_member_progress_no_capacity),
+                    style = ttTypography.footnote,
+                    color = ttLabelSecondary(),
+                )
+            }
+        }
+        SprintProgressBar(fraction = row.progressFraction)
+        row.finished.forEach { item -> MemberTaskRow(item = item) }
     }
 }
 
@@ -208,3 +328,7 @@ const val SprintSummaryVerdictTag = "sprints.summary.verdict"
 const val SprintSummaryEmptyTag = "sprints.summary.empty"
 const val SprintSummaryDoneTag = "sprints.summary.done"
 const val SprintSummaryIncompleteTag = "sprints.summary.incomplete"
+const val SprintSummaryMembersTag = "sprints.summary.members"
+const val SprintSummaryMemberProgressTag = "sprints.summary.memberProgress"
+
+fun SprintSummaryMemberRowTag(id: String): String = "sprints.summary.member.$id"

@@ -503,6 +503,18 @@ class ProjectsUiAndroidHostTest {
     fun aBusyCardOffersNoEdit() = runComposeUiTest(block = SprintDetailScenarios.aBusyCardOffersNoEdit)
 
     @Test
+    fun theSummaryListsMembersAndTheirFinishedPoints() = runComposeUiTest(block = SprintMemberSummaryScenarios.theSummaryListsMembersAndTheirFinishedPoints)
+
+    @Test
+    fun theProgressScreenShowsCapacityAndUnclaimedWork() = runComposeUiTest(block = SprintMemberSummaryScenarios.theProgressScreenShowsCapacityAndUnclaimedWork)
+
+    @Test
+    fun theMemberSheetPicksExactlyOnePersonForOneCapacity() = runComposeUiTest(block = SprintMemberSummaryScenarios.theMemberSheetPicksExactlyOnePersonForOneCapacity)
+
+    @Test
+    fun theMemberSheetOnlySavesAWholeNonNegativeCapacity() = runComposeUiTest(block = SprintMemberSummaryScenarios.theMemberSheetOnlySavesAWholeNonNegativeCapacity)
+
+    @Test
     fun theLockedWindowFreezesTheCapAndTheDates() = runComposeUiTest(block = SprintEditorScenarios.theLockedWindowFreezesTheCapAndTheDates)
 
     @Test

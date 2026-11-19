@@ -15,6 +15,7 @@ import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.database.AttachmentRecord
 import com.tasktracker.database.CommentRecord
 import com.tasktracker.database.ProjectRecord
+import com.tasktracker.database.SprintMemberRecord
 import com.tasktracker.database.SprintRecord
 import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
@@ -25,6 +26,7 @@ import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Recurrence
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -549,6 +551,39 @@ internal val SprintRecord.domainValue: Sprint?
         )
         value.reconcileFinishedAt(updatedAt)
         return value
+    }
+
+// MARK: - Sprint member
+
+internal fun SprintMember.toRecord(): SprintMemberRecord = SprintMemberRecord(
+    id = id,
+    projectID = projectID.stringValue,
+    sprintID = sprintID.stringValue,
+    userID = userID.stringValue,
+    availableStoryPoints = availableStoryPoints,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+internal fun SprintMemberRecord.updatedFrom(value: SprintMember): SprintMemberRecord = copy(
+    availableStoryPoints = value.availableStoryPoints,
+    updatedAt = value.updatedAt,
+)
+
+internal val SprintMemberRecord.domainValue: SprintMember?
+    get() {
+        val ownerID = parseUserID(userID) ?: return null
+        val memberSprintID = parseSprintID(sprintID) ?: return null
+        val memberProjectID = parseProjectID(projectID) ?: return null
+        return SprintMember(
+            id = id,
+            projectID = memberProjectID,
+            sprintID = memberSprintID,
+            userID = ownerID,
+            availableStoryPoints = availableStoryPoints,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+        )
     }
 
 // MARK: - Status change

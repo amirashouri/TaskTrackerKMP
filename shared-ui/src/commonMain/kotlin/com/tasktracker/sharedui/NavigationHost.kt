@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import androidx.navigationevent.compose.rememberNavigationEventDispatcherOwner
+import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -100,6 +101,9 @@ import com.tasktracker.featureprojectspresentation.SprintEditorModel
 import com.tasktracker.featureprojectspresentation.SprintEditorPresentation
 import com.tasktracker.featureprojectspresentation.SprintEditorSheet
 import com.tasktracker.featureprojectspresentation.SprintItemPickerSheet
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressModel
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressScreen
+import com.tasktracker.featureprojectspresentation.SprintMemberSheet
 import com.tasktracker.featureprojectspresentation.SprintListModel
 import com.tasktracker.featureprojectspresentation.SprintListScreen
 import com.tasktracker.featureprojectspresentation.SprintSummaryScreen
@@ -117,6 +121,8 @@ import com.tasktracker.featuresettingspresentation.SettingsModel
 import com.tasktracker.featuresettingspresentation.SettingsScreen
 import com.tasktracker.featureteamsdomain.MemberAdminPort
 import com.tasktracker.featureteamsdomain.TeamPort
+import com.tasktracker.featureteamsdomain.User
+import com.tasktracker.featureteamsdomain.UserStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.scoped_choose_project
 import com.tasktracker.resources.scoped_no_project_body
@@ -132,6 +138,7 @@ import com.tasktracker.routing.Router
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.coroutines.cancellation.CancellationException
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -615,7 +622,9 @@ fun NavigationHost(
                             listPane = tabRoot,
                             detailPane = when {
                                 isNewSprintOpen -> newSprintPane
-                                backgroundPushed is AppRoute.SprintDetail -> pushedPane
+                                backgroundPushed is AppRoute.SprintDetail ||
+                                    backgroundPushed is AppRoute.SprintSummary ||
+                                    backgroundPushed is AppRoute.SprintMemberProgress -> pushedPane
                                 else -> noSprintSelected
                             },
                         )
@@ -992,6 +1001,22 @@ private fun PushedRoute(
             preferences = preferences,
         )
 
+        is AppRoute.SprintSummary -> SprintSummaryDestination(
+            projectID = route.projectID,
+            sprintID = route.sprintID,
+            router = router,
+            environment = environment,
+            scope = scope,
+        )
+
+        is AppRoute.SprintMemberProgress -> SprintMemberProgressDestination(
+            projectID = route.projectID,
+            sprintID = route.sprintID,
+            router = router,
+            environment = environment,
+            scope = scope,
+        )
+
         // The outer host lifts every editor on top of the path that produced it, so this
         // branch is unreachable through anything the app builds: an editor could only sit
         // here as the background of a *second*, stacked editor, which nothing pushes. The
@@ -1261,6 +1286,85 @@ private fun rememberUserName(id: UserID?, teamPort: TeamPort?): String? {
         }
     }
     return name
+}
+
+/**
+ * The live account list for a picker that chooses an existing collaborator.
+ *
+ * `TeamPort.searchMembers` is the session cache when no backend is bound, and a
+ * server-backed `TeamPort` still answers from a directory cache that can predate an account
+ * added moments ago. The admin member list is fetched from the server on every call, so it is
+ * the honest source for a picker. `MemberAdminPort.searchMembers` is *not* used: it delegates
+ * to `TeamPort` and would carry the same staleness. A failed admin read falls back to the
+ * session directory rather than leaving the picker with no error surface and no rows.
+ */
+private suspend fun liveActiveMembers(environment: ProjectEnvironment): List<User>? {
+    val port = environment.memberAdminPort ?: return null
+    return try {
+        port.members(UserStatus.Active)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: AppError) {
+        null
+    }
+}
+
+/** A case-insensitive name-or-email match, sorted the way the directory itself sorts. */
+internal suspend fun searchDirectoryMembers(
+    environment: ProjectEnvironment,
+    query: String,
+): List<User> {
+    val active = liveActiveMembers(environment)
+    if (active != null) {
+        val needle = query.trim().lowercase()
+        return active
+            .filter { user ->
+                needle.isEmpty() ||
+                    user.displayName.orEmpty().lowercase().contains(needle) ||
+                    user.email.lowercase().contains(needle)
+            }
+            .sortedBy { it.preferredGreeting.lowercase() }
+    }
+    return environment.teamPort?.searchMembers(query).orEmpty()
+}
+
+/**
+ * Resolves selected ids without the search filter: a member removed from the active list
+ * must keep their name on an existing row. The live list is tried first, the session
+ * directory second, so a cached account never hides a newly fetched one.
+ */
+internal suspend fun resolveDirectoryMembers(
+    environment: ProjectEnvironment,
+    ids: List<UserID>,
+): List<User> {
+    if (ids.isEmpty()) return emptyList()
+    val activeByID = liveActiveMembers(environment).orEmpty().associateBy { it.id }
+    val localByID = environment.teamPort?.users(ids).orEmpty().associateBy { it.id }
+    return ids.mapNotNull { id -> activeByID[id] ?: localByID[id] }
+}
+
+/**
+ * Project membership as the server has it, for a picker that may only offer project members.
+ *
+ * The local project row is a sync snapshot: an admin can add a colleague through the admin
+ * screen well before that change has been pulled onto this device. Intersecting the live
+ * directory with that stale row hides the colleague from the sprint roster, so the admin API
+ * is asked first whenever it is bound. A failed or absent admin read keeps the local row —
+ * a non-admin still gets the offline-filtered list rather than an error.
+ */
+private suspend fun freshProjectForMembers(
+    environment: ProjectEnvironment,
+    projectID: ProjectID,
+    local: Project?,
+): Project? {
+    val port = environment.adminProjectsPort ?: return local
+    return try {
+        port.project(projectID)?.project ?: local
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (error: AppError) {
+        local
+    }
 }
 
 /** One project's board. */
@@ -1737,11 +1841,6 @@ private fun SprintDetailDestination(
         onDispose { model.stopObserving() }
     }
 
-    // The summary is the model's own value rather than a second read: the detail screen has
-    // already loaded the items, and re-reading them at the moment the summary is opened is
-    // how the two screens end up reporting different totals for the same sprint.
-    var isSummaryOpen by remember(sprintID) { mutableStateOf(false) }
-
     val detail = model.detail
     if (detail == null) {
         // Deliberately empty rather than an error banner: this is a sprint that is gone, not
@@ -1757,19 +1856,20 @@ private fun SprintDetailDestination(
         value = runCatching { environment.repository.project(projectID) }.getOrNull()
     }
 
+    val memberNames by produceState<Map<UserID, String>>(
+        emptyMap(),
+        detail.members,
+        environment,
+    ) {
+        val ids = detail.members.map { it.userID }
+        value = resolveDirectoryMembers(environment, ids)
+            .associate { it.id to it.preferredGreeting }
+    }
+
     // The editor over this sprint, opened by the card's edit button. Declared before the
     // screen because the screen's [SprintDetailScreen.onEdit] is what sets it.
     var isEditorVisible by remember(sprintID) { mutableStateOf(false) }
     var isEditorBusy by remember(sprintID) { mutableStateOf(false) }
-
-    if (isSummaryOpen) {
-        SprintSummaryScreen(
-            summary = detail.summary,
-            onBack = { isSummaryOpen = false },
-            modifier = Modifier.testTag(SprintSummaryDestinationTag),
-        )
-        return
-    }
 
     SprintDetailScreen(
         detail = detail,
@@ -1777,7 +1877,9 @@ private fun SprintDetailDestination(
         errorMessage = model.errorMessage,
         onFinish = { scope.launch { model.finish() } },
         onReopen = { scope.launch { model.reopen() } },
-        onViewSummary = { isSummaryOpen = true },
+        onViewSummary = {
+            router.push(AppRoute.SprintSummary(projectID = projectID, sprintID = sprintID))
+        },
         onDismissError = model::dismissError,
         onRemove = { scope.launch { model.removeSprint() } },
         onArchive = { scope.launch { model.archive() } },
@@ -1797,6 +1899,9 @@ private fun SprintDetailDestination(
         onRemoveTask = { itemID -> scope.launch { model.removeItem(itemID) } },
         ownerName = ownerName,
         isAdmin = isAdmin,
+        memberNames = memberNames,
+        onAddMember = { model.openMemberSheet() },
+        onEditMember = { member -> model.openMemberSheet(member) },
     )
 
     // The editor over this sprint, opened by the card's edit button. Unlike
@@ -1898,10 +2003,116 @@ private fun SprintDetailDestination(
         onDismissed = model::closePicker,
         modifier = Modifier.fillMaxSize(),
     )
+
+    // Hosted unconditionally like the task picker so the sheet keeps its exit transition.
+    SprintMemberSheet(
+        visible = model.isMemberSheetVisible,
+        isEditing = model.editingMember != null,
+        selectedUserID = model.memberUserID,
+        availablePoints = model.availablePoints,
+        isBusy = model.isBusy,
+        onSelectedUserIDChanged = model::onMemberUserIDChanged,
+        onAvailablePointsChanged = model::onMemberPointsChanged,
+        onSave = { scope.launch { model.saveMember() } },
+        onRemove = model.editingMember?.let { member ->
+            { scope.launch { model.removeMember() } }
+        },
+        onDismissRequest = model::closeMemberSheet,
+        onDismissed = model::closeMemberSheet,
+        editingName = model.editingMember?.let { memberNames[it.userID] },
+        searchMembers = { query ->
+            assignableMembersFor(
+                project = freshProjectForMembers(environment, projectID, currentProject),
+                directory = searchDirectoryMembers(environment, query),
+            )
+        },
+        resolveSelected = { ids -> resolveDirectoryMembers(environment, ids) },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
-/** The summary, rendered in place of the detail screen. See [SprintDetailDestination]. */
+/** The summary, now its own pushed destination so progress can pop back to it. */
 const val SprintSummaryDestinationTag = "shell.sprintSummary"
+
+@Composable
+private fun SprintSummaryDestination(
+    projectID: ProjectID,
+    sprintID: SprintID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+) {
+    val model = remember(sprintID, environment) {
+        SprintDetailModel(
+            sprintID = sprintID,
+            repository = environment.repository,
+            dateProvider = environment.dateProvider,
+        )
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    val detail = model.detail ?: return
+    val memberNames by produceState<Map<UserID, String>>(
+        emptyMap(),
+        detail.members,
+        environment,
+    ) {
+        val ids = detail.members.map { it.userID }
+        value = resolveDirectoryMembers(environment, ids)
+            .associate { it.id to it.preferredGreeting }
+    }
+
+    SprintSummaryScreen(
+        summary = detail.summary,
+        onBack = {
+            val path = router.path(AppTab.Sprints)
+            if (path.size > 1) router.setPath(path.dropLast(1), AppTab.Sprints)
+        },
+        memberNames = memberNames,
+        onOpenMemberProgress = {
+            router.push(
+                AppRoute.SprintMemberProgress(projectID = projectID, sprintID = sprintID),
+            )
+        },
+        modifier = Modifier.testTag(SprintSummaryDestinationTag),
+    )
+}
+
+@Composable
+private fun SprintMemberProgressDestination(
+    projectID: ProjectID,
+    sprintID: SprintID,
+    router: Router,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+) {
+    val model = remember(sprintID, environment, environment.teamPort) {
+        SprintMemberProgressModel(
+            sprintID = sprintID,
+            repository = environment.repository,
+            teamPort = environment.teamPort,
+        )
+    }
+    DisposableEffect(model) {
+        model.observe(scope)
+        onDispose { model.stopObserving() }
+    }
+
+    val view = model.view ?: return
+    SprintMemberProgressScreen(
+        view = view,
+        onBack = {
+            val path = router.path(AppTab.Sprints)
+            if (path.size > 1) router.setPath(path.dropLast(1), AppTab.Sprints)
+        },
+        modifier = Modifier.testTag(SprintMemberProgressDestinationTag),
+    )
+}
+
+const val SprintMemberProgressDestinationTag = "shell.sprintMemberProgress"
 
 /**
  * The work item editor, over whatever opened it.

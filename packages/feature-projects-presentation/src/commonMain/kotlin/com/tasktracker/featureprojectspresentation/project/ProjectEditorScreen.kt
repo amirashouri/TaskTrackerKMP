@@ -78,6 +78,8 @@ fun ProjectEditorScreen(
     modifier: Modifier = Modifier,
     errorMessage: String? = null,
     isBusy: Boolean = false,
+    /** Optional custom slot (e.g. admin project membership). */
+    membersSection: (@Composable () -> Unit)? = null,
     /** Optional custom slot (e.g. admin tag management). */
     tagsSection: (@Composable () -> Unit)? = null,
     /** Optional custom slot (e.g. admin status catalog management). */
@@ -190,6 +192,7 @@ fun ProjectEditorScreen(
                     )
                 }
             }
+            membersSection?.invoke()
             tagsSection?.invoke()
             statusesSection?.invoke()
             agentSection?.invoke()

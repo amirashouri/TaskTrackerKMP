@@ -8,6 +8,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import kotlin.coroutines.cancellation.CancellationException
@@ -210,6 +211,91 @@ class AddWorkItemsToSprint(
             sprintID = Patch.Of(sprintID),
             now = now,
         )
+    }
+}
+
+/**
+ * Adds a person to a sprint with the capacity they offered for that window.
+ *
+ * The gate is the same one that protects task membership: a lock or a finished
+ * sprint freezes the roster. A duplicate person is a validation error rather
+ * than a second row — two capacities for one member would make the summary
+ * count the same work twice.
+ */
+class AddSprintMember(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        sprintID: SprintID,
+        userID: UserID,
+        availableStoryPoints: Int,
+    ): SprintMember {
+        val sprint = repository.sprint(sprintID)
+            ?: throw AppError.Storage("That sprint no longer exists.")
+        requireMembershipEditable(sprint)
+        if (availableStoryPoints < 0) {
+            throw AppError.Validation("Available points cannot be negative.")
+        }
+        val id = SprintMember.idFor(sprintID, userID)
+        if (repository.sprintMembers(sprintID).any { it.id == id }) {
+            throw AppError.Validation("That member is already in this sprint.")
+        }
+        return repository.createSprintMember(
+            sprintID = sprintID,
+            userID = userID,
+            availableStoryPoints = availableStoryPoints,
+            now = dateProvider.now(),
+        )
+    }
+}
+
+class UpdateSprintMemberCapacity(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(
+        sprintID: SprintID,
+        id: String,
+        availableStoryPoints: Int,
+    ): SprintMember {
+        val sprint = repository.sprint(sprintID)
+            ?: throw AppError.Storage("That sprint no longer exists.")
+        requireMembershipEditable(sprint)
+        if (availableStoryPoints < 0) {
+            throw AppError.Validation("Available points cannot be negative.")
+        }
+        if (repository.sprintMembers(sprintID).none { it.id == id }) {
+            throw AppError.Storage("That member no longer exists.")
+        }
+        return repository.updateSprintMember(
+            id = id,
+            availableStoryPoints = availableStoryPoints,
+            now = dateProvider.now(),
+        )
+    }
+}
+
+class RemoveSprintMember(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+    @Throws(AppError::class, CancellationException::class)
+    suspend operator fun invoke(sprintID: SprintID, id: String, userID: UserID) {
+        val sprint = repository.sprint(sprintID)
+            ?: throw AppError.Storage("That sprint no longer exists.")
+        requireMembershipEditable(sprint)
+        if (repository.sprintMembers(sprintID).none { it.id == id }) {
+            throw AppError.Storage("That member no longer exists.")
+        }
+        if (repository.sprintWorkItems(sprintID).any { it.assigneeID == userID }) {
+            throw AppError.Validation(
+                "That member still has tasks in '${sprint.name}'. Reassign them first.",
+            )
+        }
+        repository.deleteSprintMember(id = id, now = dateProvider.now())
     }
 }
 

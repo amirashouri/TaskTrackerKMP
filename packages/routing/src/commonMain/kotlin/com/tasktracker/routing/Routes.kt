@@ -83,6 +83,12 @@ sealed interface AppRoute {
     /** One sprint: its window, its tasks, and the summary a finished one is read through. */
     data class SprintDetail(val projectID: ProjectID, val sprintID: SprintID) : AppRoute
 
+    /** The summary itself, as a pushed destination so a screen above it can pop back here. */
+    data class SprintSummary(val projectID: ProjectID, val sprintID: SprintID) : AppRoute
+
+    /** Per-member delivery and capacity for one sprint, opened from [SprintSummary]. */
+    data class SprintMemberProgress(val projectID: ProjectID, val sprintID: SprintID) : AppRoute
+
     data class WorkItemEditor(
         val projectID: ProjectID,
         val workItemID: WorkItemID?,
@@ -131,6 +137,8 @@ val AppRoute.projectIDOrNull: ProjectID?
         is AppRoute.Archive -> projectID
         is AppRoute.SprintList -> projectID
         is AppRoute.SprintDetail -> projectID
+        is AppRoute.SprintSummary -> projectID
+        is AppRoute.SprintMemberProgress -> projectID
         is AppRoute.WorkItemEditor -> projectID
         // Admin sections are not project-scoped even though one names a project: managing a
         // project's settings is not showing that project's work, and `AdminProjects(projectID)`
@@ -162,6 +170,8 @@ val AppRoute.selectsActiveProject: ProjectID?
         is AppRoute.Archive -> projectID
         is AppRoute.SprintList -> projectID
         is AppRoute.SprintDetail -> projectID
+        is AppRoute.SprintSummary -> projectID
+        is AppRoute.SprintMemberProgress -> projectID
         is AppRoute.WorkItemEditor, AppRoute.Settings, is AppRoute.AdminMembers,
         is AppRoute.AdminProjects,
         -> null

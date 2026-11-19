@@ -9,12 +9,14 @@ import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Sprint
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.SprintStatus
 import com.tasktracker.domain.SprintSummary
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.domain.sprintBlockingOverlap
 import com.tasktracker.domain.sprintSummary
+import com.tasktracker.featureprojectsdomain.AddSprintMember
 import com.tasktracker.featureprojectsdomain.AddWorkItemsToSprint
 import com.tasktracker.featureprojectsdomain.ArchiveSprint
 import com.tasktracker.featureprojectsdomain.CreateSprint
@@ -24,10 +26,12 @@ import com.tasktracker.featureprojectsdomain.LockSprint
 import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featureprojectsdomain.RemoveSprintMember
 import com.tasktracker.featureprojectsdomain.RemoveWorkItemsFromSprint
 import com.tasktracker.featureprojectsdomain.ReopenSprint
 import com.tasktracker.featureprojectsdomain.UnlockSprint
 import com.tasktracker.featureprojectsdomain.UpdateSprint
+import com.tasktracker.featureprojectsdomain.UpdateSprintMemberCapacity
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlin.time.Instant
@@ -212,10 +216,14 @@ data class SprintDetail(
     val isViewerTheOwner: Boolean,
     val isActive: Boolean,
     val status: SprintStatus,
+    val members: List<SprintMember> = emptyList(),
 ) {
     /** True if sprint is open and unlocked, allowing task additions and removals. */
     val canEditItems: Boolean
         get() = !sprint.isFinished && !sprint.isLocked
+
+    /** The roster freezes on the same boundary as task membership, by design. */
+    val canEditMembers: Boolean get() = canEditItems
 
     /** True if viewer owns the sprint or if sprint is unassigned. */
     val canManageLock: Boolean
@@ -227,7 +235,11 @@ data class SprintDetail(
 
     val hasOwner: Boolean get() = sprint.ownerID != null
 
-    val hasSummaryToShow: Boolean get() = sprint.isFinished && !summary.isEmpty
+    /**
+     * The report is available throughout the sprint, not only after it finishes: an empty
+     * in-progress sprint still has a capacity table worth seeing before work is assigned.
+     */
+    val hasSummaryToShow: Boolean get() = !sprint.isFinished || !summary.isEmpty || members.isNotEmpty()
 }
 
 /**
@@ -250,6 +262,9 @@ class SprintDetailModel(
     private val deleteSprint = DeleteSprint(repository, dateProvider)
     private val addWorkItemsToSprint = AddWorkItemsToSprint(repository, dateProvider)
     private val removeWorkItemsFromSprint = RemoveWorkItemsFromSprint(repository, dateProvider)
+    private val addSprintMember = AddSprintMember(repository, dateProvider)
+    private val updateSprintMember = UpdateSprintMemberCapacity(repository, dateProvider)
+    private val removeSprintMember = RemoveSprintMember(repository, dateProvider)
 
     var detail: SprintDetail? by mutableStateOf(null)
         private set
@@ -270,6 +285,18 @@ class SprintDetailModel(
     val canAddSelected: Boolean
         get() = selectedPickables.isNotEmpty()
 
+    var isMemberSheetVisible: Boolean by mutableStateOf(false)
+        private set
+
+    var editingMember: SprintMember? by mutableStateOf(null)
+        private set
+
+    var memberUserID: UserID? by mutableStateOf(null)
+        private set
+
+    var availablePoints: String by mutableStateOf("")
+        private set
+
     // Listens to all feature changes (sprint updates notify on project ID)
     override fun isRelevant(change: ProjectChange): Boolean = true
 
@@ -281,6 +308,7 @@ class SprintDetailModel(
             return
         }
         val items = repository.sprintWorkItems(sprintID)
+        val members = repository.sprintMembers(sprintID)
         val now = dateProvider.now()
 
         // Auto-finish sprint if end date has elapsed
@@ -294,11 +322,12 @@ class SprintDetailModel(
             startDate = sprintLocalDate(effectiveSprint.startDate, timeZone),
             endDate = sprintLocalDate(effectiveSprint.endDate, timeZone),
             items = items,
-            summary = sprintSummary(effectiveSprint, items),
+            summary = sprintSummary(effectiveSprint, items, members),
             isViewerTheOwner = effectiveSprint.ownerID != null &&
                     effectiveSprint.ownerID == currentUserID,
             isActive = effectiveSprint.isActiveOn(now),
             status = effectiveSprint.statusAt(now),
+            members = members,
         )
         pickableItems = repository.workItems(sprint.projectID)
             .filter {
@@ -341,6 +370,56 @@ class SprintDetailModel(
 
     suspend fun removeItem(id: WorkItemID): Boolean = acting {
         removeWorkItemsFromSprint(workItemIDs = listOf(id), sprintID = sprintID)
+    }
+
+    fun openMemberSheet(member: SprintMember? = null) {
+        if (detail?.canEditMembers != true || isBusy) return
+        editingMember = member
+        memberUserID = member?.userID
+        availablePoints = member?.availableStoryPoints?.toString() ?: ""
+        isMemberSheetVisible = true
+    }
+
+    fun closeMemberSheet() {
+        isMemberSheetVisible = false
+        editingMember = null
+        memberUserID = null
+        availablePoints = ""
+    }
+
+    fun onMemberUserIDChanged(id: UserID?) {
+        memberUserID = id
+    }
+
+    fun onMemberPointsChanged(value: String) {
+        // Points are a small non-negative integer; filtering here keeps the text field's
+        // validation from depending on a keyboard implementation that may allow signs.
+        if (value.isEmpty() || value.all { it.isDigit() }) availablePoints = value.take(4)
+    }
+
+    suspend fun saveMember(): Boolean {
+        val userID = memberUserID ?: return false
+        val points = availablePoints.toIntOrNull() ?: return false
+        val editing = editingMember
+        val saved = acting {
+            if (editing == null) {
+                addSprintMember(sprintID = sprintID, userID = userID, availableStoryPoints = points)
+            } else {
+                updateSprintMember(sprintID = sprintID, id = editing.id, availableStoryPoints = points)
+            }
+            Unit
+        }
+        if (saved) closeMemberSheet()
+        return saved
+    }
+
+    suspend fun removeMember(): Boolean {
+        val member = editingMember ?: return false
+        val removed = acting {
+            removeSprintMember(sprintID = sprintID, id = member.id, userID = member.userID)
+        }
+        if (removed) closeMemberSheet()
+        return removed
     }
 
     suspend fun finish(): Boolean = acting { finishSprint(sprintID) }

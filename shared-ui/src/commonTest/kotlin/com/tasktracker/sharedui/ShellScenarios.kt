@@ -82,12 +82,15 @@ import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
+import com.tasktracker.featureprojectspresentation.MemberPickerMenuTag
+import com.tasktracker.featureprojectspresentation.MemberPickerRowTag
 import com.tasktracker.featureprojectspresentation.NewProjectFormTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
+import com.tasktracker.featureprojectspresentation.ProjectMembersSectionTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTag
 import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
@@ -95,8 +98,12 @@ import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
+import com.tasktracker.featureprojectspresentation.SprintDetailAddMemberTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddTag
 import com.tasktracker.featureprojectspresentation.SprintDetailCardTag
+import com.tasktracker.featureprojectspresentation.SprintDetailSummaryTag
+import com.tasktracker.featureprojectspresentation.SprintMemberProgressBackTag
+import com.tasktracker.featureprojectspresentation.SprintMemberSheetTag
 import com.tasktracker.featureprojectspresentation.SprintDetailPlaceholderTag
 import com.tasktracker.featureprojectspresentation.SprintDetailScreenTag
 import com.tasktracker.featureprojectspresentation.SprintEditorCancelTag
@@ -107,6 +114,7 @@ import com.tasktracker.featureprojectspresentation.SprintPickerAddTag
 import com.tasktracker.featureprojectspresentation.SprintPickerRowTag
 import com.tasktracker.featureprojectspresentation.SprintPickerSheetTag
 import com.tasktracker.featureprojectspresentation.SprintRowTag
+import com.tasktracker.featureprojectspresentation.SprintSummaryMemberProgressTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTag
 import com.tasktracker.featureprojectspresentation.WorkItemBacklogRowTagPrefix
 import com.tasktracker.featureprojectspresentation.WorkItemCancelTag
@@ -1227,6 +1235,111 @@ object ShellScenarios {
             "system back at the tab root should be a no-op, not a pop",
         )
         onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * Member progress is pushed from the summary and its back button returns to the summary.
+     *
+     * The summary used to be local state inside the detail destination. Making it a route is
+     * what lets a screen above it pop back to it; this scenario is the proof that the stack,
+     * not just the pixels, tells that story.
+     */
+    val theSummaryOpensMemberProgressAndBackReturnsToTheSummary: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintDetailScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintDetailSummaryTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintSummaryDestinationTag).assertIsDisplayed()
+
+        onNodeWithTag(SprintSummaryMemberProgressTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintMemberProgressDestinationTag).assertIsDisplayed()
+        assertEquals(
+            listOf(
+                AppRoute.SprintList(project.id),
+                AppRoute.SprintDetail(project.id, sprint.id),
+                AppRoute.SprintSummary(project.id, sprint.id),
+                AppRoute.SprintMemberProgress(project.id, sprint.id),
+            ),
+            router.path(AppTab.Sprints),
+        )
+
+        onNodeWithTag(SprintMemberProgressBackTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        assertEquals(
+            listOf(
+                AppRoute.SprintList(project.id),
+                AppRoute.SprintDetail(project.id, sprint.id),
+                AppRoute.SprintSummary(project.id, sprint.id),
+            ),
+            router.path(AppTab.Sprints),
+        )
+        onNodeWithTag(SprintSummaryDestinationTag).assertIsDisplayed()
+    }
+
+    /**
+     * The roster picker offers every member of the project, not just the signed-in account.
+     *
+     * No `TeamPort` is bound here, which is the offline/session-only directory: it can name
+     * the admin and nobody else. The live member list supplied to the shell is the one that
+     * knows Amir. The local project row is deliberately the stale snapshot this bug arrived
+     * with — only the admin — while the admin API already has both people. Before the picker
+     * read either of those live sources, this scenario showed only the admin row even though
+     * Amir was a project member on the server.
+     */
+    val theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory: suspend ComposeUiTest.() -> Unit = {
+        val admin = shellTestMember(email = "admin@example.com").copy(displayName = "Admin")
+        val amir = shellTestMember(email = "amir@example.com").copy(displayName = "Amir")
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo").copy(
+            memberIDs = listOf(admin.id, amir.id),
+        )
+        projects.seed(project.copy(memberIDs = listOf(admin.id)))
+        val sprint = shellTestSprint(projectID = project.id)
+        projects.seedSprint(sprint)
+
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
+            adminProjectsPort = FakeAdminProjectsPort(listOf(shellTestAdminProject(project))),
+        )
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Sprints)).performClick()
+        waitForIdle()
+        onNodeWithTag(SprintRowTag(sprint.id), useUnmergedTree = true).performClick()
+        waitForIdle()
+
+        onNodeWithTag(SprintDetailAddMemberTag).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(SprintMemberSheetTag).assertIsDisplayed()
+        onNodeWithTag("sprints.member.picker").performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerMenuTag("sprints.member.picker")).assertIsDisplayed()
+        onNodeWithTag(MemberPickerRowTag("sprints.member.picker", admin.id)).assertIsDisplayed()
+        onNodeWithTag(MemberPickerRowTag("sprints.member.picker", amir.id)).assertIsDisplayed()
     }
 
     /**
@@ -3779,7 +3892,9 @@ object ShellScenarios {
     val aSelectedAdminProjectOpensTheEditorBesideTheList: suspend ComposeUiTest.() -> Unit =
         wide@{
             val router = Router()
-            val project = shellTestProject(name = "Apollo")
+            val admin = shellTestMember(email = "admin@example.com").copy(displayName = "Admin")
+            val amir = shellTestMember(email = "amir@example.com").copy(displayName = "Amir")
+            val project = shellTestProject(name = "Apollo").copy(memberIDs = listOf(admin.id))
             setUpShell(
                 session = ScriptedSession(restored = signedIn()),
                 router = router,
@@ -3788,6 +3903,7 @@ object ShellScenarios {
                 adminProjectsPort = FakeAdminProjectsPort(
                     seeded = listOf(shellTestAdminProject(project = project)),
                 ),
+                memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
                 width = DESKTOP_WIDTH,
             )
             waitForIdle()
@@ -3812,6 +3928,16 @@ object ShellScenarios {
                     "${editor.left.value}dp, so the editor is not in the pane beside the list. A " +
                     "detail pane that drew the list again would satisfy every presence assertion",
             )
+
+            // The edit page is the only place an administrator can add a colleague to a project
+            // that already exists: the create form has this picker, and without it here a
+            // project was stuck with whichever members it was created with.
+            onNodeWithTag(ProjectMembersSectionTag).performScrollTo().assertIsDisplayed()
+            onNodeWithTag(ProjectMembersSectionTag).performClick()
+            waitForIdle()
+            onNodeWithTag(MemberPickerMenuTag(ProjectMembersSectionTag)).assertIsDisplayed()
+            onNodeWithTag(MemberPickerRowTag(ProjectMembersSectionTag, admin.id)).assertIsDisplayed()
+            onNodeWithTag(MemberPickerRowTag(ProjectMembersSectionTag, amir.id)).assertIsDisplayed()
         }
 
     /**
@@ -5064,6 +5190,9 @@ object ShellScenarios {
         // Appended, never inserted: the indices above are reached by name from
         // TaskTrackerAppScenarios, and this one is `[15]`.
         ShellScenarios.theBacklogSortSurvivesLeavingTheTab,
+        // Appended after [16]; this one is `[17]`.
+        ShellScenarios.theSummaryOpensMemberProgressAndBackReturnsToTheSummary,
+        ShellScenarios.theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.ConfirmPopup
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
@@ -37,6 +38,7 @@ import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.domain.SprintMember
 import com.tasktracker.domain.SprintStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.sprint_achieved
@@ -53,6 +55,14 @@ import com.tasktracker.resources.sprint_items_empty
 import com.tasktracker.resources.sprint_items_title
 import com.tasktracker.resources.sprint_lock
 import com.tasktracker.resources.sprint_locked_note
+import com.tasktracker.resources.sprint_member_add
+import com.tasktracker.resources.sprint_member_available_points
+import com.tasktracker.resources.sprint_member_edit
+import com.tasktracker.resources.sprint_member_locked_note
+import com.tasktracker.resources.sprint_member_name_unknown
+import com.tasktracker.resources.sprint_member_progress_no_capacity
+import com.tasktracker.resources.sprint_members_empty
+import com.tasktracker.resources.sprint_members_title
 import com.tasktracker.resources.sprint_owner_none
 import com.tasktracker.resources.sprint_owner_only
 import com.tasktracker.resources.sprint_remove
@@ -88,6 +98,9 @@ fun SprintDetailScreen(
     ownerName: String? = null,
     modifier: Modifier = Modifier,
     isAdmin: Boolean = false,
+    memberNames: Map<UserID, String> = emptyMap(),
+    onAddMember: () -> Unit = {},
+    onEditMember: (SprintMember) -> Unit = {},
 ) {
     val editable = detail.canEditItems
     var pendingAction by remember { mutableStateOf<SprintStatus?>(null) }
@@ -254,16 +267,71 @@ fun SprintDetailScreen(
                                         enabled = !isBusy,
                                         modifier = Modifier.testTag(SprintDetailArchiveTag),
                                     )
-                                    if (detail.hasSummaryToShow) {
-                                        ttGlassButton(
-                                            label = stringResource(Res.string.sprint_view_summary),
-                                            onClick = onViewSummary,
-                                            modifier = Modifier.testTag(SprintDetailSummaryTag),
-                                        )
-                                    }
                                 }
                             }
                             SprintStatus.Archived -> {}
+                        }
+                        // The report is not an administration action and is not tied to the
+                        // finished state: the same numbers are useful before the sprint ends.
+                        if (detail.hasSummaryToShow) {
+                            ttGlassButton(
+                                label = stringResource(Res.string.sprint_view_summary),
+                                onClick = onViewSummary,
+                                enabled = !isBusy,
+                                modifier = Modifier.testTag(SprintDetailSummaryTag),
+                            )
+                        }
+                    }
+                }
+            }
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    ) {
+                        ttText(
+                            text = stringResource(Res.string.sprint_members_title),
+                            style = ttTypography.titleSmall,
+                            color = ttLabel(),
+                            modifier = Modifier.weight(1f),
+                        )
+                        ttGlassButton(
+                            label = stringResource(Res.string.sprint_member_add),
+                            onClick = onAddMember,
+                            enabled = detail.canEditMembers && !isBusy,
+                            modifier = Modifier.testTag(SprintDetailAddMemberTag),
+                        )
+                    }
+                    if (!detail.canEditMembers) {
+                        ttText(
+                            text = stringResource(Res.string.sprint_member_locked_note),
+                            style = ttTypography.footnote,
+                            color = ttBodyLabel(),
+                            modifier = Modifier.testTag(SprintDetailMemberLockedNoteTag),
+                        )
+                    }
+                    if (detail.members.isEmpty()) {
+                        ttText(
+                            text = stringResource(Res.string.sprint_members_empty),
+                            style = ttTypography.footnote,
+                            color = ttBodyLabel(),
+                            modifier = Modifier.testTag(SprintDetailMembersEmptyTag),
+                        )
+                    } else {
+                        detail.members.forEach { member ->
+                            SprintMemberRow(
+                                member = member,
+                                name = memberNames[member.userID]
+                                    ?: stringResource(Res.string.sprint_member_name_unknown),
+                                editable = detail.canEditMembers && !isBusy,
+                                onEdit = { onEditMember(member) },
+                                modifier = Modifier.testTag(SprintDetailMemberRowTag(member.id)),
+                            )
                         }
                     }
                 }
@@ -350,6 +418,50 @@ private fun sprintProgressFraction(detail: SprintDetail): Float? =
         detail.summary.achievedStoryPoints.toFloat() / detail.sprint.goalStoryPoints.toFloat()
     }
 
+@Composable
+private fun SprintMemberRow(
+    member: SprintMember,
+    name: String,
+    editable: Boolean,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val capacity = member.availableStoryPoints
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttText(
+                text = name,
+                style = ttTypography.callout,
+                color = ttLabel(),
+                modifier = Modifier.weight(1f),
+            )
+            ttText(
+                text = if (capacity > 0) {
+                    stringResource(Res.string.sprint_member_available_points, capacity)
+                } else {
+                    stringResource(Res.string.sprint_member_progress_no_capacity)
+                },
+                style = ttTypography.footnote,
+                color = ttLabelSecondary(),
+            )
+            if (editable) {
+                ttGlassButton(
+                    label = stringResource(Res.string.sprint_member_edit, name),
+                    onClick = onEdit,
+                    modifier = Modifier.testTag(SprintDetailEditMemberTag(member.id)),
+                )
+            }
+        }
+    }
+}
+
 const val SprintDetailScreenTag = "sprints.detail"
 const val SprintDetailCardTag = "sprints.detail.card"
 const val SprintDetailAddTag = "sprints.detail.add"
@@ -365,4 +477,10 @@ const val SprintDetailSummaryTag = "sprints.detail.summary"
 const val SprintDetailItemsEmptyTag = "sprints.detail.itemsEmpty"
 const val SprintDetailRemoveTag = "sprints.detail.remove"
 const val SprintDetailArchiveTag = "sprints.detail.archive"
+const val SprintDetailAddMemberTag = "sprints.detail.addMember"
+const val SprintDetailMembersEmptyTag = "sprints.detail.membersEmpty"
+const val SprintDetailMemberLockedNoteTag = "sprints.detail.memberLockedNote"
 const val SprintActionConfirmationTag = "sprints.detail.actionConfirmation"
+
+fun SprintDetailMemberRowTag(id: String): String = "sprints.detail.member.$id"
+fun SprintDetailEditMemberTag(id: String): String = "sprints.detail.member.$id.edit"

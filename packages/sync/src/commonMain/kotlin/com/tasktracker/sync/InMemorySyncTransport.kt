@@ -135,6 +135,7 @@ private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     // `when` exhaustive: `OutboxEntity.Attachment` was added to the enum with the outbox
     // work, and a `when` over the enum without it does not compile.
     OutboxEntity.Attachment -> SyncScope.Attachments
+    OutboxEntity.SprintMember -> SyncScope.SprintMembers
 }
 
 private fun OutboxEntry.toRemoteChange(): RemoteChange = RemoteChange(
