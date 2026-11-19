@@ -29,6 +29,7 @@ import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttCanvas
 import com.tasktracker.designsystem.ttTheme
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -51,11 +52,12 @@ import kotlin.test.assertTrue
  * ## The vertical delta is the lens, and the base colour cancels out
  *
  * Each swatch is a *horizontal* colour gradient, so at any one column its top and bottom rows
- * are the same base colour. The lens is a *vertical* white wash — strongest at the top of the
- * cell, nearly gone at the bottom — so on the selected swatch the top row must read lighter than
- * the bottom row by the lens's falloff across the cell, and on an unselected swatch the two rows
- * must match. The comparison needs no second composition with the selection moved, which the
- * Android host's `setContent`-once rule would otherwise force.
+ * are the same base colour. The lens is a *vertical* wash — strongest at the top of the cell,
+ * nearly gone at the bottom — so on the selected swatch the two rows must differ by the lens's
+ * falloff across the cell, and on an unselected swatch they must match. The sign depends on
+ * the appearance (white lens in dark, black in light), so the assertion is on the magnitude.
+ * The comparison needs no second composition with the selection moved, which the Android
+ * host's `setContent`-once rule would otherwise force.
  *
  * ## Coverage is structural, not measured
  *
@@ -79,7 +81,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 object AccentSwatchScenarios {
 
-    /** The selected cell's pane is lighter at the top and covers both the swatch and the label. */
+    /** The selected cell's pane covers both the swatch and the label and has a top-to-bottom wash. */
     val theSelectedAccentSwatchCarriesTheGlassLens: suspend ComposeUiTest.() -> Unit = {
         // A real skip, not a return: this test measures pixels, and a host that measured
         // nothing must not be recorded as agreeing.
@@ -119,17 +121,19 @@ object AccentSwatchScenarios {
                     "top edge and below the label's bottom edge.",
             )
             assertTrue(
-                selectedDelta >= LENS_DELTA_BAR,
-                "the selected accent swatch's top row measured only $selectedDelta lighter than " +
-                    "its bottom row (sum of R+G+B). The lens is a white wash that is strongest " +
-                    "at the top of the cell and fades to a quarter at the bottom, so a selected " +
-                    "swatch must read lighter at the top by a clear margin. Near zero means the " +
-                    "lens is not painted and the swatch is a bare colour gradient again.",
+                abs(selectedDelta) >= LENS_DELTA_BAR,
+                "the selected accent swatch's top row differs from its bottom row by only " +
+                    "${abs(selectedDelta)} (sum of R+G+B) at the swatch's centre. The lens wash " +
+                    "runs top to bottom and fades to a quarter, so a selected swatch must show a " +
+                    "clear vertical gradient. Near zero means the lens is not painted and the " +
+                    "swatch is a bare colour gradient again. The sign follows the appearance: " +
+                    "the lens is white in dark and black in light, so the top is lighter in dark " +
+                    "and darker here.",
             )
             assertTrue(
-                unselectedDelta <= CONTROL_DELTA_BAR,
-                "the unselected accent swatch's top row measured $unselectedDelta lighter than " +
-                    "its bottom row, but it carries no lens: its fill is a *horizontal* " +
+                abs(unselectedDelta) <= CONTROL_DELTA_BAR,
+                "the unselected accent swatch's top row differs from its bottom row by " +
+                    "${abs(unselectedDelta)}, but it carries no lens: its fill is a *horizontal* " +
                     "gradient, so its top and bottom rows are the same colour. Above noise " +
                     "means a lens is being drawn on an unselected swatch.",
             )
@@ -254,14 +258,18 @@ object AccentSwatchScenarios {
     private const val CONTROL_DELTA_BAR = 6
 
     /**
-     * The solid-fill lens's top stop is [com.tasktracker.designsystem.ttGlass.SOLID_LENS_ALPHA]
-     * (0.45) of white and its bottom stop a quarter of that, spread over the whole *cell* — so
-     * across the 32dp swatch, which sits near the top, the measured lift is smaller than when the
-     * lens hugged the circle. The JVM paints the selected Classic swatch at a lift of 62 on this
-     * 0…765 scale. The bar sits at half that, well clear of the unselected control's 0, and a
-     * revert to the tab-strength lens (0.14) would measure ~19 and fall short.
+     * The wash's sign is the appearance's, not the test's: `ttGlassLens` draws white in dark and
+     * black in light, so this light-appearance scenario measures a *negative* delta. The bar is
+     * on the magnitude for that reason.
+     *
+     * The lens's top stop is [com.tasktracker.designsystem.ttGlass.SOLID_LENS_ALPHA] (0.45) in
+     * dark, but light caps the effective wash at 0.14 of black and spreads it over the whole
+     * cell. Across the 32dp swatch near the top, JVM and iOS both measure **13** on this
+     * 0…765 scale; the bar at 10 leaves headroom above the unselected control's 0 while still
+     * failing if the pane stops being painted. (The previous bar of 30 assumed a white wash and
+     * was already red before the grid change.)
      */
-    private const val LENS_DELTA_BAR = 30
+    private const val LENS_DELTA_BAR = 10
 
     private fun channelSum(color: Color): Int {
         fun byte(v: Float) = (v * 255f).toInt()

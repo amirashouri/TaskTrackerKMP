@@ -7,10 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.SystemTheme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toPixelMap
@@ -381,12 +378,11 @@ class GlassSurfacePixelTest {
      * sit between those pairs, so the booleans below are about the fringe rather than about
      * the rim's antialiasing over a blue fill.
      *
-     * `LocalSystemTheme` is the platform seam `isSystemInDarkTheme()` reads on JVM and iOS;
-     * it is internal and deprecated in Compose Multiplatform 1.12.1, and this is the only
-     * place in the suite that needs to force the answer instead of pinning a scheme.
+     * [WithSystemDarkAppearance] is the test seam for this: the JVM and iOS actuals provide
+     * `LocalSystemTheme` (internal and deprecated in Compose Multiplatform 1.12.1), and Android
+     * has no such local, so its actual does nothing — the scenario skips there before it
+     * composes. That split is what keeps `commonTest` compiling on all three hosts.
      */
-    @OptIn(InternalComposeUiApi::class)
-    @Suppress("DEPRECATION")
     @Test
     fun `a surface following the system into dark carries the dispersion fringe`() {
         assumeHostRasterisesText()
@@ -397,7 +393,7 @@ class GlassSurfacePixelTest {
 
         rasterising {
             setContent {
-                CompositionLocalProvider(LocalSystemTheme provides SystemTheme.Dark) {
+                WithSystemDarkAppearance {
                     ttTheme(ThemeScheme.System) {
                         followedDark = ttIsDarkTheme()
                         CompositionLocalProvider(LocalDensity provides Density(RIM_DENSITY)) {
