@@ -94,7 +94,7 @@ fun WorkItemBacklogRow(
     isSelecting: Boolean = false,
     /** Whether this row is ticked. Only meaningful while [isSelecting]. */
     isSelected: Boolean = false,
-    /** 
+    /**
      * Touch shortcut into select mode, seeded with this row. Null where the list has no selection
      * (Kanban, Archived, Sprint) and the gesture would do nothing.
      */
