@@ -633,6 +633,258 @@ class ProjectBoardModelTest {
             "the new task must appear on the board in the lane it was added from; columns were ${board.projection.columns}",
         )
     }
+
+    // MARK: Selection
+
+    /**
+     * A selection belongs to one lane, and a tap in another lane does not move it.
+     *
+     * Two lanes mean two meanings for one Archive button — a done card is closed, a live card is
+     * filed away — so a set spanning them would be one action with two outcomes. The other lane's
+     * card is left alone rather than silently added.
+     */
+    @Test
+    fun `selection is scoped to one lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val todo = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo)
+        val inProgress = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.InProgress)
+        repository.seed(todo)
+        repository.seed(inProgress)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        val todoLane = model.projection.columns.single { it.status.category == WorkItemStatus.Todo }.status.id
+        val inProgressLane =
+            model.projection.columns.single { it.status.category == WorkItemStatus.InProgress }.status.id
+
+        model.startSelecting(todoLane, seed = todo.id)
+        model.toggleSelected(inProgressLane, inProgress.id)
+
+        assertEquals(todoLane, model.selectionLane)
+        assertEquals(
+            listOf(todo.id),
+            model.selection.ids,
+            "a tap in another lane must not join the set, or the Archive verb loses its meaning",
+        )
+    }
+
+    /**
+     * Select all intersects what the lane projects with what the screen is drawing.
+     *
+     * The My Tasks filter is the model's; the search query is the screen's and arrives as the
+     * visible ids. A tick on a card hidden by either is a count the user cannot account for, so
+     * both sides have to agree before a card is selected.
+     */
+    @Test
+    fun `select all takes only visible projected cards`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val mine = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo, assigneeID = testUserID)
+        val unassigned = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo, assigneeID = null)
+        val done = testWorkItem(project.id, key = "AP-3", status = WorkItemStatus.Done)
+        repository.seed(mine)
+        repository.seed(unassigned)
+        repository.seed(done)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider(), currentUserID = testUserID)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        model.toggleShowOnlyMyTasks()
+        val todoLane = model.projection.columns.single { it.status.category == WorkItemStatus.Todo }.status.id
+
+        model.selectAll(todoLane, listOf(mine.id, unassigned.id, done.id))
+
+        assertEquals(listOf(mine.id), model.selection.ids)
+        assertEquals(todoLane, model.selectionLane)
+        assertTrue(model.isSelecting)
+    }
+
+    @Test
+    fun `moving a selection sends every ticked card to one lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo)
+        val second = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo)
+        val untouched = testWorkItem(project.id, key = "AP-3", status = WorkItemStatus.Todo)
+        repository.seed(first)
+        repository.seed(second)
+        repository.seed(untouched)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        val todoLane = model.projection.columns.single { it.status.category == WorkItemStatus.Todo }.status.id
+        val inProgressLane =
+            model.projection.columns.single { it.status.category == WorkItemStatus.InProgress }.status.id
+
+        model.startSelecting(todoLane, seed = first.id)
+        model.toggleSelected(todoLane, second.id)
+        val outcome = assertNotNull(model.moveSelection(inProgressLane))
+        advanceUntilIdle()
+
+        assertEquals(2, outcome.appliedCount)
+        assertEquals(0, outcome.failureCount)
+        assertEquals(WorkItemStatus.InProgress, repository.workItem(first.id)!!.status)
+        assertEquals(WorkItemStatus.InProgress, repository.workItem(second.id)!!.status)
+        assertEquals(
+            WorkItemStatus.Todo,
+            repository.workItem(untouched.id)!!.status,
+            "an unticked card must not move",
+        )
+        assertTrue(model.selection.isEmpty)
+        assertFalse(model.isSelecting)
+        assertNull(model.selectionLane)
+    }
+
+    /**
+     * Archiving a Done selection closes every card, and the lane really empties.
+     *
+     * This is the whole point of the feature: `Done` was a terminal lane with no way out, so it
+     * could only grow. The assertion is on the lane the board draws, not just the stored status,
+     * because a closed card that still rendered in Done would leave the user with a clear button
+     * that appears not to work.
+     */
+    @Test
+    fun `archiving a done selection closes every card and empties the lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = testWorkItem(
+            project.id,
+            key = "AP-1",
+            status = WorkItemStatus.Done,
+            resolvedAt = repositoryClock(),
+        )
+        val second = testWorkItem(
+            project.id,
+            key = "AP-2",
+            status = WorkItemStatus.Done,
+            resolvedAt = repositoryClock(),
+        )
+        val untouched = testWorkItem(project.id, key = "AP-3", status = WorkItemStatus.InProgress)
+        repository.seed(first)
+        repository.seed(second)
+        repository.seed(untouched)
+        val resolution = repository.workItem(first.id)!!.resolvedAt
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        val doneLane = model.projection.columns.single { it.status.category == WorkItemStatus.Done }.status.id
+
+        model.startSelecting(doneLane, seed = first.id)
+        model.toggleSelected(doneLane, second.id)
+        val outcome = assertNotNull(model.archiveSelection())
+        advanceUntilIdle()
+
+        assertEquals(2, outcome.appliedCount)
+        assertEquals(WorkItemStatus.Closed, repository.workItem(first.id)!!.status)
+        assertEquals(WorkItemStatus.Closed, repository.workItem(second.id)!!.status)
+        assertEquals(resolution, repository.workItem(first.id)!!.resolvedAt)
+        assertTrue(
+            model.projection.columns.single { it.status.category == WorkItemStatus.Done }.items.isEmpty(),
+            "the done lane still draws a closed card, so clearing done would look broken",
+        )
+        assertFalse(model.isSelecting)
+    }
+
+    /**
+     * A batch that could not move anything keeps every card ticked for a retry.
+     *
+     * The retryable set is the outcome's failures, not "whatever is still in the lane": a card
+     * that left the lane is pruned by the next projection, while a card that failed in place
+     * stays ticked and the user can press again without re-selecting it.
+     */
+    @Test
+    fun `a failed batch keeps its cards ticked and reports the failure`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo)
+        val second = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo)
+        repository.seed(first)
+        repository.seed(second)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        val todoLane = model.projection.columns.single { it.status.category == WorkItemStatus.Todo }.status.id
+        val doneLane = model.projection.columns.single { it.status.category == WorkItemStatus.Done }.status.id
+        model.startSelecting(todoLane, seed = first.id)
+        model.toggleSelected(todoLane, second.id)
+
+        repository.failure = AppError.Offline
+        val outcome = assertNotNull(model.moveSelection(doneLane))
+        advanceUntilIdle()
+
+        assertEquals(0, outcome.appliedCount)
+        assertEquals(listOf(first.id, second.id), outcome.retryable)
+        assertEquals(listOf(first.id, second.id), model.selection.ids)
+        assertTrue(model.isSelecting)
+        assertNotNull(model.errorMessage)
+    }
+
+    /** A tick on a card that leaves its lane is dropped on the next projection. */
+    @Test
+    fun `pruning drops a tick that left the lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val staying = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Todo)
+        val leaving = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo)
+        repository.seed(staying)
+        repository.seed(leaving)
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        val todoLane = model.projection.columns.single { it.status.category == WorkItemStatus.Todo }.status.id
+        model.startSelecting(todoLane, seed = staying.id)
+        model.toggleSelected(todoLane, leaving.id)
+
+        repository.moveWorkItem(
+            id = leaving.id,
+            to = WorkItemStatus.Done,
+            rank = null,
+            now = repositoryClock(),
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf(staying.id), model.selection.ids)
+        assertTrue(model.isSelecting, "one card leaving must not end the mode")
+    }
+
+    /** Filing away a done card is the per-card path to the same close. */
+    @Test
+    fun `filing away a done card closes it and removes it from the done lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val item = testWorkItem(
+            project.id,
+            key = "AP-1",
+            status = WorkItemStatus.Done,
+            resolvedAt = repositoryClock(),
+        )
+        repository.seed(item)
+        val resolution = repository.workItem(item.id)!!.resolvedAt
+
+        val model = ProjectBoardModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertTrue(model.fileAway(item.id))
+        advanceUntilIdle()
+
+        assertEquals(WorkItemStatus.Closed, repository.workItem(item.id)!!.status)
+        assertEquals(resolution, repository.workItem(item.id)!!.resolvedAt)
+        assertTrue(model.projection.columns.none { column -> column.items.any { it.id == item.id } })
+    }
 }
 
 private fun repositoryClock(): kotlin.time.Instant = kotlin.time.Instant.fromEpochSeconds(1_760_000_000)

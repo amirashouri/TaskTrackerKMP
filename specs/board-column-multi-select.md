@@ -45,30 +45,33 @@ card leave the board. Nothing in the backlog screen changes here.
 
 ## Contract
 
-- [ ] Long-press on a card or the column header's **Select** enters selection mode **scoped to
-  that lane**; a tap toggles a card, other lanes' cards are unaffected, and Clear/Back leaves the
-  mode and restores drag and tap-to-open.
-- [ ] The column header's **Select all** selects only the cards that lane is currently projecting
+- [x] The column header's **Select** enters selection mode **scoped to that lane**; a tap
+  toggles a card, other lanes' cards are unaffected, and Clear/Back leaves the mode and restores
+  drag and tap-to-open. There is no long-press entry: on the board a long-press already lifts the
+  card for drag (`detectDragGesturesAfterLongPress`, 300ms), so a stationary hold would start a
+  drag ghost instead of a selection. The header is the only entry point, and it is drawn on every
+  lane that has cards.
+- [x] The column header's **Select all** selects only the cards that lane is currently projecting
   — the sprint filter and the "My tasks" filter apply, and hidden cards are never selected.
-- [ ] Archiving a **Done** card closes it: status becomes `Closed`, `resolvedAt` is kept, the next
+- [x] Archiving a **Done** card closes it: status becomes `Closed`, `resolvedAt` is kept, the next
   projection no longer lists it in Done, and it appears in the Archived segment
   (`ArchiveWorkItemTest`, `ArchiveRoundTripScenarios`).
-- [ ] Archiving an already-`Closed` card still refuses with its existing message and is counted as
+- [x] Archiving an already-`Closed` card still refuses with its existing message and is counted as
   skipped, not failed — a batch over a mixed lane completes.
-- [ ] **Move to …** sends every selected card to the chosen `StatusDefinition.id` through
+- [x] **Move to …** sends every selected card to the chosen `StatusDefinition.id` through
   `MoveWorkItem`, one command per card in board order; ranks append at the destination lane.
-- [ ] Partial failure is reported the same way as the backlog batch: moved/closed/skipped/failed
+- [x] Partial failure is reported the same way as the backlog batch: moved/closed/skipped/failed
   counts plus the first failure; succeeded cards leave the selection and failed cards stay
   selected.
-- [ ] While selection mode is on, dragging is disabled for every card, and the action bar is
+- [x] While selection mode is on, dragging is disabled for every card, and the action bar is
   disabled while a batch runs; the selected count is announced to assistive technology and each
   card exposes a `selected` state (`BoardColumnScenarios`).
-- [ ] Reverting the `Done → Closed` rule fails the domain test naming the refused close, and
+- [x] Reverting the `Done → Closed` rule fails the domain test naming the refused close, and
   reverting the projection refresh fails the board scenario (Rule 1).
 
 **KMP Constraint:** no platform-specific APIs (`java.*`, `android.*`, …) in `commonMain` without
-an explicit `expect/actual` contract; long-press and tap-to-toggle stay inside the existing Compose
-card surface.
+an explicit `expect/actual` contract; the header controls and tap-to-toggle stay inside the
+existing Compose card surface.
 
 ## Non-goal
 
@@ -88,25 +91,31 @@ card surface.
   'com.tasktracker.featureprojectspresentation.*'`, plus the board scenarios' `shared-ui`
   entry points.
 - **Before handoff:** `scripts/check.sh full` — new strings, selection visuals, and the drag gate.
-- **Counts / Baselines:** tests increase on all three hosts; `test-baseline.json` is regenerated
-  from a green full run.
+- **Counts / Baselines:** +14 on each host (jvm 2370, iOS 2305, Android host 1980);
+  `test-baseline.json` is regenerated from the green full run.
 - **Stays pending:** the long-press feel on a phone, and confirming on a device that the Done lane
   actually empties after a batch (the projection test is the executable proof; the device check is
   the visual one).
 
 ## Handoff
 
-- **Done:** Scope and contract agreed for the board surface (planning only).
-- **Pending:** Phase 1 file confirmation; the domain decision below; how the action bar exposes
-  both Move and Archive without covering the lane.
-- **Next step:** Land the backlog spec's selection primitives, then change `ArchiveWorkItem` and
-  its test before touching the board UI.
-- **Gotchas:** `ArchiveWorkItem` currently throws for **both** terminal statuses; the change must
-  keep refusing `Closed` while accepting `Done`, and the message must stop saying a Done card is
-  "already filed away" if it is not. `BoardCardActions` hides every action for terminal cards —
-  the Done case has to opt in explicitly, not merely remove that early return, or Closed cards
-  gain an Archive button that always fails. The drag gate is `movingItemID == null &&
-  !item.status.isTerminal`; selection mode is a third condition, not a replacement.
+- **Done:** `ArchiveWorkItem` closes a `Done` item (`resolvedAt` kept) and refuses only `Closed`;
+  `ArchiveWorkItems` skips only `Closed`; the backlog model's "finished elsewhere" test moved to
+  `Closed` so it still covers the skip path. `ProjectBoardModel` carries the lane-scoped selection
+  (`startSelecting`, `toggleSelected`, `selectAll` intersected with the lane projection, `clearSelection`,
+  `moveSelection`, `archiveSelection`) and prunes on reload except while a batch runs. The board draws
+  header Select / Select all / Clear, ticks cards through the shared `SelectionTickBox`, hides search
+  and drag while selecting, and the bar offers Move to … and Archive/Close. `BoardCardActions`
+  offers Archive for `Done` and skips only `Closed`. Five `BoardSelectionScenarios` run on all three
+  hosts; `scripts/check.sh full` is green at jvm 2370, iOS 2305, Android host 1980, and
+  `test-baseline.json` is regenerated from that run.
+- **Pending:** the device pass — that the Done lane visually empties after a batch and that the bar
+  does not cover the lane on a phone.
+- **Next step:** merge, delete the spec, and promote the two decisions below.
+- **Gotchas:** no long-press entry (it lifts a drag ghost); selection starts at the lane header and
+  the other lanes' headers drop their Select while a set is open. The tick's test tag is a single
+  constant, so assert it per screen, not per card. On the Android host a pointer click on the Done
+  lane can land outside the viewport, so the scenarios drive those controls by semantics action.
 
 ## Promote
 

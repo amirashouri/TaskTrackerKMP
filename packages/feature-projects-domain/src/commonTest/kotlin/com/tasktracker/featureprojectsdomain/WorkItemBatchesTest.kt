@@ -174,10 +174,27 @@ class WorkItemBatchesTest {
     }
 
     @Test
-    fun `an item finished elsewhere is skipped and keeps its resolution date`() = runTest {
+    fun `a done item is closed rather than skipped`() = runTest {
         val repository = FakeProjectRepository()
         val project = repository.seedProject()
-        val finished = addItem(repository, project.id, WorkItemStatus.Done)
+        val done = addItem(repository, project.id, WorkItemStatus.Done)
+        val finishedResolution = assertNotNull(repository.workItem(done.id)).resolvedAt
+        val archive = ArchiveWorkItems(repository, TestDateProvider(now + 60.seconds))
+
+        val outcome = archive(listOf(done.id))
+
+        assertEquals(listOf(done.id), outcome.applied)
+        assertEquals(0, outcome.skippedCount)
+        val closed = assertNotNull(repository.workItem(done.id))
+        assertEquals(WorkItemStatus.Closed, closed.status)
+        assertEquals(finishedResolution, closed.resolvedAt, "the done date is the resolution")
+    }
+
+    @Test
+    fun `an item filed away elsewhere is skipped and keeps its resolution date`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = repository.seedProject()
+        val finished = addItem(repository, project.id, WorkItemStatus.Closed)
         val live = addItem(repository, project.id, WorkItemStatus.Todo)
         val finishedResolution = assertNotNull(repository.workItem(finished.id)).resolvedAt
         val archive = ArchiveWorkItems(repository, TestDateProvider(now + 60.seconds))

@@ -87,7 +87,7 @@ class ProjectsUiAndroidHostTest {
     fun aBusyCardDoesNotFileAnythingAway() = runComposeUiTest(block = ArchiveRoundTripScenarios.aBusyCardDoesNotFileAnythingAway)
 
     @Test
-    fun aDeliveredCardOffersNoFileAway() = runComposeUiTest(block = ArchiveRoundTripScenarios.aDeliveredCardOffersNoFileAway)
+    fun aDeliveredCardOffersClose() = runComposeUiTest(block = ArchiveRoundTripScenarios.aDeliveredCardOffersClose)
 
     @Test
     fun everyLaneIsDrawnEvenWithNothingInIt() = runComposeUiTest(block = BoardColumnScenarios.everyLaneIsDrawnEvenWithNothingInIt)
@@ -362,6 +362,31 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun theBarRefusesActionsAndNamesTheWorkInProgress() =
         runComposeUiTest(block = ProjectBacklogScenarios.theBarRefusesActionsAndNamesTheWorkInProgress)
+
+    /** The lane header's Select starts a selection scoped to that lane. */
+    @Test
+    fun theLaneHeaderStartsItsOwnSelection() =
+        runComposeUiTest(block = BoardSelectionScenarios.theLaneHeaderStartsItsOwnSelection)
+
+    /** A card tap ticks and unticks it without opening the editor. */
+    @Test
+    fun tappingACardTicksAndUnticksIt() =
+        runComposeUiTest(block = BoardSelectionScenarios.tappingACardTicksAndUnticksIt)
+
+    /** Select all ticks exactly the lane's cards. */
+    @Test
+    fun selectAllTakesTheLanesCards() =
+        runComposeUiTest(block = BoardSelectionScenarios.selectAllTakesTheLanesCards)
+
+    /** The bar archives the set, and Clear leaves the mode. */
+    @Test
+    fun theBarArchivesTheSelectionAndClearEndsTheMode() =
+        runComposeUiTest(block = BoardSelectionScenarios.theBarArchivesTheSelectionAndClearEndsTheMode)
+
+    /** Move to asks for a destination lane and reports the chosen one. */
+    @Test
+    fun moveAsksForALaneAndReportsIt() =
+        runComposeUiTest(block = BoardSelectionScenarios.moveAsksForALaneAndReportsIt)
 
     @Test
     fun wideLayoutClampsContentWidthAndCenters() =

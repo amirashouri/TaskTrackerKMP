@@ -367,6 +367,23 @@
       bar's progress label is separate from the button labels so the buttons can keep saying what
       they do while disabled.
     -->
+    <!--
+      Multi-select on the board.
+
+      "Select all" is a button label on a 300dp lane header, so it stays two words rather than a
+      glyph: there is no select-all icon in the set, and reusing the tick-in-a-box would make two
+      different actions wear the same picture.
+    -->
+    <string name="board_select">Select</string>
+    <string name="board_select_all">Select all</string>
+    <string name="board_selection_clear">Clear</string>
+    <string name="board_selection_count">%1$d selected</string>
+    <string name="board_selection_working">Working…</string>
+    <string name="board_move_selection">Move to…</string>
+    <string name="board_archive_selection">Archive</string>
+    <string name="board_move_prompt_title">Move cards</string>
+    <string name="board_move_prompt_body">Choose the column to move %1$d cards to.</string>
+
     <string name="backlog_select">Select</string>
     <string name="backlog_select_open">Select tasks</string>
     <string name="backlog_selection_count">%1$d selected</string>

@@ -76,6 +76,7 @@ import com.tasktracker.resources.backlog_kanban_empty_body
 import com.tasktracker.resources.backlog_kanban_empty_title
 import com.tasktracker.resources.backlog_put_on_board_prompt_body
 import com.tasktracker.resources.backlog_put_on_board_prompt_body_many
+import com.tasktracker.resources.backlog_put_on_board_prompt_title
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
@@ -703,6 +704,7 @@ fun ProjectBacklogScreen(
             // sheet animates out on its own.
             pendingPutOnBoard?.let { request ->
                 PutOnBoardSheet(
+                    title = stringResource(Res.string.backlog_put_on_board_prompt_title),
                     body = when (request) {
                         is BacklogPutOnBoardRequest.Single ->
                             stringResource(Res.string.backlog_put_on_board_prompt_body, request.item.title)

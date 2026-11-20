@@ -42,6 +42,7 @@ import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttGlassSurface
@@ -59,6 +60,9 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.board_empty_column
+import com.tasktracker.resources.board_select
+import com.tasktracker.resources.board_select_all
+import com.tasktracker.resources.board_selection_clear
 import com.tasktracker.resources.board_sort_by_date
 import com.tasktracker.resources.board_sort_by_priority
 import org.jetbrains.compose.resources.stringResource
@@ -87,6 +91,20 @@ fun BoardColumnView(
     drag: BoardCardDrag? = null,
     /** Outlines column as active drop target when a dragged card hovers over it. */
     isDropTarget: Boolean = false,
+    /** True while any lane is in multi-select mode; exactly one lane owns the selection. */
+    isSelecting: Boolean = false,
+    /** True when *this* lane owns the selection; only then do its cards tick. */
+    isSelectionLane: Boolean = false,
+    /** The ticked cards, all belonging to [isSelectionLane]'s selection. */
+    selection: Set<WorkItemID> = emptySet(),
+    /** Starts selecting this lane. Null hides the header's Select control. */
+    onStartSelecting: (() -> Unit)? = null,
+    /** Ticks or unticks one card of this lane. */
+    onToggleSelected: (WorkItemID) -> Unit = {},
+    /** Selects every card this lane is drawing (already search-filtered by the screen). */
+    onSelectAll: ((List<WorkItemID>) -> Unit)? = null,
+    /** Leaves select mode. */
+    onClearSelection: () -> Unit = {},
 ) {
     Box(
         modifier = modifier
@@ -164,6 +182,11 @@ fun BoardColumnView(
                             item = item,
                             onClick = { onSelect(item) },
                             onCopy = onCopy,
+                            isSelecting = isSelecting,
+                            isSelected = item.id in selection,
+                            // A tap in a lane that does not own the selection ticks nothing:
+                            // the selection is one lane's, and the header is how it changes.
+                            onToggleSelected = { if (isSelectionLane) onToggleSelected(item.id) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .alpha(if (drag?.draggingItemID == item.id) 0.35f else 1f)
@@ -243,30 +266,57 @@ fun BoardColumnView(
                 color = ttLabelSecondary(),
                 modifier = Modifier.testTag(BoardColumnCountTag(column.status)),
             )
-            ttGlassIconButton(
-                image = ttActionIcons.sort,
-                contentDescription = stringResource(
-                    when (sortOrder) {
-                        ColumnSortOrder.ByDate -> Res.string.board_sort_by_date
-                        ColumnSortOrder.ByPriority -> Res.string.board_sort_by_priority
-                    }
-                ),
-                onClick = {
-                    sortOrder = when (sortOrder) {
-                        ColumnSortOrder.ByDate -> ColumnSortOrder.ByPriority
-                        ColumnSortOrder.ByPriority -> ColumnSortOrder.ByDate
-                    }
-                },
-                tint = ttAccent(),
-                modifier = Modifier.testTag(BoardColumnSortTag(column.status)),
-            )
-            onAddTask?.let { addTask ->
+            if (isSelectionLane) {
+                // One lane owns the selection while it is on: Select all fills it with exactly the
+                // cards this lane draws, and the close control is the way out with its existing
+                // ticks dropped.
+                onSelectAll?.let { selectAll ->
+                    ttGlassButton(
+                        label = stringResource(Res.string.board_select_all),
+                        onClick = { selectAll(column.items.map { it.id }) },
+                        modifier = Modifier.testTag(BoardColumnSelectAllTag(column.status)),
+                    )
+                }
                 ttGlassIconButton(
-                    image = ttActionIcons.add,
-                    contentDescription = stringResource(Res.string.board_add_task),
-                    onClick = addTask,
-                    modifier = Modifier.testTag(BoardColumnAddTaskTag(column.status)),
+                    image = ttActionIcons.close,
+                    contentDescription = stringResource(Res.string.board_selection_clear),
+                    onClick = onClearSelection,
+                    modifier = Modifier.testTag(BoardColumnSelectionClearTag(column.status)),
                 )
+            } else if (!isSelecting) {
+                onStartSelecting?.let { startSelecting ->
+                    ttGlassIconButton(
+                        image = ttActionIcons.select,
+                        contentDescription = stringResource(Res.string.board_select),
+                        onClick = startSelecting,
+                        modifier = Modifier.testTag(BoardColumnSelectTag(column.status)),
+                    )
+                }
+                ttGlassIconButton(
+                    image = ttActionIcons.sort,
+                    contentDescription = stringResource(
+                        when (sortOrder) {
+                            ColumnSortOrder.ByDate -> Res.string.board_sort_by_date
+                            ColumnSortOrder.ByPriority -> Res.string.board_sort_by_priority
+                        }
+                    ),
+                    onClick = {
+                        sortOrder = when (sortOrder) {
+                            ColumnSortOrder.ByDate -> ColumnSortOrder.ByPriority
+                            ColumnSortOrder.ByPriority -> ColumnSortOrder.ByDate
+                        }
+                    },
+                    tint = ttAccent(),
+                    modifier = Modifier.testTag(BoardColumnSortTag(column.status)),
+                )
+                onAddTask?.let { addTask ->
+                    ttGlassIconButton(
+                        image = ttActionIcons.add,
+                        contentDescription = stringResource(Res.string.board_add_task),
+                        onClick = addTask,
+                        modifier = Modifier.testTag(BoardColumnAddTaskTag(column.status)),
+                    )
+                }
             }
         }
     }
@@ -293,6 +343,9 @@ fun BoardColumnCountTag(status: StatusDefinition): String = "${BoardColumnTag(st
 fun BoardColumnEmptyTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.empty"
 fun BoardColumnAddTaskTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.add"
 fun BoardColumnSortTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.sort"
+fun BoardColumnSelectTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.select"
+fun BoardColumnSelectAllTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.selectAll"
+fun BoardColumnSelectionClearTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.clear"
 
 /** Timeout before long press lifts card (300ms prevents collision with vertical scroll swipes). */
 internal const val BoardCardLiftTimeoutMillis = 300L
