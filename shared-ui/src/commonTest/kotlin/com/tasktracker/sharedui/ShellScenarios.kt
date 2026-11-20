@@ -2717,6 +2717,45 @@ object ShellScenarios {
     }
 
     /**
+     * The sidebar lens has to be re-measured when the chrome leaves and re-enters the tree.
+     *
+     * The resize scenario next door asserts the insets, but its landing destination is the top
+     * row: a lens that kept a stale y coordinate would still look right there. This one selects
+     * the last destination first, shrinks past the sidebar threshold into the rail, and grows
+     * back, asserting the lens against the row it marks on both sides of the round trip.
+     */
+    val theSidebarLensSurvivesAChromeRoundTrip: suspend ComposeUiTest.() -> Unit = {
+        val width = mutableStateOf(SIDEBAR_WIDTH)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            widthState = width,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+
+        assertLensMarks(
+            what = "before shrinking to the rail",
+            lens = onNodeWithTag(SidebarLensTag).getBoundsInRoot(),
+            row = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot(),
+        )
+
+        runOnIdle { width.value = DESKTOP_WIDTH }
+        waitForIdle()
+        onNodeWithTag(NavigationRailTag).assertExists()
+        runOnIdle { width.value = SIDEBAR_WIDTH }
+        waitForIdle()
+        onNodeWithTag(SidebarTag).assertExists()
+
+        assertLensMarks(
+            what = "after growing back from the rail",
+            lens = onNodeWithTag(SidebarLensTag).getBoundsInRoot(),
+            row = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot(),
+        )
+    }
+
+    /**
      * Asserts a lens is marking a row: the same rectangle to within [ONE_POINT].
      *
      * Four edges rather than a centre or a top edge. A lens that is right about where a row starts
