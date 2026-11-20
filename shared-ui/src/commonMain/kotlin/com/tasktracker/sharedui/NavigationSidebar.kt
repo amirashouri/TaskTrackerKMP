@@ -44,7 +44,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
+import com.tasktracker.designsystem.AccentPalette
+import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.TTGlassSurface
@@ -62,6 +65,7 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.featureprojectspresentation.PickableProject
 import com.tasktracker.featureprojectspresentation.ProjectPickerModel
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
+import com.tasktracker.featuresettingspresentation.ThemeControlsPanel
 import com.tasktracker.routing.AppTab
 import kotlinx.coroutines.CoroutineScope
 import kotlin.math.roundToInt
@@ -74,6 +78,13 @@ internal fun NavigationSidebar(
     repository: ProjectRepositoryPort,
     activeProjectID: ProjectID?,
     onOpenProject: (ProjectID) -> Unit,
+    themeScheme: ThemeScheme,
+    accentPalette: AccentPalette,
+    glassIntensity: Float,
+    onThemeChange: (ThemeScheme) -> Unit,
+    onAccentPaletteChange: (AccentPalette) -> Unit,
+    onGlassIntensityPreview: (Float) -> Unit,
+    onGlassIntensityCommit: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // The same two inks the rail's cells use, for the same reason: both put a label on glass with
@@ -92,9 +103,10 @@ internal fun NavigationSidebar(
     // The travelling lens needs two measurements and neither can be derived: where each
     // destination row sits inside the panel, and the panel itself to measure them against.
     //
-    // A row's place is not a formula. The project list above the work destinations is
-    // `weight(1f, fill = false)`, so it grows with the number of projects and pushes those rows
-    // down — a lens positioned from an index would sit on the row above whatever was selected.
+    // A row's place is not a formula. The project list above the work destinations wraps to its
+    // projects, so a lens positioned from an index would sit on the row above whatever was
+    // selected. The space below Settings belongs to a spacer, and the theme panel is a measured
+    // neighbour pinned underneath it; neither is a fixed offset from the panel's top.
     //
     // The rows hand over their `LayoutCoordinates` and the rectangles are built *here*, in
     // composition, rather than inside the callbacks. That is the load-bearing detail: a callback
@@ -123,6 +135,11 @@ internal fun NavigationSidebar(
     }
     val lens = ttLensPlacement(rowRects, selected, density)
     val lensShape = RoundedCornerShape(ttRadius.control)
+    // `BoxWithConstraints` cannot bound the panel here: next to a weighted spacer it is measured
+    // with an infinite main-axis constraint, so `maxHeight * fraction` would be infinity and the
+    // panel would grow until it pushed the destinations off a short window. The panel's own
+    // measured height is the stable bound, and arrives on the same frame that places the lens.
+    val panelHeight = panel?.let { with(density) { it.size.height.toDp() } } ?: 0.dp
 
     Box(
         modifier = modifier
@@ -181,84 +198,110 @@ internal fun NavigationSidebar(
                     )
                 }
 
+                // Two children under SpaceBetween: the destination stack at the top and the theme
+                // panel at the floor. A spacer with a weight would have shared the leftover with
+                // the project list's own `weight(1f, fill = false)`; because that list wraps to
+                // its projects, its unused share stayed unused and the panel floated hundreds of
+                // dp above the bottom. SpaceBetween gives the whole remainder to the gap between
+                // the two children and leaves the stack's internal arrangement untouched.
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(ttSpacing.hairlineInset)
                         .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                    verticalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    // The index, at the head. It is the one destination that is not scoped to a
-                    // project, so it opens the panel rather than sitting at the bottom with the
-                    // work destinations. A heading here instead of a row was 8.1's shape, and it
-                    // composed "Projects" twice — once as inert text, once as the row below —
-                    // while hanging the same test tag on three nodes.
-                    SidebarDestinationRow(
-                        label = tabTitle(AppTab.Projects),
-                        icon = tabIcon(AppTab.Projects),
-                        isSelected = selected == AppTab.Projects,
-                        selectedInk = selectedInk,
-                        inactiveInk = inactiveInk,
-                        onClick = { onSelect(AppTab.Projects) },
-                        modifier = Modifier
-                            .testTag(SidebarButtonTag(AppTab.Projects))
-                            .onGloballyPositioned { rowCoordinates[AppTab.Projects] = it },
-                    )
-
-                    if (projectPicker.projects.isNotEmpty()) {
-                        LazyColumn(
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+                    ) {
+                        // The index, at the head. It is the one destination that is not scoped to a
+                        // project, so it opens the panel rather than sitting at the bottom with the
+                        // work destinations. A heading here instead of a row was 8.1's shape, and it
+                        // composed "Projects" twice — once as inert text, once as the row below —
+                        // while hanging the same test tag on three nodes.
+                        SidebarDestinationRow(
+                            label = tabTitle(AppTab.Projects),
+                            icon = tabIcon(AppTab.Projects),
+                            isSelected = selected == AppTab.Projects,
+                            selectedInk = selectedInk,
+                            inactiveInk = inactiveInk,
+                            onClick = { onSelect(AppTab.Projects) },
                             modifier = Modifier
-                                .weight(1f, fill = false)
-                                .testTag(SidebarProjectListTag),
-                            contentPadding = PaddingValues(vertical = ttSpacing.xs),
-                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                                .testTag(SidebarButtonTag(AppTab.Projects))
+                                .onGloballyPositioned { rowCoordinates[AppTab.Projects] = it },
+                        )
+
+                        if (projectPicker.projects.isNotEmpty()) {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .testTag(SidebarProjectListTag),
+                                contentPadding = PaddingValues(vertical = ttSpacing.xs),
+                                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                            ) {
+                                items(projectPicker.projects, key = { it.id.stringValue }) { project ->
+                                    SidebarProjectRow(
+                                        project = project,
+                                        isActive = activeProjectID == project.id,
+                                        onClick = { onOpenProject(project.id) },
+                                        selectedInk = selectedInk,
+                                        inactiveInk = inactiveInk,
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(ttSpacing.xl))
+
+                        Column(
+                            modifier = Modifier.padding(start = ttSpacing.lg),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
                         ) {
-                            items(projectPicker.projects, key = { it.id.stringValue }) { project ->
-                                SidebarProjectRow(
-                                    project = project,
-                                    isActive = activeProjectID == project.id,
-                                    onClick = { onOpenProject(project.id) },
+                            for (tab in AppTab.entries) {
+                                if (!tab.isProjectScoped) continue
+                                SidebarDestinationRow(
+                                    label = tabTitle(tab),
+                                    icon = tabIcon(tab),
+                                    isSelected = tab == selected,
                                     selectedInk = selectedInk,
                                     inactiveInk = inactiveInk,
+                                    onClick = { onSelect(tab) },
+                                    modifier = Modifier
+                                        .testTag(SidebarButtonTag(tab))
+                                        .onGloballyPositioned { rowCoordinates[tab] = it },
                                 )
                             }
                         }
+
+                        Spacer(Modifier.height(ttSpacing.xl))
+
+                        SidebarDestinationRow(
+                            label = tabTitle(AppTab.Settings),
+                            icon = tabIcon(AppTab.Settings),
+                            isSelected = selected == AppTab.Settings,
+                            selectedInk = selectedInk,
+                            inactiveInk = inactiveInk,
+                            onClick = { onSelect(AppTab.Settings) },
+                            modifier = Modifier
+                                .testTag(SidebarButtonTag(AppTab.Settings))
+                                .onGloballyPositioned { rowCoordinates[AppTab.Settings] = it },
+                        )
                     }
 
-                    Spacer(Modifier.height(ttSpacing.xl))
-
-                    Column(
-                        modifier = Modifier.padding(start = ttSpacing.lg),
-                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
-                    ) {
-                        for (tab in AppTab.entries) {
-                            if (!tab.isProjectScoped) continue
-                            SidebarDestinationRow(
-                                label = tabTitle(tab),
-                                icon = tabIcon(tab),
-                                isSelected = tab == selected,
-                                selectedInk = selectedInk,
-                                inactiveInk = inactiveInk,
-                                onClick = { onSelect(tab) },
-                                modifier = Modifier
-                                    .testTag(SidebarButtonTag(tab))
-                                    .onGloballyPositioned { rowCoordinates[tab] = it },
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(ttSpacing.xl))
-
-                    SidebarDestinationRow(
-                        label = tabTitle(AppTab.Settings),
-                        icon = tabIcon(AppTab.Settings),
-                        isSelected = selected == AppTab.Settings,
-                        selectedInk = selectedInk,
-                        inactiveInk = inactiveInk,
-                        onClick = { onSelect(AppTab.Settings) },
-                        modifier = Modifier
-                            .testTag(SidebarButtonTag(AppTab.Settings))
-                            .onGloballyPositioned { rowCoordinates[AppTab.Settings] = it },
+                    // Bounding the expanded content keeps the navigation rows fixed — and the
+                    // travelling lens with them — on a short desktop window; the panel scrolls
+                    // instead of pushing the rows away.
+                    ThemeControlsPanel(
+                        themeScheme = themeScheme,
+                        accentPalette = accentPalette,
+                        glassIntensity = glassIntensity,
+                        onThemeChange = onThemeChange,
+                        onAccentPaletteChange = onAccentPaletteChange,
+                        onGlassIntensityPreview = onGlassIntensityPreview,
+                        onGlassIntensityCommit = onGlassIntensityCommit,
+                        modifier = Modifier.fillMaxWidth(),
+                        contentMaxHeight = panelHeight * THEME_PANEL_HEIGHT_FRACTION,
                     )
                 }
             }
@@ -376,6 +419,9 @@ private fun SidebarProjectRow(
  * could not tell which chrome it was looking at.
  */
 const val SidebarTag = "shell.sidebar"
+
+/** Share of the remaining sidebar height the expanded theme panel may occupy before scrolling. */
+private const val THEME_PANEL_HEIGHT_FRACTION = 0.4f
 
 /**
  * One destination's row in the sidebar, so a test taps by name rather than by position.

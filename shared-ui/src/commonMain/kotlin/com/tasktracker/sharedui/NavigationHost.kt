@@ -63,6 +63,7 @@ import com.tasktracker.designsystem.SheetPresentation
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTGlassNavigationRail
 import com.tasktracker.designsystem.TTGlassTabBar
+import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttGlass
@@ -197,6 +198,11 @@ fun NavigationHost(
     // question, and two reads of the same local is two chances for them to disagree about what
     // layout this shell is in.
     val layoutClass = LocalShellLayoutClass.current
+
+    // The sidebar's appearance panel writes through the same shell preferences as Settings.
+    // Reading them here, once, keeps the chrome and the screen on one value per frame.
+    val sidebarAccentPalette by preferences.accentPalette.collectAsState()
+    val sidebarGlassIntensity by preferences.glassIntensity.collectAsState()
 
     // Editors that have been dismissed but are still playing their exit transition.
     // Kept composed until the animation finishes so the exit can be seen.
@@ -795,6 +801,20 @@ fun NavigationHost(
                     repository = environment.repository,
                     activeProjectID = navigation.activeProjectID,
                     onOpenProject = { id -> router.openProject(id, AppTab.Board) },
+                    themeScheme = themeScheme,
+                    accentPalette = sidebarAccentPalette,
+                    glassIntensity = sidebarGlassIntensity,
+                    onThemeChange = { scheme -> scope.launch { preferences.setThemeScheme(scheme) } },
+                    onAccentPaletteChange = { palette ->
+                        scope.launch { preferences.setAccentPalette(palette) }
+                    },
+                    // Preview is composition-only; only the commit is written, on finger lift.
+                    onGlassIntensityPreview = { intensity ->
+                        preferences.previewGlassIntensity(intensity)
+                    },
+                    onGlassIntensityCommit = { intensity ->
+                        scope.launch { preferences.commitGlassIntensity(intensity) }
+                    },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { size: IntSize ->

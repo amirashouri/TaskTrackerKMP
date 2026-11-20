@@ -29,6 +29,7 @@ internal fun GlassIntensityRow(
     intensity: Float,
     onPreview: (Float) -> Unit,
     onCommit: (Float) -> Unit,
+    sliderTag: String = GlassSliderTag,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = ttSpacing.sm),
@@ -55,7 +56,7 @@ internal fun GlassIntensityRow(
             value = intensity,
             onValueChange = onPreview,
             onValueChangeFinished = onCommit,
-            modifier = Modifier.testTag(GlassSliderTag),
+            modifier = Modifier.testTag(sliderTag),
         )
     }
 }

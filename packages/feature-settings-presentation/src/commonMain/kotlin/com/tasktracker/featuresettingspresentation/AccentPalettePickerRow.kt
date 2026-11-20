@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,11 +58,17 @@ import kotlin.math.roundToInt
 internal fun AccentPalettePickerRow(
     selected: AccentPalette,
     onSelect: (AccentPalette) -> Unit,
+    showNames: Boolean = true,
+    tagPrefix: String = ACCENT_TAG_PREFIX,
 ) {
     val density = LocalDensity.current
     val positions = remember { mutableStateMapOf<AccentPalette, IntRect>() }
     var containerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val lens = ttLensPlacement(positions, selected, density)
+    // With names the labels need three columns on a phone. Without them six swatches fit one
+    // row, which is what the sidebar's compact panel wants — the lens and the hit targets stay
+    // the same, only the caption goes away.
+    val columns = if (showNames) GRID_COLUMNS else AccentPalette.all.size
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(vertical = ttSpacing.sm),
@@ -96,7 +104,7 @@ internal fun AccentPalettePickerRow(
             // could fit. Two rows of three give each label about 96dp, so it reads in full on
             // one line, and the cell grows to roughly 96x70dp — well past the 44dp target.
             Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
-                AccentPalette.all.chunked(GRID_COLUMNS).forEach { rowPalettes ->
+                AccentPalette.all.chunked(columns).forEach { rowPalettes ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
@@ -109,11 +117,13 @@ internal fun AccentPalettePickerRow(
                                 onSelect = onSelect,
                                 positions = positions,
                                 containerCoordinates = containerCoordinates,
+                                showNames = showNames,
+                                tagPrefix = tagPrefix,
                             )
                         }
-                        // A seventh palette would start a third row; a short row is padded so
-                        // its cells keep the same width as the rows above.
-                        repeat(GRID_COLUMNS - rowPalettes.size) {
+                        // A short row is padded so its cells keep the same width as the rows
+                        // above; in the compact one-row grid there is no short row to pad.
+                        repeat(columns - rowPalettes.size) {
                             Spacer(modifier = Modifier.weight(1f))
                         }
                     }
@@ -127,7 +137,7 @@ internal fun AccentPalettePickerRow(
                 modifier = Modifier
                     .offset(x = lens.x, y = lens.y)
                     .size(lens.width, lens.height)
-                    .testTag(AccentGlassTag(selected))
+                    .testTag(AccentGlassTag(selected, tagPrefix))
                     .ttGlassLens(
                         shape = RoundedCornerShape(ttRadius.control),
                         washAlpha = ttGlass.SOLID_LENS_ALPHA,
@@ -154,12 +164,15 @@ private fun RowScope.AccentCell(
     onSelect: (AccentPalette) -> Unit,
     positions: MutableMap<AccentPalette, IntRect>,
     containerCoordinates: LayoutCoordinates?,
+    showNames: Boolean,
+    tagPrefix: String,
 ) {
     val cellShape = RoundedCornerShape(ttRadius.control)
     Box(
         modifier = Modifier
             .weight(1f)
-            .testTag(AccentCellTag(palette))
+            .then(if (showNames) Modifier else Modifier.height(MIN_COMPACT_CELL_HEIGHT))
+            .testTag(AccentCellTag(palette, tagPrefix))
             .clip(cellShape)
             .selectable(selected = isSelected, role = Role.RadioButton) {
                 onSelect(palette)
@@ -179,14 +192,29 @@ private fun RowScope.AccentCell(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = ttSpacing.sm),
+                .then(
+                    if (showNames) {
+                        Modifier.padding(vertical = ttSpacing.sm)
+                    } else {
+                        // Arrangement.Center only has an effect if this column occupies the cell's
+                        // full 44dp; wrapping to the swatch's 24dp left the swatch high and the
+                        // travelling lens a few dp below it.
+                        Modifier.fillMaxHeight()
+                    },
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+            verticalArrangement = if (showNames) {
+                Arrangement.spacedBy(ttSpacing.xs)
+            } else {
+                // With no caption below it, the swatch belongs in the middle of the 44dp cell;
+                // leaving it top-aligned made the travelling lens read as offset downward.
+                Arrangement.Center
+            },
         ) {
             Box(
                 modifier = Modifier
-                    .size(32.dp)
-                    .testTag(AccentSwatchTag(palette))
+                    .size(if (showNames) 32.dp else COMPACT_SWATCH_SIZE)
+                    .testTag(AccentSwatchTag(palette, tagPrefix))
                     .clip(CircleShape)
                     .background(
                         Brush.horizontalGradient(listOf(palette.light, palette.dark)),
@@ -203,29 +231,46 @@ private fun RowScope.AccentCell(
                         },
                     ),
             )
-            ttText(
-                text = palette.title,
-                modifier = Modifier.testTag(AccentLabelTag(palette)),
-                style = ttTypography.footnote,
-                color = ttSelectionLabelInk(isSelected),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-            )
+            if (showNames) {
+                ttText(
+                    text = palette.title,
+                    modifier = Modifier.testTag(AccentLabelTag(palette, tagPrefix)),
+                    style = ttTypography.footnote,
+                    color = ttSelectionLabelInk(isSelected),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                )
+            }
         }
     }
 }
 
 private const val GRID_COLUMNS = 3
+private const val ACCENT_TAG_PREFIX = "settings.accent"
+private val COMPACT_SWATCH_SIZE = 24.dp
+private val MIN_COMPACT_CELL_HEIGHT = 44.dp
 
 /** The tag for one palette's whole tappable cell, so its 44dp target can be measured. */
-internal fun AccentCellTag(palette: AccentPalette): String = "settings.accent.cell.${palette.wireValue}"
+internal fun AccentCellTag(
+    palette: AccentPalette,
+    tagPrefix: String = ACCENT_TAG_PREFIX,
+): String = "$tagPrefix.cell.${palette.wireValue}"
 
 /** The tag for one palette's swatch, so a rendered test can read the glass lens off it. */
-internal fun AccentSwatchTag(palette: AccentPalette): String = "settings.accent.${palette.wireValue}"
+internal fun AccentSwatchTag(
+    palette: AccentPalette,
+    tagPrefix: String = ACCENT_TAG_PREFIX,
+): String = "$tagPrefix.${palette.wireValue}"
 
 /** The tag for one palette's glass pane, so a test can read the rectangle's coverage. */
-internal fun AccentGlassTag(palette: AccentPalette): String = "settings.accent.glass.${palette.wireValue}"
+internal fun AccentGlassTag(
+    palette: AccentPalette,
+    tagPrefix: String = ACCENT_TAG_PREFIX,
+): String = "$tagPrefix.glass.${palette.wireValue}"
 
 /** The tag for one palette's label, so a test can prove the pane reaches the text. */
-internal fun AccentLabelTag(palette: AccentPalette): String = "settings.accent.label.${palette.wireValue}"
+internal fun AccentLabelTag(
+    palette: AccentPalette,
+    tagPrefix: String = ACCENT_TAG_PREFIX,
+): String = "$tagPrefix.label.${palette.wireValue}"

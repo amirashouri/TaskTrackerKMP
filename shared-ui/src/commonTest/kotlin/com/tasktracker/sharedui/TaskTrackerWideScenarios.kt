@@ -123,4 +123,20 @@ abstract class TaskTrackerWideScenarios {
         runComposeUiTest(
             block = ShellScenarios.theSidebarFollowsAProjectChosenFromTheProjectsList,
         )
+
+    @Test
+    fun theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader() =
+        runComposeUiTest(
+            block = ShellScenarios.theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader,
+        )
+
+    @Test
+    fun theSidebarThemePanelControlsTheShellPreferences() =
+        runComposeUiTest(
+            block = ShellScenarios.theSidebarThemePanelControlsTheShellPreferences,
+        )
+
+    @Test
+    fun theSidebarThemePanelScrollsInAShortWindow() =
+        runComposeUiTest(block = ShellScenarios.theSidebarThemePanelScrollsInAShortWindow)
 }
