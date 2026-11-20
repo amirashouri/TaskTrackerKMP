@@ -141,6 +141,10 @@ class PreviewSettingsPort(
     override suspend fun setServerAddress(input: String): ServerAddressValidation =
         ServerAddressValidation.Valid(input)
 
+    /** The preview never scans a pairing link; this is only what the interface requires. */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation =
+        ServerAddressValidation.Valid(input)
+
     override suspend fun resetServerAddress() = Unit
 
     /** A preview has no paired machine, so the Agent block shows its empty state. */

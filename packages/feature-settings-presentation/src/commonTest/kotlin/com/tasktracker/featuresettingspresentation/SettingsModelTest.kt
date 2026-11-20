@@ -964,6 +964,19 @@ class RecordingSettingsPort(
         return result
     }
 
+    /**
+     * Mirrors the real service's save-without-probe rule for a pairing link. Not on the
+     * model's path — the shell applies a scan on the auth gate — but a fake has to answer.
+     */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation {
+        appliedPairingAddresses += input
+        val result = ServerAddressValidation.Valid(input)
+        serverAddressValue = ServerAddressSettings(inUse = result.baseUrl, savedOverride = result.baseUrl)
+        return result
+    }
+
+    val appliedPairingAddresses = mutableListOf<String>()
+
     override suspend fun resetServerAddress() {
         resetServerAddressCalls++
         serverAddressValue = serverAddressValue.copy(savedOverride = null)

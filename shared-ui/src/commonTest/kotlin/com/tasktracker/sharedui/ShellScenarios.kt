@@ -573,6 +573,38 @@ object ShellScenarios {
     }
 
     /**
+     * A pairing link scanned before sign-in replaces the server the login will use.
+     *
+     * The auth gate has no Settings screen, so holding the address for one would leave the
+     * person on the previous server with no way to say otherwise — and the sign-in is the very
+     * next request. The shell, not the router, is where this can be asserted: only the shell
+     * knows the gate is on screen and holds the settings port.
+     *
+     * The address is the encoded one `tt` prints, and the assertion is the port's record: a
+     * build that still treated the scan as "wait for Settings" would leave the list empty while
+     * keeping the sign-in form displayed, exactly as this scenario's first assertion demands.
+     */
+    val aConnectLinkScannedSignedOutReplacesTheServer: suspend ComposeUiTest.() -> Unit = {
+        val deepLinks = DeepLinkSource()
+        val settings = FakeShellSettingsPort()
+        setUpShell(session = ScriptedSession(), settings = settings, deepLinks = deepLinks)
+        waitForIdle()
+        // The gate is on screen and stays there: the scan is not a way around sign-in.
+        onNodeWithTag(EmailFieldTag).assertIsDisplayed()
+
+        deepLinks.receive("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com")
+        waitForIdle()
+
+        assertEquals(
+            listOf("https://tasks.example.com"),
+            settings.appliedPairingAddresses,
+            "a scan on the auth gate must reach the settings port, or the login still uses " +
+                "the previous server",
+        )
+        onNodeWithTag(EmailFieldTag).assertIsDisplayed()
+    }
+
+    /**
      * A session that ends tears down the signed-in tree.
      *
      * Asserted three times over: the form comes back, the port ended up signed out, and the

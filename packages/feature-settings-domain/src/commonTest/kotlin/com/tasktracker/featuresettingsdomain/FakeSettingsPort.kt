@@ -173,6 +173,10 @@ class FakeSettingsPort(
     override suspend fun setServerAddress(input: String): ServerAddressValidation =
         ServerAddressValidation.Valid(input)
 
+    /** Nothing in this module's use cases applies a pairing link; the interface requires it. */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation =
+        ServerAddressValidation.Valid(input)
+
     override suspend fun resetServerAddress() = Unit
 
     /** The agent block's snapshot, and the commands a test can count. */

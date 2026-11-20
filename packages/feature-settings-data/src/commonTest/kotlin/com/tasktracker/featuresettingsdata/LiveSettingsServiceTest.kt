@@ -392,6 +392,60 @@ class LiveSettingsServiceTest {
         assertEquals("https://build.example.com", service.serverAddress().inUse)
     }
 
+    /**
+     * A scanned pairing link is saved and published without waiting on the health probe.
+     *
+     * The auth gate has no Settings screen to show a probe result on, and a probe that failed
+     * would leave the person signing in to a server they did not scan. The scanned link is the
+     * confirmation; the login's own transport failure is what reports an unreachable server.
+     */
+    @Test
+    fun aPairingAddressIsAppliedWithoutProbing() = runTest {
+        val probe = RecordingProbe()
+        val store = UserDefaultsStore(InMemoryPreferences())
+        var live = "https://build.example.com"
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(probe),
+            defaults = store,
+            apiBaseUrl = { live },
+            onServerAddressApplied = { live = it },
+        )
+
+        val result = service.applyPairingAddress("  HTTPS://Tasks.Example.COM/  ")
+
+        assertEquals(ServerAddressValidation.Valid("https://tasks.example.com"), result)
+        assertEquals(
+            emptyList(),
+            probe.asked,
+            "a scanned link must not wait on a probe the auth gate cannot show a failure for",
+        )
+        assertEquals("https://tasks.example.com", live)
+        assertEquals("https://tasks.example.com", store.value(API_BASE_URL_PREFERENCE_KEY))
+        assertEquals("https://tasks.example.com", service.serverAddress().inUse)
+    }
+
+    @Test
+    fun aMalformedPairingAddressIsNeitherSavedNorPublished() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        var live = "https://build.example.com"
+        val service = service(
+            monitor = emptyMonitor(),
+            defaults = store,
+            apiBaseUrl = { live },
+            onServerAddressApplied = { live = it },
+        )
+
+        val result = service.applyPairingAddress("tasks.example.com")
+
+        assertEquals(
+            ServerAddressValidation.Invalid(ServerAddressValidation.Reason.MissingScheme),
+            result,
+        )
+        assertEquals("https://build.example.com", live)
+        assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
+    }
+
     // MARK: - Self profile
 
     @Test

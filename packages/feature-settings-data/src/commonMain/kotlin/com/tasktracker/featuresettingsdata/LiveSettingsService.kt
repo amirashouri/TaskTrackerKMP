@@ -21,6 +21,7 @@ import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.UserProfileChanges
 import com.tasktracker.featuresettingsdomain.UserProfileGateway
+import com.tasktracker.featuresettingsdomain.validateServerAddress
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
@@ -496,6 +497,24 @@ class LiveSettingsService(
             defaults.set(result.baseUrl, API_BASE_URL_PREFERENCE_KEY)
             // Before returning, so the clients already bound send their next request to the
             // address the user just confirmed rather than to the one this launch started on.
+            onServerAddressApplied(result.baseUrl)
+        }
+        return result
+    }
+
+    /**
+     * Saves and publishes a pairing link's address without probing it.
+     *
+     * The scan is the confirmation: the code came from a running `tt expose`, and the person
+     * who scanned it is on the sign-in screen, which has no Settings to open. A probe here could
+     * only answer "not reachable yet" and leave them on a server they did not choose — the
+     * login's own transport failure is the honest report. The pure rule still runs first, so a
+     * malformed link never reaches a preference or a client.
+     */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation {
+        val result = validateServerAddress(input)
+        if (result is ServerAddressValidation.Valid) {
+            defaults.set(result.baseUrl, API_BASE_URL_PREFERENCE_KEY)
             onServerAddressApplied(result.baseUrl)
         }
         return result

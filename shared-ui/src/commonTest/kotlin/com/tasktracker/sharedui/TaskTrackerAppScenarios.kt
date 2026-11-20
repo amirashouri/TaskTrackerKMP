@@ -57,6 +57,9 @@ abstract class TaskTrackerAppScenarios {
     fun aConnectLinkOpensSettingsWithTheAddressPrefilled() =
         runComposeUiTest(block = ShellScenarios.aConnectLinkOpensSettingsWithTheAddressPrefilled)
     @Test
+    fun aConnectLinkScannedSignedOutReplacesTheServer() =
+        runComposeUiTest(block = ShellScenarios.aConnectLinkScannedSignedOutReplacesTheServer)
+    @Test
     fun signingOutClearsTheNavigationStack() = runComposeUiTest(block = ShellScenarios.signingOutClearsTheNavigationStack)
     @Test
     fun openingAProjectShowsItsBoard() = runComposeUiTest(block = ShellScenarios.openingAProjectShowsItsBoard)

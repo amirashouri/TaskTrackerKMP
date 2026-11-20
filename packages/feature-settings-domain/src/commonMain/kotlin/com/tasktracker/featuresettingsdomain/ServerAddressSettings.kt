@@ -6,11 +6,11 @@ package com.tasktracker.featuresettingsdomain
  *
  * ## Why these are two values and not one
  *
- * The API root is resolved once, while the composition root binds the app-scoped HTTP clients,
- * so a change saved from Settings cannot reconfigure the clients already running. [inUse] is
- * therefore the honest thing to display — the address actually on the wire — and [savedOverride]
- * is what the *next* process will read. Collapsing them into a single "current" value would make
- * the row claim the change is live when it is not.
+ * A save publishes the confirmed address to the clients that are already running, so [inUse]
+ * follows it immediately; [savedOverride] is the preference the *next* process resolves, and it
+ * is what Reset clears. They can differ before a save in this run — an override written by a
+ * previous launch — and collapse into one value after it, so the row must read [inUse] and the
+ * sheet must edit [savedOverride].
  *
  * [inUse] is nullable because the offline demo graph has no backend at all: `testBindings` builds
  * it with no root, and the row has to say so rather than show a URL nothing is listening on.
