@@ -313,6 +313,11 @@ class ProjectsUiJvmTest {
     fun theBarArchivesTheSelectionAndClearEndsTheMode() =
         runComposeUiTest(block = BoardSelectionScenarios.theBarArchivesTheSelectionAndClearEndsTheMode)
 
+    /** Reduced motion shows the bar on the first frame, without travel. */
+    @Test
+    fun reducedMotionShowsTheBarWithoutTravel() =
+        runComposeUiTest(block = BoardSelectionScenarios.reducedMotionShowsTheBarWithoutTravel)
+
     /** Move to asks for a destination lane and reports the chosen one. */
     @Test
     fun moveAsksForALaneAndReportsIt() =

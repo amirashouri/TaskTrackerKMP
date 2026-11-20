@@ -681,7 +681,12 @@ fun ProjectBacklogScreen(
                                     //
                                     // Hidden while selecting: the mode closed the query, and a search
                                     // field would be a filter that unticks rows the user just chose.
-                                    if (!isSelecting) searchToggle(Modifier)
+                                    // Hidden through the same sideways fold the field uses rather
+                                    // than an `if`: an instant removal would hand its width to the
+                                    // bar in one frame while the bar is still fading in.
+                                    SearchRevealBeside(visible = !isSelecting) {
+                                        searchToggle(Modifier)
+                                    }
                                 }
                             } else {
                                 SelectionBarSwap(

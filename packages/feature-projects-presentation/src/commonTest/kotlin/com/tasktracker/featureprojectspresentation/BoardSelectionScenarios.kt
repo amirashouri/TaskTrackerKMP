@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -22,7 +24,9 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.unit.dp
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.domain.BoardColumn
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItemStatus
@@ -193,6 +197,49 @@ object BoardSelectionScenarios {
     }
 
     /**
+     * Reduced motion shows the bar at full height on the first frame.
+     *
+     * The setting removes the travel, not the bar. Measuring after `waitForIdle` cannot tell the
+     * two apart — every tween has finished by then — so the clock is stopped before the Select
+     * tap and exactly one frame is advanced. A travelling bar is still near zero height there and
+     * the lanes below it have not moved; a snapped bar has already made its row.
+     */
+    val reducedMotionShowsTheBarWithoutTravel: suspend ComposeUiTest.() -> Unit = {
+        val projection = ViewPreviewData.boardProjection()
+        val done = lane(WorkItemStatus.Done)
+        boardWithSelection(projection, reducedMotion = true)
+        waitForIdle()
+
+        val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+
+        onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
+        waitForIdle()
+        val settledTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        val fullTravel = settledTop - closedTop
+        assertTrue(fullTravel > 0.dp, "the bar must take a row even without motion")
+
+        onNodeWithTag(ProjectBoardSelectionClearTag).selectControl()
+        waitForIdle()
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
+        mainClock.advanceTimeByFrame()
+
+        onNodeWithTag(ProjectBoardSelectionBarTag).assertExists()
+        val travelled =
+            onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top - closedTop
+        assertTrue(
+            travelled >= fullTravel - 0.5.dp,
+            "with reduced motion the bar should already occupy its full row on the first frame " +
+                "(${fullTravel} of travel), but the lanes had only moved $travelled — the " +
+                "platform setting is being ignored and the reveal is animating anyway",
+        )
+
+        mainClock.autoAdvance = true
+        waitForIdle()
+    }
+
+    /**
      * "Move to" asks for a destination lane and reports the one chosen.
      *
      * The lane the set already lives in is not a destination: moving a card to where it already is
@@ -242,43 +289,46 @@ private fun ComposeUiTest.boardWithSelection(
     projection: BoardProjection,
     laneID: String? = null,
     initialSelection: Set<WorkItemID> = emptySet(),
+    reducedMotion: Boolean = false,
     onMove: (String) -> Unit = {},
     onArchive: () -> Unit = {},
 ) {
     setContent {
-        Themed {
-            var isSelecting by remember { mutableStateOf(initialSelection.isNotEmpty()) }
-            var selectionLane by remember { mutableStateOf(if (initialSelection.isNotEmpty()) laneID else null) }
-            var selection by remember { mutableStateOf(initialSelection) }
-            Box(modifier = Modifier.fillMaxSize()) {
-                ProjectBoardScreen(
-                    projection = projection,
-                    isLoading = false,
-                    errorMessage = null,
-                    movingItemID = null,
-                    onSelect = {},
-                    onFileAway = {},
-                    onMove = { _, _ -> },
-                    onDismissError = {},
-                    isSelecting = isSelecting,
-                    selectionLane = selectionLane,
-                    selection = selection,
-                    onStartSelecting = { lane ->
-                        selectionLane = lane
-                        isSelecting = true
-                    },
-                    onToggleSelected = { _, id ->
-                        selection = if (id in selection) selection - id else selection + id
-                    },
-                    onSelectAll = { _, ids -> selection = ids.toSet() },
-                    onClearSelection = {
-                        selection = emptySet()
-                        isSelecting = false
-                        selectionLane = null
-                    },
-                    onMoveSelection = onMove,
-                    onArchiveSelection = onArchive,
-                )
+        CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
+            Themed {
+                var isSelecting by remember { mutableStateOf(initialSelection.isNotEmpty()) }
+                var selectionLane by remember { mutableStateOf(if (initialSelection.isNotEmpty()) laneID else null) }
+                var selection by remember { mutableStateOf(initialSelection) }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ProjectBoardScreen(
+                        projection = projection,
+                        isLoading = false,
+                        errorMessage = null,
+                        movingItemID = null,
+                        onSelect = {},
+                        onFileAway = {},
+                        onMove = { _, _ -> },
+                        onDismissError = {},
+                        isSelecting = isSelecting,
+                        selectionLane = selectionLane,
+                        selection = selection,
+                        onStartSelecting = { lane ->
+                            selectionLane = lane
+                            isSelecting = true
+                        },
+                        onToggleSelected = { _, id ->
+                            selection = if (id in selection) selection - id else selection + id
+                        },
+                        onSelectAll = { _, ids -> selection = ids.toSet() },
+                        onClearSelection = {
+                            selection = emptySet()
+                            isSelecting = false
+                            selectionLane = null
+                        },
+                        onMoveSelection = onMove,
+                        onArchiveSelection = onArchive,
+                    )
+                }
             }
         }
     }

@@ -199,8 +199,8 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
 - **Selection-bar motion is one helper, and the bar stays composed.** The board and
   backlog bars animate through `SelectionBarMotion.kt`, never behind an `if` — an
   uncomposed bar cannot animate away. A `Column`'s `spacedBy` counts children, so an
-  `AnimatedVisibility` left as a sibling spends a gap even while empty: group it with the
-  row above it, or swap it in place through a single child.
+  `AnimatedVisibility` left as a sibling spends a gap even while empty: supply the gap
+  inside the animated content, or swap the bar in place through a single child.
 - **Silent rendering failures.** `ImageVector.Builder.addPath` draws nothing
   without a `Brush` fill, and equal contours cancel under even-odd just as
   silently. A gradient with `endY = Float.POSITIVE_INFINITY` interpolates at ~0

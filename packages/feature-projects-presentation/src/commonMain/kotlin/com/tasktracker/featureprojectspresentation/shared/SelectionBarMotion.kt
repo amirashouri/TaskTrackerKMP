@@ -125,8 +125,14 @@ internal fun SelectionBarSwap(
                         slideOutVertically(
                             animationSpec = tween(SELECTION_BAR_EXIT_MILLIS),
                         ) { -it / 4 },
-                    sizeTransform = SizeTransform(clip = true) { _, _ ->
-                        tween(SELECTION_BAR_REVEAL_MILLIS)
+                    sizeTransform = SizeTransform(clip = true) { initial, target ->
+                        tween(
+                            if (target.width < initial.width || target.height < initial.height) {
+                                SELECTION_BAR_EXIT_MILLIS
+                            } else {
+                                SELECTION_BAR_REVEAL_MILLIS
+                            },
+                        )
                     },
                 )
             }
