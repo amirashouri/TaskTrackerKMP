@@ -28,8 +28,8 @@ import kotlinx.coroutines.runBlocking
  *
  * A customer can also override the build-time value from Settings. That address lives in
  * the raw preference key (it must survive sign-out) and wins whenever it is non-blank. It is
- * read once here, so a saved change takes effect on the next launch: the HTTP clients are
- * bound for the life of the process.
+ * read here once, at launch; a save made *while* the app runs is published to the already-bound
+ * clients through [LiveApiBaseUrl] as well as written here for the next launch.
  *
  * The offline demo is therefore no longer what a launched app gets. It stays reachable by
  * calling [AppGraph.start] with `apiBaseUrl = null` directly, which is what the graph's own

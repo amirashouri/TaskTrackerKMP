@@ -231,6 +231,57 @@ class AppGraphTest {
     }
 
     /**
+     * A root published after launch reaches the clients bound before it.
+     *
+     * `KtorHttpClientLiveBaseUrlTest` proves the client reads its provider per request; this
+     * proves the graph handed it the one app-scoped state Settings publishes into. A factory
+     * that captured the launch string — or built its own state — would stay on the old root.
+     *
+     * The Server row's half of the same state is pinned one level down, in
+     * `LiveSettingsServiceTest`: the service takes the root as a provider, so a save it performs
+     * is what the row reads back. Resolving `SettingsPort` here would build `NetworkMonitor`,
+     * which needs a platform host this common test does not have on the Android target.
+     *
+     * Resolved through the factories production really uses, with an inert client so no socket
+     * is opened.
+     */
+    @Test
+    fun `a published root repoints the clients bound at launch`() = runTest {
+        val roots = mutableListOf<() -> String>()
+        val resolver = AppGraph.start(
+            testBindings(
+                startServices = false,
+                apiBaseUrl = "http://127.0.0.1:8080",
+                httpClient = { root, _ ->
+                    roots += root
+                    InertHttpClient()
+                },
+            ),
+        )
+
+        try {
+            resolver.resolve(AuthRemotePort::class)
+            resolver.resolve(SyncTransport::class)
+            assertEquals(
+                listOf("http://127.0.0.1:8080", "http://127.0.0.1:8080"),
+                roots.map { it() },
+                "both launch clients must start on the root the graph was started with",
+            )
+
+            resolver.resolve(LiveApiBaseUrl::class).publish("http://192.168.31.162:8080")
+
+            assertEquals(
+                listOf("http://192.168.31.162:8080", "http://192.168.31.162:8080"),
+                roots.map { it() },
+                "a published root must reach the clients bound before it, or the next login " +
+                    "still reaches the old server",
+            )
+        } finally {
+            resolver.stop()
+        }
+    }
+
+    /**
      * The attachment sweep, and the switch that governs it.
      *
      * It rides the same switch as the blob transport, and for the same reason: bytes are
@@ -374,7 +425,7 @@ class AppGraphTest {
     @Test
     fun `the production client factory keeps the interceptors it is handed`() = runTest {
         val client = PlatformBindings.defaultHttpClient(
-            "http://127.0.0.1:9/",
+            { "http://127.0.0.1:9/" },
             listOf(InterceptorThatRefuses()),
         )
 
@@ -419,7 +470,7 @@ class AppGraphTest {
         )
 
         val thrown = runCatching {
-            bindings.httpClient("http://127.0.0.1:9/", listOf(InterceptorThatRefuses()))
+            bindings.httpClient({ "http://127.0.0.1:9/" }, listOf(InterceptorThatRefuses()))
                 .send(HttpRequest(method = HttpMethod.Get, path = "/v1/sync/changes"))
         }.exceptionOrNull()
 

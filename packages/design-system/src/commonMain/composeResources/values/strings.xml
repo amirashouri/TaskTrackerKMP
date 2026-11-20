@@ -698,11 +698,11 @@
     <!-- Shown in the row's value slot when the graph bound no backend at all: the offline demo. -->
     <string name="settings_server_none">No server</string>
     <string name="settings_server_title">Server address</string>
-    <string name="settings_server_body">The address of your TaskTracker server. The app checks it before saving, and uses the new address the next time it opens.</string>
+    <string name="settings_server_body">The address of your TaskTracker server. The app checks it before saving, and starts using the new address as soon as it is saved.</string>
     <string name="settings_server_hint">https://tasks.example.com</string>
     <string name="settings_server_reset">Reset to Default</string>
-    <string name="settings_server_saved_notice">Saved. The app will use the new address the next time it opens.</string>
-    <string name="settings_server_reset_notice">Reset. The app will use the default address the next time it opens.</string>
+    <string name="settings_server_saved_notice">Saved. The app is using the new address now.</string>
+    <string name="settings_server_reset_notice">Reset. The app is using the default address now.</string>
     <!-- One sentence per validation reason, so the field says which part is wrong. -->
     <string name="settings_server_error_blank">Enter a server address.</string>
     <string name="settings_server_error_missing_scheme">Start with http:// or https://.</string>

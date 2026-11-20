@@ -920,9 +920,9 @@ private fun outcomeMessage(outcome: SyncOutcome): String? = when (outcome) {
 /**
  * The Server row's value: the address this launch is using, or the no-server label.
  *
- * Deliberately the *in-use* root and not the saved override. A save cannot rebind the running
- * clients, so showing the saved value here would claim the change is live; the notice below the
- * row is what carries "next launch".
+ * Deliberately the *in-use* root and not the saved override, because they can differ before a
+ * save is made in this run. After one they coincide: the saved address is published to the
+ * running clients, so the row shows what the next request will actually reach.
  */
 @Composable
 private fun serverAddressLabel(address: ServerAddressSettings): String =

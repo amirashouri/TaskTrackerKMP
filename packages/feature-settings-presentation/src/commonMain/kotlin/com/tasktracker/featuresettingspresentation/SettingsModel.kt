@@ -49,8 +49,8 @@ data class ServerAddressEditor(
 /**
  * What the last server-address command did, in the model's words rather than the screen's.
  *
- * Both cases share one promise — the preference is written and the running clients are not
- * reconfigured until the next launch — which is why the screen renders them through the same
+ * Both cases share one promise — the preference is written and the running clients switch to
+ * the address before the call returns — which is why the screen renders them through the same
  * notice and only the verb differs.
  */
 enum class ServerAddressNotice { Saved, Reset }
@@ -297,10 +297,12 @@ class SettingsModel(
     private var confirmedUserDetails: UserDetails? = null
 
     /**
-     * The address this launch is using, and the address saved for the next, as one value.
+     * The address the running clients are using, and the override persisted for the next
+     * launch, as one value.
      *
-     * Two fields rather than one current address, because they genuinely differ between a save
-     * and the next launch; see [ServerAddressSettings].
+     * Two fields rather than one current address, because an override saved by a previous run
+     * differs from the root this process launched with; after a save in this run they coincide.
+     * See [ServerAddressSettings].
      */
     var serverAddress: ServerAddressSettings by mutableStateOf(
         ServerAddressSettings(inUse = null, savedOverride = null),
@@ -720,8 +722,8 @@ class SettingsModel(
     // MARK: - Server Address
 
     /**
-     * Opens the editor, prefilled with the pending pairing address or what the next launch will
-     * use.
+     * Opens the editor, prefilled with the pending pairing address or the saved override (or,
+     * with neither, the in-use root).
      *
      * [prefill] is a `tasktracker://connect` link's address. It wins over both the saved
      * override and the in-use root, because it is the address the customer just chose by
@@ -748,11 +750,11 @@ class SettingsModel(
     /**
      * Asks the port to check and save the draft, and holds the answer.
      *
-     * The port is the whole operation — validate, probe, write — so "saved" here cannot mean
-     * less than "checked". On [ServerAddressValidation.Valid] the editor closes and the notice
-     * says a restart is needed; the row keeps showing [serverAddress]'s in-use root, which is
-     * still what is on the wire. On [ServerAddressValidation.Invalid] the editor stays open with
-     * the reason and the preference is untouched.
+     * The port is the whole operation — validate, probe, write, repoint — so "saved" here cannot
+     * mean less than "checked and in use". On [ServerAddressValidation.Valid] the editor closes
+     * and the notice says the address is live; [serverAddress] is re-read, so the row shows the
+     * same root the clients are now sending to. On [ServerAddressValidation.Invalid] the editor
+     * stays open with the reason and nothing is saved or applied.
      *
      * `isChecking` is set before the call because the probe can take seconds, which is the only
      * feedback the field can give while it waits. A cancelled call leaves it set, deliberately:
@@ -774,11 +776,10 @@ class SettingsModel(
     }
 
     /**
-     * Forgets any saved address so the next launch falls back to the build-time default.
+     * Forgets the saved address and puts the running clients back on the build-time root.
      *
-     * No probe: there is nothing to reach, only something to remove. The notice is raised for
-     * the same reason a save raises one — the running clients keep the old root until the next
-     * launch.
+     * No probe: there is nothing to reach, only something to remove and a local switch to flip.
+     * The notice is raised for the same reason a save raises one — the row and the wire moved.
      */
     suspend fun resetServerAddress() {
         port.resetServerAddress()
