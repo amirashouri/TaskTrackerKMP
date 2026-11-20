@@ -57,6 +57,12 @@ private class FakeAuthSession(
     private var token: String = "token-v1",
     private var refreshedToken: String = "token-v2",
     private var refreshFails: Boolean = false,
+    /**
+     * Thrown from [validAccessToken] even on the non-forced path. That is what a relaunch
+     * with a refresh token the server no longer honours looks like: no `401` from a call,
+     * just a refresh that fails before the request leaves.
+     */
+    private var refreshFailure: AppError? = null,
 ) : AuthSessionDelegate {
 
     private val lock = Mutex()
@@ -67,6 +73,7 @@ private class FakeAuthSession(
     val invalidationReasons: List<SessionInvalidationReason> get() = invalidations.toList()
 
     override suspend fun validAccessToken(forceRefresh: Boolean): String = lock.withLock {
+        refreshFailure?.let { throw it }
         if (forceRefresh) {
             refreshes += 1
             if (refreshFails) throw AppError.Unauthorized
@@ -186,6 +193,37 @@ class KtorHttpClientTest {
             client(transport, auth).send(HttpRequest(HttpMethod.Get, "/v1/projects"))
         }
         assertEquals(listOf(SessionInvalidationReason.RefreshRejected), auth.invalidationReasons)
+    }
+
+    @Test
+    fun `a refresh rejected before the request leaves ends the session`() = runTest {
+        val transport = StubTransport()
+        val auth = FakeAuthSession(refreshFailure = AppError.Unauthorized)
+
+        assertFailsWith<AppError.Unauthorized> {
+            client(transport, auth).send(HttpRequest(HttpMethod.Get, "/v1/projects"))
+        }
+
+        // Nothing was sent: this fails in `adapt`, which is the path a relaunch takes when
+        // the stored refresh token is one the server no longer honours. It used to leave the
+        // session alive and retry the refresh on every cycle.
+        assertEquals(0, transport.requestCount)
+        assertEquals(listOf(SessionInvalidationReason.RefreshRejected), auth.invalidationReasons)
+    }
+
+    @Test
+    fun `a refresh that fails while offline keeps the session`() = runTest {
+        val transport = StubTransport()
+        val auth = FakeAuthSession(refreshFailure = AppError.Offline)
+
+        assertFailsWith<AppError.Offline> {
+            client(transport, auth).send(HttpRequest(HttpMethod.Get, "/v1/projects"))
+        }
+
+        // Being offline is not being signed out: queued work has to survive a tunnel, and a
+        // sign-out here would throw the user back to the login screen on every dropped link.
+        assertEquals(0, transport.requestCount)
+        assertTrue(auth.invalidationReasons.isEmpty())
     }
 
     @Test

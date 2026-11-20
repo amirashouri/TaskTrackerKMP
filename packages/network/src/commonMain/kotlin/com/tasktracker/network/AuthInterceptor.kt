@@ -1,5 +1,6 @@
 package com.tasktracker.network
 
+import com.tasktracker.core.AppError
 import com.tasktracker.core.TTLogger
 import com.tasktracker.core.logMessage
 import kotlinx.coroutines.CancellationException
@@ -14,6 +15,11 @@ import kotlinx.coroutines.CancellationException
  * 2. **`403` is terminal.** Unlike `401`, a `403` means "this token is understood and
  *    refused" (wrong account, revoked, insufficient scope), so retrying with a fresh
  *    token cannot help.
+ * 3. **A refused refresh ends the session wherever it happens.** [adapt] is where a
+ *    relaunch with a dead refresh token first fails — there is no response yet, so
+ *    [retry] never runs. Treating that as an ordinary error left the token in the
+ *    keychain, retried the refresh every cycle and kept showing stale data instead of
+ *    the sign-in screen. Transient failures (offline, timeout, 5xx) are not a sign-out.
  *
  * A `struct` in the original; a class holding one immutable reference here. Wrapping it in
  * a coroutine `Mutex` would be wrong — the delegate behind it does the concurrency
@@ -24,7 +30,31 @@ class AuthInterceptor(private val delegate: AuthSessionDelegate) : RequestInterc
     override suspend fun adapt(request: HttpRequest): HttpRequest {
         if (!request.requiresAuth) return request
         // Sign-in and refresh must not try to read a session that does not exist yet.
-        val token = delegate.validAccessToken(forceRefresh = false)
+        val token = try {
+            delegate.validAccessToken(forceRefresh = false)
+        } catch (cancellation: CancellationException) {
+            // A cancelled screen must not end the session on its way out; the same guard
+            // `retry` keeps, for the same reason.
+            throw cancellation
+        } catch (error: Throwable) {
+            // A refresh the server refused is the session ending, and it has to be handled
+            // here as well as in `retry`: a relaunch with a dead refresh token fails before
+            // any request is sent, so there is no `401` response to react to. Left
+            // unsignalled, the dead token stayed in the keychain, every sync cycle retried
+            // the refresh, and the app kept rendering stale data instead of the sign-in
+            // screen. Only a refusal ends the session — being offline is not being signed
+            // out, and queued work must survive it.
+            if ((error as? AppError)?.requiresSignOut == true) {
+                TTLogger.auth.error {
+                    logMessage {
+                        append("network: refresh rejected before the request left -> ending session ")
+                        append("(${SessionInvalidationReason.RefreshRejected.wireName})")
+                    }
+                }
+                delegate.invalidateSession(SessionInvalidationReason.RefreshRejected)
+            }
+            throw error
+        }
         return request.setting("Authorization", value = "Bearer $token")
     }
 
