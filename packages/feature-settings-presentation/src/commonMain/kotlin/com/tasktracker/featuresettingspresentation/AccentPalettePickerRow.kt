@@ -36,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntRect
 import com.tasktracker.designsystem.AccentPalette
-import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassLens
 import com.tasktracker.designsystem.ttGlassSurface
@@ -162,7 +161,6 @@ private fun RowScope.AccentCell(
             .weight(1f)
             .testTag(AccentCellTag(palette))
             .clip(cellShape)
-            .ttFocusRing(cellShape)
             .selectable(selected = isSelected, role = Role.RadioButton) {
                 onSelect(palette)
             }

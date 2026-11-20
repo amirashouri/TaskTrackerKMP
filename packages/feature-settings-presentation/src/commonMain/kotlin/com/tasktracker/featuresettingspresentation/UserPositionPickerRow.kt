@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
-import com.tasktracker.designsystem.ttFocusRing
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
@@ -58,7 +57,6 @@ internal fun UserPositionPickerRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .ttFocusRing()
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -122,7 +120,6 @@ private fun UserPositionOption(
         modifier = Modifier
             .fillMaxWidth()
             .dropdownOption(key = position)
-            .ttFocusRing()
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,

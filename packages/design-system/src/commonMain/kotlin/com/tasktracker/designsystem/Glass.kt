@@ -91,6 +91,15 @@ object ttGlass {
     /** Multiplier for the green channel of the dispersion fringe (green leads slightly). */
     const val DISPERSION_GREEN_MULTIPLIER: Float = 1.5f
     const val TAB_LENS_RIM_ALPHA: Float = 0.45f
+    /**
+     * Stroke of the selection lens's rim.
+     *
+     * Twice [hairlineWidth]: this line marks *which cell is selected*, so it has to read as a
+     * boundary at a glance, while a glass surface's hairline is only a highlight on its edge.
+     * Keeping it separate from [hairlineWidth] lets the lens get bolder without turning every
+     * card and pill's rim into a rule.
+     */
+    val LENS_RIM_WIDTH: Dp = 1.dp
     const val SOLID_LENS_ALPHA: Float = 0.45f
     const val SOLID_LENS_RIM_ALPHA: Float = 0.6f
     const val TAB_LENS_WIDEN: Float = 0.10f
@@ -355,7 +364,7 @@ fun Modifier.ttGlassLens(
             }
         }
         .border(
-            width = ttGlass.hairlineWidth,
+            width = ttGlass.LENS_RIM_WIDTH,
             color = lensColor.copy(alpha = effectiveRimAlpha),
             shape = shape,
         )
@@ -731,7 +740,6 @@ private fun FlowPickerChip(
         modifier = Modifier
             .clip(CircleShape)
             .onGloballyPositioned(onPositioned)
-            .ttFocusRing()
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },
@@ -775,7 +783,6 @@ private fun Segment(
                 contentDescription = label
                 selected = isSelected
             }
-            .ttFocusRing(CircleShape)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() },

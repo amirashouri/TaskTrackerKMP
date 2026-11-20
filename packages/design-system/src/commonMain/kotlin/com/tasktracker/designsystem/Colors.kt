@@ -146,10 +146,11 @@ fun ttStatusAway(): Color = ttFixedColours.statusAway(ttIsDarkTheme())
  * to be found before the weight could be changed.
  *
  * It is deliberately **not** [ttGlass]'s `hairlineWidth`. That is 0.5dp and belongs to a glass
- * *rim*: a highlight meant to be lighter than the surface it outlines. An outline on an opaque
- * chip is the opposite job — it has to be visible against the fill it sits on — so the two are
- * different weights doing different things, and their being confusable is why this one needed
- * a name.
+ * *surface* rim: a highlight meant to be lighter than the surface it outlines. A selection
+ * lens's rim has its own [ttGlass.LENS_RIM_WIDTH], because marking which cell is selected is a
+ * different job from outlining every card. An outline on an opaque chip is the opposite job
+ * again — it has to be visible against the fill it sits on — so the three are different weights
+ * doing different things, and their being confusable is why this one needed a name.
  */
 val ttSeparatorWidth: Dp = 1.dp
 
