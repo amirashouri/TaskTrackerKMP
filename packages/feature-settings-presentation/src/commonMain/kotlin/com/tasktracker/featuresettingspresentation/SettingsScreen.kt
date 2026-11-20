@@ -384,7 +384,8 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.testTag(SettingsUserStatusRowTag),
             )
-            SettingsDivider()
+            // No divider above or below the note: the field draws its own glass pill, and a
+            // separator on each side read as a second frame around it.
             StatusTextEditor(
                 value = userDetails.statusText,
                 onValueChange = { statusText ->
@@ -393,7 +394,6 @@ fun SettingsScreen(
                 onCommit = onUserDetailsCommit,
                 modifier = Modifier.testTag(SettingsStatusTextRowTag),
             )
-            SettingsDivider()
             SettingsActionRow(
                 label = stringResource(Res.string.settings_change_password),
                 icon = ttSettingsIcons.lock,
