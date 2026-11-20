@@ -147,6 +147,21 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   failed profile PATCH restores the last server-confirmed snapshot rather than
   re-reading `port.userDetails()`, which is a networked read-through.
 
+### Selection and batches
+
+- **A batch is presentation convenience over per-item commands.** `PutWorkItemsOnBoard` and
+  `ArchiveWorkItems` loop the same `MoveWorkItem` / `ArchiveWorkItem` the single-row paths use,
+  so every item keeps its own history row and its own outbox row. There is no server batch
+  endpoint and no new wire key; do not add one to make a selection cheaper.
+- **A batch reports item by item.** Applied and skipped items leave the selection, failed items
+  stay ticked, and only the first failure's message reaches the banner — the failed rows still
+  ticked are what carry the count. A terminal item met mid-batch is *skipped*, not failed; the
+  refusal is a message, so the skip is decided before the archive call rather than by matching it.
+- **Backlog selection never survives navigation and never spans a filter.** The mode is scoped to
+  the Backlog section, entering it closes the search, and switching segment, leaving the
+  destination or editing the query drops the set. A ticked row the user cannot see is a count
+  they cannot account for.
+
 ### Architecture and models
 
 - **The architecture graph is an allow-list.** Edits to

@@ -1,10 +1,11 @@
 # board-column-multi-select — multi-select a board column to move or clear Done
 
-- **status:** pending
+- **status:** in-progress
 - **priority:** P1
-- **branch:** blank until cut — `feat/board-column-multi-select`
-- **blocked by:** `specs/backlog-multi-select.md` — the selection primitives and the batch
-  outcome shape come from there; this spec must not grow a second copy of them.
+- **branch:** `feat/board-column-multi-select`
+- **blocked by:** none — the selection primitives and the batch outcome shape shipped with the
+  backlog selection (`specs/backlog-multi-select.md`, merged in PR #91 and removed from
+  `specs/`). This spec must not grow a second copy of them.
 - **context:** Requested 2026-11-20 with the backlog spec. The board can move one card by drag or
   per-card buttons, but a **Done** card has no action at all: `BoardCardActions` returns early for
   a terminal item and `ArchiveWorkItem` refuses one, so the Done lane can only grow. There is
