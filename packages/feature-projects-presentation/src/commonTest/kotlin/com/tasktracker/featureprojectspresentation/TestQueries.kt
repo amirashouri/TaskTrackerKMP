@@ -61,8 +61,7 @@ internal fun ComposeUiTest.textOf(tag: String, useUnmerged: Boolean = false): St
     onNodeWithTag(tag, useUnmergedTree = useUnmerged)
         .fetchSemanticsNode()
         .config[SemanticsProperties.Text]
-        ?.joinToString(separator = "") { it.text }
-        .orEmpty()
+        .joinToString(separator = "") { it.text }
 
 /**
  * Asserts the node carrying [tag] says exactly [expected].

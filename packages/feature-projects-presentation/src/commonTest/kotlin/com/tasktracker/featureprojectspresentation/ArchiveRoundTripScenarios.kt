@@ -221,7 +221,7 @@ class ArchiveRoundTripTest {
         val filed = repository.workItem(item.id)
         assertTrue(filed?.status?.isTerminal == true, "a filed-away task is terminal")
         assertFalse(
-            filed?.status?.appearsOnBoard == true,
+            filed.status.appearsOnBoard,
             "and the board has no Closed lane, so it must not appear there",
         )
         // `BoardProjection.items` is every item in the project; `columns` is the board. A

@@ -79,8 +79,8 @@ object MentionRules {
             val end = match.range.last + 1
             // Group 1 is the UserID pattern, group 2 is the username pattern.
             // groupValues returns "" for non-matching groups, not null.
-            val userIdGroup = match.groupValues?.getOrNull(1)
-            val usernameGroup = match.groupValues?.getOrNull(2)
+            val userIdGroup = match.groupValues.getOrNull(1)
+            val usernameGroup = match.groupValues.getOrNull(2)
             if (userIdGroup != null && userIdGroup.isNotEmpty()) {
                 mentions.add(Mention.ByUserID(raw, start, end, UserID(userIdGroup)))
             } else if (usernameGroup != null && usernameGroup.isNotEmpty()) {

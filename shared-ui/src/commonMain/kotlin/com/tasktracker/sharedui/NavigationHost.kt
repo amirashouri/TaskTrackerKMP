@@ -2266,7 +2266,7 @@ private fun WorkItemEditorDestination(
         }
         // A failed read is "no live catalog", not "the project has none": fall back to the
         // local row, which is the same answer a member gets.
-        value = runCatching { adminProjectsPort?.project(projectID)?.project?.tags }.getOrNull()
+        value = runCatching { adminProjectsPort.project(projectID)?.project?.tags }.getOrNull()
             ?: local.tags
     }
 

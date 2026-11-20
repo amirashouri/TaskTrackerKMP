@@ -450,7 +450,8 @@ private class PreviewRepository(
     }
 
     override suspend fun deleteAttachment(id: AttachmentID) {
-        val index = storedAttachments.indexOfFirst { it.id == id } ?: return
+        val index = storedAttachments.indexOfFirst { it.id == id }
+        if (index < 0) return
         storedAttachments.removeAt(index)
         broadcaster.send(ProjectChange(ProjectChange.Kind.WorkItems))
     }
