@@ -161,6 +161,14 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   the Backlog section, entering it closes the search, and switching segment, leaving the
   destination or editing the query drops the set. A ticked row the user cannot see is a count
   they cannot account for.
+- **The board's Archive on a Done card closes it.** `Done` is a board lane and `Closed` is the
+  archive, so archiving a done card is `Done → Closed` with the existing `resolvedAt` kept — the
+  date the work ended, not the day the board was tidied. `Closed` stays refused and is the batch's
+  only skip. `Closed` is still not a status the editor offers: closing is an action, not a choice.
+- **Board selection is lane-scoped and starts at the lane header.** A set belongs to one lane, so
+  tapping a card in another lane ticks nothing and the other headers drop their Select while a set
+  is open. There is no long-press entry: long-press lifts a card for drag, and a stationary hold
+  would start a drag ghost. Drag is off while selecting, and the wire is still one row per card.
 
 ### Architecture and models
 
