@@ -1556,6 +1556,14 @@ private fun BacklogDestination(
         onPutOnBoardDefaultStatusChosen = { key ->
             scope.launch { preferences.setPutOnBoardStatusKey(projectID, key) }
         },
+        isSelecting = model.isSelecting,
+        selection = model.selection.asSet(),
+        isBatchRunning = model.isBatchRunning,
+        onStartSelecting = { model.startSelecting() },
+        onToggleSelected = model::toggleSelected,
+        onClearSelection = model::clearSelection,
+        onPutSelectionOnBoard = { statusKey -> scope.launch { model.putSelectionOnBoard(statusKey) } },
+        onArchiveSelection = { scope.launch { model.archiveSelection() } },
     )
 }
 

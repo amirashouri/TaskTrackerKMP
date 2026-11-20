@@ -357,6 +357,23 @@
     <string name="backlog_put_on_board_prompt_title">Put on board</string>
     <string name="backlog_put_on_board_prompt_body">Choose the column to add %1$s to.</string>
     <string name="backlog_put_on_board_confirm">Add to column</string>
+    <string name="backlog_put_on_board_prompt_body_many">Choose the column to add %1$d items to.</string>
+
+    <!--
+      Multi-select on the backlog.
+
+      "Add to board" rather than "Put on board" because it acts on a set: the singular wording is
+      the row's one-task verb, and a count beside it would read as a mistranslation. The action
+      bar's progress label is separate from the button labels so the buttons can keep saying what
+      they do while disabled.
+    -->
+    <string name="backlog_select">Select</string>
+    <string name="backlog_select_open">Select tasks</string>
+    <string name="backlog_selection_count">%1$d selected</string>
+    <string name="backlog_selection_clear">Clear</string>
+    <string name="backlog_selection_put_on_board">Add to board</string>
+    <string name="backlog_selection_archive">Archive</string>
+    <string name="backlog_selection_working">Working…</string>
 
     <!--
       The backlog's two sort keys and the direction each one currently reads in.

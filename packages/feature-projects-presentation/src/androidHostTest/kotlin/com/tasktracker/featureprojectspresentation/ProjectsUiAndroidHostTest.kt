@@ -323,6 +323,46 @@ class ProjectsUiAndroidHostTest {
     fun puttingOnBoardWithoutACatalogBoardsToLegacyTodo() =
         runComposeUiTest(block = ProjectBacklogScenarios.puttingOnBoardWithoutACatalogBoardsToLegacyTodo)
 
+    /** The header's Select control enters multi-select and the bar names the count. */
+    @Test
+    fun theHeaderSelectEntersTheMode() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theHeaderSelectEntersTheMode)
+
+    /** A select-mode row tap ticks and unticks instead of opening the editor. */
+    @Test
+    fun tappingARowInSelectModeTicksIt() =
+        runComposeUiTest(block = ProjectBacklogScenarios.tappingARowInSelectModeTicksIt)
+
+    /** A long press enters the mode with the pressed row ticked. */
+    @Test
+    fun longPressingARowEntersTheModeWithItTicked() =
+        runComposeUiTest(block = ProjectBacklogScenarios.longPressingARowEntersTheModeWithItTicked)
+
+    /** The bar boards the whole set into one lane with one commit. */
+    @Test
+    fun theSelectionBarBoardsTheSetIntoOneLane() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theSelectionBarBoardsTheSetIntoOneLane)
+
+    /** Archive is refused at zero selected and acts on a ticked row. */
+    @Test
+    fun theArchiveActionWaitsForATick() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theArchiveActionWaitsForATick)
+
+    /** Switching to another section ends selection rather than leaving ticks behind. */
+    @Test
+    fun leavingTheBacklogSectionEndsSelection() =
+        runComposeUiTest(block = ProjectBacklogScenarios.leavingTheBacklogSectionEndsSelection)
+
+    /** Several columns: the selection asks for one lane and boards the set into it. */
+    @Test
+    fun theSelectionWithSeveralColumnsAsksForOneLane() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theSelectionWithSeveralColumnsAsksForOneLane)
+
+    /** While a batch runs the bar says so and refuses both actions. */
+    @Test
+    fun theBarRefusesActionsAndNamesTheWorkInProgress() =
+        runComposeUiTest(block = ProjectBacklogScenarios.theBarRefusesActionsAndNamesTheWorkInProgress)
+
     @Test
     fun wideLayoutClampsContentWidthAndCenters() =
         runComposeUiTest(block = ProjectBacklogScenarios.wideLayoutClampsContentWidthAndCenters)

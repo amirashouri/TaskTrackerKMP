@@ -420,6 +420,29 @@ object ttActionIcons {
     }
 
     /**
+     * A ticked box, for entering multi-select mode.
+     *
+     * An outline rather than a solid box with a cut-out tick, because the mode this opens starts
+     * with *nothing* ticked: the empty box is the honest picture of it, and the check says what
+     * the box is for. The check is a single filled contour wholly inside the outline's hole, so
+     * the file's even-odd fill has one contour to count there and paints it solid; letting the
+     * tick reach the stroke would put that band inside two contours and punch a notch in both.
+     *
+     * Four-unit corners, a step rounder than [archive]'s box, so a 22dp rendering reads as a
+     * control rather than as another document glyph.
+     */
+    val select: ImageVector = icon("Select") {
+        outlinedRoundRect(3.5f, 3.5f, 20.5f, 20.5f, radius = 4.0f, stroke = 1.8f)
+        moveTo(7.6f, 12.4f)
+        lineTo(10.6f, 15.4f)
+        lineTo(16.4f, 8.8f)
+        lineTo(17.9f, 10.2f)
+        lineTo(10.6f, 17.4f)
+        lineTo(6.2f, 13.8f)
+        close()
+    }
+
+    /**
      * A clipboard: an outlined board with a solid clip across its top edge.
      *
      * The verb is "copy this to the clipboard", so the glyph is the clipboard rather than the
@@ -700,8 +723,8 @@ object ttActionIcons {
 
     /** Every action glyph, for shared geometry checks. */
     val all: List<ImageVector> = listOf(
-        add, close, edit, trash, remove, search, archive, copy, chevronDown, expand, collapse,
-        sort, priority, createdAt, person, link,
+        add, close, edit, trash, remove, search, archive, copy, select, chevronDown, expand,
+        collapse, sort, priority, createdAt, person, link,
     )
 }
 
