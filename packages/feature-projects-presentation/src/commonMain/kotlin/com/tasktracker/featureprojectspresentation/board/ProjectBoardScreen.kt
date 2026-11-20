@@ -40,6 +40,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -58,6 +61,7 @@ import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSearchField
 import com.tasktracker.designsystem.ttSpacing
@@ -66,10 +70,18 @@ import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
+import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BoardProjection
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.board_archive_selection
 import com.tasktracker.resources.board_kanban
+import com.tasktracker.resources.board_move_prompt_body
+import com.tasktracker.resources.board_move_prompt_title
+import com.tasktracker.resources.board_move_selection
 import com.tasktracker.resources.board_my_tasks
+import com.tasktracker.resources.board_selection_clear
+import com.tasktracker.resources.board_selection_count
+import com.tasktracker.resources.board_selection_working
 import com.tasktracker.resources.board_no_project_body
 import com.tasktracker.resources.board_no_project_title
 import com.tasktracker.resources.work_item_archive
@@ -99,6 +111,15 @@ import org.jetbrains.compose.resources.stringResource
  * board can be read without spending a row on a box most visits never use. Closing it clears the
  * query as well as hiding the field: the alternative leaves the lanes short of cards with no
  * visible control to explain why.
+ *
+ * ## Selection is one lane's, and the screen only binds it
+ *
+ * [isSelecting], [selectionLane] and [selection] are model state; each lane reports through the
+ * same callbacks with its own status id, so the screen never decides which lane a tap belongs to.
+ * While the mode is on the search field goes away and drag is switched off: a query could hide a
+ * ticked card, and a drag would lift a card out of a lane whose set is being built. The action bar
+ * takes the header's place under the lanes' header row, because both lanes' affordances need room
+ * and the bar is what acts on the set.
  */
 @Composable
 fun ProjectBoardScreen(
@@ -126,6 +147,26 @@ fun ProjectBoardScreen(
     blockedByKeys: Map<WorkItemID, List<WorkItemKey>> = emptyMap(),
     /** Disables adding tasks directly to lanes when an active sprint is InProgress. */
     canAddTask: Boolean = true,
+    /** True while one lane's cards are being ticked. */
+    isSelecting: Boolean = false,
+    /** The lane the selection belongs to, or null when nothing is ticked. */
+    selectionLane: String? = null,
+    /** The ticked cards. Membership is what draws each card's box. */
+    selection: Set<WorkItemID> = emptySet(),
+    /** True while a batch move or archive runs; the action bar disables itself and says so. */
+    isBatchRunning: Boolean = false,
+    /** Enters select mode on one lane. Null hides every lane's Select control. */
+    onStartSelecting: ((String) -> Unit)? = null,
+    /** Ticks or unticks one card of the selection lane. */
+    onToggleSelected: (String, WorkItemID) -> Unit = { _, _ -> },
+    /** Selects every visible card of one lane. */
+    onSelectAll: (String, List<WorkItemID>) -> Unit = { _, _ -> },
+    /** Leaves select mode and drops every tick. */
+    onClearSelection: () -> Unit = {},
+    /** Moves the selection into one lane id. */
+    onMoveSelection: (String) -> Unit = {},
+    /** Archives the selection: closing a Done lane, filing away a live one. */
+    onArchiveSelection: () -> Unit = {},
 ) {
     val dragState = remember { BoardDragState() }
 
@@ -138,12 +179,37 @@ fun ProjectBoardScreen(
     // activity. Leaving the destination and coming back starts closed, which matches the empty
     // query it starts with.
     var searchOpen by remember { mutableStateOf(false) }
+    // The "Move to" picker's visibility. Screen state like the query: it is a visit, not a
+    // preference, and dismissing it must not touch the selection.
+    var moveSheetOpen by remember { mutableStateOf(false) }
     val appliedQuery = rememberDebouncedQuery(query)
     // Keyed on the projection *instance* as well as the query: the model replaces the projection
     // on every reload and on every My Tasks toggle, and a filter remembered against the query
     // alone would keep showing the previous load's cards.
     val shown = remember(projection, appliedQuery) { projection.matching(appliedQuery) }
     val focusManager = LocalFocusManager.current
+
+    /**
+     * Enters select mode on [laneID], closing the search first.
+     *
+     * A query can hide a card, and a hidden card that stays ticked is a count the user cannot
+     * account for — the same rule the backlog's entry point follows. The field is not composed
+     * again until the mode ends, so no filter can be applied halfway through a selection.
+     */
+    fun enterSelecting(laneID: String) {
+        if (query.isNotEmpty()) {
+            query = ""
+            focusManager.clearFocus()
+        }
+        searchOpen = false
+        onStartSelecting?.invoke(laneID)
+    }
+
+    // Every column but the selection's own: moving a card into the lane it is already in is a
+    // command that changes nothing, so it is not offered as a destination.
+    val moveDestinations = shown.columns
+        .map { it.status }
+        .filter { it.id != selectionLane }
 
     ClipboardCopyHost(modifier = modifier) { onCopy ->
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -214,7 +280,7 @@ fun ProjectBoardScreen(
                         horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (projection.project != null) {
+                        if (projection.project != null && !isSelecting) {
                             // On a wide header the field unfolds *beside* its button, inside the
                             // trailing row: it takes width from the title rather than pushing the
                             // lanes down, which is the same arrangement the backlog header uses.
@@ -263,9 +329,24 @@ fun ProjectBoardScreen(
                 // nothing and offer a control whose list does not exist yet. Immediately under the
                 // header row and above the banner, so the header's own order is identity first,
                 // then the control over the list it filters.
+                // The selection bar stands in the header's second row for the same reason the
+                // backlog's does: the count and the two verbs need the width, and both lanes'
+                // headers are one control row already.
+                if (isSelecting) {
+                    BoardSelectionActions(
+                        count = selection.size,
+                        isBusy = isBatchRunning,
+                        canMove = moveDestinations.isNotEmpty(),
+                        onMove = { moveSheetOpen = true },
+                        onArchive = onArchiveSelection,
+                        onClear = onClearSelection,
+                        modifier = Modifier.fillMaxWidth().horizontalGutter(),
+                    )
+                }
+
                 // Compact header only: on a wide one the field is already in the header row, and
                 // composing it here as well would put two fields on screen with one query.
-                if (projection.project != null && !wideHeader) {
+                if (projection.project != null && !wideHeader && !isSelecting) {
                     SearchReveal(visible = searchOpen) {
                         searchField(Modifier.fillMaxWidth().horizontalGutter())
                     }
@@ -327,8 +408,9 @@ fun ProjectBoardScreen(
                     val drag = BoardCardDrag(
                         draggingItemID = dragState.item?.id,
                         onStart = { item, bounds, grab ->
-                            // Terminal items cannot be dragged onto the board; ignore if already busy
-                            if (movingItemID == null && !item.status.isTerminal) {
+                            // Terminal items cannot be dragged onto the board; a batch in flight
+                            // owns the cards; and a selection is built by taps, not drags.
+                            if (movingItemID == null && !item.status.isTerminal && !isSelecting) {
                                 dragState.start(item, bounds, grab)
                                 dragState.retarget(laneAt(dragState.pointer))
                             }
@@ -414,13 +496,32 @@ fun ProjectBoardScreen(
                                     column = column,
                                     onSelect = { onSelect(it.id) },
                                     onCopy = onCopy,
-                                    onAddTask = if (canAddTask) onAddTask?.let { addTask -> { addTask(column.status.id) } } else null,
+                                    onAddTask = if (canAddTask && !isSelecting) {
+                                        onAddTask?.let { addTask -> { addTask(column.status.id) } }
+                                    } else {
+                                        null
+                                    },
                                     modifier = Modifier,
                                     assigneeName = { item ->
                                         item.assigneeID?.let { assigneeNames[it] }
                                     },
                                     blockedByKeys = { item -> blockedByKeys[item.id].orEmpty() },
                                     projectTags = projection.project?.tags.orEmpty(),
+                                    isSelecting = isSelecting,
+                                    isSelectionLane = selectionLane == column.status.id,
+                                    selection = selection,
+                                    onStartSelecting = if (onStartSelecting != null) {
+                                        { enterSelecting(column.status.id) }
+                                    } else {
+                                        null
+                                    },
+                                    onToggleSelected = { itemID ->
+                                        onToggleSelected(column.status.id, itemID)
+                                    },
+                                    onSelectAll = { itemIDs ->
+                                        onSelectAll(column.status.id, itemIDs)
+                                    },
+                                    onClearSelection = onClearSelection,
                                     cardTrailing = { item ->
                                         BoardCardActions(
                                             item = item,
@@ -431,7 +532,10 @@ fun ProjectBoardScreen(
                                             destinations = shown.columns.map { it.status },
                                         )
                                     },
-                                    drag = drag,
+                                    // No drag while selecting: a lifted card would leave the lane
+                                    // whose set is being built, and the long-press that lifts it is
+                                    // also the gesture a user might mean as a select.
+                                    drag = if (isSelecting) null else drag,
                                     isDropTarget = dragState.target == column.status.id,
                                 )
                             }
@@ -476,7 +580,88 @@ fun ProjectBoardScreen(
                     }
                 }
             }
+
+            // The "Move to" picker: same sheet shape as the backlog's, different title and body.
+            // `visible` tracks `moveSheetOpen`, so dismissing it leaves the selection untouched
+            // and the user can choose Archive instead.
+            if (moveSheetOpen) {
+                PutOnBoardSheet(
+                    title = stringResource(Res.string.board_move_prompt_title),
+                    body = stringResource(Res.string.board_move_prompt_body, selection.size),
+                    statuses = moveDestinations,
+                    onConfirm = { definition ->
+                        onMoveSelection(definition.id)
+                        moveSheetOpen = false
+                    },
+                    onDismissRequest = { moveSheetOpen = false },
+                )
+            }
         }
+    }
+}
+
+/**
+ * The action bar shown under the header while a lane's selection is being built.
+ *
+ * The count is a live region so a screen reader announces it as cards are ticked, and it is the
+ * only thing naming the set. Both verbs refuse at zero and while a batch runs, so the bar never
+ * reflows under the finger that just unticked the last card; "Move to" also refuses when there
+ * is nowhere else to move.
+ */
+@Composable
+private fun BoardSelectionActions(
+    count: Int,
+    isBusy: Boolean,
+    canMove: Boolean,
+    onMove: () -> Unit,
+    onArchive: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = count > 0 && !isBusy
+    Row(
+        modifier = modifier.testTag(ProjectBoardSelectionBarTag),
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ttText(
+            text = stringResource(Res.string.board_selection_count, count),
+            style = ttTypography.caption,
+            color = ttLabel(),
+            modifier = Modifier
+                .testTag(ProjectBoardSelectionCountTag)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (isBusy) {
+            ttText(
+                text = stringResource(Res.string.board_selection_working),
+                style = ttTypography.captionSmall,
+                color = ttLabelSecondary(),
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        ttGlassButton(
+            label = stringResource(Res.string.board_move_selection),
+            onClick = { if (enabled && canMove) onMove() },
+            modifier = Modifier.testTag(ProjectBoardSelectionMoveTag),
+            style = if (enabled && canMove) {
+                TTGlassButtonStyle(tint = ttAccent(), prominent = true)
+            } else {
+                TTGlassButtonStyle()
+            },
+        )
+        ttGlassButton(
+            label = stringResource(Res.string.board_archive_selection),
+            onClick = { if (enabled) onArchive() },
+            modifier = Modifier.testTag(ProjectBoardSelectionArchiveTag),
+            style = if (enabled) TTGlassButtonStyle(tint = ttAccent(), prominent = true) else TTGlassButtonStyle(),
+        )
+        ttGlassIconButton(
+            image = ttActionIcons.close,
+            contentDescription = stringResource(Res.string.board_selection_clear),
+            onClick = onClear,
+            modifier = Modifier.testTag(ProjectBoardSelectionClearTag),
+        )
     }
 }
 
@@ -567,7 +752,9 @@ private fun BoardCardActions(
     onMove: (WorkItemID, String) -> Unit,
     destinations: List<StatusDefinition>,
 ) {
-    if (item.status.isTerminal) return
+    // `Closed` has no next step and the archive refuses it; `Done` does, and closing it is what
+    // lets the Done lane be cleared from the card as well as from a selection.
+    if (item.status == WorkItemStatus.Closed) return
     Column(
         modifier = Modifier.wrapContentWidth(),
         horizontalAlignment = Alignment.End,
@@ -635,6 +822,11 @@ const val ProjectBoardTitleTag = "board.title"
 const val ProjectBoardSearchFieldTag = "board.search"
 const val ProjectBoardSearchInputTag = "board.search.input"
 const val ProjectBoardEmptySearchTag = "board.emptySearch"
+const val ProjectBoardSelectionBarTag = "board.selection.bar"
+const val ProjectBoardSelectionCountTag = "board.selection.count"
+const val ProjectBoardSelectionMoveTag = "board.selection.move"
+const val ProjectBoardSelectionArchiveTag = "board.selection.archive"
+const val ProjectBoardSelectionClearTag = "board.selection.clear"
 const val BoardFileAwayTagPrefix = "board.card.fileAway"
 const val BoardMoveActionsTagPrefix = "board.card.moveActions"
 

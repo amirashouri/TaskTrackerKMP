@@ -116,22 +116,26 @@ object ArchiveRoundTripScenarios {
     }
 
     /**
-     * A delivered task offers no way to file away.
+     * A delivered card offers the close action, and it reaches the handler.
      *
-     * `Done` is terminal and appears on the board, so it is the one card where the guard is
-     * load-bearing: filing an already-closed task away is a no-op that would still report
-     * success, and the button would be an invitation to press it.
+     * `Done` used to return early from the card actions, so a delivered card had no way off the
+     * board at all and the lane could only grow. Filing one away now closes it, so the same
+     * control is the card-level half of clearing the lane — the selection's Archive is the batch
+     * half, and both go through `ArchiveWorkItem`.
      */
-    val aDeliveredCardOffersNoFileAway: suspend ComposeUiTest.() -> Unit = {
+    val aDeliveredCardOffersClose: suspend ComposeUiTest.() -> Unit = {
         val projection = ViewPreviewData.boardProjection()
         val delivered = projection.items.first { it.status == WorkItemStatus.Done }
+        var filed: WorkItemID? = null
 
-        boardShowing(projection, movingItemID = null, onFileAway = {})
+        boardShowing(projection, movingItemID = null, onFileAway = { filed = it })
 
-        assertEquals(0, countOfTag(BoardFileAwayTag(delivered), useUnmerged = true))
+        assertEquals(1, countOfTag(BoardFileAwayTag(delivered), useUnmerged = true))
+        onNested(BoardFileAwayTag(delivered)).performSemanticsAction(SemanticsActions.OnClick)
+        assertEquals(delivered.id, filed)
         assertTrue(
             delivered in projection.columns.flatMap { it.items },
-            "and a delivered task is still on the board, so the guard is doing real work",
+            "a delivered task is still on the board, so this is a real action on a real lane",
         )
     }
 }

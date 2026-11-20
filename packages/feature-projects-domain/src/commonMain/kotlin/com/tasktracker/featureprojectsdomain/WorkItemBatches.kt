@@ -56,17 +56,16 @@ data class WorkItemBatchOutcome(
 }
 
 /**
- * Boards every item in [ids] into one column.
+ * Moves a set of items into one status, one per-item command at a time.
  *
- * The lane is resolved once, from the project's catalog, with the same rule as the single-item
- * path: an unknown or absent [statusKey] falls back to `Todo` with no key, which is the
- * pre-catalog behaviour. Resolving it once rather than per item is the point — a batch must not
- * half-land in one lane and half in another because the catalog changed mid-loop.
+ * The target is resolved by the caller once, so a batch cannot half-land in one lane and half in
+ * another when the catalog changes mid-loop. Each item still goes through [MoveWorkItem], so each
+ * one writes its own status history row and its own outbox change; there is no server-side batch
+ * and this class must not grow one.
  *
- * Each item still goes through [MoveWorkItem], so each one writes its own status history row and
- * its own outbox change. There is no server-side batch and this class must not grow one.
+ * One failure does not abort the rest: the outcome carries it and the loop continues.
  */
-class PutWorkItemsOnBoard(
+class MoveWorkItems(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
 ) {
@@ -75,18 +74,14 @@ class PutWorkItemsOnBoard(
 
     @Throws(CancellationException::class)
     suspend operator fun invoke(
-        projectID: ProjectID,
         ids: List<WorkItemID>,
+        to: WorkItemStatus,
         statusKey: String? = null,
     ): WorkItemBatchOutcome {
-        val definition = statusKey?.let { key ->
-            repository.project(projectID)?.statuses?.firstOrNull { it.id == key }
-        }
-        val to = definition?.category ?: WorkItemStatus.Todo
         var outcome = WorkItemBatchOutcome()
         for (id in ids.distinct()) {
             try {
-                moveWorkItem(id = id, to = to, statusKey = definition?.id)
+                moveWorkItem(id = id, to = to, statusKey = statusKey)
                 outcome = outcome.copy(applied = outcome.applied + id)
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -99,13 +94,45 @@ class PutWorkItemsOnBoard(
 }
 
 /**
+ * Boards every item in [ids] into the column named by [statusKey].
+ *
+ * The lane is resolved from the project's catalog with the same rule as the single-item path: an
+ * unknown or absent key falls back to `Todo` with no key, which is the pre-catalog behaviour.
+ * Resolving it once rather than per item is the point, and [MoveWorkItems] does the loop.
+ */
+class PutWorkItemsOnBoard(
+    private val repository: ProjectRepositoryPort,
+    private val dateProvider: DateProvider,
+) {
+
+    private val moveWorkItems = MoveWorkItems(repository, dateProvider)
+
+    @Throws(CancellationException::class)
+    suspend operator fun invoke(
+        projectID: ProjectID,
+        ids: List<WorkItemID>,
+        statusKey: String? = null,
+    ): WorkItemBatchOutcome {
+        val definition = statusKey?.let { key ->
+            repository.project(projectID)?.statuses?.firstOrNull { it.id == key }
+        }
+        return moveWorkItems(
+            ids = ids,
+            to = definition?.category ?: WorkItemStatus.Todo,
+            statusKey = definition?.id,
+        )
+    }
+}
+
+/**
  * Files every item in [ids] away through [ArchiveWorkItem].
  *
- * An item that is already terminal — a task another client finished between the selection and
- * this command — is [WorkItemBatchOutcome.skipped] rather than a failure: there is nothing left
- * to archive, and re-archiving would rewrite `resolvedAt`, the date the task actually finished.
- * The check happens before the archive call because [ArchiveWorkItem]'s refusal is a message, not
- * a distinguishable type, and string-matching it here would make the skip depend on the wording.
+ * A `Done` item is closed, not skipped: `Done` is a lane and `Closed` is the archive, and this is
+ * the one path that gets a done card out of its lane. An item that is already `Closed` — filed
+ * away by another client between the selection and this command — is
+ * [WorkItemBatchOutcome.skipped] rather than a failure: there is nothing left to archive. The
+ * check happens before the archive call because [ArchiveWorkItem]'s refusal is a message, not a
+ * distinguishable type, and string-matching it here would make the skip depend on the wording.
  *
  * A missing item is still a failure, not a skip: it may have been deleted, and that is worth
  * saying.
@@ -129,7 +156,7 @@ class ArchiveWorkItems(
                 )
                 continue
             }
-            if (current.status.isTerminal) {
+            if (current.status == WorkItemStatus.Closed) {
                 outcome = outcome.copy(skipped = outcome.skipped + id)
                 continue
             }

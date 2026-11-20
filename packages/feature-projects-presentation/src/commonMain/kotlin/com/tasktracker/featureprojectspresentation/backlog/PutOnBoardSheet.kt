@@ -30,7 +30,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
-import com.tasktracker.resources.backlog_put_on_board_prompt_title
 import com.tasktracker.resources.common_cancel
 import org.jetbrains.compose.resources.stringResource
 
@@ -43,12 +42,14 @@ import org.jetbrains.compose.resources.stringResource
  * the user did not need to make. Picking a column both boards the work there and, back in the
  * screen, remembers it for next time.
  *
- * [body] is composed by the caller because the same sheet asks for one task and for a selected
- * set, and the sentence differs in more than a count (`%1$s` is a title, `%1$d` a number), which
- * a string with a placeholder shape of its own cannot express in every language.
+ * [title] and [body] are composed by the caller because the same sheet asks for one task, for a
+ * selected set, and for a board "move to" — the sentence differs in more than a count (`%1$s` is
+ * a title, `%1$d` a number), which a string with a placeholder shape of its own cannot express in
+ * every language, and "Put on board" is the wrong verb for moving between columns.
  */
 @Composable
 fun PutOnBoardSheet(
+    title: String,
     body: String,
     statuses: List<StatusDefinition>,
     onConfirm: (StatusDefinition) -> Unit,
@@ -65,6 +66,7 @@ fun PutOnBoardSheet(
         scrollable = false,
     ) {
         PutOnBoardContent(
+            title = title,
             body = body,
             statuses = statuses,
             onConfirm = onConfirm,
@@ -76,6 +78,7 @@ fun PutOnBoardSheet(
 
 @Composable
 private fun PutOnBoardContent(
+    title: String,
     body: String,
     statuses: List<StatusDefinition>,
     onConfirm: (StatusDefinition) -> Unit,
@@ -89,7 +92,7 @@ private fun PutOnBoardContent(
         verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
     ) {
         ttText(
-            text = stringResource(Res.string.backlog_put_on_board_prompt_title),
+            text = title,
             style = ttTypography.title,
             color = ttLabel(),
         )

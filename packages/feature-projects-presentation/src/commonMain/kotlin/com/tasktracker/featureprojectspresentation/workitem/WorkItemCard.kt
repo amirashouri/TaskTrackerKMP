@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -45,6 +47,12 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Summary card representing a work item on the board with priority, assignee, due date, and copy actions.
+ *
+ * In select mode the card is one checkbox: the click becomes a tick, the copy control and the
+ * caller's [trailing] actions disappear (a second action under a tap that now ticks is two answers
+ * to one gesture), and a tick box is drawn beside the priority badge. `selectable` rather than a
+ * plain click gives the card `Role.Checkbox` and a `selected` state, which is what a screen reader
+ * reads.
  */
 @Composable
 fun WorkItemCard(
@@ -60,16 +68,35 @@ fun WorkItemCard(
     blockedByKeys: List<WorkItemKey> = emptyList(),
     /** Project tag catalog used to resolve tag IDs into icons. */
     projectTags: List<ProjectTag> = emptyList(),
+    /** True while the lane is in multi-select mode: a click ticks instead of opening the editor. */
+    isSelecting: Boolean = false,
+    /** Whether this card is ticked. Only meaningful while [isSelecting]. */
+    isSelected: Boolean = false,
+    /** Invoked by a click while [isSelecting]. */
+    onToggleSelected: (() -> Unit)? = null,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
             .testTag(WorkItemCardTag(item))
             .clip(RoundedCornerShape(ttRadius.surface))
             .ttGlassCard()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick,
+            .then(
+                if (isSelecting) {
+                    Modifier.selectable(
+                        selected = isSelected,
+                        interactionSource = interactionSource,
+                        indication = null,
+                        role = Role.Checkbox,
+                        onClick = { onToggleSelected?.invoke() },
+                    )
+                } else {
+                    Modifier.clickable(
+                        indication = null,
+                        interactionSource = interactionSource,
+                        onClick = onClick,
+                    )
+                },
             )
             .padding(ttSpacing.xl),
         verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
@@ -86,6 +113,12 @@ fun WorkItemCard(
                 modifier = Modifier.weight(1f),
             )
             PriorityBadge(priority = item.priority)
+            if (isSelecting) {
+                SelectionTickBox(
+                    isSelected = isSelected,
+                    modifier = Modifier.testTag(WorkItemCardSelectionTickTag),
+                )
+            }
         }
         ttText(
             text = item.title,
@@ -132,13 +165,15 @@ fun WorkItemCard(
                 )
             }
             Spacer(Modifier.weight(1f))
-            ttGlassIconButton(
-                image = ttActionIcons.copy,
-                contentDescription = stringResource(Res.string.work_item_copy),
-                onClick = { onCopy(clipboardText(item)) },
-                modifier = Modifier.testTag(WorkItemCardCopyTag),
-            )
-            trailing?.invoke()
+            if (!isSelecting) {
+                ttGlassIconButton(
+                    image = ttActionIcons.copy,
+                    contentDescription = stringResource(Res.string.work_item_copy),
+                    onClick = { onCopy(clipboardText(item)) },
+                    modifier = Modifier.testTag(WorkItemCardCopyTag),
+                )
+                trailing?.invoke()
+            }
         }
     }
 }
@@ -222,6 +257,7 @@ const val WorkItemCardDueTag = "workItem.card.dueDate"
 const val WorkItemCardAssigneeTag = "workItem.card.assignee"
 const val WorkItemCardCopyTag = "workItem.card.copy"
 const val WorkItemCardDescriptionTag = "workItem.card.description"
+const val WorkItemCardSelectionTickTag = "workItem.card.selected"
 
 fun WorkItemCardTag(item: WorkItem): String = "$WorkItemCardTagPrefix.${item.key}"
 

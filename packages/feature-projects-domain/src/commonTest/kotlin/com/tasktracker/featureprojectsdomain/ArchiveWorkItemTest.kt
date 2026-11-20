@@ -17,9 +17,10 @@ import kotlin.time.Instant
 /**
  * The archive decision, tested against a fake port.
  *
- * The rule worth pinning: archiving is a move to [WorkItemStatus.Closed], and it must
- * refuse to fire on a task that is already terminal — a re-archive would rewrite
- * `resolvedAt`, erasing when the task actually finished.
+ * The rules worth pinning: archiving is a move to [WorkItemStatus.Closed] from anything that is
+ * not already closed — including `Done`, which is a lane the archive must be able to clear — and
+ * it must refuse to fire on a task that is already `Closed`, where there is nothing left to file
+ * and a second move would only claim a change that did not happen.
  */
 class ArchiveWorkItemTest {
 
@@ -82,15 +83,33 @@ class ArchiveWorkItemTest {
     }
 
     @Test
-    fun `an already-done task cannot be re-archived`() = runTest {
+    fun `archiving a done task closes it and keeps its resolution date`() = runTest {
         val repository = FakeProjectRepository()
         val item = makeItem(repository, WorkItemStatus.Done)
-        val archive = ArchiveWorkItem(repository, TestDateProvider(now + 60.seconds))
+        val later = now + 60.seconds
+        val archive = ArchiveWorkItem(repository, TestDateProvider(later))
 
-        assertFailsWith<AppError> { archive(item.id) }
+        val archived = archive(item.id)
 
-        // The refused move must not have rewritten the resolution date the task already had.
-        assertEquals(now, assertNotNull(repository.workItem(item.id)).resolvedAt)
+        assertEquals(WorkItemStatus.Closed, archived.status)
+        assertEquals(
+            now,
+            archived.resolvedAt,
+            "closing must not rewrite the date the task was actually finished",
+        )
+    }
+
+    @Test
+    fun `closing a done task records the move in history`() = runTest {
+        val repository = FakeProjectRepository()
+        val item = makeItem(repository, WorkItemStatus.Done)
+        val later = now + 60.seconds
+        ArchiveWorkItem(repository, TestDateProvider(later))(item.id)
+
+        val history = repository.statusChanges(item.id)
+        assertEquals(WorkItemStatus.Done, history.first().from)
+        assertEquals(WorkItemStatus.Closed, history.first().to)
+        assertEquals(later, history.first().changedAt)
     }
 
     @Test
@@ -107,15 +126,15 @@ class ArchiveWorkItemTest {
     @Test
     fun `the refusal names the item and where it is already filed`() = runTest {
         val repository = FakeProjectRepository()
-        val item = makeItem(repository, WorkItemStatus.Done)
+        val item = makeItem(repository, WorkItemStatus.Closed)
         val archive = ArchiveWorkItem(repository, TestDateProvider(now + 60.seconds))
 
         val error = assertFailsWith<AppError> { archive(item.id) }
 
         // The key rather than the id, because the key is what the user is looking at. The
-        // status is the wire value rather than "Done": see the note in `MoveWorkItem` on why
+        // status is the wire value rather than "Closed": see the note in `MoveWorkItem` on why
         // this module cannot produce a display title.
-        assertEquals("FAKE-1 is already filed away in done.", error.message)
+        assertEquals("FAKE-1 is already filed away in closed.", error.message)
     }
 
     @Test

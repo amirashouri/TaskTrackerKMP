@@ -331,6 +331,16 @@ private fun ProjectBoardDestination(
             onToggleMyTasks = model::toggleShowOnlyMyTasks,
             activeSprint = model.activeSprint,
             canAddTask = !model.addsLocked,
+            isSelecting = model.isSelecting,
+            selectionLane = model.selectionLane,
+            selection = model.selection.asSet(),
+            isBatchRunning = model.isBatchRunning,
+            onStartSelecting = { laneID -> model.startSelecting(laneID) },
+            onToggleSelected = model::toggleSelected,
+            onSelectAll = model::selectAll,
+            onClearSelection = model::clearSelection,
+            onMoveSelection = { statusKey -> scope.launch { model.moveSelection(statusKey) } },
+            onArchiveSelection = { scope.launch { model.archiveSelection() } },
         )
     }
 }

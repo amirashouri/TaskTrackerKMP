@@ -282,16 +282,14 @@ class ProjectBacklogModelTest {
     }
 
     /**
-     * A done task is refused a second filing *and* is already in the archive.
+     * A done task can be filed away, and it was already in the archive.
      *
-     * The reported bug in one place: "file away" on a `Done` task is refused because `Done` is
-     * terminal, and that refusal is only honest if the archive section is showing the task. An
-     * archive filtered on `Closed` refused the press and drew nothing, so the task looked lost
-     * from both sections at once. Asserted on the projection the screen draws rather than on the
-     * store, because that is the surface that was wrong.
+     * Filing a `Done` task now closes it — `Done` is a lane and `Closed` is the archive — so the
+     * press changes the store instead of being refused. The projection assertions hold both
+     * halves: the task is history before and after, and one task is still counted once.
      */
     @Test
-    fun `a done task is refused a second filing and is already in the archive`() = runTest {
+    fun `a done task can be filed away and is already in the archive`() = runTest {
         val repository = FakeProjectRepository()
         val project = testProject()
         repository.seed(project)
@@ -302,10 +300,12 @@ class ProjectBacklogModelTest {
         model.observe(eagerScope())
         advanceUntilIdle()
 
-        assertFalse(model.fileAway(item.id))
-        assertNotNull(model.errorMessage)
+        assertTrue(model.fileAway(item.id))
+        advanceUntilIdle()
+
+        assertEquals(WorkItemStatus.Closed, repository.workItem(item.id)!!.status)
+        assertNull(model.errorMessage)
         assertEquals(listOf("AP-1"), model.projection.archived.map { it.key.toString() })
-        // The done lane still holds it: one task, read in two sections, counted once.
         assertEquals(1, model.projection.totalItemCount)
     }
 
@@ -448,7 +448,8 @@ class ProjectBacklogModelTest {
         val project = testProject()
         repository.seed(project)
         val live = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
-        val finished = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Done)
+        // Closed is the only terminal status Archive skips now; a Done card is closed on purpose.
+        val finished = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Closed)
         repository.seed(live)
         repository.seed(finished)
         val resolutionBefore = repository.workItem(finished.id)!!.resolvedAt
