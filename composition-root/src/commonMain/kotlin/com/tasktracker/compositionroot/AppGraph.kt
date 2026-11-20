@@ -74,6 +74,7 @@ import com.tasktracker.sync.SyncTransport
 import com.tasktracker.userdefaults.PreferencesBackend
 import com.tasktracker.userdefaults.UserDefaultsStore
 import com.tasktracker.userdefaults.platformPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * The one module allowed to see every concrete type, and therefore the only place the
@@ -233,6 +234,11 @@ object AppGraph {
     private fun ResolverBuilder.registerPlatform(platforms: PlatformBindings) {
         registerRouter()
 
+        // The one root every HTTP client reads per request, app-scoped so a save from Settings
+        // reaches clients that were bound at launch. Initialised from the launch root, and
+        // `restoreLaunchRoot` is what a Reset puts back. See [LiveApiBaseUrl].
+        app<LiveApiBaseUrl> { LiveApiBaseUrl(platforms.apiBaseUrl) }
+
         // `forHost` rather than the primary constructor: on Android the watcher needs a
         // `Context` to reach `ConnectivityManager`, and the no-argument constructor throws
         // there. Passing the host everywhere means one registration works on all three
@@ -342,7 +348,10 @@ object AppGraph {
         // means the factory runs once, so one engine is created for the process either way.
         app<AuthRemotePort> { resolver ->
             platforms.apiBaseUrl?.let { url ->
-                HttpAuthRemote(platforms.httpClient(url, emptyList()))
+                // The live root, not this launch's `url`: a save from Settings repoints every
+                // client already bound, so the next login has to reach the new server.
+                val root = resolver.resolve(LiveApiBaseUrl::class)
+                HttpAuthRemote(platforms.httpClient({ root.current ?: url }, emptyList()))
             } ?: MockAuthRemote(dateProvider = resolver.resolve(DateProvider::class))
         }
 
@@ -466,10 +475,11 @@ object AppGraph {
         // the shell renders the placeholder — the `null` the destination documents.
         platforms.apiBaseUrl?.let { url ->
             app<AdminProjectsPort> { resolver ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 AdminProjectsRepository(
                     remote = HttpAdminProjectsRemote(
                         client = platforms.httpClient(
-                            url,
+                            { root.current ?: url },
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     ),
@@ -485,9 +495,10 @@ object AppGraph {
             // surface, so they ride the same client construction and the same
             // backend switch.
             app<AgentPairingPort> { resolver ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 HttpAgentPairingRemote(
                     client = platforms.httpClient(
-                        url,
+                        { root.current ?: url },
                         listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                     ),
                 )
@@ -507,9 +518,10 @@ object AppGraph {
     private fun ResolverBuilder.registerAgentRuns(platforms: PlatformBindings) {
         platforms.apiBaseUrl?.let { url ->
             app<AgentRunsPort> { resolver ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 HttpAgentRunsRemote(
                     client = platforms.httpClient(
-                        url,
+                        { root.current ?: url },
                         listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                     ),
                 )
@@ -535,11 +547,12 @@ object AppGraph {
                 sessionCache = resolver.resolve(SessionCache::class),
             )
             platforms.apiBaseUrl?.let { url ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 ServerTeamRepository(
                     local = local,
                     remote = HttpTeamRemote(
                         client = platforms.httpClient(
-                            url,
+                            { root.current ?: url },
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     ),
@@ -555,9 +568,10 @@ object AppGraph {
         // placeholder against a live server, with nothing red to say the wiring was dead.
         platforms.apiBaseUrl?.let { url ->
             app<HttpMemberAdminRemote> { resolver ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 HttpMemberAdminRemote(
                     client = platforms.httpClient(
-                        url,
+                        { root.current ?: url },
                         listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                     ),
                 )
@@ -591,9 +605,10 @@ object AppGraph {
     private fun ResolverBuilder.registerSync(platforms: PlatformBindings) {
         app<SyncTransport> { resolver ->
             platforms.apiBaseUrl?.let { url ->
+                val root = resolver.resolve(LiveApiBaseUrl::class)
                 HttpSyncTransport(
                     platforms.httpClient(
-                        url,
+                        { root.current ?: url },
                         listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                     ),
                 )
@@ -816,11 +831,19 @@ object AppGraph {
                         now = resolver.resolve(DateProvider::class).now(),
                     )
                 },
-                // The in-use root, read from the same binding the shells passed, and the
-                // validate-then-probe pair 6.3 landed. `HttpServerAddressProbe()` builds no
+                // The in-use root, read through the app-scoped state on every call rather than
+                // copied here: a save has to show up in Settings *and* in the clients already
+                // bound, and a captured string would let the row disagree with the wire. The
+                // validate-then-probe pair 6.3 landed; `HttpServerAddressProbe()` builds no
                 // engine until a check runs, so constructing it here keeps graph construction
                 // free of platform calls — the property `HostedGraphScenarios` asserts.
-                apiBaseUrl = platforms.apiBaseUrl,
+                apiBaseUrl = { resolver.resolve(LiveApiBaseUrl::class).current },
+                // Save and Reset publish into that same state before they return, so every
+                // already-bound client sends its next request to the confirmed root.
+                onServerAddressApplied = { saved ->
+                    resolver.resolve(LiveApiBaseUrl::class).publish(saved)
+                },
+                onServerAddressReset = { resolver.resolve(LiveApiBaseUrl::class).restoreLaunchRoot() },
                 checkServerAddress = CheckServerAddress(HttpServerAddressProbe()),
                 defaults = resolver.resolve(UserDefaultsStore::class),
                 // The identity block's wire path. Built only when there is an API root, like
@@ -829,9 +852,10 @@ object AppGraph {
                 // it the same refresh-then-replay the directory and admin remotes get, so a
                 // token that expires mid-edit is refreshed rather than reported as a failure.
                 profileGateway = platforms.apiBaseUrl?.let { url ->
+                    val root = resolver.resolve(LiveApiBaseUrl::class)
                     HttpUserProfileGateway(
                         client = platforms.httpClient(
-                            url,
+                            { root.current ?: url },
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     )
@@ -842,9 +866,10 @@ object AppGraph {
                 // clock is the graph's own app-scoped one, so the freshness window
                 // agrees with every other timestamp this app compares.
                 agentGateway = platforms.apiBaseUrl?.let { url ->
+                    val root = resolver.resolve(LiveApiBaseUrl::class)
                     HttpAgentRunnersRemote(
                         client = platforms.httpClient(
-                            url,
+                            { root.current ?: url },
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     )
@@ -854,9 +879,10 @@ object AppGraph {
                 // own client, like every other authenticated remote, so a failed mint never
                 // shares a connection state with the read that confirms it.
                 agentPairingGateway = platforms.apiBaseUrl?.let { url ->
+                    val root = resolver.resolve(LiveApiBaseUrl::class)
                     HttpAgentSetupRemote(
                         client = platforms.httpClient(
-                            url,
+                            { root.current ?: url },
                             listOf(AuthInterceptor(resolver.resolve(TokenVault::class))),
                         ),
                     )
@@ -912,6 +938,35 @@ object AppGraph {
 }
 
 /**
+ * The API root every already-bound HTTP client should use right now.
+ *
+ * Not a preference and not the launch-time string: Settings' Save has to reach the clients the
+ * graph bound before the user opened the sheet, and `platformApiBaseUrl` is read once at launch.
+ * One app-scoped instance is shared by every client factory and by `LiveSettingsService`, so the
+ * address the row prints and the address on the wire cannot drift.
+ *
+ * [launchRoot] is what [restoreLaunchRoot] puts back, which is what a Reset means now that it is
+ * applied immediately rather than on the next launch.
+ */
+internal class LiveApiBaseUrl(private val launchRoot: String?) {
+
+    private val state = MutableStateFlow(launchRoot)
+
+    /** The root a request built now should use, or `null` in the offline demo. */
+    val current: String? get() = state.value
+
+    /** Makes a confirmed address the root of every client bound through this state. */
+    fun publish(address: String) {
+        state.value = address
+    }
+
+    /** Forgets the saved address, returning the clients to the root this process launched with. */
+    fun restoreLaunchRoot() {
+        state.value = launchRoot
+    }
+}
+
+/**
  * The platform backends, the store location, and the API root: the values that differ between
  * a real process and a test host.
  *
@@ -938,8 +993,8 @@ internal class PlatformBindings(
      */
     val apiBaseUrl: String? = null,
     /**
-     * Builds the HTTP client a bound backend is reached through, given its root and the
-     * interceptors it must carry.
+     * Builds the HTTP client a bound backend is reached through, given how to read its root
+     * per request and the interceptors it must carry.
      *
      * A seam for the same reason [keychain] is one, and it is here to make one property
      * assertable rather than obvious: the sync client carries a bearer-token interceptor and
@@ -968,7 +1023,7 @@ internal class PlatformBindings(
      * is therefore deliberately this constructor's, not `AppGraph.start`'s, and this link is
      * recorded as a residual rather than gated.
      */
-    val httpClient: (String, List<RequestInterceptor>) -> HttpClient = defaultHttpClient,
+    val httpClient: (() -> String, List<RequestInterceptor>) -> HttpClient = defaultHttpClient,
     /**
      * Where the store is, as a configuration rather than as a host.
      *
@@ -1034,7 +1089,7 @@ internal class PlatformBindings(
          *   appended another would never reach it, and "and no others" above is the half that
          *   is asserted by convention rather than by an assertion.
          */
-        val defaultHttpClient: (String, List<RequestInterceptor>) -> HttpClient =
+        val defaultHttpClient: (() -> String, List<RequestInterceptor>) -> HttpClient =
             { baseUrl, interceptors ->
                 KtorHttpClient(baseUrl = baseUrl, interceptors = interceptors)
             }

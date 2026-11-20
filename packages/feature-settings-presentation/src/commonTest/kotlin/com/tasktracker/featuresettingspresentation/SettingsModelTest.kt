@@ -356,7 +356,7 @@ class SettingsModelTest {
     }
 
     @Test
-    fun aSuccessfulSaveClosesTheEditorAndRaisesTheRestartNotice() = runTest {
+    fun aSuccessfulSaveClosesTheEditorAndMakesTheAddressLive() = runTest {
         val port = RecordingSettingsPort().apply {
             setServerAddressResult = ServerAddressValidation.Valid("https://new.example.com")
         }
@@ -370,9 +370,9 @@ class SettingsModelTest {
         assertEquals(listOf("https://new.example.com"), port.setServerAddressInputs)
         assertNull(model.serverAddressEditor)
         assertEquals(ServerAddressNotice.Saved, model.serverAddressNotice)
-        // The in-use root is unchanged — a save cannot rebind the running clients — and the
-        // override the next launch will read is the checked address.
-        assertEquals("https://tasks.example.com", model.serverAddress.inUse)
+        // The model re-reads the port, so the row shows the checked address as the root the
+        // clients are using now — the same value the next launch will resolve.
+        assertEquals("https://new.example.com", model.serverAddress.inUse)
         assertEquals("https://new.example.com", model.serverAddress.savedOverride)
     }
 
@@ -954,10 +954,28 @@ class RecordingSettingsPort(
         setServerAddressGate?.await()
         val result = setServerAddressResult
         if (result is ServerAddressValidation.Valid) {
-            serverAddressValue = serverAddressValue.copy(savedOverride = result.baseUrl)
+            // Mirrors the real service, which publishes the confirmed root to the running
+            // clients as well as writing the override the next launch reads.
+            serverAddressValue = ServerAddressSettings(
+                inUse = result.baseUrl,
+                savedOverride = result.baseUrl,
+            )
         }
         return result
     }
+
+    /**
+     * Mirrors the real service's save-without-probe rule for a pairing link. Not on the
+     * model's path — the shell applies a scan on the auth gate — but a fake has to answer.
+     */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation {
+        appliedPairingAddresses += input
+        val result = ServerAddressValidation.Valid(input)
+        serverAddressValue = ServerAddressSettings(inUse = result.baseUrl, savedOverride = result.baseUrl)
+        return result
+    }
+
+    val appliedPairingAddresses = mutableListOf<String>()
 
     override suspend fun resetServerAddress() {
         resetServerAddressCalls++

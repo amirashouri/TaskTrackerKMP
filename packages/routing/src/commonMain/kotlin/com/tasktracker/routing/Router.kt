@@ -126,8 +126,10 @@ class Router {
             state.clearedNavigation().copy(
                 root = RootDestination.Main,
                 isRestoringSession = false,
-                // A pairing link scanned before sign-in is waiting on the screen that can
-                // carry it out, so the first signed-in frame is already on Settings.
+                // A pairing link still pending here is one the auth gate could not apply — the
+                // shell normally publishes it and consumes it on the sign-in screen — so the
+                // first signed-in frame opens Settings for it. Kept as the fallback rather than
+                // the rule; see `RootScreen`'s auth-gate effect.
                 selectedTab = if (state.pendingServerAddress != null) {
                     AppTab.Settings
                 } else {
@@ -355,8 +357,9 @@ class Router {
         if (_state.value.root != RootDestination.Main) {
             // The pairing link is the one intent worth keeping across sign-in: the customer
             // scans the code the CLI printed before this device knows who they are. It does
-            // not navigate, so it cannot bypass the gate — `enterMain` lands on Settings and
-            // the screen opens its editor. Every other link keeps the reject.
+            // not navigate, so it cannot bypass the gate — the shell applies the address on the
+            // sign-in screen, where the next request is the login itself. Every other link
+            // keeps the reject.
             if (link.serverAddress != null) {
                 update { it.copy(pendingServerAddress = link.serverAddress) }
                 logNotice("routing: held a pairing link until sign-in")

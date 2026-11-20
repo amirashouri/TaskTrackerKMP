@@ -67,7 +67,7 @@ internal fun testBindings(
     keychain: KeychainAccess = InMemoryKeychain(),
     preferences: PreferencesBackend = InMemoryPreferences(),
     apiBaseUrl: String? = null,
-    httpClient: (String, List<RequestInterceptor>) -> HttpClient = PlatformBindings.defaultHttpClient,
+    httpClient: (() -> String, List<RequestInterceptor>) -> HttpClient = PlatformBindings.defaultHttpClient,
 ): PlatformBindings {
     val host = testPlatformHost()
     return PlatformBindings(

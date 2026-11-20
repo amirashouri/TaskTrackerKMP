@@ -76,6 +76,7 @@ import com.tasktracker.resources.settings_sync_waiting
 import org.jetbrains.compose.resources.getString
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.time.Instant
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -919,16 +920,16 @@ object SettingsScenarios {
     }
 
     /**
-     * A save raises the restart notice, and the notice says *when* the change applies.
+     * A save raises a notice that says the address is live, not that a restart is needed.
      *
-     * The row still reads the in-use address in this state, which is the honest pairing: the
-     * notice is the only thing that can explain why the address the user just saved is not the
-     * address on screen.
+     * The row reads the same root the clients are now sending to, so the notice's job is to
+     * confirm the switch happened — promising "next time it opens" would describe the old
+     * behaviour, where the in-use address on screen was still the launch-time one.
      */
-    val aSavedChangeRaisesTheRestartNotice: suspend ComposeUiTest.() -> Unit = {
+    val aSavedChangeSaysTheAddressIsInUseNow: suspend ComposeUiTest.() -> Unit = {
         screenShowing(
             serverAddress = ServerAddressSettings(
-                inUse = "https://tasks.example.com",
+                inUse = "https://new.example.com",
                 savedOverride = "https://new.example.com",
             ),
             serverAddressNotice = ServerAddressNotice.Saved,
@@ -939,8 +940,12 @@ object SettingsScenarios {
         val notice = getString(Res.string.settings_server_saved_notice)
         onNodeWithText(notice).assertIsDisplayed()
         assertTrue(
+            notice.contains("now"),
+            "\"$notice\" does not say the saved address is in use now",
+        )
+        assertFalse(
             notice.contains("next time"),
-            "\"$notice\" does not say when the saved address takes effect",
+            "\"$notice\" still claims the saved address waits for the next launch",
         )
     }
 

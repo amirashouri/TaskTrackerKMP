@@ -164,8 +164,8 @@ abstract class SettingsViewScenarios {
         runComposeUiTest(block = SettingsScenarios.aCheckInFlightDisablesTheOtherActions)
 
     @Test
-    fun aSavedChangeRaisesTheRestartNotice() =
-        runComposeUiTest(block = SettingsScenarios.aSavedChangeRaisesTheRestartNotice)
+    fun aSavedChangeSaysTheAddressIsInUseNow() =
+        runComposeUiTest(block = SettingsScenarios.aSavedChangeSaysTheAddressIsInUseNow)
 
     @Test
     fun theNameSheetStagesAndCommitsANewName() =

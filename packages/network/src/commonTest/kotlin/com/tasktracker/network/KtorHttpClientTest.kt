@@ -436,6 +436,34 @@ class KtorHttpClientTest {
     }
 
     @Test
+    fun `a confirmed address reaches a client built before the save`() = runTest {
+        // The pairing flow saves a server address after every remote has been bound. A client
+        // that captured the launch-time root would keep sending the login to the stale address.
+        var root = "https://old.example.com"
+        val transport = StubTransport()
+        transport.enqueue(Stub.json("""{"ok":true}"""))
+        transport.enqueue(Stub.json("""{"ok":true}"""))
+        val liveClient = KtorHttpClient(
+            baseUrl = { root },
+            engine = transport.engine(),
+            retryPolicy = RetryPolicy.None,
+            sleeper = {},
+        )
+
+        liveClient.send(HttpRequest(HttpMethod.Get, "/readyz"))
+        root = "http://192.168.31.162:8080"
+        liveClient.send(HttpRequest(HttpMethod.Get, "/readyz"))
+
+        assertEquals(
+            listOf(
+                "https://old.example.com/readyz",
+                "http://192.168.31.162:8080/readyz",
+            ),
+            transport.recorded.map { it.url },
+        )
+    }
+
+    @Test
     fun `the post helper encodes the body and decodes the reply`() = runTest {
         val transport = StubTransport()
         transport.enqueue(Stub.json("""{"ok":true}"""))

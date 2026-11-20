@@ -21,6 +21,7 @@ import com.tasktracker.featuresettingsdomain.SyncOutcome
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.featuresettingsdomain.UserProfileChanges
 import com.tasktracker.featuresettingsdomain.UserProfileGateway
+import com.tasktracker.featuresettingsdomain.validateServerAddress
 import com.tasktracker.network.Connectivity
 import com.tasktracker.network.NetworkMonitor
 import com.tasktracker.sync.SyncCoordinator
@@ -98,14 +99,30 @@ class LiveSettingsService(
      */
     private val onRetryStuckChanges: suspend () -> Unit = {},
     /**
-     * The API root this process bound its app-scoped clients to, or `null` in the offline demo.
+     * Publishes a validated address into the root the already-bound clients read.
      *
-     * Passed in rather than read from the preference, and that is the decision the whole Server
-     * field turns on: the preference is the *next* launch's root, while this is the one already
-     * on the wire. Reading the preference here would make the row report a change the running
-     * clients have not taken.
+     * A closure for the same reason the sign-out pair is one: the state belongs to the
+     * composition root, and this package must not know what else lives there. Called before
+     * [setServerAddress] returns, so a caller that saves and then sends has already moved.
      */
-    private val apiBaseUrl: String?,
+    private val onServerAddressApplied: (String) -> Unit = {},
+    /**
+     * Puts the clients back on the root this process launched with.
+     *
+     * Separate from [onServerAddressApplied] because a reset has no address to publish — the
+     * app, not the settings package, knows which fallback the build-time root was.
+     */
+    private val onServerAddressReset: () -> Unit = {},
+    /**
+     * The API root the app-scoped clients are using *now*, or `null` in the offline demo.
+     *
+     * A provider rather than a copied string, and that is the decision the whole Server field
+     * turns on: [setServerAddress] publishes a confirmed address into the composition root's
+     * live state, so the row must read that state instead of a launch-time snapshot. The
+     * preference stays a separate value — it is what the next launch resolves — and reading it
+     * here would report a change the running clients have not taken.
+     */
+    private val apiBaseUrl: () -> String?,
     /**
      * The validate-then-probe operation, as 6.3 landed it.
      *
@@ -448,7 +465,7 @@ class LiveSettingsService(
     // MARK: - Server Address
 
     /**
-     * The in-use root from the constructor, plus the raw override the next launch will read.
+     * The live in-use root, plus the raw override the next launch will read.
      *
      * The override is read through the store's **raw**-key overload, so the value is exactly the
      * one 6.1's resolver reads at startup — same key, same verbatim spelling, no namespace. A
@@ -456,7 +473,7 @@ class LiveSettingsService(
      * it as `isCustom` would offer a Reset that has nothing to clear.
      */
     override suspend fun serverAddress(): ServerAddressSettings = ServerAddressSettings(
-        inUse = apiBaseUrl,
+        inUse = apiBaseUrl(),
         savedOverride = defaults.value(API_BASE_URL_PREFERENCE_KEY)?.takeIf { it.isNotBlank() },
     )
 
@@ -466,7 +483,8 @@ class LiveSettingsService(
      * The validator normalises the address, so what lands in the preference is the canonical
      * form rather than the user's typing; that is the same string the resolver would have to
      * build a client from, and normalising at read time would be a second chance to disagree.
-     * An `Invalid` result writes nothing — the sheet stays open on the reason.
+     * A `Valid` result also publishes that normalised root to the running clients. An `Invalid`
+     * result writes and publishes nothing — the sheet stays open on the reason.
      *
      * The write uses the raw-key overload and ignores its boolean, for the reason 6.1's read
      * ignores a missing key: this store's `set(String, String)` returns `true` unconditionally.
@@ -477,12 +495,40 @@ class LiveSettingsService(
         val result = checkServerAddress.check(input)
         if (result is ServerAddressValidation.Valid) {
             defaults.set(result.baseUrl, API_BASE_URL_PREFERENCE_KEY)
+            // Before returning, so the clients already bound send their next request to the
+            // address the user just confirmed rather than to the one this launch started on.
+            onServerAddressApplied(result.baseUrl)
         }
         return result
     }
 
+    /**
+     * Saves and publishes a pairing link's address without probing it.
+     *
+     * The scan is the confirmation: the code came from a running `tt expose`, and the person
+     * who scanned it is on the sign-in screen, which has no Settings to open. A probe here could
+     * only answer "not reachable yet" and leave them on a server they did not choose — the
+     * login's own transport failure is the honest report. The pure rule still runs first, so a
+     * malformed link never reaches a preference or a client.
+     */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation {
+        val result = validateServerAddress(input)
+        if (result is ServerAddressValidation.Valid) {
+            defaults.set(result.baseUrl, API_BASE_URL_PREFERENCE_KEY)
+            onServerAddressApplied(result.baseUrl)
+        }
+        return result
+    }
+
+    /**
+     * Forgets the override and puts the already-bound clients back on the launch root.
+     *
+     * The preference removal is what the next launch reads; the hook is what the running
+     * process uses, and both have to happen or the row and the wire would disagree.
+     */
     override suspend fun resetServerAddress() {
         defaults.remove(API_BASE_URL_PREFERENCE_KEY)
+        onServerAddressReset()
     }
 
     // MARK: - Translation

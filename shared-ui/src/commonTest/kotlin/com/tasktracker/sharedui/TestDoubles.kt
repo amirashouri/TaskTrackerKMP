@@ -370,13 +370,31 @@ class FakeShellSettingsPort(
      * A no-server state is the honest stand-in: these scenarios build the shell without a
      * backend, so a non-null address here would be a value nothing is listening on.
      */
-    override suspend fun serverAddress(): ServerAddressSettings =
+    override suspend fun serverAddress(): ServerAddressSettings = serverAddressValue
+
+    override suspend fun setServerAddress(input: String): ServerAddressValidation {
+        serverAddressValue = ServerAddressSettings(inUse = input, savedOverride = input)
+        return ServerAddressValidation.Valid(input)
+    }
+
+    /**
+     * Recorded rather than ignored: a shell scenario has to see that a link scanned on the auth
+     * gate reached the port, and that the row the next screen reads now names that server.
+     */
+    override suspend fun applyPairingAddress(input: String): ServerAddressValidation {
+        appliedPairingAddresses += input
+        serverAddressValue = ServerAddressSettings(inUse = input, savedOverride = input)
+        return ServerAddressValidation.Valid(input)
+    }
+
+    var serverAddressValue: ServerAddressSettings =
         ServerAddressSettings(inUse = null, savedOverride = null)
 
-    override suspend fun setServerAddress(input: String): ServerAddressValidation =
-        ServerAddressValidation.Valid(input)
+    val appliedPairingAddresses = mutableListOf<String>()
 
-    override suspend fun resetServerAddress() = Unit
+    override suspend fun resetServerAddress() {
+        serverAddressValue = serverAddressValue.copy(savedOverride = null)
+    }
 
     /** The shell scenarios build no backend, so there is no fleet to show. */
     override suspend fun agentOverview(): AgentOverview = AgentOverview()

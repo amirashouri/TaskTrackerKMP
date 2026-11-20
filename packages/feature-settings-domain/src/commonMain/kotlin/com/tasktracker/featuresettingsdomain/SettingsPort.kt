@@ -160,28 +160,43 @@ interface SettingsPort {
     fun appVersion(): AppVersion
 
     /**
-     * The address this process is using, and the address saved for the next one.
+     * The address the running clients are using, and the override saved for the next launch.
      *
-     * Two values rather than one, and the split is the feature: the API root is bound once,
-     * while the app-scoped HTTP clients are built, so a saved change cannot take effect until
-     * the next launch. The screen shows [ServerAddressSettings.inUse] and offers to edit
+     * A save publishes into the live root and writes the override, so after one the two agree;
+     * before one, an override from a previous launch can differ from the launch-time root. The
+     * row shows [ServerAddressSettings.inUse]; the sheet edits
      * [ServerAddressSettings.savedOverride].
      */
     suspend fun serverAddress(): ServerAddressSettings
 
     /**
      * Checks [input] as a TaskTracker server and, only when it answers, saves the normalized
-     * address for the next launch.
+     * address and points the running clients at it.
      *
-     * Validation, the health probe and the write are one operation here rather than three the
-     * screen has to sequence, because "saved" *is* "checked": a caller cannot forget the middle
-     * step. The return value is the check's own answer — the screen renders the failure reason
-     * and does not repeat the rule.
+     * Validation, the health probe, the write and the live switch are one operation here rather
+     * than four the screen has to sequence, because "saved" *is* "checked and in use": a caller
+     * cannot forget the middle step. The return value is the check's own answer — the screen
+     * renders the failure reason and does not repeat the rule.
      */
     suspend fun setServerAddress(input: String): ServerAddressValidation
 
     /**
-     * Forgets any saved address, so the next launch falls back to the build-time default.
+     * Applies a pairing link's address to the clients that are already bound.
+     *
+     * The auth gate is the case this exists for: a scan before sign-in has no Settings screen to
+     * open, and the very next request is the sign-in itself, so holding the address for a screen
+     * the user cannot reach leaves them on the previous server with no way to say otherwise.
+     *
+     * Unlike [setServerAddress] there is no health probe. The link is the CLI's own handoff and
+     * the scan is the person's decision, so an unreachable server must surface as the sign-in's
+     * transport failure rather than as a no-op behind a screen they cannot open. The address is
+     * still shape-checked and normalised, and a valid one is persisted for the next launch as
+     * well as published to the running clients.
+     */
+    suspend fun applyPairingAddress(input: String): ServerAddressValidation
+
+    /**
+     * Forgets the saved address and returns the running clients to the launch-time root.
      *
      * The counterpart to [setServerAddress], and the reason the setting is reversible: a
      * customer who mistypes an address, or moves off a temporary exposure, is not stranded with

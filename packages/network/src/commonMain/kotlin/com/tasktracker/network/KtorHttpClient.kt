@@ -32,7 +32,8 @@ import kotlin.time.Duration
  * nothing. The concurrency control that *is* needed lives in the auth delegate
  * (`TokenVault`'s refresh gate), not here.
  *
- * @param baseUrl the API root. A trailing slash is tolerated.
+ * @param baseUrl supplies the API root. A trailing slash is tolerated. It is read per request
+ *   so a server address confirmed after the client was built reaches already-bound remotes.
  * @param engine the transport. Defaults to the platform's — Darwin's is Foundation's
  *   `URLSession`, OkHttp's is the JVM/Android HTTP stack — which is why the engine is an
  *   `expect`/`actual` and not a common dependency.
@@ -45,7 +46,7 @@ import kotlin.time.Duration
  *   the reverse (guessing `Offline` from a connection failure) is not done.
  */
 class KtorHttpClient(
-    private val baseUrl: String,
+    private val baseUrl: () -> String,
     engine: HttpClientEngine = createDefaultHttpEngine(),
     private val interceptors: List<RequestInterceptor> = emptyList(),
     private val retryPolicy: RetryPolicy = RetryPolicy.Default,
@@ -53,6 +54,25 @@ class KtorHttpClient(
     private val sleeper: suspend (Duration) -> Unit = { delay(it) },
     private val connectivity: ConnectivitySource? = null,
 ) : HttpClient {
+
+    /** A fixed root for callers that have no live address state. */
+    constructor(
+        baseUrl: String,
+        engine: HttpClientEngine = createDefaultHttpEngine(),
+        interceptors: List<RequestInterceptor> = emptyList(),
+        retryPolicy: RetryPolicy = RetryPolicy.Default,
+        json: Json = JSONCoding.json,
+        sleeper: suspend (Duration) -> Unit = { delay(it) },
+        connectivity: ConnectivitySource? = null,
+    ) : this(
+        baseUrl = { baseUrl },
+        engine = engine,
+        interceptors = interceptors,
+        retryPolicy = retryPolicy,
+        json = json,
+        sleeper = sleeper,
+        connectivity = connectivity,
+    )
 
     private val client = KtorClient(engine) {
         // The whole auth design depends on *seeing* a 401 rather than having it thrown:
@@ -261,7 +281,7 @@ class KtorHttpClient(
      * in the endpoint rather than something that silently becomes a different route.
      */
     private fun urlString(request: HttpRequest): String {
-        val builder = URLBuilder(baseUrl)
+        val builder = URLBuilder(baseUrl())
         val segments = request.path.split('/').filter { it.isNotEmpty() }
         if (segments.isNotEmpty()) {
             builder.appendPathSegments(segments)

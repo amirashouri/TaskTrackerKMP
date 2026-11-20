@@ -101,12 +101,14 @@ class LiveSettingsServiceTest {
 
     private fun service(
         monitor: NetworkMonitor,
-        apiBaseUrl: String? = null,
+        apiBaseUrl: () -> String? = { null },
         checkServerAddress: CheckServerAddress = CheckServerAddress(ServerAddressProbe { true }),
         defaults: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         profileGateway: UserProfileGateway? = null,
         agentGateway: AgentSettingsGateway? = null,
         dateProvider: DateProvider = SystemDateProvider(),
+        onServerAddressApplied: (String) -> Unit = {},
+        onServerAddressReset: () -> Unit = {},
     ) = LiveSettingsService(
         monitor = monitor,
         // Never asked to sync by the connectivity tests; see `UnusedSyncDependencies`.
@@ -115,6 +117,8 @@ class LiveSettingsServiceTest {
         onEndSession = {},
         onForceEndSession = {},
         apiBaseUrl = apiBaseUrl,
+        onServerAddressApplied = onServerAddressApplied,
+        onServerAddressReset = onServerAddressReset,
         checkServerAddress = checkServerAddress,
         defaults = defaults,
         profileGateway = profileGateway,
@@ -192,7 +196,7 @@ class LiveSettingsServiceTest {
             version = version,
             onEndSession = {},
             onForceEndSession = {},
-            apiBaseUrl = null,
+            apiBaseUrl = { null },
             checkServerAddress = CheckServerAddress(ServerAddressProbe { true }),
             defaults = UserDefaultsStore(InMemoryPreferences()),
         )
@@ -225,7 +229,7 @@ class LiveSettingsServiceTest {
     fun theServerAddressReportsTheInUseRootWithNoOverrideYet() = runTest {
         val service = service(
             monitor = emptyMonitor(),
-            apiBaseUrl = "https://tasks.example.com",
+            apiBaseUrl = { "https://tasks.example.com" },
         )
 
         assertEquals(
@@ -312,6 +316,134 @@ class LiveSettingsServiceTest {
 
         assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
         assertNull(service.serverAddress().savedOverride)
+    }
+
+    /**
+     * The save reaches the clients that were bound before the user opened Settings.
+     *
+     * `live` is what those clients read, so asserting it moved is asserting the publish the
+     * composition root wires to `LiveApiBaseUrl.publish` happened by the time the call
+     * returned — not merely that the preference was written.
+     */
+    @Test
+    fun aValidatedAddressIsPublishedToTheLiveRootBeforeReturning() = runTest {
+        var live = "https://build.example.com"
+        val published = mutableListOf<String>()
+        val service = service(
+            monitor = emptyMonitor(),
+            apiBaseUrl = { live },
+            onServerAddressApplied = {
+                published += it
+                live = it
+            },
+        )
+
+        val result = service.setServerAddress("HTTPS://Tasks.Example.COM/")
+
+        assertEquals(ServerAddressValidation.Valid("https://tasks.example.com"), result)
+        assertEquals(listOf("https://tasks.example.com"), published)
+        // The row reads the provider, so after the publish it reports the root on the wire
+        // rather than the one this launch started on.
+        assertEquals("https://tasks.example.com", live)
+        assertEquals("https://tasks.example.com", service.serverAddress().inUse)
+    }
+
+    @Test
+    fun anInvalidAddressPublishesNothing() = runTest {
+        var live = "https://build.example.com"
+        val published = mutableListOf<String>()
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(ServerAddressProbe { false }),
+            apiBaseUrl = { live },
+            onServerAddressApplied = {
+                published += it
+                live = it
+            },
+        )
+
+        val result = service.setServerAddress("https://nobody.example.com")
+
+        assertEquals(
+            ServerAddressValidation.Invalid(ServerAddressValidation.Reason.Unreachable),
+            result,
+        )
+        assertEquals(emptyList(), published)
+        assertEquals("https://build.example.com", live)
+        assertEquals("https://build.example.com", service.serverAddress().inUse)
+    }
+
+    @Test
+    fun resetPutsTheLiveRootBackOnTheLaunchAddress() = runTest {
+        var live = "https://build.example.com"
+        val service = service(
+            monitor = emptyMonitor(),
+            apiBaseUrl = { live },
+            onServerAddressApplied = { live = it },
+            onServerAddressReset = { live = "https://build.example.com" },
+        )
+
+        service.setServerAddress("https://tasks.example.com")
+        assertEquals("https://tasks.example.com", live)
+
+        service.resetServerAddress()
+
+        assertEquals("https://build.example.com", live)
+        assertEquals("https://build.example.com", service.serverAddress().inUse)
+    }
+
+    /**
+     * A scanned pairing link is saved and published without waiting on the health probe.
+     *
+     * The auth gate has no Settings screen to show a probe result on, and a probe that failed
+     * would leave the person signing in to a server they did not scan. The scanned link is the
+     * confirmation; the login's own transport failure is what reports an unreachable server.
+     */
+    @Test
+    fun aPairingAddressIsAppliedWithoutProbing() = runTest {
+        val probe = RecordingProbe()
+        val store = UserDefaultsStore(InMemoryPreferences())
+        var live = "https://build.example.com"
+        val service = service(
+            monitor = emptyMonitor(),
+            checkServerAddress = CheckServerAddress(probe),
+            defaults = store,
+            apiBaseUrl = { live },
+            onServerAddressApplied = { live = it },
+        )
+
+        val result = service.applyPairingAddress("  HTTPS://Tasks.Example.COM/  ")
+
+        assertEquals(ServerAddressValidation.Valid("https://tasks.example.com"), result)
+        assertEquals(
+            emptyList(),
+            probe.asked,
+            "a scanned link must not wait on a probe the auth gate cannot show a failure for",
+        )
+        assertEquals("https://tasks.example.com", live)
+        assertEquals("https://tasks.example.com", store.value(API_BASE_URL_PREFERENCE_KEY))
+        assertEquals("https://tasks.example.com", service.serverAddress().inUse)
+    }
+
+    @Test
+    fun aMalformedPairingAddressIsNeitherSavedNorPublished() = runTest {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        var live = "https://build.example.com"
+        val service = service(
+            monitor = emptyMonitor(),
+            defaults = store,
+            apiBaseUrl = { live },
+            onServerAddressApplied = { live = it },
+        )
+
+        val result = service.applyPairingAddress("tasks.example.com")
+
+        assertEquals(
+            ServerAddressValidation.Invalid(ServerAddressValidation.Reason.MissingScheme),
+            result,
+        )
+        assertEquals("https://build.example.com", live)
+        assertNull(store.value(API_BASE_URL_PREFERENCE_KEY))
     }
 
     // MARK: - Self profile

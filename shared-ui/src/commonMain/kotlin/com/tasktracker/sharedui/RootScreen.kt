@@ -221,6 +221,18 @@ fun RootScreen(
     // collector must not grow a second policy of its own.
     LaunchedEffect(deepLinks) { deepLinks.urls.collect { router.open(it) } }
 
+    // A pairing link scanned on the auth gate is applied here rather than held for Settings:
+    // the sign-in is the very next request, and no Settings screen exists until it succeeds.
+    // Consumed either way, so one scan is one attempt; signed in, the link still only prefills
+    // Settings, where switching a live session's server needs the user's Save.
+    LaunchedEffect(navigation.root, navigation.pendingServerAddress, settings) {
+        val address = navigation.pendingServerAddress ?: return@LaunchedEffect
+        if (navigation.root != RootDestination.Auth) return@LaunchedEffect
+        val port = settings ?: return@LaunchedEffect
+        port.applyPairingAddress(address)
+        router.consumePendingServerAddress()
+    }
+
     val showsSplash = !hasHeldMinimum || navigation.isRestoringSession
 
     // The active project is remembered on every change rather than on sign-out, so the value
