@@ -235,113 +235,125 @@ fun ProjectBoardScreen(
                         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                     )
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalGutter()
-                        .testTag(ProjectBoardHeaderTag),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+                // The bar is grouped with the header rather than left as a sibling: the outer
+                // Column's `spacedBy` counts every child, so a composed-but-empty bar would spend a
+                // gap even with the mode off. Inside this column the bar's own top padding supplies
+                // the gap only while the reveal has height to give.
+                Column {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalGutter()
+                            .testTag(ProjectBoardHeaderTag),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        onOpenSwitcher?.let { openSwitcher ->
-                            ProjectSwitcherButton(
-                                project = projection.project,
-                                onClick = openSwitcher,
-                                projects = projects,
-                                onSelectProject = onSelectProject,
-                                showName = false,
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            onOpenSwitcher?.let { openSwitcher ->
+                                ProjectSwitcherButton(
+                                    project = projection.project,
+                                    onClick = openSwitcher,
+                                    projects = projects,
+                                    onSelectProject = onSelectProject,
+                                    showName = false,
+                                )
+                            }
+                            if (assignees.isNotEmpty()) {
+                                AssigneeStack(
+                                    names = assignees,
+                                    modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                                )
+                            }
+                            ttText(
+                                text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
+                                style = ttTypography.titleSmall,
+                                color = ttLabel(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
                             )
                         }
-                        if (assignees.isNotEmpty()) {
-                            AssigneeStack(
-                                names = assignees,
-                                modifier = Modifier.testTag(ProjectBoardAssigneesTag),
-                            )
-                        }
-                        ttText(
-                            text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
-                            style = ttTypography.titleSmall,
-                            color = ttLabel(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
-                        )
-                    }
-                    // The trailing controls keep their order: the search toggle is inserted *before*
-                    // My Tasks rather than after it, so the button that was already here does not
-                    // move when this one appears. No toggle without a project — it would reveal a
-                    // field over "no project selected", which filters a list that does not exist.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        if (projection.project != null && !isSelecting) {
-                            // On a wide header the field unfolds *beside* its button, inside the
-                            // trailing row: it takes width from the title rather than pushing the
-                            // lanes down, which is the same arrangement the backlog header uses.
-                            // A fixed width, because this row wraps its content — a weighted child
-                            // in a wrap-content row receives no space to grow into.
-                            if (wideHeader) {
-                                SearchRevealBeside(visible = searchOpen) {
-                                    searchField(Modifier.width(BoardSearchFieldWidth))
+                        // The trailing controls keep their order: the search toggle is inserted
+                        // *before* My Tasks rather than after it, so the button that was already
+                        // here does not move when this one appears. No toggle without a project —
+                        // it would reveal a field over "no project selected", which filters a list
+                        // that does not exist.
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (projection.project != null && !isSelecting) {
+                                // On a wide header the field unfolds *beside* its button, inside the
+                                // trailing row: it takes width from the title rather than pushing
+                                // the lanes down, which is the same arrangement the backlog header
+                                // uses. A fixed width, because this row wraps its content — a
+                                // weighted child in a wrap-content row receives no space to grow
+                                // into.
+                                if (wideHeader) {
+                                    SearchRevealBeside(visible = searchOpen) {
+                                        searchField(Modifier.width(BoardSearchFieldWidth))
+                                    }
                                 }
+                                ttGlassIconButton(
+                                    image = ttActionIcons.search,
+                                    contentDescription = stringResource(
+                                        if (searchOpen) {
+                                            Res.string.work_item_search_close
+                                        } else {
+                                            Res.string.work_item_search_open
+                                        },
+                                    ),
+                                    onClick = {
+                                        searchOpen = !searchOpen
+                                        // Closing is also a reset. A query that outlives its field
+                                        // would leave the board filtered by a control that is no
+                                        // longer on screen, with the lanes simply missing cards and
+                                        // nothing to explain why.
+                                        if (!searchOpen) {
+                                            query = ""
+                                            focusManager.clearFocus()
+                                        }
+                                    },
+                                    tint = if (searchOpen) ttAccent() else ttLabel(),
+                                    modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
+                                )
                             }
                             ttGlassIconButton(
-                                image = ttActionIcons.search,
-                                contentDescription = stringResource(
-                                    if (searchOpen) {
-                                        Res.string.work_item_search_close
-                                    } else {
-                                        Res.string.work_item_search_open
-                                    },
-                                ),
-                                onClick = {
-                                    searchOpen = !searchOpen
-                                    // Closing is also a reset. A query that outlives its field would
-                                    // leave the board filtered by a control that is no longer on
-                                    // screen, with the lanes simply missing cards and nothing to
-                                    // explain why.
-                                    if (!searchOpen) {
-                                        query = ""
-                                        focusManager.clearFocus()
-                                    }
-                                },
-                                tint = if (searchOpen) ttAccent() else ttLabel(),
-                                modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
+                                image = ttActionIcons.person,
+                                contentDescription = stringResource(Res.string.board_my_tasks),
+                                onClick = onToggleMyTasks,
+                                tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                                modifier = Modifier.testTag(ProjectBoardMyTasksTag),
                             )
                         }
-                        ttGlassIconButton(
-                            image = ttActionIcons.person,
-                            contentDescription = stringResource(Res.string.board_my_tasks),
-                            onClick = onToggleMyTasks,
-                            tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
-                            modifier = Modifier.testTag(ProjectBoardMyTasksTag),
+                    }
+
+                    // Only with a project on screen: a field over "no project selected" would
+                    // filter nothing and offer a control whose list does not exist yet.
+                    // Immediately under the header row and above the banner, so the header's own
+                    // order is identity first, then the control over the list it filters.
+                    // The selection bar stands in the header's second row for the same reason the
+                    // backlog's does: the count and the two verbs need the width, and both lanes'
+                    // headers are one control row already. It unfolds rather than popping in, so
+                    // the lanes below keep their place while the new row is made.
+                    SelectionBarReveal(visible = isSelecting) {
+                        BoardSelectionActions(
+                            count = selection.size,
+                            isBusy = isBatchRunning,
+                            canMove = moveDestinations.isNotEmpty(),
+                            onMove = { moveSheetOpen = true },
+                            onArchive = onArchiveSelection,
+                            onClear = onClearSelection,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalGutter()
+                                .padding(top = ttSpacing.lg),
                         )
                     }
-                }
-
-                // Only with a project on screen: a field over "no project selected" would filter
-                // nothing and offer a control whose list does not exist yet. Immediately under the
-                // header row and above the banner, so the header's own order is identity first,
-                // then the control over the list it filters.
-                // The selection bar stands in the header's second row for the same reason the
-                // backlog's does: the count and the two verbs need the width, and both lanes'
-                // headers are one control row already.
-                if (isSelecting) {
-                    BoardSelectionActions(
-                        count = selection.size,
-                        isBusy = isBatchRunning,
-                        canMove = moveDestinations.isNotEmpty(),
-                        onMove = { moveSheetOpen = true },
-                        onArchive = onArchiveSelection,
-                        onClear = onClearSelection,
-                        modifier = Modifier.fillMaxWidth().horizontalGutter(),
-                    )
                 }
 
                 // Compact header only: on a wide one the field is already in the header row, and

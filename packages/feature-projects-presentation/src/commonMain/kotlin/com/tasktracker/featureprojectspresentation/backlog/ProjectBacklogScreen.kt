@@ -614,42 +614,65 @@ fun ProjectBacklogScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                                 ) {
-                                    if (isSelecting) {
-                                        BacklogSelectionActions(
-                                            count = selection.size,
-                                            isBusy = isBatchRunning,
-                                            onPutOnBoard = { requestPutSelectionOnBoard() },
-                                            onArchive = onArchiveSelection,
-                                            modifier = Modifier.weight(1f),
+                                    // The bar and the row it replaces swap places in the same slot:
+                                    // both are composed for the length of the cross-fade, which is
+                                    // what lets the bar animate away instead of being deleted, and
+                                    // the slot's height travels with them so the measured header —
+                                    // and the list inset derived from it — does not jump.
+                                    Box(Modifier.weight(1f)) {
+                                        SelectionBarSwap(
+                                            selecting = isSelecting,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            bar = {
+                                                BacklogSelectionActions(
+                                                    count = selection.size,
+                                                    isBusy = isBatchRunning,
+                                                    onPutOnBoard = { requestPutSelectionOnBoard() },
+                                                    onArchive = onArchiveSelection,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            },
+                                            content = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                                ) {
+                                                    if (currentSection == BacklogSection.Backlog) {
+                                                        BacklogSortControls(
+                                                            order = currentSortOrder,
+                                                            onOpen = openSortSheet,
+                                                            // Whatever the field and toggle do not
+                                                            // take: closed, that is the whole header
+                                                            // width, which is what "fill the width"
+                                                            // means here.
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                        SearchRevealBeside(visible = searchOpen) {
+                                                            searchField(Modifier.fillMaxWidth(DESKTOP_SEARCH_FIELD_FRACTION))
+                                                        }
+                                                    } else {
+                                                        // No sort row: the field is the row, not a
+                                                        // portion of it. The weighted box gives it
+                                                        // everything the toggle does not use, and
+                                                        // still lets the reveal travel from zero
+                                                        // width. The leading inset mirrors the row's
+                                                        // gap to the toggle, so the field is not
+                                                        // flush against the header edge on one side
+                                                        // and spaced on the other.
+                                                        Box(
+                                                            Modifier
+                                                                .weight(1f)
+                                                                .padding(start = ttSpacing.sm),
+                                                        ) {
+                                                            SearchRevealBeside(visible = searchOpen) {
+                                                                searchField(Modifier.fillMaxWidth())
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
                                         )
-                                    } else if (currentSection == BacklogSection.Backlog) {
-                                        BacklogSortControls(
-                                            order = currentSortOrder,
-                                            onOpen = openSortSheet,
-                                            // Whatever the field and toggle do not take: closed, that
-                                            // is the whole header width, which is what "fill the
-                                            // width" means here.
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        SearchRevealBeside(visible = searchOpen) {
-                                            searchField(Modifier.fillMaxWidth(DESKTOP_SEARCH_FIELD_FRACTION))
-                                        }
-                                    } else {
-                                        // No sort row: the field is the row, not a portion of it. The
-                                        // weighted box gives it everything the toggle does not use,
-                                        // and still lets the reveal travel from zero width. The leading
-                                        // inset mirrors the row's gap to the toggle, so the field is
-                                        // not flush against the header edge on one side and spaced on
-                                        // the other.
-                                        Box(
-                                            Modifier
-                                                .weight(1f)
-                                                .padding(start = ttSpacing.sm),
-                                        ) {
-                                            SearchRevealBeside(visible = searchOpen) {
-                                                searchField(Modifier.fillMaxWidth())
-                                            }
-                                        }
                                     }
                                     // The toggle keeps the trailing edge, under the add action, and
                                     // becomes the close control while the field is open — it never
@@ -661,30 +684,44 @@ fun ProjectBacklogScreen(
                                     if (!isSelecting) searchToggle(Modifier)
                                 }
                             } else {
-                                if (isSelecting) {
-                                    BacklogSelectionActions(
-                                        count = selection.size,
-                                        isBusy = isBatchRunning,
-                                        onPutOnBoard = { requestPutSelectionOnBoard() },
-                                        onArchive = onArchiveSelection,
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                } else {
-                                    if (currentSection == BacklogSection.Backlog) {
-                                        BacklogSortControls(
-                                            order = currentSortOrder,
-                                            onOpen = openSortSheet,
+                                SelectionBarSwap(
+                                    selecting = isSelecting,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    bar = {
+                                        BacklogSelectionActions(
+                                            count = selection.size,
+                                            isBusy = isBatchRunning,
+                                            onPutOnBoard = { requestPutSelectionOnBoard() },
+                                            onArchive = onArchiveSelection,
                                             modifier = Modifier.fillMaxWidth(),
                                         )
-                                    }
-                                    // Inside the measured column, so the list's top inset grows with the field
-                                    // and the first row still starts below the header rather than behind it.
-                                    // The reveal is the reason the inset is measured at all: it changes while
-                                    // the field unfolds.
-                                    SearchReveal(visible = searchOpen) {
-                                        searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
-                                    }
-                                }
+                                    },
+                                    content = {
+                                        // The sort controls and the reveal were siblings in the
+                                        // header column; they stay one gap apart inside the swap,
+                                        // which is a single header child so the bar can animate
+                                        // away without leaving a spacing gap behind.
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                                        ) {
+                                            if (currentSection == BacklogSection.Backlog) {
+                                                BacklogSortControls(
+                                                    order = currentSortOrder,
+                                                    onOpen = openSortSheet,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                )
+                                            }
+                                            // Inside the measured column, so the list's top inset grows with the field
+                                            // and the first row still starts below the header rather than behind it.
+                                            // The reveal is the reason the inset is measured at all: it changes while
+                                            // the field unfolds.
+                                            SearchReveal(visible = searchOpen) {
+                                                searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
+                                            }
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
