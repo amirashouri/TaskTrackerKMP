@@ -3,6 +3,7 @@
 package com.tasktracker.sharedui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -53,6 +54,7 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.randomTagID
+import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.NavigationRailLensTag
 import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
@@ -128,6 +130,14 @@ import com.tasktracker.featuresettingspresentation.SettingsManageMembersTag
 import com.tasktracker.featuresettingspresentation.SettingsManageProjectsTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
 import com.tasktracker.featuresettingspresentation.SettingsSignOutTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsAccentCellTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsAccentLensTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsAccentSwatchTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsContentTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsGlassSliderTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsHeaderTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsPanelTag
+import com.tasktracker.featuresettingspresentation.ThemeControlsSchemeTag
 import com.tasktracker.featuresettingspresentation.ThemeDropdownTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
 import com.tasktracker.featureteamsdomain.MemberAdminPort
@@ -260,6 +270,7 @@ object ShellScenarios {
         preferences: UserDefaultsStore = UserDefaultsStore(InMemoryPreferences()),
         splashHold: Long = 0L,
         width: Dp? = PHONE_WIDTH,
+        height: Dp? = null,
         widthState: MutableState<Dp>? = null,
         density: Density = Density(1f),
         deepLinks: DeepLinkSource = DeepLinkSource(),
@@ -313,7 +324,11 @@ object ShellScenarios {
                             deepLinks = deepLinks,
                         )
                     } else {
-                        Box(modifier = Modifier.width(shellWidth)) {
+                        Box(
+                            modifier = Modifier
+                                .width(shellWidth)
+                                .then(if (height != null) Modifier.height(height) else Modifier),
+                        ) {
                             TaskTrackerApp(
                                 resolver,
                                 splashMinimumHoldMillis = splashHold,
@@ -2842,6 +2857,163 @@ object ShellScenarios {
                 "when the project list was scrolled, so the panel is growing with its content " +
                 "rather than keeping the list as the only flexible child",
         )
+    }
+
+    /**
+     * The sidebar's Theme panel is a small header until someone asks for the controls.
+     *
+     * The compact accent grid is asserted by the absence of a palette name, not by counting
+     * swatches: a row that kept the Settings labels would still show all six colours and would
+     * be twice as tall, which is the size this panel exists to avoid.
+     */
+    val theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader:
+        suspend ComposeUiTest.() -> Unit = {
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        onNodeWithTag(ThemeControlsPanelTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodesWithTag(ThemeControlsContentTag).fetchSemanticsNodes().isEmpty(),
+            "the theme panel started expanded; only its header should be composed until tapped",
+        )
+
+        mainClock.autoAdvance = false
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeByFrame()
+        val oneFrame = onNodeWithTag(ThemeControlsContentTag).getBoundsInRoot()
+        val oneFrameHeight = oneFrame.bottom.value - oneFrame.top.value
+        mainClock.advanceTimeBy(250)
+        mainClock.autoAdvance = true
+        waitForIdle()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
+        val openBounds = onNodeWithTag(ThemeControlsContentTag).getBoundsInRoot()
+        val openHeight = openBounds.bottom.value - openBounds.top.value
+        assertTrue(
+            oneFrameHeight < openHeight - 1f,
+            "one frame after the tap the panel was already ${oneFrameHeight}dp tall and its " +
+                "settled height is ${openHeight}dp; the reveal snapped open instead of " +
+                "animating",
+        )
+        ThemeScheme.all.forEach { onNodeWithTag(ThemeControlsSchemeTag(it)).assertIsDisplayed() }
+        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Music)).assertIsDisplayed()
+        onNodeWithTag(ThemeControlsGlassSliderTag).assertIsDisplayed()
+
+        // The panel belongs to the sidebar's bottom edge, not to the row after Settings.
+        val panel = onNodeWithTag(ThemeControlsPanelTag).getBoundsInRoot()
+        val sidebar = onNodeWithTag(SidebarTag).getBoundsInRoot()
+        val listBounds = onNodeWithTag(SidebarProjectListTag).getBoundsInRoot()
+        val boardBounds = onNodeWithTag(SidebarButtonTag(AppTab.Board)).getBoundsInRoot()
+        val settingsBounds = onNodeWithTag(SidebarButtonTag(AppTab.Settings)).getBoundsInRoot()
+        assertTrue(
+            abs(sidebar.bottom.value - panel.bottom.value) < 16f,
+            "the theme panel's bottom is ${panel.bottom.value}dp but the sidebar's is " +
+                "${sidebar.bottom.value}dp; the panel is not pinned to the bottom. " +
+                "list=${listBounds.top.value}..${listBounds.bottom.value}, " +
+                "board=${boardBounds.top.value}, " +
+                "settings=${settingsBounds.top.value}..${settingsBounds.bottom.value}, " +
+                "panel=${panel.top.value}..${panel.bottom.value}",
+        )
+
+        // The lens must cover the swatch, not the caption-shaped cell it used to include.
+        mainClock.advanceTimeBy(400)
+        val cell = onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Classic)).getBoundsInRoot()
+        val swatch = onNodeWithTag(
+            ThemeControlsAccentSwatchTag(AccentPalette.Classic),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        val lens = onNodeWithTag(
+            ThemeControlsAccentLensTag(AccentPalette.Classic),
+            useUnmergedTree = true,
+        ).getBoundsInRoot()
+        assertEquals(
+            (cell.left.value + cell.right.value) / 2f,
+            (lens.left.value + lens.right.value) / 2f,
+            ONE_POINT,
+            "the accent lens is horizontally off the swatch it marks",
+        )
+        assertEquals(
+            (swatch.top.value + swatch.bottom.value) / 2f,
+            (lens.top.value + lens.bottom.value) / 2f,
+            ONE_POINT,
+            "the accent lens sits at ${(lens.top.value + lens.bottom.value) / 2f}dp but its swatch " +
+                "is centred at ${(swatch.top.value + swatch.bottom.value) / 2f}dp; the hidden " +
+                "caption is still stretching the cell the lens is measured from. " +
+                "cell=${cell.top.value}..${cell.bottom.value}, " +
+                "swatch=${swatch.top.value}..${swatch.bottom.value}, " +
+                "lens=${lens.top.value}..${lens.bottom.value}",
+        )
+
+        assertTrue(
+            onAllNodesWithText(AccentPalette.Music.title).fetchSemanticsNodes().isEmpty(),
+            "the sidebar's accent grid still prints palette names, so it is not the compact row",
+        )
+
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeBy(250)
+        waitForIdle()
+        assertTrue(
+            onAllNodesWithTag(ThemeControlsContentTag).fetchSemanticsNodes().isEmpty(),
+            "tapping the header again did not collapse the theme panel",
+        )
+    }
+
+    /**
+     * All three controls write through the shell preferences the Settings tab uses.
+     *
+     * The store is read directly rather than through a second composition: the claim is that
+     * the sidebar reached the same persisted keys, not that another shell can render them.
+     */
+    val theSidebarThemePanelControlsTheShellPreferences:
+        suspend ComposeUiTest.() -> Unit = {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            preferences = store,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeBy(250)
+        waitForIdle()
+
+        onNodeWithTag(ThemeControlsSchemeTag(ThemeScheme.Dark)).performClick()
+        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Music)).performClick()
+        onNodeWithTag(ThemeControlsGlassSliderTag)
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(0.25f) }
+        waitForIdle()
+
+        assertEquals(ThemeScheme.Dark.wireValue, store.value(ShellPreferences.THEME_KEY))
+        assertEquals(AccentPalette.Music.wireValue, store.value(ShellPreferences.ACCENT_PALETTE_KEY))
+        assertEquals("0.25", store.value(ShellPreferences.GLASS_INTENSITY_KEY))
+    }
+
+    /**
+     * A short desktop window scrolls the panel's controls rather than pushing navigation away.
+     *
+     * The slider is the last control, so reaching it through the content node is the scroll:
+     * without a bounded, scrollable pane it is either clipped or it has stretched the sidebar.
+     */
+    val theSidebarThemePanelScrollsInAShortWindow: suspend ComposeUiTest.() -> Unit = {
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            width = SIDEBAR_WIDTH,
+            height = 520.dp,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeBy(250)
+        waitForIdle()
+
+        onNodeWithTag(ThemeControlsContentTag)
+            .performScrollToNode(hasTestTag(ThemeControlsGlassSliderTag))
+        waitForIdle()
+        onNodeWithTag(ThemeControlsGlassSliderTag).assertIsDisplayed()
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).assertIsDisplayed()
     }
 
     /**

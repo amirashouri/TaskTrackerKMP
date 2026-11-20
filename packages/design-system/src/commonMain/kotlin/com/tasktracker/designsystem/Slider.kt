@@ -1,6 +1,7 @@
 package com.tasktracker.designsystem
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -22,11 +23,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 
 /**
@@ -196,10 +199,19 @@ fun ttSlider(
                     )
                 }
                 .size(ttSliderThumbSize)
-                .ttGlassSurface(shape = CircleShape, tint = ttAccent()),
+                .testTag(SliderThumbTag)
+                .ttGlassSurface(shape = CircleShape, tint = ttAccent())
+                // At 100% the thumb sits on an accent-filled track, so an accent disc alone
+                // disappears into it. The on-accent ink has already been contrast-tested
+                // against this fill; a rim in that colour makes the knob readable at every
+                // value without changing its size or the gesture geometry.
+                .border(THUMB_RIM_WIDTH, ttOnAccent, CircleShape),
         )
     }
 }
+
+/** The thumb's own node, so a rendered test can read its rim off the frame. */
+const val SliderThumbTag = "designsystem.slider.thumb"
 
 /**
  * The thumb's diameter.
@@ -209,3 +221,6 @@ fun ttSlider(
  * the app's dimensions to drift.
  */
 private val ttSliderThumbSize = ttSpacing.xxxl
+
+/** Contrast rim around the accent thumb, so it survives a fully accent-filled track. */
+private val THUMB_RIM_WIDTH = 2.dp

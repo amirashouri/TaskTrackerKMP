@@ -222,6 +222,34 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   centres the overflow, so `boundsInRoot.left` is not
   `(windowWidth - contentWidth) / 2`. Read the screen node's own bounds and
   compare centres.
+- **Shell chrome reuses presentation controls through a state/callback seam.**
+  The desktop sidebar's Theme panel is a public `ThemeControlsPanel` in
+  `feature-settings-presentation`: it reuses the Settings theme picker, accent
+  row and glass slider, with a compact accent variant that drops names but keeps
+  the travelling lens and 44dp cell targets. It takes values and callbacks and
+  never reads `user-defaults`, leaving `ShellPreferences` as the one writer. Its
+  expanded content is capped at 40% of the sidebar's measured height, so a short
+  window scrolls the panel instead of moving the measured destination lens.
+- **Bottom-anchor the sidebar panel with `Arrangement.SpaceBetween`, not a
+  weighted spacer.** The project list's `weight(1f, fill = false)` wraps to its
+  projects; a second weighted child shares the leftover but does *not* inherit
+  the list's unused share, so the panel floated 200dp above the floor. Two
+  children under `SpaceBetween` (destination stack, panel) give the whole gap
+  to the bottom without touching the stack's adjacency invariant. The scroll
+  cap must come from the panel's own measured height: `BoxWithConstraints` next
+  to a weighted child reports infinite `maxHeight`.
+- **Measure the moving thing, not its container.** The accent lens is derived
+  from the cell rect, so asserting lens-centre equals cell-centre passed even
+  with the swatch pinned to the cell's top. Compare the lens with the *swatch*.
+  And `Arrangement.Center` is inert in a column that wraps its content: the
+  compact cell needs a fixed 44dp height for the centring to have space to act.
+- **An accent thumb on an accent-filled track needs an on-accent rim.** The
+  slider's knob was invisible at 100% because its fill matched the track; a
+  2dp `ttOnAccent` rim makes the edge readable without changing the gesture
+  geometry. `SliderThumbVisibilityTest` samples that rim off a raster and was
+  mutation-checked with the rim removed. The panel's open/close uses
+  `AnimatedVisibility` with reduced-motion snap; its scenario compares the
+  content height one frame after the tap with the settled height.
 
 ### Product limits
 
