@@ -392,7 +392,12 @@ fun SettingsScreen(
                     onUserDetailsChange(userDetails.copy(statusText = statusText))
                 },
                 onCommit = onUserDetailsCommit,
-                modifier = Modifier.testTag(SettingsStatusTextRowTag),
+                // The pill is a field, not a row: without a gap of its own it butted against
+                // the status row above and the Change password row below, so the three read
+                // as one striped block instead of a control inside a group.
+                modifier = Modifier
+                    .padding(vertical = ttSpacing.sm)
+                    .testTag(SettingsStatusTextRowTag),
             )
             SettingsActionRow(
                 label = stringResource(Res.string.settings_change_password),
