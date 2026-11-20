@@ -309,6 +309,182 @@ class ProjectBacklogModelTest {
         assertEquals(1, model.projection.totalItemCount)
     }
 
+    // MARK: Select mode and batches
+
+    @Test
+    fun `starting selection keeps the mode even with nothing ticked yet`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting()
+
+        assertTrue(model.isSelecting)
+        assertTrue(model.selection.isEmpty)
+    }
+
+    @Test
+    fun `a long press seeds the selection and taps toggle in order`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        val second = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Backlog)
+        repository.seed(first)
+        repository.seed(second)
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting(seed = second.id)
+        model.toggleSelected(first.id)
+
+        assertEquals(listOf(second.id, first.id), model.selection.ids)
+        model.toggleSelected(second.id)
+        assertEquals(listOf(first.id), model.selection.ids)
+        assertTrue(model.isSelecting, "deselecting one row is not leaving the mode")
+    }
+
+    @Test
+    fun `boarding a selection moves every ticked item into the chosen lane`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject(
+            statuses = listOf(
+                StatusDefinition(id = "todo-1", name = "To Do", category = WorkItemStatus.Todo, order = 0),
+                StatusDefinition(id = "review-1", name = "In Review", category = WorkItemStatus.InReview, order = 1),
+            ),
+        )
+        repository.seed(project)
+        val first = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        val second = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Backlog)
+        val untouched = testWorkItem(project.id, key = "AP-3", status = WorkItemStatus.Backlog)
+        repository.seed(first)
+        repository.seed(second)
+        repository.seed(untouched)
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting(seed = first.id)
+        model.toggleSelected(second.id)
+        val outcome = assertNotNull(model.putSelectionOnBoard("review-1"))
+        advanceUntilIdle()
+
+        assertEquals(2, outcome.appliedCount)
+        assertEquals(0, outcome.failureCount)
+        assertEquals(WorkItemStatus.InReview, repository.workItem(first.id)!!.status)
+        assertEquals("review-1", repository.workItem(second.id)!!.statusKey)
+        assertEquals(
+            WorkItemStatus.Backlog,
+            repository.workItem(untouched.id)!!.status,
+            "an unticked row must not move",
+        )
+        assertTrue(model.selection.isEmpty)
+        assertFalse(model.isSelecting, "a finished batch with nothing left to retry leaves the mode")
+    }
+
+    @Test
+    fun `a failed item stays ticked and reports its message while the rest move`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val live = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        val gone = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Backlog)
+        repository.seed(live)
+        repository.seed(gone)
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        model.startSelecting(seed = live.id)
+        model.toggleSelected(gone.id)
+
+        // Deleted on another client between the selection and the command.
+        repository.deleteWorkItem(gone.id)
+        advanceUntilIdle()
+        val outcome = assertNotNull(model.putSelectionOnBoard(null))
+        advanceUntilIdle()
+
+        assertEquals(1, outcome.appliedCount)
+        assertEquals(listOf(gone.id), outcome.retryable)
+        assertEquals(listOf(gone.id), model.selection.ids)
+        assertTrue(model.isSelecting)
+        assertNotNull(model.errorMessage)
+        assertEquals(WorkItemStatus.Todo, repository.workItem(live.id)!!.status)
+    }
+
+    @Test
+    fun `archiving a selection closes every ticked item`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val first = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        val second = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Todo)
+        val untouched = testWorkItem(project.id, key = "AP-3", status = WorkItemStatus.Backlog)
+        repository.seed(first)
+        repository.seed(second)
+        repository.seed(untouched)
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting(seed = first.id)
+        model.toggleSelected(second.id)
+        val outcome = assertNotNull(model.archiveSelection())
+        advanceUntilIdle()
+
+        assertEquals(listOf(first.id, second.id), outcome.applied)
+        assertEquals(WorkItemStatus.Closed, repository.workItem(first.id)!!.status)
+        assertEquals(WorkItemStatus.Closed, repository.workItem(second.id)!!.status)
+        assertEquals(WorkItemStatus.Backlog, repository.workItem(untouched.id)!!.status)
+        assertTrue(model.selection.isEmpty)
+    }
+
+    @Test
+    fun `an item finished elsewhere is skipped without failing the batch`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val live = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        val finished = testWorkItem(project.id, key = "AP-2", status = WorkItemStatus.Done)
+        repository.seed(live)
+        repository.seed(finished)
+        val resolutionBefore = repository.workItem(finished.id)!!.resolvedAt
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting(seed = finished.id)
+        model.toggleSelected(live.id)
+        val outcome = assertNotNull(model.archiveSelection())
+        advanceUntilIdle()
+
+        assertEquals(listOf(finished.id), outcome.skipped)
+        assertEquals(listOf(live.id), outcome.applied)
+        assertEquals(0, outcome.failureCount)
+        assertEquals(resolutionBefore, repository.workItem(finished.id)!!.resolvedAt)
+        assertTrue(model.selection.isEmpty, "a skipped row is not retryable")
+    }
+
+    @Test
+    fun `a batch with nothing selected does nothing`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        repository.seed(testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog))
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.startSelecting()
+        assertNull(model.putSelectionOnBoard(null))
+        assertNull(model.archiveSelection())
+
+        assertTrue(repository.writes.isEmpty(), "no selection means no per-item write")
+    }
+
     @Test
     fun `dismissing the error clears it`() = runTest {
         val repository = FakeProjectRepository()

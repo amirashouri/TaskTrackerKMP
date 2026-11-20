@@ -20,11 +20,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTouchInput
@@ -41,6 +54,9 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.backlog_put_on_board_prompt_body_many
+import com.tasktracker.resources.backlog_selection_count
+import com.tasktracker.resources.backlog_selection_working
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
 import org.jetbrains.compose.resources.getString
@@ -707,6 +723,13 @@ private fun ComposeUiTest.backlogShowing(
     onPutOnBoard: (WorkItemID, String?) -> Unit = { _, _ -> },
     /** The shell-remembered column for this project, as [ProjectBacklogScreen] reads it. */
     putOnBoardDefaultStatusKey: String? = null,
+    isSelecting: Boolean = false,
+    selection: Set<WorkItemID> = emptySet(),
+    onStartSelecting: (() -> Unit)? = null,
+    onToggleSelected: (WorkItemID) -> Unit = {},
+    onClearSelection: () -> Unit = {},
+    onPutSelectionOnBoard: (String?) -> Unit = {},
+    onArchiveSelection: () -> Unit = {},
 ) {
     setContent {
         Themed {
@@ -737,11 +760,305 @@ private fun ComposeUiTest.backlogShowing(
                     onSelectProject = {},
                     onAddTask = onAddTask,
                     putOnBoardDefaultStatusKey = putOnBoardDefaultStatusKey,
+                    isSelecting = isSelecting,
+                    selection = selection,
+                    onStartSelecting = onStartSelecting,
+                    onToggleSelected = onToggleSelected,
+                    onClearSelection = onClearSelection,
+                    onPutSelectionOnBoard = onPutSelectionOnBoard,
+                    onArchiveSelection = onArchiveSelection,
                 )
             }
         }
     }
 
+    }
+
+    // ---- Multi-select ----
+
+    /**
+     * The backlog in select mode, with the selection hoisted into the test.
+     *
+     * The screen is stateless about selection, so a scenario that wants to tick more than one row
+     * has to be the state: [ProjectBacklogScreen] reports a tap, this harness records it, and the
+     * recomposition is the same round trip the model does in the app. Handing the screen a fixed
+     * `selection` instead would let a scenario assert the *drawing* of a tick but never the tap
+     * that produces it.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    private fun ComposeUiTest.selectableBacklog(
+        items: List<WorkItem>,
+        project: Project = ViewPreviewData.seededProject,
+        onSelect: (WorkItemID) -> Unit = {},
+        isBatchRunning: Boolean = false,
+        onPutOnBoard: (String?) -> Unit = {},
+        onArchive: () -> Unit = {},
+    ) {
+        setContent {
+            Themed {
+                var isSelecting by remember { mutableStateOf(false) }
+                var selection by remember { mutableStateOf(emptySet<WorkItemID>()) }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ProjectBacklogScreen(
+                        projection = BacklogSectionedProjection(project = project, items = items),
+                        isLoading = false,
+                        errorMessage = null,
+                        busyItemID = null,
+                        onSelect = onSelect,
+                        onPutOnBoard = { _, _ -> },
+                        onFileAway = {},
+                        onUnarchive = {},
+                        onDismissError = {},
+                        onOpenSwitcher = {},
+                        projects = ViewPreviewData.pickable(),
+                        onSelectProject = {},
+                        onAddTask = null,
+                        isSelecting = isSelecting,
+                        selection = selection,
+                        isBatchRunning = isBatchRunning,
+                        onStartSelecting = { isSelecting = true },
+                        onToggleSelected = { id ->
+                            selection = if (id in selection) selection - id else selection + id
+                        },
+                        onClearSelection = {
+                            selection = emptySet()
+                            isSelecting = false
+                        },
+                        onPutSelectionOnBoard = onPutOnBoard,
+                        onArchiveSelection = onArchive,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * The header's Select control enters the mode and the bar names an empty selection.
+     *
+     * Zero selected is a state the user can land in — the mode is entered before the first tick —
+     * and the count is what says so: a bar that stayed hidden until a row was ticked would leave
+     * the tick boxes on screen with no explanation of how to act on them.
+     */
+    val theHeaderSelectEntersTheMode: suspend ComposeUiTest.() -> Unit = {
+        selectableBacklog(items = backlogItems(count = 2))
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectionBarTag).assertIsDisplayed()
+        onNodeWithTag(ProjectBacklogSelectionCountTag)
+            .assertTextEquals(getString(Res.string.backlog_selection_count, 0))
+        // The count is a live region, so ticking a row is announced rather than only drawn.
+        onNodeWithTag(ProjectBacklogSelectionCountTag).assert(
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+        )
+        // The same control is the way out: Select became Clear in place.
+        onNodeWithTag(ProjectBacklogSelectTag).assertDoesNotExist()
+        onNodeWithTag(ProjectBacklogSelectionClearTag).assertIsDisplayed()
+    }
+
+    /**
+     * In select mode a row tap ticks instead of opening, and a second tap unticks.
+     *
+     * The editor is the thing this must not do: `onSelect` still opens work everywhere else on the
+     * screen, so a select-mode tap that fell through to it would navigate away mid-batch.
+     */
+    val tappingARowInSelectModeTicksIt: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 2)
+        val opened = mutableListOf<WorkItemID>()
+        // Entered through the header, then ticked: the mode and the tick are separate gestures in
+        // the app, and a scenario that started with `isSelecting = true` would skip the entry.
+        selectableBacklog(items = items, onSelect = { opened += it })
+        waitForIdle()
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+
+        val first = items.first()
+        onNodeWithTag(WorkItemBacklogRowTag(first)).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemBacklogRowTag(first)).assertIsSelected()
+        onNodeWithTag(ProjectBacklogSelectionCountTag)
+            .assertTextEquals(getString(Res.string.backlog_selection_count, 1))
+
+        onNodeWithTag(WorkItemBacklogRowTag(first)).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemBacklogRowTag(first)).assertIsNotSelected()
+        assertTrue(opened.isEmpty(), "a select-mode tap must tick, never open the editor")
+    }
+
+    /**
+     * A long press is the touch shortcut into the mode, seeded with the row under the finger.
+     *
+     * The mode has to be entered *and* that row ticked by one gesture, or the first press would
+     * only replace the row's usual action with an empty checklist.
+     */
+    val longPressingARowEntersTheModeWithItTicked: suspend ComposeUiTest.() -> Unit = {
+        val item = backlogItems(count = 1).first()
+        selectableBacklog(items = listOf(item))
+        waitForIdle()
+
+        // The row's long-click *action*, not a synthetic hold: whether a press becomes a long
+        // press is the gesture detector's timeout against the host's clock, and the Android host's
+        // test clock does not advance it inside a touch-injection block. What this scenario owns is
+        // that the row exposes the action and that it enters the mode seeded with that row.
+        onNodeWithTag(WorkItemBacklogRowTag(item))
+            .performSemanticsAction(SemanticsActions.OnLongClick) { it() }
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectionBarTag).assertIsDisplayed()
+        onNodeWithTag(WorkItemBacklogRowTag(item)).assertIsSelected()
+        onNodeWithTag(ProjectBacklogSelectionCountTag)
+            .assertTextEquals(getString(Res.string.backlog_selection_count, 1))
+    }
+
+    /**
+     * The bar's Add to board commits the whole set into one lane, resolved once.
+     *
+     * One callback for the set, not one per row: the screen is what decides the lane, and a
+     * per-row report would let a batch split across columns when the catalog changed mid-loop.
+     */
+    val theSelectionBarBoardsTheSetIntoOneLane: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 2)
+        val boarded = mutableListOf<String?>()
+        selectableBacklog(
+            items = items,
+            project = ViewPreviewData.seededProject.withBoardStatuses(singleBoardStatus.first()),
+            onPutOnBoard = { key -> boarded += key },
+        )
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+        items.forEach { item ->
+            onNodeWithTag(WorkItemBacklogRowTag(item)).performClick()
+            waitForIdle()
+        }
+        onNodeWithTag(ProjectBacklogSelectionPutOnBoardTag).performClick()
+        waitForIdle()
+
+        assertEquals(
+            listOf<String?>(singleBoardStatus.first().id),
+            boarded,
+            "the set boards once, into the single column the resolver can commit alone",
+        )
+    }
+
+    /**
+     * Archive does nothing until a row is ticked, and then acts on the selection.
+     *
+     * The button is refused rather than hidden so the bar does not reflow under the finger that
+     * just unticked the last row; the assertion is on the callback, because a refused press must
+     * not reach the model.
+     */
+    val theArchiveActionWaitsForATick: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 2)
+        var archived = 0
+        selectableBacklog(items = items, onArchive = { archived += 1 })
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectBacklogSelectionArchiveTag).performClick()
+        waitForIdle()
+        assertEquals(0, archived, "zero selected must not archive anything")
+
+        onNodeWithTag(WorkItemBacklogRowTag(items.first())).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectBacklogSelectionArchiveTag).performClick()
+        waitForIdle()
+        assertEquals(1, archived)
+    }
+
+    /**
+     * Several columns and no remembered default: the selection asks for one lane.
+     *
+     * The batch cannot commit on its own here, and the sheet has to say that it is asking about a
+     * set rather than naming one task. The chosen lane is then the one the whole set reports.
+     */
+    val theSelectionWithSeveralColumnsAsksForOneLane: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 2)
+        val boarded = mutableListOf<String?>()
+        selectableBacklog(
+            items = items,
+            project = ViewPreviewData.seededProject.withBoardStatuses(*pairedBoardStatuses.toTypedArray()),
+            onPutOnBoard = { key -> boarded += key },
+        )
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+        items.forEach { item ->
+            onNodeWithTag(WorkItemBacklogRowTag(item)).performClick()
+            waitForIdle()
+        }
+        onNodeWithTag(ProjectBacklogSelectionPutOnBoardTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(PutOnBoardSheetTag).assertIsDisplayed()
+        onNodeWithText(
+            getString(Res.string.backlog_put_on_board_prompt_body_many, items.size),
+        ).assertIsDisplayed()
+        assertTrue(boarded.isEmpty(), "the set must not move before a lane is chosen")
+
+        onNodeWithTag(PutOnBoardStatusRowTag(pairedBoardStatuses[1])).performClick()
+        waitForIdle()
+
+        assertEquals(listOf<String?>(pairedBoardStatuses[1].id), boarded)
+        onNodeWithTag(PutOnBoardSheetTag).assertDoesNotExist()
+    }
+
+    /**
+     * While a batch runs the bar says so and refuses both actions.
+     *
+     * A second press during the first batch would queue the same items twice, and the buttons keep
+     * their labels while disabled so the bar never reflows under the finger that started it.
+     */
+    val theBarRefusesActionsAndNamesTheWorkInProgress: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 1)
+        var boards = 0
+        var archives = 0
+        selectableBacklog(
+            items = items,
+            isBatchRunning = true,
+            onPutOnBoard = { boards += 1 },
+            onArchive = { archives += 1 },
+        )
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemBacklogRowTag(items.first())).performClick()
+        waitForIdle()
+
+        onNodeWithText(getString(Res.string.backlog_selection_working)).assertIsDisplayed()
+        onNodeWithTag(ProjectBacklogSelectionPutOnBoardTag).performClick()
+        onNodeWithTag(ProjectBacklogSelectionArchiveTag).performClick()
+        waitForIdle()
+
+        assertEquals(0, boards)
+        assertEquals(0, archives)
+    }
+
+    /**
+     * Leaving the Backlog section ends the mode; Archived rows are never selection targets.
+     */
+    val leavingTheBacklogSectionEndsSelection: suspend ComposeUiTest.() -> Unit = {
+        val items = backlogItems(count = 2)
+        selectableBacklog(items = items)
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectTag).performClick()
+        waitForIdle()
+        onNodeWithTag(WorkItemBacklogRowTag(items.first())).performClick()
+        waitForIdle()
+
+        onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_kanban))).performClick()
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSelectionBarTag).assertDoesNotExist()
+        onNodeWithTag(ProjectBacklogSelectionClearTag).assertDoesNotExist()
+        onNodeWithTag(ProjectBacklogSelectTag).assertDoesNotExist()
     }
 
     // ---- "Put on board" column resolver ----

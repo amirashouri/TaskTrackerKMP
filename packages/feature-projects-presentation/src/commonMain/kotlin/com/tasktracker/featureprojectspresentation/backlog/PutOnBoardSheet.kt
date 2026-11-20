@@ -20,7 +20,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.domain.StatusDefinition
-import com.tasktracker.domain.WorkItem
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
@@ -31,7 +30,6 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
-import com.tasktracker.resources.backlog_put_on_board_prompt_body
 import com.tasktracker.resources.backlog_put_on_board_prompt_title
 import com.tasktracker.resources.common_cancel
 import org.jetbrains.compose.resources.stringResource
@@ -42,12 +40,16 @@ import org.jetbrains.compose.resources.stringResource
  * The screen only opens this when the project has more than one board column and no remembered
  * default for it — see [ProjectBacklogScreen]. A single tap on a column is the commit: there is no
  * separate "done" because the question is exactly "which one", so a second control would be a click
- * the user did not need to make. Picking a column both boards the task there and, back in the
+ * the user did not need to make. Picking a column both boards the work there and, back in the
  * screen, remembers it for next time.
+ *
+ * [body] is composed by the caller because the same sheet asks for one task and for a selected
+ * set, and the sentence differs in more than a count (`%1$s` is a title, `%1$d` a number), which
+ * a string with a placeholder shape of its own cannot express in every language.
  */
 @Composable
 fun PutOnBoardSheet(
-    item: WorkItem,
+    body: String,
     statuses: List<StatusDefinition>,
     onConfirm: (StatusDefinition) -> Unit,
     onDismissRequest: () -> Unit,
@@ -63,7 +65,7 @@ fun PutOnBoardSheet(
         scrollable = false,
     ) {
         PutOnBoardContent(
-            item = item,
+            body = body,
             statuses = statuses,
             onConfirm = onConfirm,
             isBusy = isBusy,
@@ -74,7 +76,7 @@ fun PutOnBoardSheet(
 
 @Composable
 private fun PutOnBoardContent(
-    item: WorkItem,
+    body: String,
     statuses: List<StatusDefinition>,
     onConfirm: (StatusDefinition) -> Unit,
     isBusy: Boolean,
@@ -92,7 +94,7 @@ private fun PutOnBoardContent(
             color = ttLabel(),
         )
         ttText(
-            text = stringResource(Res.string.backlog_put_on_board_prompt_body, item.title),
+            text = body,
             style = ttTypography.footnote,
             color = ttLabelSecondary(),
         )

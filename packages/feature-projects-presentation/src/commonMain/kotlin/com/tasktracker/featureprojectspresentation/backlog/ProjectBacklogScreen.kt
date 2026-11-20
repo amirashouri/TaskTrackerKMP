@@ -36,6 +36,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
@@ -56,6 +59,9 @@ import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.designsystem.ttSearchField
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.BacklogSection
@@ -68,9 +74,17 @@ import com.tasktracker.resources.backlog_empty_body
 import com.tasktracker.resources.backlog_empty_title
 import com.tasktracker.resources.backlog_kanban_empty_body
 import com.tasktracker.resources.backlog_kanban_empty_title
+import com.tasktracker.resources.backlog_put_on_board_prompt_body
+import com.tasktracker.resources.backlog_put_on_board_prompt_body_many
 import com.tasktracker.resources.backlog_section_archived
 import com.tasktracker.resources.backlog_section_backlog
 import com.tasktracker.resources.backlog_section_kanban
+import com.tasktracker.resources.backlog_selection_archive
+import com.tasktracker.resources.backlog_selection_clear
+import com.tasktracker.resources.backlog_selection_count
+import com.tasktracker.resources.backlog_selection_put_on_board
+import com.tasktracker.resources.backlog_selection_working
+import com.tasktracker.resources.backlog_select_open
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.work_item_search_close
 import com.tasktracker.resources.work_item_search_empty_body
@@ -95,6 +109,15 @@ import org.jetbrains.compose.resources.stringResource
  *
  * Both are defaulted, so a caller that does not persist anything — a preview, a focused
  * screen test — still gets a working, self-contained list.
+ *
+ * ## Selection is the host's too
+ *
+ * [isSelecting] and [selection] are model state passed down, and every gesture reports through a
+ * callback rather than ticking a local copy: rows, the header's Select control and the action bar
+ * all have to agree, and a local set would drift the moment the model pruned it after a batch.
+ * The two entry points — the header control and a long-press on a row — both go through the same
+ * `enterSelecting` scope, which also closes the search: a query that hides a row must never leave
+ * it ticked and invisible.
  */
 @Composable
 fun ProjectBacklogScreen(
@@ -123,6 +146,22 @@ fun ProjectBacklogScreen(
     putOnBoardDefaultStatusKey: String? = null,
     /** Persists the column the user chose, so the next boarding in this project skips the prompt. */
     onPutOnBoardDefaultStatusChosen: (String) -> Unit = {},
+    /** True while the model is in multi-select mode. */
+    isSelecting: Boolean = false,
+    /** The ticked items. Membership is what draws each row's box. */
+    selection: Set<WorkItemID> = emptySet(),
+    /** True while a batch command runs; the action bar disables itself and says so. */
+    isBatchRunning: Boolean = false,
+    /** Enters select mode from the header. Null draws no Select control (previews, locked hosts). */
+    onStartSelecting: (() -> Unit)? = null,
+    /** Ticks or unticks one row. */
+    onToggleSelected: (WorkItemID) -> Unit = {},
+    /** Leaves select mode and drops every tick. */
+    onClearSelection: () -> Unit = {},
+    /** Boards every ticked item into one lane; `null` is the legacy `Todo` lane. */
+    onPutSelectionOnBoard: (String?) -> Unit = {},
+    /** Files every ticked item away. */
+    onArchiveSelection: () -> Unit = {},
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
@@ -152,13 +191,60 @@ fun ProjectBacklogScreen(
     // boarding falls back to the legacy `Todo` lane with no key.
     val boardStatuses = projection.project?.boardStatuses.orEmpty()
 
-    // The item waiting for a column choice, or null when the picker is closed. Set by the resolver
-    // below only when it cannot decide on its own — i.e. several columns and no usable default.
-    var pendingPutOnBoard by remember { mutableStateOf<WorkItem?>(null) }
+    // The request waiting for a column choice, or null when the picker is closed. Set by the
+    // resolver below only when it cannot decide on its own — i.e. several columns and no usable
+    // default. One sheet serves the single row and the selection: the question is the same one.
+    var pendingPutOnBoard by remember { mutableStateOf<BacklogPutOnBoardRequest?>(null) }
 
-    fun commitPutOnBoard(item: WorkItem, definition: StatusDefinition) {
-        onPutOnBoard(item.id, definition.id)
-        onPutOnBoardDefaultStatusChosen(definition.id)
+    fun commitPutOnBoard(item: WorkItem, definition: StatusDefinition?) {
+        onPutOnBoard(item.id, definition?.id)
+        definition?.id?.let(onPutOnBoardDefaultStatusChosen)
+    }
+
+    /** Commits the selection to [definition], remembering it when the project has a catalog. */
+    fun commitPutSelectionOnBoard(definition: StatusDefinition?) {
+        onPutSelectionOnBoard(definition?.id)
+        definition?.id?.let(onPutOnBoardDefaultStatusChosen)
+    }
+
+    /**
+     * The lane decision shared by the single row and the selection.
+     *
+     * No board columns at all is the legacy catalog-less project: `Todo`, no key, no prompt.
+     * One column needs no question. A remembered default still in the catalog is the user's own
+     * earlier answer. Anything else is a genuine choice, and only then does the sheet open.
+     */
+    fun chooseLane(): BacklogLaneChoice {
+        val remembered = putOnBoardDefaultStatusKey
+        return when {
+            boardStatuses.isEmpty() -> BacklogLaneChoice.Apply(null)
+            boardStatuses.size == 1 -> BacklogLaneChoice.Apply(boardStatuses.first())
+            remembered != null && boardStatuses.any { it.id == remembered } ->
+                BacklogLaneChoice.Apply(boardStatuses.first { it.id == remembered })
+            else -> BacklogLaneChoice.Ask
+        }
+    }
+
+    /**
+     * Enters select mode, closing the search first.
+     *
+     * A query can hide a row, and a hidden row that stays ticked is a count the user cannot
+     * account for, so the mode starts with the whole backlog on screen — the field closes and its
+     * query is dropped. The field is not composed again until the mode ends, which is what keeps
+     * a filter from being applied halfway through a selection.
+     */
+    fun enterSelecting() {
+        if (query.isNotEmpty()) {
+            query = ""
+            focusManager.clearFocus()
+        }
+        onStartSelecting?.invoke()
+    }
+
+    /** A row tap or long-press while selecting: the first enters the mode, both tick the row. */
+    fun toggleRow(item: WorkItem) {
+        if (!isSelecting) enterSelecting()
+        onToggleSelected(item.id)
     }
 
     /**
@@ -183,13 +269,30 @@ fun ProjectBacklogScreen(
      * and the next boarding in this project skips the prompt.
      */
     fun requestPutOnBoard(item: WorkItem) {
-        when {
-            boardStatuses.isEmpty() -> onPutOnBoard(item.id, null)
-            boardStatuses.size == 1 -> commitPutOnBoard(item, boardStatuses.first())
-            putOnBoardDefaultStatusKey != null &&
-                boardStatuses.any { it.id == putOnBoardDefaultStatusKey } ->
-                commitPutOnBoard(item, boardStatuses.first { it.id == putOnBoardDefaultStatusKey })
-            else -> pendingPutOnBoard = item
+        when (val choice = chooseLane()) {
+            is BacklogLaneChoice.Apply -> commitPutOnBoard(item, choice.definition)
+            BacklogLaneChoice.Ask -> pendingPutOnBoard = BacklogPutOnBoardRequest.Single(item)
+        }
+    }
+
+    /** The selection's version of the same resolution, with one lane for the whole set. */
+    fun requestPutSelectionOnBoard() {
+        when (val choice = chooseLane()) {
+            is BacklogLaneChoice.Apply -> commitPutSelectionOnBoard(choice.definition)
+            BacklogLaneChoice.Ask -> pendingPutOnBoard = BacklogPutOnBoardRequest.Selection(selection.size)
+        }
+    }
+
+    /**
+     * A query edit can hide a ticked row, and a hidden tick is a count the user cannot account
+     * for, so editing the field drops the selection. It is the field's own callback rather than
+     * an effect on the debounced query: entering select mode resets the query itself, and an
+     * effect would read that reset as an edit and close the mode that just opened.
+     */
+    val updateQuery: (String) -> Unit = { next ->
+        if (next != query) {
+            if (selection.isNotEmpty()) onClearSelection()
+            query = next
         }
     }
 
@@ -272,6 +375,9 @@ fun ProjectBacklogScreen(
                         onFileAway = onFileAway,
                         onCopy = onCopy,
                         onAddTask = onAddTask,
+                        isSelecting = isSelecting,
+                        selection = selection,
+                        onToggleRow = { toggleRow(it) },
                         contentTopInset = firstRowInset,
                         tabBarInset = tabBarInset,
                         modifier = listContentModifier,
@@ -338,7 +444,11 @@ fun ProjectBacklogScreen(
                             TTGlassSegmentedPicker(
                                 options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
                                 selection = currentSection,
-                                onSelect = { currentSection = it },
+                                onSelect = {
+                                    currentSection = it
+                                    // Archived rows are history, never a selection target.
+                                    if (it != BacklogSection.Backlog) onClearSelection()
+                                },
                                 modifier = pickerModifier.testTag(ProjectBacklogSectionsTag),
                                 title = { option ->
                                     when (option) {
@@ -359,7 +469,7 @@ fun ProjectBacklogScreen(
                         val searchField: @Composable (Modifier) -> Unit = { fieldModifier ->
                             ttSearchField(
                                 value = query,
-                                onValueChange = { query = it },
+                                onValueChange = updateQuery,
                                 hint = stringResource(Res.string.work_item_search_placeholder),
                                 modifier = fieldModifier
                                     .heightIn(min = BacklogFilterRowHeight)
@@ -384,7 +494,7 @@ fun ProjectBacklogScreen(
                                     // a filter that outlives its field leaves rows missing with nothing
                                     // on screen to say why.
                                     if (!searchOpen) {
-                                        query = ""
+                                        updateQuery("")
                                         focusManager.clearFocus()
                                     }
                                 },
@@ -393,6 +503,31 @@ fun ProjectBacklogScreen(
                             )
                         }
                         val openSortSheet: () -> Unit = { sortSheetOpen = true }
+                        // The header's way in and out of select mode. One control, two states:
+                        // entering and leaving are the same gesture in the same place, so a user
+                        // who entered by accident does not have to hunt for the exit.
+                        val selectAction: @Composable (Modifier) -> Unit = { actionModifier ->
+                            val showSelect = currentSection == BacklogSection.Backlog &&
+                                onStartSelecting != null &&
+                                (isSelecting || !shown.backlogIsEmpty)
+                            if (showSelect) {
+                                if (isSelecting) {
+                                    ttGlassIconButton(
+                                        image = ttActionIcons.close,
+                                        contentDescription = stringResource(Res.string.backlog_selection_clear),
+                                        onClick = onClearSelection,
+                                        modifier = actionModifier.testTag(ProjectBacklogSelectionClearTag),
+                                    )
+                                } else {
+                                    ttGlassIconButton(
+                                        image = ttActionIcons.select,
+                                        contentDescription = stringResource(Res.string.backlog_select_open),
+                                        onClick = { enterSelecting() },
+                                        modifier = actionModifier.testTag(ProjectBacklogSelectTag),
+                                    )
+                                }
+                            }
+                        }
 
                         Column(
                             modifier = Modifier
@@ -440,7 +575,9 @@ fun ProjectBacklogScreen(
                                     ) {
                                         sectionPicker(Modifier)
                                     }
-                                } else {
+                                }
+                                selectAction(Modifier)
+                                if (!wideHeader && !isSelecting) {
                                     searchToggle(Modifier)
                                 }
                                 onAddTask?.let { addTask ->
@@ -476,7 +613,15 @@ fun ProjectBacklogScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                                 ) {
-                                    if (currentSection == BacklogSection.Backlog) {
+                                    if (isSelecting) {
+                                        BacklogSelectionActions(
+                                            count = selection.size,
+                                            isBusy = isBatchRunning,
+                                            onPutOnBoard = { requestPutSelectionOnBoard() },
+                                            onArchive = onArchiveSelection,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                    } else if (currentSection == BacklogSection.Backlog) {
                                         BacklogSortControls(
                                             order = currentSortOrder,
                                             onOpen = openSortSheet,
@@ -509,22 +654,35 @@ fun ProjectBacklogScreen(
                                     // becomes the close control while the field is open — it never
                                     // leaves the row, so the field grows beside it instead of over the
                                     // only way to dismiss the search.
-                                    searchToggle(Modifier)
+                                    //
+                                    // Hidden while selecting: the mode closed the query, and a search
+                                    // field would be a filter that unticks rows the user just chose.
+                                    if (!isSelecting) searchToggle(Modifier)
                                 }
                             } else {
-                                if (currentSection == BacklogSection.Backlog) {
-                                    BacklogSortControls(
-                                        order = currentSortOrder,
-                                        onOpen = openSortSheet,
+                                if (isSelecting) {
+                                    BacklogSelectionActions(
+                                        count = selection.size,
+                                        isBusy = isBatchRunning,
+                                        onPutOnBoard = { requestPutSelectionOnBoard() },
+                                        onArchive = onArchiveSelection,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
-                                }
-                                // Inside the measured column, so the list's top inset grows with the field
-                                // and the first row still starts below the header rather than behind it.
-                                // The reveal is the reason the inset is measured at all: it changes while
-                                // the field unfolds.
-                                SearchReveal(visible = searchOpen) {
-                                    searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
+                                } else {
+                                    if (currentSection == BacklogSection.Backlog) {
+                                        BacklogSortControls(
+                                            order = currentSortOrder,
+                                            onOpen = openSortSheet,
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                    // Inside the measured column, so the list's top inset grows with the field
+                                    // and the first row still starts below the header rather than behind it.
+                                    // The reveal is the reason the inset is measured at all: it changes while
+                                    // the field unfolds.
+                                    SearchReveal(visible = searchOpen) {
+                                        searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
+                                    }
                                 }
                             }
                         }
@@ -543,12 +701,20 @@ fun ProjectBacklogScreen(
             // The column picker, open only while the resolver has decided it cannot board without
             // a choice. `visible` tracks `pendingPutOnBoard`, so dismissing sets it null and the
             // sheet animates out on its own.
-            pendingPutOnBoard?.let { item ->
+            pendingPutOnBoard?.let { request ->
                 PutOnBoardSheet(
-                    item = item,
+                    body = when (request) {
+                        is BacklogPutOnBoardRequest.Single ->
+                            stringResource(Res.string.backlog_put_on_board_prompt_body, request.item.title)
+                        is BacklogPutOnBoardRequest.Selection ->
+                            stringResource(Res.string.backlog_put_on_board_prompt_body_many, request.count)
+                    },
                     statuses = boardStatuses,
                     onConfirm = { definition ->
-                        commitPutOnBoard(item, definition)
+                        when (request) {
+                            is BacklogPutOnBoardRequest.Single -> commitPutOnBoard(request.item, definition)
+                            is BacklogPutOnBoardRequest.Selection -> commitPutSelectionOnBoard(definition)
+                        }
                         pendingPutOnBoard = null
                     },
                     onDismissRequest = { pendingPutOnBoard = null },
@@ -572,6 +738,9 @@ private fun BacklogSectionList(
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
     onAddTask: (() -> Unit)?,
+    isSelecting: Boolean,
+    selection: Set<WorkItemID>,
+    onToggleRow: (WorkItem) -> Unit,
     contentTopInset: Dp,
     tabBarInset: Dp,
     modifier: Modifier = Modifier,
@@ -607,6 +776,10 @@ private fun BacklogSectionList(
                     onOpen = { onSelect(item.id) },
                     onCopy = onCopy,
                     projectTags = projection.project?.tags.orEmpty(),
+                    isSelecting = isSelecting,
+                    isSelected = item.id in selection,
+                    onLongPress = { onToggleRow(item) },
+                    onToggleSelected = { onToggleRow(item) },
                 )
             }
         }
@@ -803,6 +976,79 @@ const val ProjectBacklogSearchToggleTag = "backlog.search.toggle"
 const val ProjectBacklogSearchInputTag = "backlog.search.input"
 const val BacklogAddTaskTag = "backlog.addTask"
 const val ProjectBacklogHeaderHousingTag = "backlog.header.housing"
+const val ProjectBacklogSelectTag = "backlog.select"
+const val ProjectBacklogSelectionClearTag = "backlog.selection.clear"
+const val ProjectBacklogSelectionBarTag = "backlog.selection.bar"
+const val ProjectBacklogSelectionCountTag = "backlog.selection.count"
+const val ProjectBacklogSelectionPutOnBoardTag = "backlog.selection.putOnBoard"
+const val ProjectBacklogSelectionArchiveTag = "backlog.selection.archive"
+
+/** What asked for a column: one row, or the whole selection. */
+private sealed interface BacklogPutOnBoardRequest {
+    data class Single(val item: WorkItem) : BacklogPutOnBoardRequest
+    data class Selection(val count: Int) : BacklogPutOnBoardRequest
+}
+
+/** The lane the screen can commit on its own, or a genuine choice for the sheet. */
+private sealed interface BacklogLaneChoice {
+    /** [definition] null means the legacy `Todo` lane with no catalog key. */
+    data class Apply(val definition: StatusDefinition?) : BacklogLaneChoice
+    data object Ask : BacklogLaneChoice
+}
+
+/**
+ * The action bar shown in the sort row's place while selecting.
+ *
+ * The count is a live region so a screen reader announces it as rows are ticked, and it is the
+ * only thing that names the set — the buttons act on "the selection", which is whatever the count
+ * says. Both actions are refused at zero rather than hidden, so the bar does not reflow under the
+ * finger that just unticked the last row; while a batch runs they are refused too, and the bar
+ * says what is happening instead of leaving two dead controls unexplained.
+ */
+@Composable
+private fun BacklogSelectionActions(
+    count: Int,
+    isBusy: Boolean,
+    onPutOnBoard: () -> Unit,
+    onArchive: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = count > 0 && !isBusy
+    Row(
+        modifier = modifier.testTag(ProjectBacklogSelectionBarTag),
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ttText(
+            text = stringResource(Res.string.backlog_selection_count, count),
+            style = ttTypography.caption,
+            color = ttLabel(),
+            modifier = Modifier
+                .testTag(ProjectBacklogSelectionCountTag)
+                .semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (isBusy) {
+            ttText(
+                text = stringResource(Res.string.backlog_selection_working),
+                style = ttTypography.captionSmall,
+                color = ttLabelSecondary(),
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        ttGlassButton(
+            label = stringResource(Res.string.backlog_selection_put_on_board),
+            onClick = { if (enabled) onPutOnBoard() },
+            modifier = Modifier.testTag(ProjectBacklogSelectionPutOnBoardTag),
+            style = if (enabled) TTGlassButtonStyle(tint = ttAccent(), prominent = true) else TTGlassButtonStyle(),
+        )
+        ttGlassButton(
+            label = stringResource(Res.string.backlog_selection_archive),
+            onClick = { if (enabled) onArchive() },
+            modifier = Modifier.testTag(ProjectBacklogSelectionArchiveTag),
+            style = if (enabled) TTGlassButtonStyle(tint = ttAccent(), prominent = true) else TTGlassButtonStyle(),
+        )
+    }
+}
 
 /** How long the header's housing takes to fade in or out as rows pass under it. */
 private const val HEADER_HOUSING_FADE_MILLIS = 160
