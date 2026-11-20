@@ -250,6 +250,13 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   mutation-checked with the rim removed. The panel's open/close uses
   `AnimatedVisibility` with reduced-motion snap; its scenario compares the
   content height one frame after the tap with the settled height.
+- **Measured selection geometry is value state, not `LayoutCoordinates`.**
+  Compose reuses a row's `LayoutCoordinates` object across layout passes, so
+  assigning the same instance to a state map again does not invalidate when only
+  its position moved. The sidebar lens kept the pre-population rectangle after a
+  sidebar→rail→sidebar resize, a row above the selected one. Store an `IntRect`
+  per row and refresh it in every `onGloballyPositioned` callback; the rail's
+  index-based lens has no such problem.
 
 ### Product limits
 

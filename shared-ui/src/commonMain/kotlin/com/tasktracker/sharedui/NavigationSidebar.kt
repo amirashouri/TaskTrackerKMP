@@ -108,24 +108,26 @@ internal fun NavigationSidebar(
     // selected. The space below Settings belongs to a spacer, and the theme panel is a measured
     // neighbour pinned underneath it; neither is a fixed offset from the panel's top.
     //
-    // The rows hand over their `LayoutCoordinates` and the rectangles are built *here*, in
-    // composition, rather than inside the callbacks. That is the load-bearing detail: a callback
-    // that wanted the panel's coordinates would record nothing on the frame it happened to fire
-    // before the panel had been measured, the row would never move again, and the lens would be
-    // missing for the life of the composition. Read this way, the order the two arrive in does
-    // not matter, and the arrows below are the same `ttLensPlacement` the segmented pickers use.
+    // The rows hand over their `LayoutCoordinates`, but the lens reads immutable rectangles.
+    // That distinction is load-bearing: Compose reuses the same `LayoutCoordinates` object for a
+    // row across layout passes, so writing it into a state map again when only its *position*
+    // moved is a no-op — the map still compares equal and no recomposition is scheduled. The
+    // project list populating after the first pass moved every row down 31dp without the lens
+    // following; a round trip through the rail left it parked on the pre-population rectangle.
+    // Storing an IntRect makes the geometry change a real state change.
     val density = LocalDensity.current
     val rowCoordinates = remember { mutableStateMapOf<AppTab, LayoutCoordinates>() }
+    val rowRects = remember { mutableStateMapOf<AppTab, IntRect>() }
     var panelCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val panel = panelCoordinates
-    val rowRects: Map<AppTab, IntRect> = if (panel == null) {
-        emptyMap()
-    } else {
-        rowCoordinates.mapValues { (_, row) ->
-            val topLeft = panel.localPositionOf(row, Offset.Zero)
+
+    fun refreshRowRects() {
+        val measuredPanel = panelCoordinates ?: return
+        rowCoordinates.forEach { (tab, row) ->
+            val topLeft = measuredPanel.localPositionOf(row, Offset.Zero)
             val left = topLeft.x.roundToInt()
             val top = topLeft.y.roundToInt()
-            IntRect(
+            rowRects[tab] = IntRect(
                 left = left,
                 top = top,
                 right = left + row.size.width,
@@ -133,6 +135,7 @@ internal fun NavigationSidebar(
             )
         }
     }
+
     val lens = ttLensPlacement(rowRects, selected, density)
     val lensShape = RoundedCornerShape(ttRadius.control)
     // `BoxWithConstraints` cannot bound the panel here: next to a weighted spacer it is measured
@@ -178,7 +181,10 @@ internal fun NavigationSidebar(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned { panelCoordinates = it },
+                    .onGloballyPositioned { coordinates ->
+                        panelCoordinates = coordinates
+                        refreshRowRects()
+                    },
             ) {
                 // Drawn before the rows and behind them, which is the bar's arrangement: the lens
                 // is a wash and a rim under the content it marks, not a chip on top of it. It is
@@ -269,7 +275,10 @@ internal fun NavigationSidebar(
                                     onClick = { onSelect(tab) },
                                     modifier = Modifier
                                         .testTag(SidebarButtonTag(tab))
-                                        .onGloballyPositioned { rowCoordinates[tab] = it },
+                                        .onGloballyPositioned { coordinates ->
+                                            rowCoordinates[tab] = coordinates
+                                            refreshRowRects()
+                                        },
                                 )
                             }
                         }
@@ -285,7 +294,10 @@ internal fun NavigationSidebar(
                             onClick = { onSelect(AppTab.Settings) },
                             modifier = Modifier
                                 .testTag(SidebarButtonTag(AppTab.Settings))
-                                .onGloballyPositioned { rowCoordinates[AppTab.Settings] = it },
+                                .onGloballyPositioned { coordinates ->
+                                    rowCoordinates[AppTab.Settings] = coordinates
+                                    refreshRowRects()
+                                },
                         )
                     }
 

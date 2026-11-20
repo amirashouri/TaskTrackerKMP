@@ -102,6 +102,9 @@ abstract class TaskTrackerWideScenarios {
     fun resizingSidebarToRailAndBackShedsBothInsets() =
         runComposeUiTest(block = ShellScenarios.resizingSidebarToRailAndBackShedsBothInsets)
     @Test
+    fun theSidebarLensSurvivesAChromeRoundTrip() =
+        runComposeUiTest(block = ShellScenarios.theSidebarLensSurvivesAChromeRoundTrip)
+    @Test
     fun theRailIsALeadingColumnRatherThanAStretchedOne() =
         runComposeUiTest(block = ShellScenarios.theRailIsALeadingColumnRatherThanAStretchedOne)
     @Test
