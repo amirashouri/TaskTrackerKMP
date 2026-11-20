@@ -182,11 +182,12 @@ fun BoardColumnView(
                             item = item,
                             onClick = { onSelect(item) },
                             onCopy = onCopy,
-                            isSelecting = isSelecting,
+                            // Only the lane that owns the selection draws ticks. Passing the
+                            // screen-wide flag here made every lane's cards checkboxes, which
+                            // read as a selection spanning lanes that does not exist.
+                            isSelecting = isSelecting && isSelectionLane,
                             isSelected = item.id in selection,
-                            // A tap in a lane that does not own the selection ticks nothing:
-                            // the selection is one lane's, and the header is how it changes.
-                            onToggleSelected = { if (isSelectionLane) onToggleSelected(item.id) },
+                            onToggleSelected = { onToggleSelected(item.id) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .alpha(if (drag?.draggingItemID == item.id) 0.35f else 1f)

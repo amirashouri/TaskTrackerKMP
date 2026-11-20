@@ -8,14 +8,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import com.tasktracker.core.WorkItemID
@@ -77,6 +81,35 @@ object BoardSelectionScenarios {
             countOfTag(BoardColumnSelectTag(todo)),
             "another lane must not offer a Select while one lane's set is open",
         )
+    }
+
+    /**
+     * Only the owning lane draws ticks; another lane's cards stay ordinary cards.
+     *
+     * The mode is one lane's, so the screen-wide flag must not reach the other lanes' cards: a
+     * checkbox drawn in Todo while Done is being selected reads as a board-wide selection that
+     * would archive cards the user never touched.
+     */
+    val onlyTheSelectionLaneDrawsTicks: suspend ComposeUiTest.() -> Unit = {
+        val projection = ViewPreviewData.boardProjection()
+        val done = lane(WorkItemStatus.Done)
+        val doneCards = projection.column(WorkItemStatus.Done).items
+        val otherCard = projection.column(WorkItemStatus.Todo).items.first()
+        boardWithSelection(projection)
+        waitForIdle()
+
+        onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
+        waitForIdle()
+
+        // The tick is inside a merged card, so only the unmerged tree exposes one node per card.
+        assertEquals(
+            doneCards.size,
+            onAllNodesWithTag(WorkItemCardSelectionTickTag, useUnmergedTree = true)
+                .fetchSemanticsNodes().size,
+            "only the selection lane's cards are checkboxes",
+        )
+        onNodeWithTag(WorkItemCardTag(otherCard))
+            .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Selected))
     }
 
     /**

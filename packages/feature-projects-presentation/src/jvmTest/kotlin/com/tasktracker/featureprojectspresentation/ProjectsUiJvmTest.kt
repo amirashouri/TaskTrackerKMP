@@ -293,6 +293,11 @@ class ProjectsUiJvmTest {
     fun theLaneHeaderStartsItsOwnSelection() =
         runComposeUiTest(block = BoardSelectionScenarios.theLaneHeaderStartsItsOwnSelection)
 
+    /** Only the lane that owns the selection draws ticks. */
+    @Test
+    fun onlyTheSelectionLaneDrawsTicks() =
+        runComposeUiTest(block = BoardSelectionScenarios.onlyTheSelectionLaneDrawsTicks)
+
     /** A card tap ticks and unticks it without opening the editor. */
     @Test
     fun tappingACardTicksAndUnticksIt() =
