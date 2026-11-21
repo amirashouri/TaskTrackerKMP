@@ -139,14 +139,16 @@ object ThemeOptionScenarios {
     }
 
     /**
-     * Both long palette names are on screen in full; the six-column row could not do that.
+     * Every palette caption is on screen in full; the six-column row could not do that.
      *
-     * This used to assert that "Navy Blue" wrapped onto two lines, because at 320dp a
-     * six-column row left about 48dp per caption and wrapping was the only way to show the
-     * whole word. The picker is a 3x2 grid now, so the contract is the opposite: both long
-     * names fit on one line and neither is abbreviated. `AccentSwatchScenarios` measures the
-     * text layout at the same width; this scenario keeps the full Settings page in the loop,
-     * so a regression that only appears after scrolling still has a witness.
+     * This used to assert that the longest name (then "Navy Blue") wrapped onto two lines,
+     * because at 320dp a six-column row left about 48dp per caption and wrapping was the
+     * only way to show the whole word. The picker is a 3x2 grid now, so the contract is the
+     * opposite: every name fits on one line and none is abbreviated. The names are read from
+     * [AccentPalette] rather than written out here, so renaming a palette cannot strand this
+     * test the way a literal would. `AccentSwatchScenarios` measures the text layout at the
+     * same width; this scenario keeps the full Settings page in the loop, so a regression
+     * that only appears after scrolling still has a witness.
      */
     val theLongAccentCaptionWrapsInsteadOfClipping: suspend ComposeUiTest.() -> Unit = {
         setContent {
@@ -161,7 +163,7 @@ object ThemeOptionScenarios {
                         onThemeChange = {},
                         onSyncNow = {},
                         onSignOut = {},
-                        accentPalette = AccentPalette.NavyBlue,
+                        accentPalette = AccentPalette.Slot6,
                         onAccentPaletteChange = {},
                     )
                 }
@@ -172,13 +174,14 @@ object ThemeOptionScenarios {
         // scrolled into range, which is why this used to fail with "could not find any node"
         // rather than measuring a wrapped caption. Scroll to the palette first; the claim is
         // about wrapping, not about where the row initially sits.
-        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText("Navy Blue"))
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasText(AccentPalette.Slot6.title))
         waitForIdle()
 
         // Unmerged, because `selectable` merges the caption into the palette cell; this is
         // the text node itself, so finding it proves the shipped string is the full name.
-        onNodeWithText("Classic Light", useUnmergedTree = true).assertExists()
-        onNodeWithText("Navy Blue", useUnmergedTree = true).assertExists()
+        for (palette in AccentPalette.all) {
+            onNodeWithText(palette.title, useUnmergedTree = true).assertExists()
+        }
     }
 
     /**

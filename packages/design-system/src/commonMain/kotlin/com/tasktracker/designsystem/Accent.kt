@@ -24,26 +24,55 @@ object TaskTrackerAccent {
     val all: List<Color> = listOf(Light, Dark)
 }
 
-/** Alternative accent palette options. */
+/**
+ * Alternative accent palette options.
+ *
+ * A constant is a *slot*, not a colour. [wireValue] is the identity a stored preference
+ * contains, and it never moves; [title], [light] and [dark] are presentation and may change
+ * freely. Recolouring a palette edits those three and nothing else, so a stored choice
+ * survives a rename — the thing that would break if the identity were the constant's `name`
+ * or `ordinal`.
+ *
+ * The slots differ by hue because the contrast contract pins every accent into the
+ * 0.10–0.1833 luminance window (4.5:1 for the white label, 3:1 against the canvas), which
+ * both the light and the dark value must sit inside. Lightness is not an axis a palette can
+ * vary on; see `AccentContrastTest`.
+ *
+ * `wireValue` keeps its name for symmetry with [ThemeScheme.wireValue]; it is local
+ * storage, not a server contract.
+ */
 enum class AccentPalette(
     val wireValue: String,
     val title: String,
     val light: Color,
     val dark: Color,
 ) {
-    Classic("classic", "Classic", TaskTrackerAccent.Light, TaskTrackerAccent.Dark),
-    ClassicLight("classic-light", "Classic Light", Color(0xFF49688F), Color(0xFF416A9A)),
-    Music("music", "Music", Color(0xFFB0004B), Color(0xFFD81B60)),
-    Sunset("sunset", "Sunset", Color(0xFFA8320A), Color(0xFFCA3F12)),
-    Violet("violet", "Violet", Color(0xFF5B21B6), Color(0xFF8845D2)),
-    NavyBlue("navy-blue", "Navy Blue", Color(0xFF234D82), Color(0xFF45658F)),
+    /** The default brand blue. */
+    Slot1("accent-1", "Classic", TaskTrackerAccent.Light, TaskTrackerAccent.Dark),
+
+    /**
+     * The green slot, which replaced a second navy.
+     *
+     * The old pair shared Classic's 213° hue and its dark value sat 0.007 luminance away, so
+     * in dark mode the picker showed three swatches that were the same colour.
+     */
+    Slot2("accent-2", "Emerald", Color(0xFF0A5C3E), Color(0xFF047857)),
+    Slot3("accent-3", "Music", Color(0xFFB0004B), Color(0xFFD81B60)),
+    Slot4("accent-4", "Sunset", Color(0xFFA8320A), Color(0xFFCA3F12)),
+    Slot5("accent-5", "Violet", Color(0xFF5B21B6), Color(0xFF8845D2)),
+
+    /**
+     * The warm slot, which replaced the third navy (`#234D82` / `#45658F`) — the one whose
+     * dark value was 0.006 luminance from Classic's. See [Slot2].
+     */
+    Slot6("accent-6", "Amber", Color(0xFF7A5200), Color(0xFF8A6100)),
     ;
 
     companion object {
         val all: List<AccentPalette> = entries
 
         fun fromStoredValue(value: String?): AccentPalette =
-            entries.firstOrNull { it.wireValue == value } ?: Classic
+            entries.firstOrNull { it.wireValue == value } ?: Slot1
     }
 }
 

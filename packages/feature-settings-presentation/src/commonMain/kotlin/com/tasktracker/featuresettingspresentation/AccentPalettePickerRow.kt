@@ -100,7 +100,7 @@ internal fun AccentPalettePickerRow(
                 .onGloballyPositioned { containerCoordinates = it },
         ) {
             // Three columns rather than six: at 320dp a six-cell row left roughly 48dp per
-            // cell, and two-line labels with an ellipsis were the only way "Classic Light"
+            // cell, and two-line labels with an ellipsis were the only way the longest name
             // could fit. Two rows of three give each label about 96dp, so it reads in full on
             // one line, and the cell grows to roughly 96x70dp — well past the 44dp target.
             Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {

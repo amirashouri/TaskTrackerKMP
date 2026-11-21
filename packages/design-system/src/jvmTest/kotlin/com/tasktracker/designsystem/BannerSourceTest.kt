@@ -83,12 +83,12 @@ class BannerSourceTest {
     @Test
     fun `the accent tone is not the error tone`() {
         assertTrue(
-            AccentPalette.Classic.light != ttFixedColours.errorLight,
+            AccentPalette.Slot1.light != ttFixedColours.errorLight,
             "the banner's accent tone is the same colour as its error tone in light, so a " +
                 "notice and a failure are painted identically",
         )
         assertTrue(
-            AccentPalette.Classic.dark != ttFixedColours.errorDark,
+            AccentPalette.Slot1.dark != ttFixedColours.errorDark,
             "the banner's accent tone is the same colour as its error tone in dark",
         )
     }

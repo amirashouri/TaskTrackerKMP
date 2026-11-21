@@ -92,7 +92,7 @@ object AccentSwatchScenarios {
                     // contrast is only meaningful against the surface it actually lands on.
                     Box(modifier = Modifier.fillMaxSize().background(ttCanvas())) {
                         AccentPalettePickerRow(
-                            selected = AccentPalette.Classic,
+                            selected = AccentPalette.Slot1,
                             onSelect = {},
                         )
                     }
@@ -104,10 +104,10 @@ object AccentSwatchScenarios {
             val root = onRoot().getBoundsInRoot()
             val scale = frame.width.toFloat() / max(root.right.value, 1f)
 
-            val selected = onNodeWithTag(AccentSwatchTag(AccentPalette.Classic), useUnmergedTree = true).getBoundsInRoot()
-            val unselected = onNodeWithTag(AccentSwatchTag(AccentPalette.Music), useUnmergedTree = true).getBoundsInRoot()
-            val pane = onNodeWithTag(AccentGlassTag(AccentPalette.Classic), useUnmergedTree = true).getBoundsInRoot()
-            val label = onNodeWithTag(AccentLabelTag(AccentPalette.Classic), useUnmergedTree = true).getBoundsInRoot()
+            val selected = onNodeWithTag(AccentSwatchTag(AccentPalette.Slot1), useUnmergedTree = true).getBoundsInRoot()
+            val unselected = onNodeWithTag(AccentSwatchTag(AccentPalette.Slot3), useUnmergedTree = true).getBoundsInRoot()
+            val pane = onNodeWithTag(AccentGlassTag(AccentPalette.Slot1), useUnmergedTree = true).getBoundsInRoot()
+            val label = onNodeWithTag(AccentLabelTag(AccentPalette.Slot1), useUnmergedTree = true).getBoundsInRoot()
 
             val selectedDelta = topToBottomDelta(frame, selected, scale)
             val unselectedDelta = topToBottomDelta(frame, unselected, scale)
@@ -155,7 +155,7 @@ object AccentSwatchScenarios {
             ttTheme(ThemeScheme.Light) {
                 Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH).background(ttCanvas())) {
                     AccentPalettePickerRow(
-                        selected = AccentPalette.Classic,
+                        selected = AccentPalette.Slot1,
                         onSelect = {},
                     )
                 }
@@ -199,7 +199,7 @@ object AccentSwatchScenarios {
      * palette in the lower row and checks the pane ends up on its cell rather than partway.
      */
     val theLensTravelsToASecondRow: suspend ComposeUiTest.() -> Unit = {
-        var selected by mutableStateOf(AccentPalette.Classic)
+        var selected by mutableStateOf(AccentPalette.Slot1)
         setContent {
             ttTheme(ThemeScheme.Light) {
                 Box(modifier = Modifier.width(NARROW_CONTENT_WIDTH)) {
@@ -212,20 +212,20 @@ object AccentSwatchScenarios {
         }
         waitForIdle()
 
-        onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue)).performClick()
+        onNodeWithTag(AccentCellTag(AccentPalette.Slot6)).performClick()
         mainClock.advanceTimeBy(2_000)
         waitForIdle()
 
-        val cell = onNodeWithTag(AccentCellTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+        val cell = onNodeWithTag(AccentCellTag(AccentPalette.Slot6), useUnmergedTree = true)
             .getBoundsInRoot()
-        val pane = onNodeWithTag(AccentGlassTag(AccentPalette.NavyBlue), useUnmergedTree = true)
+        val pane = onNodeWithTag(AccentGlassTag(AccentPalette.Slot6), useUnmergedTree = true)
             .getBoundsInRoot()
         assertTrue(
             pane.left.value <= cell.left.value + 0.5f &&
                 pane.top.value <= cell.top.value + 0.5f &&
                 pane.right.value >= cell.right.value - 0.5f &&
                 pane.bottom.value >= cell.bottom.value - 0.5f,
-            "after selecting Navy Blue the lens pane ($pane) did not settle on its cell " +
+            "after selecting ${AccentPalette.Slot6.title} the lens pane ($pane) did not settle on its cell " +
                 "($cell). Two rows mean the lens has a vertical leg; a pane that stops on the " +
                 "first row means the placement still assumes one.",
         )

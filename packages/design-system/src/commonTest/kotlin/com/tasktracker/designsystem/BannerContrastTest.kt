@@ -96,10 +96,10 @@ class BannerContrastTest {
     @Test
     fun `the accent tone also leaves the message above the bar`() {
         for (dark in listOf(false, true)) {
-            // The accent values are the ones `AccentPalette.Classic` ships, which is what the
+            // The accent values are the ones `AccentPalette.Slot1` ships, which is what the
             // pinned appearance resolves to. Read from the palette rather than copied so a
             // change to the accent moves this number.
-            val palette = AccentPalette.Classic
+            val palette = AccentPalette.Slot1
             val accent = if (dark) palette.dark else palette.light
             val fill = over(accent, BANNER_FILL_ALPHA, ttFixedColours.canvas(dark))
             val ratio = contrastRatio(ttFixedColours.label(dark), fill)

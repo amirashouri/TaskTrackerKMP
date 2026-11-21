@@ -71,7 +71,7 @@ private fun AmbientBackdropDarkPreview() {
 @Preview(name = "Backdrop, Sunset palette", showBackground = true)
 @Composable
 private fun AmbientBackdropSunsetPreview() {
-    ttPreviewSurface(ThemeScheme.Light, AccentPalette.Sunset) { Box(Modifier.fillMaxSize()) }
+    ttPreviewSurface(ThemeScheme.Light, AccentPalette.Slot4) { Box(Modifier.fillMaxSize()) }
 }
 
 /**
@@ -407,7 +407,7 @@ private fun BottomSheetPreview() {
 @Composable
 internal fun ttPreviewSurface(
     scheme: ThemeScheme = ThemeScheme.System,
-    accentPalette: AccentPalette = AccentPalette.Classic,
+    accentPalette: AccentPalette = AccentPalette.Slot1,
     content: @Composable () -> Unit,
 ) {
     ttTheme(scheme, accentPalette) {

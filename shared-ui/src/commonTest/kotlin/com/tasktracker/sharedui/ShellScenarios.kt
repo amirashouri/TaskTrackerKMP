@@ -2969,7 +2969,7 @@ object ShellScenarios {
                 "animating",
         )
         ThemeScheme.all.forEach { onNodeWithTag(ThemeControlsSchemeTag(it)).assertIsDisplayed() }
-        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Music)).assertIsDisplayed()
+        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Slot3)).assertIsDisplayed()
         onNodeWithTag(ThemeControlsGlassSliderTag).assertIsDisplayed()
 
         // The panel belongs to the sidebar's bottom edge, not to the row after Settings.
@@ -2990,13 +2990,13 @@ object ShellScenarios {
 
         // The lens must cover the swatch, not the caption-shaped cell it used to include.
         mainClock.advanceTimeBy(400)
-        val cell = onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Classic)).getBoundsInRoot()
+        val cell = onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Slot1)).getBoundsInRoot()
         val swatch = onNodeWithTag(
-            ThemeControlsAccentSwatchTag(AccentPalette.Classic),
+            ThemeControlsAccentSwatchTag(AccentPalette.Slot1),
             useUnmergedTree = true,
         ).getBoundsInRoot()
         val lens = onNodeWithTag(
-            ThemeControlsAccentLensTag(AccentPalette.Classic),
+            ThemeControlsAccentLensTag(AccentPalette.Slot1),
             useUnmergedTree = true,
         ).getBoundsInRoot()
         assertEquals(
@@ -3018,7 +3018,7 @@ object ShellScenarios {
         )
 
         assertTrue(
-            onAllNodesWithText(AccentPalette.Music.title).fetchSemanticsNodes().isEmpty(),
+            onAllNodesWithText(AccentPalette.Slot3.title).fetchSemanticsNodes().isEmpty(),
             "the sidebar's accent grid still prints palette names, so it is not the compact row",
         )
 
@@ -3052,13 +3052,13 @@ object ShellScenarios {
         waitForIdle()
 
         onNodeWithTag(ThemeControlsSchemeTag(ThemeScheme.Dark)).performClick()
-        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Music)).performClick()
+        onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Slot3)).performClick()
         onNodeWithTag(ThemeControlsGlassSliderTag)
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0.25f) }
         waitForIdle()
 
         assertEquals(ThemeScheme.Dark.wireValue, store.value(ShellPreferences.THEME_KEY))
-        assertEquals(AccentPalette.Music.wireValue, store.value(ShellPreferences.ACCENT_PALETTE_KEY))
+        assertEquals(AccentPalette.Slot3.wireValue, store.value(ShellPreferences.ACCENT_PALETTE_KEY))
         assertEquals("0.25", store.value(ShellPreferences.GLASS_INTENSITY_KEY))
     }
 

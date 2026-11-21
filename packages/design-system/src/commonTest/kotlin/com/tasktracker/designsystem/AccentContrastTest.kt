@@ -226,16 +226,20 @@ class AccentContrastTest {
     }
 
     /**
-     * The default dark pair keeps the brand hue and enough saturation to read as colour.
+     * Every dark accent keeps its light value's hue and enough saturation to read as colour.
      *
      * Both bars can be satisfied by a grey, and that is exactly what the previous values
-     * were: `#5F6873` and `#6C7582` measured saturation 0.037 and 0.106. The hue check is
-     * circular because the light value sits at 213°, close to the 0°/360° seam; a naive
-     * subtraction would call a one-degree crossing a 359-degree drift.
+     * were: `#5F6873` and `#6C7582` measured saturation 0.037 and 0.106. A palette whose
+     * dark value drifts to a different hue, or loses its chroma, is a different colour in
+     * the dark appearance — the one thing the picker promises it will not be.
+     *
+     * The distance is measured with wrap-around: Classic's light value sits at 213°, close
+     * to the 0°/360° seam, so a naive subtraction would call a one-degree crossing a
+     * 359-degree drift.
      */
     @Test
-    fun `the default dark accents keep the light value's hue and real chroma`() {
-        for (palette in listOf(AccentPalette.Classic, AccentPalette.ClassicLight)) {
+    fun `every dark accent keeps the light value's hue and real chroma`() {
+        for (palette in AccentPalette.all) {
             val (hue, saturation) = hueAndSaturation(palette.dark)
             val (lightHue, _) = hueAndSaturation(palette.light)
             val drift = hueDistance(hue, lightHue)
@@ -256,20 +260,22 @@ class AccentContrastTest {
     /**
      * The light values and the stored identities are the fixed point of the palette.
      *
-     * Dark was the only thing this task was allowed to move. Pinning the light hexes and wire
-     * values makes an accidental light-mode change fail here rather than in a screenshot, and
-     * the wire value is what a stored preference contains — renaming it would silently reset
-     * every user's palette to Classic.
+     * Pinning the light hexes and wire values makes an accidental change fail here rather
+     * than in a screenshot. The wire value is the stored identity, so it must not change
+     * when a palette is renamed or recoloured — the slots are opaque (`accent-1`…`accent-6`)
+     * precisely so that it never has to. The light hexes are listed because every one of
+     * them is constrained by the two contrast bars; a value that moved has to be
+     * re-measured, not assumed.
      */
     @Test
     fun `light values and wire values are unchanged`() {
         val expected = listOf(
-            Triple(AccentPalette.Classic, "classic", "#34537a"),
-            Triple(AccentPalette.ClassicLight, "classic-light", "#49688f"),
-            Triple(AccentPalette.Music, "music", "#b0004b"),
-            Triple(AccentPalette.Sunset, "sunset", "#a8320a"),
-            Triple(AccentPalette.Violet, "violet", "#5b21b6"),
-            Triple(AccentPalette.NavyBlue, "navy-blue", "#234d82"),
+            Triple(AccentPalette.Slot1, "accent-1", "#34537a"),
+            Triple(AccentPalette.Slot2, "accent-2", "#0a5c3e"),
+            Triple(AccentPalette.Slot3, "accent-3", "#b0004b"),
+            Triple(AccentPalette.Slot4, "accent-4", "#a8320a"),
+            Triple(AccentPalette.Slot5, "accent-5", "#5b21b6"),
+            Triple(AccentPalette.Slot6, "accent-6", "#7a5200"),
         )
         for ((palette, wire, light) in expected) {
             assertEquals(wire, palette.wireValue, "${palette.name} wire value")

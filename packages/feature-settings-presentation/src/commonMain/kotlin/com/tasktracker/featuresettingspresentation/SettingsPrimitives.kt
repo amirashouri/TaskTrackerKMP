@@ -205,7 +205,7 @@ internal fun SettingsActionRow(
         } else {
             // Disclosure indicator: this row navigates. A chevron reads as "tappable" in
             // every theme and contrast level, unlike an accent-coloured label, which fails
-            // the bar on the mid-tone dark palettes (Navy Blue / Classic dark).
+            // the bar on the mid-tone dark palettes (Amber / Classic dark).
             ttIcon(
                 image = ttActionIcons.chevronRight,
                 contentDescription = null,

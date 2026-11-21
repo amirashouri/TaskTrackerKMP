@@ -26,7 +26,7 @@ class ShellPreferences(
     private val _themeScheme = MutableStateFlow(ThemeScheme.System)
     val themeScheme: StateFlow<ThemeScheme> = _themeScheme.asStateFlow()
 
-    private val _accentPalette = MutableStateFlow(AccentPalette.Classic)
+    private val _accentPalette = MutableStateFlow(AccentPalette.Slot1)
     val accentPalette: StateFlow<AccentPalette> = _accentPalette.asStateFlow()
 
     /** Glass material intensity fraction in `0f..1f`. */

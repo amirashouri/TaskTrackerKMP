@@ -154,7 +154,7 @@ fun SettingsScreen(
      */
     onRetryStuckChanges: () -> Unit = {},
     modifier: Modifier = Modifier,
-    accentPalette: AccentPalette = AccentPalette.Classic,
+    accentPalette: AccentPalette = AccentPalette.Slot1,
     onAccentPaletteChange: (AccentPalette) -> Unit = {},
     glassIntensity: Float = 1f,
     onGlassIntensityPreview: (Float) -> Unit = {},

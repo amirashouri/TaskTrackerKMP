@@ -59,9 +59,9 @@ class BacklogSortSheetRenderTest {
 
     @Test
     fun theFirstChipKeepsItsLabelLegibleInEveryThemeTested() {
-        // The two extremes of the palette: Classic dark is a near-neutral grey, Music is a
-        // saturated red. A pairing that clears both has no hue left to hide in.
-        for (palette in listOf(AccentPalette.Classic, AccentPalette.Music)) {
+        // The two extremes of the palette: Classic is a muted blue, Music a saturated red.
+        // A pairing that clears both has no hue left to hide in.
+        for (palette in listOf(AccentPalette.Slot1, AccentPalette.Slot3)) {
             for (scheme in listOf(ThemeScheme.Light, ThemeScheme.Dark)) {
                 var reading: Reading? = null
                 rasterising {

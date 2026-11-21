@@ -35,7 +35,7 @@ class AmbientBackdropPaletteTest {
     @Test
     fun `the secondary corner changes with the accent palette`() {
         val frames = mutableMapOf<AccentPalette, PixelMap>()
-        for (palette in listOf(AccentPalette.Classic, AccentPalette.Sunset)) {
+        for (palette in listOf(AccentPalette.Slot1, AccentPalette.Slot4)) {
             rasterising {
                 setContent {
                     ttTheme(ThemeScheme.Light, palette) {
@@ -47,8 +47,8 @@ class AmbientBackdropPaletteTest {
             }
         }
 
-        val classic = requireNotNull(frames[AccentPalette.Classic]) { "no Classic frame" }
-        val sunset = requireNotNull(frames[AccentPalette.Sunset]) { "no Sunset frame" }
+        val classic = requireNotNull(frames[AccentPalette.Slot1]) { "no Classic frame" }
+        val sunset = requireNotNull(frames[AccentPalette.Slot4]) { "no Sunset frame" }
         val width = classic.width
         val height = classic.height
 
