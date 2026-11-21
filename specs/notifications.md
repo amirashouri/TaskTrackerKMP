@@ -2,7 +2,7 @@
 
 - **status:** in-progress
 - **priority:** P1
-- **branch:** `main` (inbox merged in #97; badges/local notifications uncommitted)
+- **branch:** `feat/notifications-badges-local`
 - **blocked by:** `../TaskTrackerServer/specs/notifications.md` — **the server lands first**;
   the client may not pull `notification` until the server serves the scope and accepts the
   read/dismiss pushes.
@@ -217,14 +217,13 @@ six-segment bar is unacceptable, B is the fallback, but it should keep selecting
   stale-update handling, local read/dismiss/read-all writes, outbox contents, recipient
   scoping, retention and the local-notifier calls. The module's Android host test task is
   disabled for the same missing-`Context` reason as the database and projects-data modules.
+- Full client matrix passed (JVM 2,394, iOS 2,329, Android host 1,984) and the test baseline
+  was regenerated for the new cases.
 
 ### Pending / next
 
 - No visual pass on a device/desktop yet, and the OS banners have not been exercised on a
   real Android device, iOS simulator/device or desktop tray.
-- The full host matrix and `test-baseline.json` regeneration remain after adding the
-  repository tests.
-- Work is uncommitted on `main`.
 
 ### Gotchas
 
