@@ -12,6 +12,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.SwipeDefaults
@@ -27,8 +29,10 @@ import com.tasktracker.resources.projects_empty_title
 import org.jetbrains.compose.resources.getString
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.math.abs
 
 /**
  * The projects list and the confirmation in front of removing one, as scenarios.
@@ -319,6 +323,51 @@ object ProjectsListScenarios {
 
         onNodeWithTag(ProjectRowTag(rows[0].summary)).performClick()
         assertEquals(rows[0].summary.id, opened, "clicking a project card in the grid opens it")
+    }
+
+    /**
+     * A long summary clips to one line, so a grid card is exactly as tall as its neighbours.
+     *
+     * A card that wraps the details to two lines makes one cell taller than the rest of its
+     * grid row. Measuring the cards catches that directly; reading the text layout catches a
+     * fixture that fits on one line and would therefore prove nothing about truncation.
+     */
+    val aLongDetailsLineKeepsGridCardsTheSameHeight: suspend ComposeUiTest.() -> Unit = {
+        val shortDetails = "A short summary."
+        val longDetails = "This project summary is deliberately long enough that it cannot fit " +
+            "on one line of a grid card, so the card must clip it rather than grow taller. " +
+            "Repeated to be certain the text overflows on every host."
+        val short = ProjectSummary(
+            project = ViewPreviewData.seededProject.copy(details = shortDetails),
+            itemCount = 7,
+        )
+        val long = ProjectSummary(
+            project = ViewPreviewData.secondProject.copy(details = longDetails),
+            itemCount = 1,
+        )
+        listShowing(rowsWith(short, long), modifier = Modifier.requiredWidth(1000.dp))
+
+        val shortHeight = onNodeWithTag(ProjectRowTag(short)).fetchSemanticsNode().boundsInRoot.height
+        val longHeight = onNodeWithTag(ProjectRowTag(long)).fetchSemanticsNode().boundsInRoot.height
+        assertTrue(
+            abs(shortHeight - longHeight) < 1f,
+            "the long-summary card is ${longHeight}px tall against ${shortHeight}px for a short one",
+        )
+
+        val layouts = mutableListOf<TextLayoutResult>()
+        val getLayout = onNodeWithText(longDetails, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsActions.GetTextLayoutResult]
+            .action
+        assertNotNull(getLayout, "the project details expose no text layout, so truncation is unreadable")
+        getLayout(layouts)
+        val layout = layouts.single()
+        assertEquals(
+            1,
+            layout.lineCount,
+            "the details took ${layout.lineCount} lines, so a long summary makes grid cards taller",
+        )
+        assertTrue(layout.hasVisualOverflow, "the fixture fits on one line, so this scenario proves nothing")
     }
 
     /** On a wide screen, clicking the direct delete button on a card triggers removal confirmation. */

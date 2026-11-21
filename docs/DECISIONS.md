@@ -235,6 +235,10 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   seam or new dependency is warranted. A recording handler in tests proves the
   exact URI; static creator copy belongs in `:packages:design-system`, the only
   module that configures `compose.resources`.
+- **Grid cards cap summary text at one clipped line.** `ProjectRowView` gives
+  `project.details` `maxLines = 1` with `TextOverflow.Ellipsis`; a wrapped summary
+  makes one card taller than its neighbours in the projects grid. Reverting the
+  constant to two lines grew the long-summary card from 131px to 150px.
 - **A paused clock needs a frame-producing wait.** With reduced motion the
   selection bar's `EnterTransition.None` asks the test clock for no frame, so a
   bare `advanceTimeByFrame()` after the Select click can sample a tree in which
