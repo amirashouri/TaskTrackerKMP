@@ -128,6 +128,24 @@ object ttSettingsIcons {
         close()
     }
 
+    val linkedin: ImageVector = icon("LinkedIn", PathFillType.EvenOdd) {
+        // A rounded square frame with "in" knocked back in inside it. EvenOdd lets the two
+        // inner shapes read as filled again after the frame's inner cut-out.
+        roundRect(2f, 2f, 22f, 22f, 4.5f)
+        roundRect(5.4f, 5.4f, 18.6f, 18.6f, 2.2f)
+        circle(8.6f, 9.2f, 1.35f)
+        roundRect(7.3f, 11.5f, 9.9f, 18.6f, 0.5f)
+        roundRect(11.7f, 11.5f, 14f, 18.6f, 0.5f)
+        moveTo(14f, 13.4f)
+        quadTo(14f, 11.5f, 16.1f, 11.5f)
+        quadTo(18.3f, 11.5f, 18.3f, 13.5f)
+        lineTo(18.3f, 18.6f)
+        lineTo(16f, 18.6f)
+        lineTo(16f, 14.4f)
+        quadTo(16f, 13.4f, 14f, 13.4f)
+        close()
+    }
+
     val members: ImageVector = icon("Members") {
         // Two heads over two shoulders: a group rather than a single person.
         circle(8f, 7f, 3f)

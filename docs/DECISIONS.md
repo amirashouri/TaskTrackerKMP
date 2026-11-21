@@ -229,6 +229,12 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
 - **A comment claiming "test X cannot see Y" is unverified.** Two guards can
   overlap completely; mutate the behaviour, run both, and write down which one
   goes red. That is the only way to know a pair of tests is complementary.
+- **External contacts go through Compose's `LocalUriHandler`.** The Settings
+  creator card opens `mailto:` and `https://` with this common composition local,
+  whose Compose 1.12.1 actuals cover Android, iOS and Desktop — no `expect`/`actual`
+  seam or new dependency is warranted. A recording handler in tests proves the
+  exact URI; static creator copy belongs in `:packages:design-system`, the only
+  module that configures `compose.resources`.
 
 - **Wide layouts cap reading width at the shell's breakpoint, per module.** The
   projects list, the backlog and the sprint list all switch at `840.dp` — the

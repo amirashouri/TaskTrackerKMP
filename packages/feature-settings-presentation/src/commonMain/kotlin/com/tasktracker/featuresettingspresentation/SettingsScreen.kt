@@ -681,6 +681,7 @@ fun SettingsScreen(
                     version.display?.let {
                         item { versionSection() }
                     }
+                    item { CreatorCard() }
                 }
             }
         } else {
@@ -735,6 +736,7 @@ fun SettingsScreen(
                 version.display?.let {
                     item { versionSection() }
                 }
+                item { CreatorCard() }
             }
         }
 

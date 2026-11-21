@@ -8,6 +8,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -21,6 +23,7 @@ import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -67,6 +70,10 @@ import com.tasktracker.resources.settings_agent_running
 import com.tasktracker.resources.settings_agent_status_info_line
 import com.tasktracker.resources.settings_connectivity_offline
 import com.tasktracker.resources.settings_connectivity_online
+import com.tasktracker.resources.settings_creator_body
+import com.tasktracker.resources.settings_creator_email_description
+import com.tasktracker.resources.settings_creator_linkedin_description
+import com.tasktracker.resources.settings_creator_name
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
 import com.tasktracker.resources.settings_profile_save_failed
@@ -1198,6 +1205,43 @@ object SettingsScenarios {
                 "reads as a button that did nothing",
         )
     }
+
+    /**
+     * The closing card introduces the creator and both of its rows open the README contacts.
+     *
+     * A click count is not enough here: an email row that opened the LinkedIn URL — or a card
+     * whose label said "Email" while its handler opened something else — would still pass. The
+     * recording [UriHandler] reads back the exact strings a tap would hand to the OS.
+     */
+    val theCreatorCardOpensBothContacts: suspend ComposeUiTest.() -> Unit = {
+        val opened = mutableListOf<String>()
+        screenShowing(
+            uriHandler = object : UriHandler {
+                override fun openUri(uri: String) {
+                    opened += uri
+                }
+            },
+        )
+
+        onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(CreatorCardTag))
+        onNodeWithTag(CreatorCardTag).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_creator_name)).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_creator_body)).assertIsDisplayed()
+        onNodeWithContentDescription(getString(Res.string.settings_creator_email_description)).assertIsDisplayed()
+        onNodeWithContentDescription(getString(Res.string.settings_creator_linkedin_description)).assertIsDisplayed()
+
+        onNodeWithTag(CreatorEmailRowTag).performClick()
+        onNodeWithTag(CreatorLinkedInRowTag).performClick()
+
+        assertEquals(
+            listOf(
+                "mailto:amirashouri72@gmail.com",
+                "https://www.linkedin.com/in/amirreza-ashouri-229019156",
+            ),
+            opened,
+            "the contact rows must open the exact URIs published in the README",
+        )
+    }
 }
 
 /**
@@ -1246,36 +1290,45 @@ private fun ComposeUiTest.screenShowing(
     onStartAgent: (AgentRunnerID) -> Unit = {},
     onDismissAgentFailure: () -> Unit = {},
     onOpenAgentSetup: () -> Unit = {},
+    uriHandler: UriHandler = NoOpUriHandler,
 ) {
     setContent {
         Themed {
-            SettingsScreen(
-                connectivity = connectivity,
-                activity = activity,
-                themeScheme = ThemeScheme.System,
-                version = version,
-                commandOutcome = commandOutcome,
-                onThemeChange = {},
-                onSyncNow = {},
-                onSignOut = {},
-                isAdmin = isAdmin,
-                serverAddress = serverAddress,
-                serverAddressEditor = serverAddressEditor,
-                serverAddressNotice = serverAddressNotice,
-                userDetails = userDetails,
-                onUserDetailsChange = onUserDetailsChange,
-                onUserDetailsCommit = onUserDetailsCommit,
-                profileFailure = profileFailure,
-                onDismissProfileFailure = onDismissProfileFailure,
-                agentOverview = agentOverview,
-                agentFailure = agentFailure,
-                onStopAgent = onStopAgent,
-                onStartAgent = onStartAgent,
-                onDismissAgentFailure = onDismissAgentFailure,
-                onOpenAgentSetup = onOpenAgentSetup,
-            )
+            // A quiet default keeps the other scenarios honest: none of them opens a link,
+            // and the creator scenario replaces this with one that records the URIs.
+            CompositionLocalProvider(LocalUriHandler provides uriHandler) {
+                SettingsScreen(
+                    connectivity = connectivity,
+                    activity = activity,
+                    themeScheme = ThemeScheme.System,
+                    version = version,
+                    commandOutcome = commandOutcome,
+                    onThemeChange = {},
+                    onSyncNow = {},
+                    onSignOut = {},
+                    isAdmin = isAdmin,
+                    serverAddress = serverAddress,
+                    serverAddressEditor = serverAddressEditor,
+                    serverAddressNotice = serverAddressNotice,
+                    userDetails = userDetails,
+                    onUserDetailsChange = onUserDetailsChange,
+                    onUserDetailsCommit = onUserDetailsCommit,
+                    profileFailure = profileFailure,
+                    onDismissProfileFailure = onDismissProfileFailure,
+                    agentOverview = agentOverview,
+                    agentFailure = agentFailure,
+                    onStopAgent = onStopAgent,
+                    onStartAgent = onStartAgent,
+                    onDismissAgentFailure = onDismissAgentFailure,
+                    onOpenAgentSetup = onOpenAgentSetup,
+                )
+            }
         }
     }
+}
+
+private object NoOpUriHandler : UriHandler {
+    override fun openUri(uri: String) = Unit
 }
 
 /**

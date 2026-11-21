@@ -794,6 +794,22 @@
     <string name="settings_signout_force">Force Sign Out</string>
     <string name="settings_about_section">About</string>
     <string name="settings_version">Version</string>
+    <!--
+      The creator card closes the Settings list. The email row carries a mailto: URI so a tap
+      opens a draft rather than a browser tab; the LinkedIn row opens the profile. The values
+      are shown beside the labels so the contacts are usable even where no handler is installed
+      and the tap cannot be completed. Content descriptions name the person and the action —
+      a bare URL or an unlabelled icon reads as nothing through a screen reader.
+    -->
+    <string name="settings_creator_section">About the creator</string>
+    <string name="settings_creator_name">Amirreza Ashouri</string>
+    <string name="settings_creator_body">TaskTracker is built and maintained by Amirreza Ashouri. Feedback, bug reports and stars are welcome.</string>
+    <string name="settings_creator_email_label">Email</string>
+    <string name="settings_creator_email_value">amirashouri72@gmail.com</string>
+    <string name="settings_creator_email_description">Email Amirreza Ashouri</string>
+    <string name="settings_creator_linkedin_label">LinkedIn</string>
+    <string name="settings_creator_linkedin_value">linkedin.com/in/amirreza-ashouri-229019156</string>
+    <string name="settings_creator_linkedin_description">Open Amirreza Ashouri's LinkedIn profile</string>
     <string name="settings_missing_title">Nothing to configure</string>
     <string name="settings_missing_body">The app was built without a settings service, so this screen has nothing to read.</string>
 
