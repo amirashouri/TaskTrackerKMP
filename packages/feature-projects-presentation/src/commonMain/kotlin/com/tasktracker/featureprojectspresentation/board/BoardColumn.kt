@@ -404,7 +404,7 @@ fun BoardColumnSelectAllTag(status: StatusDefinition): String = "${BoardColumnTa
 fun BoardColumnSelectionClearTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.clear"
 
 /** Timeout before long press lifts card (300ms prevents collision with vertical scroll swipes). */
-internal const val BoardCardLiftTimeoutMillis = 300L
+internal const val BoardCardLiftTimeoutMillis = 100L
 
 internal val columnWidth = 300.dp
 
