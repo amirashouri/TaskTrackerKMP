@@ -199,6 +199,10 @@ abstract class SettingsViewScenarios {
         runComposeUiTest(block = SettingsScenarios.theMintedCodeIsShownAndCopyPutsItOnTheClipboard)
 
     @Test
+    fun theCreatorCardOpensBothContacts() =
+        runComposeUiTest(block = SettingsScenarios.theCreatorCardOpensBothContacts)
+
+    @Test
     fun theAccentLabelsReadInFullInAGrid() =
         runComposeUiTest(block = AccentSwatchScenarios.theAccentLabelsReadInFullInAGrid)
 
