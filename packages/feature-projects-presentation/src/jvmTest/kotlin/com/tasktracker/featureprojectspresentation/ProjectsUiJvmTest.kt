@@ -134,6 +134,10 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = ProjectsListScenarios.wideLayoutRendersEveryProjectInGrid)
 
     @Test
+    fun aLongDetailsLineKeepsGridCardsTheSameHeight() =
+        runComposeUiTest(block = ProjectsListScenarios.aLongDetailsLineKeepsGridCardsTheSameHeight)
+
+    @Test
     fun wideLayoutDirectDeleteAsksConfirmation() =
         runComposeUiTest(block = ProjectsListScenarios.wideLayoutDirectDeleteAsksConfirmation)
 

@@ -164,7 +164,8 @@ fun ProjectRowTag(project: ProjectSummary): String = "$ProjectRowTagPrefix.${pro
 fun ProjectRemoveTag(project: ProjectSummary): String = "${ProjectRowTag(project)}.remove"
 fun ProjectEditTag(project: ProjectSummary): String = "${ProjectRowTag(project)}.edit"
 
-private const val PROJECT_DETAILS_MAX_LINES = 2
+/** One line: a wrapped summary makes cards in the wide grid different heights. */
+private const val PROJECT_DETAILS_MAX_LINES = 1
 private const val MONOGRAM_CHARACTERS = 2
 private const val MONOGRAM_FILL_ALPHA = 0.16f
 private const val MONOGRAM_RIM_ALPHA = 0.34f
