@@ -22,8 +22,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
@@ -92,24 +90,20 @@ internal fun ThemePickerRow(
             )
         }
 
-        if (expanded) {
-            Popup(
-                popupPositionProvider = SettingsDropdownPositionProvider,
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                SettingsDropdownColumn(selection = selected) {
-                    ThemeScheme.all.forEach { scheme ->
-                        ThemePickerOption(
-                            scheme = scheme,
-                            isSelected = scheme == selected,
-                            onClick = {
-                                onSelect(scheme)
-                                expanded = false
-                            },
-                        )
-                    }
-                }
+        SettingsDropdownPopup(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            selection = selected,
+        ) {
+            ThemeScheme.all.forEach { scheme ->
+                ThemePickerOption(
+                    scheme = scheme,
+                    isSelected = scheme == selected,
+                    onClick = {
+                        onSelect(scheme)
+                        expanded = false
+                    },
+                )
             }
         }
     }

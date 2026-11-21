@@ -1,5 +1,12 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -147,7 +154,10 @@ internal fun MemberPicker(
                 }
             }
         }
-        if (expanded) {
+        val transitionState = remember { MutableTransitionState(false) }
+        transitionState.targetState = expanded
+
+        if (transitionState.currentState || transitionState.targetState) {
             val gapPx = with(density) { ttSpacing.sm.roundToPx() }
             Popup(
                 popupPositionProvider = remember(density) {
@@ -156,54 +166,60 @@ internal fun MemberPicker(
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = false),
             ) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(min = with(density) { anchorWidthPx.toDp() }, max = 280.dp)
-                        .heightIn(max = MEMBER_PICKER_MENU_MAX_HEIGHT)
-                        .verticalScroll(rememberScrollState())
-                        .ttGlassSurface(
-                            shape = RoundedCornerShape(ttRadius.control),
-                            base = ttSurface().copy(alpha = 1f),
-                        )
-                        .padding(vertical = ttSpacing.xs)
-                        .testTag(MemberPickerMenuTag(tagPrefix)),
+                AnimatedVisibility(
+                    visibleState = transitionState,
+                    enter = fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.95f, animationSpec = tween(150)),
+                    exit = fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f, animationSpec = tween(150)),
                 ) {
-                    if (clearLabel != null && selectedIDs.isNotEmpty()) {
-                        PickerRow(
-                            name = clearLabel,
-                            email = null,
-                            isSelected = false,
-                            onClick = {
-                                expanded = false
-                                onSelectedIDsChanged(emptyList())
-                            },
-                            modifier = Modifier.testTag(MemberPickerClearTag(tagPrefix)),
-                        )
-                    }
-                    results.forEach { user ->
-                        val isSelected = user.id in selectedIDs
-                        PickerRow(
-                            name = user.preferredGreeting,
-                            email = user.email,
-                            isSelected = isSelected,
-                            onClick = {
-                                onSelectedIDsChanged(
-                                    when {
-                                        multiSelect && isSelected -> selectedIDs - user.id
-                                        multiSelect -> selectedIDs + user.id
-                                        !multiSelect && isSelected -> {
-                                            expanded = false
-                                            emptyList()
-                                        }
-                                        else -> {
-                                            expanded = false
-                                            listOf(user.id)
-                                        }
-                                    },
-                                )
-                            },
-                            modifier = Modifier.testTag(MemberPickerRowTag(tagPrefix, user.id)),
-                        )
+                    Column(
+                        modifier = Modifier
+                            .widthIn(min = with(density) { anchorWidthPx.toDp() }, max = 280.dp)
+                            .heightIn(max = MEMBER_PICKER_MENU_MAX_HEIGHT)
+                            .verticalScroll(rememberScrollState())
+                            .ttGlassSurface(
+                                shape = RoundedCornerShape(ttRadius.control),
+                                base = ttSurface().copy(alpha = 1f),
+                            )
+                            .padding(vertical = ttSpacing.xs)
+                            .testTag(MemberPickerMenuTag(tagPrefix)),
+                    ) {
+                        if (clearLabel != null && selectedIDs.isNotEmpty()) {
+                            PickerRow(
+                                name = clearLabel,
+                                email = null,
+                                isSelected = false,
+                                onClick = {
+                                    expanded = false
+                                    onSelectedIDsChanged(emptyList())
+                                },
+                                modifier = Modifier.testTag(MemberPickerClearTag(tagPrefix)),
+                            )
+                        }
+                        results.forEach { user ->
+                            val isSelected = user.id in selectedIDs
+                            PickerRow(
+                                name = user.preferredGreeting,
+                                email = user.email,
+                                isSelected = isSelected,
+                                onClick = {
+                                    onSelectedIDsChanged(
+                                        when {
+                                            multiSelect && isSelected -> selectedIDs - user.id
+                                            multiSelect -> selectedIDs + user.id
+                                            !multiSelect && isSelected -> {
+                                                expanded = false
+                                                emptyList()
+                                            }
+                                            else -> {
+                                                expanded = false
+                                                listOf(user.id)
+                                            }
+                                        },
+                                    )
+                                },
+                                modifier = Modifier.testTag(MemberPickerRowTag(tagPrefix, user.id)),
+                            )
+                        }
                     }
                 }
             }

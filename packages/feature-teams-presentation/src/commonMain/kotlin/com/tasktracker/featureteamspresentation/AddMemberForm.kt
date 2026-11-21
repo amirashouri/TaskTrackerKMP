@@ -1,5 +1,12 @@
 package com.tasktracker.featureteamspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -332,37 +339,46 @@ private fun PositionPicker(
             )
         }
 
-        if (expanded) {
+        val transitionState = remember { MutableTransitionState(false) }
+        transitionState.targetState = expanded
+
+        if (transitionState.currentState || transitionState.targetState) {
             Popup(
                 popupPositionProvider = MemberDropdownPositionProvider,
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
-                Column(
-                    modifier = Modifier
-                        .width(PositionDropdownWidth)
-                        .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
-                        .padding(vertical = ttSpacing.xs),
+                AnimatedVisibility(
+                    visibleState = transitionState,
+                    enter = fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.95f, animationSpec = tween(150)),
+                    exit = fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f, animationSpec = tween(150)),
                 ) {
-                    PositionOption(
-                        label = stringResource(Res.string.admin_members_position_none),
-                        tag = memberPositionOptionTag(null),
-                        isSelected = selected == null,
-                        onClick = {
-                            onSelect(null)
-                            expanded = false
-                        },
-                    )
-                    UserPosition.all.forEach { position ->
+                    Column(
+                        modifier = Modifier
+                            .width(PositionDropdownWidth)
+                            .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+                            .padding(vertical = ttSpacing.xs),
+                    ) {
                         PositionOption(
-                            label = position.displayName,
-                            tag = memberPositionOptionTag(position),
-                            isSelected = position == selected,
+                            label = stringResource(Res.string.admin_members_position_none),
+                            tag = memberPositionOptionTag(null),
+                            isSelected = selected == null,
                             onClick = {
-                                onSelect(position)
+                                onSelect(null)
                                 expanded = false
                             },
                         )
+                        UserPosition.all.forEach { position ->
+                            PositionOption(
+                                label = position.displayName,
+                                tag = memberPositionOptionTag(position),
+                                isSelected = position == selected,
+                                onClick = {
+                                    onSelect(position)
+                                    expanded = false
+                                },
+                            )
+                        }
                     }
                 }
             }

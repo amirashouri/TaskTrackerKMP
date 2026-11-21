@@ -21,8 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttIcon
@@ -85,24 +83,20 @@ internal fun UserPositionPickerRow(
             )
         }
 
-        if (expanded) {
-            Popup(
-                popupPositionProvider = SettingsDropdownPositionProvider,
-                onDismissRequest = { expanded = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                SettingsDropdownColumn(selection = selected) {
-                    UserPosition.all.forEach { position ->
-                        UserPositionOption(
-                            position = position,
-                            isSelected = position == selected,
-                            onClick = {
-                                onSelect(position)
-                                expanded = false
-                            },
-                        )
-                    }
-                }
+        SettingsDropdownPopup(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            selection = selected,
+        ) {
+            UserPosition.all.forEach { position ->
+                UserPositionOption(
+                    position = position,
+                    isSelected = position == selected,
+                    onClick = {
+                        onSelect(position)
+                        expanded = false
+                    },
+                )
             }
         }
     }

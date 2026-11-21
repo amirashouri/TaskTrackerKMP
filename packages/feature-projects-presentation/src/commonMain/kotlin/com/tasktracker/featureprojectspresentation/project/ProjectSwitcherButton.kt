@@ -1,6 +1,13 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -119,7 +126,10 @@ fun ProjectSwitcherButton(
             )
         }
 
-        if (expanded && onSelectProject != null && switcherWidthPx > 0) {
+        val transitionState = remember { MutableTransitionState(false) }
+        transitionState.targetState = expanded && onSelectProject != null && switcherWidthPx > 0
+
+        if (transitionState.currentState || transitionState.targetState) {
             Popup(
                 popupPositionProvider = ProjectSwitcherDropdownPositionProvider(
                     gapPx = with(LocalDensity.current) { ttSpacing.sm.roundToPx() }
@@ -127,43 +137,49 @@ fun ProjectSwitcherButton(
                 onDismissRequest = { expanded = false },
                 properties = PopupProperties(focusable = true),
             ) {
-                Column(
-                    modifier = Modifier
-                        .widthIn(
-                            min = with(LocalDensity.current) { switcherWidthPx.toDp() },
-                            max = switcherMenuWidthMax,
-                        )
-                        .heightIn(max = 240.dp)
-                        .verticalScroll(rememberScrollState())
-                        .ttGlassSurface(
-                            shape = RoundedCornerShape(ttRadius.control),
-                            base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
-                        )
-                        .padding(vertical = ttSpacing.xs)
-                        .testTag(ProjectSwitcherMenuTag),
+                AnimatedVisibility(
+                    visibleState = transitionState,
+                    enter = fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.95f, animationSpec = tween(150)),
+                    exit = fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f, animationSpec = tween(150)),
                 ) {
-                    projects.forEach { option ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    expanded = false
-                                    onSelectProject(option.id)
-                                }
-                                .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
-                                .testTag(ProjectSwitcherOptionTag(option.id)),
-                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ttInitialsAvatar(initials = option.keyPrefix, size = switcherMonogramSize)
-                            ttText(
-                                text = option.name,
-                                style = ttTypography.callout,
-                                color = ttLabel(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
+                    Column(
+                        modifier = Modifier
+                            .widthIn(
+                                min = with(LocalDensity.current) { switcherWidthPx.toDp() },
+                                max = switcherMenuWidthMax,
                             )
+                            .heightIn(max = 240.dp)
+                            .verticalScroll(rememberScrollState())
+                            .ttGlassSurface(
+                                shape = RoundedCornerShape(ttRadius.control),
+                                base = ttSurface().copy(alpha = 1f - ttGlassLensAlpha()),
+                            )
+                            .padding(vertical = ttSpacing.xs)
+                            .testTag(ProjectSwitcherMenuTag),
+                    ) {
+                        projects.forEach { option ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        expanded = false
+                                        onSelectProject?.invoke(option.id)
+                                    }
+                                    .padding(horizontal = ttSpacing.lg, vertical = ttSpacing.md)
+                                    .testTag(ProjectSwitcherOptionTag(option.id)),
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ttInitialsAvatar(initials = option.keyPrefix, size = switcherMonogramSize)
+                                ttText(
+                                    text = option.name,
+                                    style = ttTypography.callout,
+                                    color = ttLabel(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
                         }
                     }
                 }

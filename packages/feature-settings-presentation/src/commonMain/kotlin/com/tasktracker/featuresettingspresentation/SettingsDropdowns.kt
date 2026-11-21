@@ -1,5 +1,12 @@
 package com.tasktracker.featuresettingspresentation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +35,9 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassLens
 import com.tasktracker.designsystem.ttGlassSurface
@@ -182,6 +191,37 @@ internal fun SettingsDropdownColumn(
                 ) {
                     content()
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Shared animated popup wrapper for settings dropdown columns.
+ */
+@Composable
+internal fun SettingsDropdownPopup(
+    expanded: Boolean,
+    onDismissRequest: () -> Unit,
+    selection: Any?,
+    width: Dp = ThemeDropdownWidth,
+    content: @Composable () -> Unit,
+) {
+    val transitionState = remember { MutableTransitionState(false) }
+    transitionState.targetState = expanded
+
+    if (transitionState.currentState || transitionState.targetState) {
+        Popup(
+            popupPositionProvider = SettingsDropdownPositionProvider,
+            onDismissRequest = onDismissRequest,
+            properties = PopupProperties(focusable = true),
+        ) {
+            AnimatedVisibility(
+                visibleState = transitionState,
+                enter = fadeIn(animationSpec = tween(150)) + scaleIn(initialScale = 0.95f, animationSpec = tween(150)),
+                exit = fadeOut(animationSpec = tween(150)) + scaleOut(targetScale = 0.95f, animationSpec = tween(150)),
+            ) {
+                SettingsDropdownColumn(selection = selection, width = width, content = content)
             }
         }
     }
