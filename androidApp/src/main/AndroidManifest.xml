@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Android 13+ gates local notifications behind this runtime permission. Requested from
+         MainActivity; older platforms ignore the declaration. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
         Local-network access, for the API roots that can legitimately be on the local network:

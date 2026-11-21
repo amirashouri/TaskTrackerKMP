@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -94,6 +95,8 @@ fun <Tab> TTGlassNavigationRail(
     title: @Composable (Tab) -> String,
     /** The destination's glyph, as an [ImageVector]. See [TTGlassTabBar.icon]. */
     icon: (Tab) -> ImageVector,
+    /** A per-destination unread count. See [TTGlassTabBar.badge]. */
+    badge: (Tab) -> Int = { 0 },
     /**
      * A per-destination modifier, for the caller's own
      * [androidx.compose.ui.platform.testTag] or anything else that has to address one
@@ -190,6 +193,7 @@ fun <Tab> TTGlassNavigationRail(
                         label = title(tab),
                         icon = icon(tab),
                         isSelected = index == selectedIndex,
+                        badgeCount = badge(tab),
                         accent = selectedInk,
                         inactiveInk = inactiveInk,
                         onClick = { onSelect(tab) },
@@ -371,6 +375,7 @@ private fun RailCell(
     label: String,
     icon: ImageVector,
     isSelected: Boolean,
+    badgeCount: Int = 0,
     accent: Color,
     inactiveInk: Color,
     onClick: () -> Unit,
@@ -418,14 +423,23 @@ private fun RailCell(
             alignment = Alignment.CenterVertically,
         ),
     ) {
-        ttIcon(
-            image = icon,
-            contentDescription = null,
-            tint = if (isSelected) accent else inactiveInk,
-            modifier = Modifier
-                .size(ttIconSize.tab)
-                .scale(iconScale),
-        )
+        Box(
+            modifier = Modifier.size(ttIconSize.tab),
+            contentAlignment = Alignment.Center,
+        ) {
+            ttIcon(
+                image = icon,
+                contentDescription = null,
+                tint = if (isSelected) accent else inactiveInk,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(iconScale),
+            )
+            ttCountBadge(
+                count = badgeCount,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
         ttText(
             text = label,
             style = ttTypography.caption,

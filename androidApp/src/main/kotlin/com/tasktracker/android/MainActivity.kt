@@ -41,6 +41,10 @@ class MainActivity : ComponentActivity() {
     private val localNetworkAccess =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /** The Android 13+ local-notification prompt. A denial leaves the in-app inbox working. */
+    private val notificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -50,6 +54,7 @@ class MainActivity : ComponentActivity() {
 
         val app = application as TaskTrackerApplication
         requestLocalNetworkAccessIfNeeded(app.apiBaseUrl)
+        requestNotificationPermissionIfNeeded()
 
         // A cold start *from* a link. Buffered by the shared sink, so delivering it before
         // the composition starts is safe; `savedInstanceState == null` keeps an activity
@@ -85,6 +90,23 @@ class MainActivity : ComponentActivity() {
      */
     private fun Intent.deepLink(): String? =
         takeIf { action == Intent.ACTION_VIEW }?.dataString
+
+    /**
+     * Asks for the notification permission on Android 13+, where it is a runtime grant.
+     *
+     * Asked at launch rather than when the first notification arrives: a prompt triggered by a
+     * background arrival would be an unexplained dialog, and on a device whose app is not in the
+     * foreground it would not be shown at all. Below 33 the permission does not exist, and a
+     * request would resolve as denied without a dialog.
+     */
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     /**
      * Asks for local-network access when the build's root is on the local network.

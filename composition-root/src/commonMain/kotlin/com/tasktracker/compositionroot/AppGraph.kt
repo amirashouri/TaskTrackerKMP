@@ -25,6 +25,7 @@ import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featurenotificationsdata.RoomNotificationRepository
 import com.tasktracker.featurenotificationsdomain.NotificationPort
+import com.tasktracker.featurenotificationsdomain.createLocalNotifier
 import com.tasktracker.featureprojectsdata.AdminProjectsRepository
 import com.tasktracker.featureprojectsdata.HttpAdminProjectsRemote
 import com.tasktracker.featureprojectsdata.HttpAgentPairingRemote
@@ -467,7 +468,12 @@ object AppGraph {
         // also the sync sink for the `notification` entity — one instance, so a pulled row
         // lands where the open inbox is already listening.
         app<NotificationPort> { resolver ->
-            RoomNotificationRepository(resolver.resolve(TaskTrackerDatabase::class))
+            RoomNotificationRepository(
+                database = resolver.resolve(TaskTrackerDatabase::class),
+                // The host is the application context on Android, which the OS notifier needs;
+                // null is correct on Desktop and iOS.
+                localNotifier = createLocalNotifier(platforms.host),
+            )
         }
 
         // The admin half of the projects feature: the live server view of every project, and

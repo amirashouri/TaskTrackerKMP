@@ -68,7 +68,7 @@ private class AndroidLocalNotifier(
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH,
             ).apply {
-                description = "Task assignments, mentions, due dates, and status changes"
+                description = "Task assignments and comments on your work"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 200, 100, 200)
             }
@@ -187,6 +187,7 @@ private class AndroidLocalNotifier(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(launchAppIntent(context, requestCode(notification)))
 
         notificationManager.notify(requestCode(notification), builder.build())
     }
@@ -219,6 +220,25 @@ private class AndroidLocalNotifier(
 }
 
 /**
+ * The tap target for an OS notification: the app's launcher activity, brought to the front.
+ *
+ * A package launch intent rather than a named `MainActivity`, because this module must not
+ * depend on the app module that declares it. `singleTop` in the manifest keeps an existing
+ * activity rather than stacking a second shell.
+ */
+private fun launchAppIntent(context: Context, requestCode: Int): PendingIntent? {
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        ?: return null
+    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    return PendingIntent.getActivity(
+        context,
+        requestCode,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+}
+
+/**
  * BroadcastReceiver that shows the notification when the alarm fires.
  *
  * Registered in the manifest via `:packages:feature-notifications-data`'s
@@ -232,6 +252,7 @@ class NotificationReceiver : android.content.BroadcastReceiver() {
 
         if (notificationId != null && title != null && body != null) {
             val notificationManager = context.getSystemService(NotificationManager::class.java)
+            val requestCode = REQUEST_CODE_BASE + notificationId.hashCode().absoluteValue % 0x10000
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(title)
@@ -239,8 +260,8 @@ class NotificationReceiver : android.content.BroadcastReceiver() {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setContentIntent(launchAppIntent(context, requestCode))
 
-            val requestCode = REQUEST_CODE_BASE + notificationId.hashCode().absoluteValue % 0x10000
             notificationManager?.notify(requestCode, builder.build())
         }
     }
