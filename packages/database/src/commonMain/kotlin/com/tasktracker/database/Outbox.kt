@@ -55,6 +55,14 @@ enum class OutboxEntity(val wireValue: String) {
      * equal to the server's `OutboxEntityAttachment`.
      */
     Attachment("attachment"),
+
+    /**
+     * A notification's read state or dismissal.
+     *
+     * The server generates notifications; the client may only push `isRead` (as a full
+     * document, which the server narrows) or a delete that dismisses one. Never a create.
+     */
+    Notification("notification"),
     ;
 
     companion object {

@@ -1077,6 +1077,11 @@ class RoomProjectRepository(
         now: Instant,
         repaired: MutableList<ProjectID>,
     ): ByteArray? = when (entity) {
+        // Nothing to rebuild: a notification is server-authored, and the only changes this
+        // device may send are a read flag or a dismissal. A refusal is therefore terminal for
+        // that outbox row, and re-sending the stored bytes is the only honest answer.
+        OutboxEntity.Notification -> null
+
         OutboxEntity.Project -> {
             val id = parseProjectID(entityID) ?: return null
             val stored = recordForProject(id)?.domainValue ?: return null

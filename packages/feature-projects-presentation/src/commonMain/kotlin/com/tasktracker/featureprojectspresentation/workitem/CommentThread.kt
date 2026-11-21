@@ -1,25 +1,30 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.UserID
+import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttAvatarSize
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttInitialsAvatar
 import com.tasktracker.designsystem.ttInitialsFor
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -43,6 +48,8 @@ import org.jetbrains.compose.resources.stringResource
 fun CommentThread(
     comments: List<Comment>,
     authorNames: Map<UserID, String>,
+    /** The comment an inbox notification asked to reveal, outlined in the thread. */
+    highlightedCommentID: CommentID? = null,
     canComment: Boolean,
     draft: String,
     replyTo: CommentID?,
@@ -84,6 +91,7 @@ fun CommentThread(
                         childrenOf = childrenOf,
                         authorNames = authorNames,
                         onReply = onReply,
+                        highlightedCommentID = highlightedCommentID,
                     )
                 }
             }
@@ -144,12 +152,22 @@ private fun CommentBranch(
     childrenOf: Map<CommentID?, List<Comment>>,
     authorNames: Map<UserID, String>,
     onReply: (CommentID) -> Unit,
+    highlightedCommentID: CommentID? = null,
     depth: Int = 0,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.sm)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    color = if (highlightedCommentID == comment.id) {
+                        ttAccent().copy(alpha = 0.14f)
+                    } else {
+                        Color.Transparent
+                    },
+                    shape = RoundedCornerShape(ttRadius.control),
+                )
+                .padding(horizontal = ttSpacing.xs, vertical = ttSpacing.xxs)
                 .testTag(WorkItemCommentTag(comment.id)),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             verticalAlignment = Alignment.Top,
@@ -201,6 +219,7 @@ private fun CommentBranch(
                 childrenOf = childrenOf,
                 authorNames = authorNames,
                 onReply = onReply,
+                highlightedCommentID = highlightedCommentID,
                 depth = depth + 1,
             )
         }

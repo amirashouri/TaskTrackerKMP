@@ -1,5 +1,5 @@
 plugins {
-    id("tasktracker.kmp.library")
+    id("tasktracker.kmp.compose")
 }
 
 dependencies {
@@ -9,4 +9,5 @@ dependencies {
     commonMainImplementation(project(":packages:routing"))
     commonMainImplementation(project(":packages:di"))
     commonMainImplementation(project(":packages:feature-notifications-domain"))
+    commonMainImplementation(libs.kotlinx.coroutines.core)
 }

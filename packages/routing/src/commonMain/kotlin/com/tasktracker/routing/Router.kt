@@ -1,6 +1,7 @@
 package com.tasktracker.routing
 
 import com.tasktracker.core.LogPrivacy
+import com.tasktracker.core.NotificationID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TTLogger
@@ -29,8 +30,17 @@ data class RouterState(
     val boardPath: List<AppRoute> = emptyList(),
     val backlogPath: List<AppRoute> = emptyList(),
     val sprintsPath: List<AppRoute> = emptyList(),
+    val notificationsPath: List<AppRoute> = emptyList(),
     val settingsPath: List<AppRoute> = emptyList(),
     val activeProjectID: ProjectID? = null,
+    /**
+     * A notification the inbox should flash, set by tapping the arrival popup.
+     *
+     * One-shot, like `pendingServerAddress`: the inbox consumes it once it has
+     * scrolled the matching card into view and started the flash. Kept on the state
+     * so a popup tap that arrives before the inbox is composed survives.
+     */
+    val highlightedNotificationID: NotificationID? = null,
     /**
      * A server address from a `tasktracker://connect` link, waiting for Settings to consume it.
      *
@@ -56,6 +66,7 @@ data class RouterState(
         AppTab.Board -> boardPath
         AppTab.Backlog -> backlogPath
         AppTab.Sprints -> sprintsPath
+        AppTab.Notifications -> notificationsPath
         AppTab.Settings -> settingsPath
     }
 }
@@ -208,7 +219,30 @@ class Router {
             AppTab.Sprints -> state.copy(activeProjectID = projectID, selectedTab = AppTab.Sprints)
                 .withPath(AppTab.Sprints, sprintListStack(projectID))
 
-            AppTab.Settings -> state
+            // Not project-scoped: opening a project here would be a half-apply, so it is
+            // ignored exactly as it is on Settings.
+            AppTab.Notifications, AppTab.Settings -> state
+        }
+    }
+
+    /**
+     * Opens the inbox, optionally flashing one notification.
+     *
+     * One entry point for the sidebar row, the tab bar and the arrival popup, so a popup
+     * tap cannot select the tab without also delivering the highlight.
+     */
+    fun openNotifications(highlight: NotificationID? = null) = update { state ->
+        state.copy(selectedTab = AppTab.Notifications, highlightedNotificationID = highlight)
+    }
+
+    /** Takes the pending inbox highlight, or `null` when there is none. One-shot. */
+    fun consumeNotificationHighlight(): NotificationID? {
+        while (true) {
+            val current = _state.value
+            val pending = current.highlightedNotificationID ?: return null
+            if (_state.compareAndSet(current, current.copy(highlightedNotificationID = null))) {
+                return pending
+            }
         }
     }
 
@@ -441,6 +475,7 @@ class Router {
         boardPath = emptyList(),
         backlogPath = emptyList(),
         sprintsPath = emptyList(),
+        notificationsPath = emptyList(),
         settingsPath = emptyList(),
     )
 
@@ -449,6 +484,7 @@ class Router {
         AppTab.Board -> copy(boardPath = path)
         AppTab.Backlog -> copy(backlogPath = path)
         AppTab.Sprints -> copy(sprintsPath = path)
+        AppTab.Notifications -> copy(notificationsPath = path)
         AppTab.Settings -> copy(settingsPath = path)
     }
 

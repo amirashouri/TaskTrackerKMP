@@ -23,6 +23,8 @@ import com.tasktracker.featureauthdata.SessionStateBus
 import com.tasktracker.featureauthdata.TokenVault
 import com.tasktracker.featureauthdomain.AuthRemotePort
 import com.tasktracker.featureauthdomain.AuthSessionPort
+import com.tasktracker.featurenotificationsdata.RoomNotificationRepository
+import com.tasktracker.featurenotificationsdomain.NotificationPort
 import com.tasktracker.featureprojectsdata.AdminProjectsRepository
 import com.tasktracker.featureprojectsdata.HttpAdminProjectsRemote
 import com.tasktracker.featureprojectsdata.HttpAgentPairingRemote
@@ -68,6 +70,7 @@ import com.tasktracker.network.RequestInterceptor
 import com.tasktracker.routing.Router
 import com.tasktracker.sync.HttpSyncTransport
 import com.tasktracker.sync.InMemorySyncTransport
+import com.tasktracker.sync.SyncApplySink
 import com.tasktracker.sync.SyncCoordinator
 import com.tasktracker.sync.SyncEngine
 import com.tasktracker.sync.SyncTransport
@@ -459,6 +462,14 @@ object AppGraph {
             )
         }
 
+        // The inbox, bound in every graph. It is local-first like the projects store, so a
+        // demo build has a working (empty) Inbox rather than a missing tab, and the port is
+        // also the sync sink for the `notification` entity — one instance, so a pulled row
+        // lands where the open inbox is already listening.
+        app<NotificationPort> { resolver ->
+            RoomNotificationRepository(resolver.resolve(TaskTrackerDatabase::class))
+        }
+
         // The admin half of the projects feature: the live server view of every project, and
         // the edit path that reaches the change feed.
         //
@@ -666,6 +677,11 @@ object AppGraph {
 
         app<SyncEngine> { resolver ->
             val sink = resolver.resolve(LocalDataSyncSink::class)
+            // Notifications name no project, so the projects sink would throw on them. The
+            // map stays total by binding the notification port itself as its entity's sink;
+            // the port and the sink are one object precisely so a pull and the inbox share a
+            // change signal.
+            val notificationSink = resolver.resolve(NotificationPort::class) as SyncApplySink
             val sessionCache = resolver.resolve(SessionCache::class)
             SyncEngine(
                 outbox = resolver.resolve(OutboxQueue::class),
@@ -684,7 +700,9 @@ object AppGraph {
                 // has an exhaustive `when` over the same enum, so a new entity still fails to
                 // compile there first, and this line binds it without anyone having to
                 // remember this file exists.
-                sinks = OutboxEntity.entries.associateWith { sink },
+                sinks = OutboxEntity.entries.associateWith { entity ->
+                    if (entity == OutboxEntity.Notification) notificationSink else sink
+                },
                 // Claims only the signed-in account's queued rows, read at cycle time from the
                 // same cache the repository stamps rows with. The two must agree, or a stamped
                 // row would never be claimed again — which is why this is the session cache

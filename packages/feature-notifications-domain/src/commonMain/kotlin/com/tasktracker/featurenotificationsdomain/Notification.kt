@@ -1,5 +1,6 @@
 package com.tasktracker.featurenotificationsdomain
 
+import com.tasktracker.core.InstantWireSerializer
 import com.tasktracker.core.NotificationID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.randomNotificationID
@@ -36,7 +37,9 @@ data class Notification(
     val payload: String,
     /** Whether the user has seen this notification. */
     var isRead: Boolean = false,
+    @Serializable(with = InstantWireSerializer::class)
     val createdAt: Instant,
+    @Serializable(with = InstantWireSerializer::class)
     var updatedAt: Instant,
 )
 
@@ -59,6 +62,10 @@ enum class NotificationKind {
     @SerialName("task_assigned")
     TaskAssigned,
 
+    /** A comment was added to a task assigned to this user. */
+    @SerialName("comment_added")
+    CommentAdded,
+
     @SerialName("due_today")
     DueToday,
 
@@ -79,6 +86,7 @@ val NotificationKind.wireValue: String
     get() = when (this) {
         NotificationKind.MentionedInComment -> "mentioned_in_comment"
         NotificationKind.TaskAssigned -> "task_assigned"
+        NotificationKind.CommentAdded -> "comment_added"
         NotificationKind.DueToday -> "due_today"
         NotificationKind.StatusChanged -> "status_changed"
     }

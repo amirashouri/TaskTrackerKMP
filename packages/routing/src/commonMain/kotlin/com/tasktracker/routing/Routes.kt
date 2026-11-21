@@ -1,5 +1,6 @@
 package com.tasktracker.routing
 
+import com.tasktracker.core.CommentID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
@@ -33,6 +34,9 @@ enum class AppTab(val wireValue: String) {
     Board("board"),
     Backlog("backlog"),
     Sprints("sprints"),
+
+    /** The signed-in user's notification inbox. Not scoped to a project. */
+    Notifications("notifications"),
     Settings("settings"),
     ;
 
@@ -46,7 +50,7 @@ enum class AppTab(val wireValue: String) {
     val isProjectScoped: Boolean
         get() = when (this) {
             Board, Backlog, Sprints -> true
-            Projects, Settings -> false
+            Projects, Notifications, Settings -> false
         }
 
     companion object {
@@ -102,6 +106,13 @@ sealed interface AppRoute {
          * lanes in one category still saves the card into the lane it was added from.
          */
         val initialStatusKey: String? = null,
+        /**
+         * The comment a notification tapped from the inbox wants to reveal.
+         *
+         * A comment notification opens the work item with this id so the thread can
+         * highlight it. `null` for every other way into the editor.
+         */
+        val focusCommentID: CommentID? = null,
     ) : AppRoute
 
     data object Settings : AppRoute

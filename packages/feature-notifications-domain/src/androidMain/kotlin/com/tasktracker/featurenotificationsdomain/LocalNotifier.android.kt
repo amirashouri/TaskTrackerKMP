@@ -194,6 +194,7 @@ private class AndroidLocalNotifier(
     private fun notificationTitle(notification: Notification): String = when (notification.kind) {
         NotificationKind.MentionedInComment -> "Mentioned in a comment"
         NotificationKind.TaskAssigned -> "Task assigned to you"
+        NotificationKind.CommentAdded -> "New comment"
         NotificationKind.DueToday -> "Due today"
         NotificationKind.StatusChanged -> "Status changed"
     }
@@ -207,6 +208,7 @@ private class AndroidLocalNotifier(
             when (notification.kind) {
                 NotificationKind.MentionedInComment -> json["commentBodyPreview"]?.toString()?.removeSurrounding("\"") ?: "New mention"
                 NotificationKind.TaskAssigned -> "Task ${json["workItemKey"]?.toString()?.removeSurrounding("\"") ?: ""} was assigned to you"
+                NotificationKind.CommentAdded -> json["commentPreview"]?.toString()?.removeSurrounding("\"") ?: "New comment"
                 NotificationKind.DueToday -> "Task ${json["workItemKey"]?.toString()?.removeSurrounding("\"") ?: ""} is due today"
                 NotificationKind.StatusChanged -> "Task ${json["workItemKey"]?.toString()?.removeSurrounding("\"") ?: ""} changed to ${json["toStatus"]?.toString()?.removeSurrounding("\"") ?: ""}"
             }

@@ -138,6 +138,21 @@ object ttTabIcons {
     val settings: ImageVector = icon("Settings") { gear() }
 
     /**
+     * A bell, for the inbox.
+     *
+     * A filled body with a separate clapper, on the same 24-unit grid as the rest of the set.
+     * The bell is the one glyph here whose silhouette depends on a hole — the handle-like arch
+     * at the top is a cut-out — so its contour is drawn as a single outline and the interior is
+     * left empty rather than stacked from two overlapping shapes, which the file's even-odd
+     * fill would punch into a different hole.
+     */
+    val notifications: ImageVector = icon("Notifications") {
+        outlinedRoundRect(4.5f, 7.0f, 19.5f, 18.0f, radius = 5.0f, stroke = 1.8f)
+        solidRoundRect(9.5f, 18.6f, 14.5f, 20.4f, radius = 0.9f)
+        solidRoundRect(10.8f, 3.5f, 13.2f, 6.5f, radius = 1.0f)
+    }
+
+    /**
      * Three bars rising left to right — a chart of successive iterations.
      *
      * ## There is no SF Symbol standing in for this one, and the mapping says so
@@ -196,7 +211,7 @@ object ttTabIcons {
      * copy of a collection in a test is a second thing to update, and it would keep passing
      * after the collection stopped being what the test claims it is.
      */
-    val all: List<ImageVector> = listOf(projects, board, backlog, sprints, settings)
+    val all: List<ImageVector> = listOf(projects, board, backlog, sprints, notifications, settings)
 
     /**
      * Each glyph against the SF Symbol name the native project uses for that tab.
@@ -216,6 +231,7 @@ object ttTabIcons {
         "rectangle.split.3x1" to board,
         "tray" to backlog,
         NO_COUNTERPART to sprints,
+        "bell" to notifications,
         "gearshape" to settings,
     )
 
