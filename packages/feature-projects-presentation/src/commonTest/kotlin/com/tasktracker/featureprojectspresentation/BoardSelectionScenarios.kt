@@ -73,6 +73,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection)
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
 
@@ -102,6 +103,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection)
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
 
@@ -129,6 +131,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection)
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
         onNodeWithTag(WorkItemCardTag(card)).selectControl()
@@ -158,6 +161,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection)
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
         onNodeWithTag(BoardColumnSelectAllTag(done)).selectControl()
@@ -177,6 +181,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection, onArchive = { archived += 1 })
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
         onNodeWithTag(ProjectBoardSelectionArchiveTag).selectControl()
@@ -212,6 +217,7 @@ object BoardSelectionScenarios {
 
         val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
         val settledTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
@@ -221,6 +227,8 @@ object BoardSelectionScenarios {
         onNodeWithTag(ProjectBoardSelectionClearTag).selectControl()
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
+        waitForIdle()
         mainClock.autoAdvance = false
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         mainClock.advanceTimeByFrame()
@@ -254,6 +262,7 @@ object BoardSelectionScenarios {
         boardWithSelection(projection, onMove = { moved += it })
         waitForIdle()
 
+        onNodeWithTag(BoardColumnMoreTag(done)).selectControl()
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
         waitForIdle()
         onNodeWithTag(BoardColumnSelectAllTag(done)).selectControl()

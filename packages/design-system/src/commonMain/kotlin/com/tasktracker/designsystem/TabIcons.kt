@@ -534,6 +534,13 @@ object ttActionIcons {
         solidRoundRect(10.5f, 17.0f, 13.5f, 20.0f, radius = 1.5f)
     }
 
+    /** Three horizontal dots for expanding column header actions. */
+    val more: ImageVector = icon("More") {
+        solidRoundRect(4.0f, 10.5f, 7.0f, 13.5f, radius = 1.5f)
+        solidRoundRect(10.5f, 10.5f, 13.5f, 13.5f, radius = 1.5f)
+        solidRoundRect(17.0f, 10.5f, 20.0f, 13.5f, radius = 1.5f)
+    }
+
     /** Opposing outward arrows representing expanding a sheet to full screen. */
     val expand: ImageVector = icon("Expand") {
         moveTo(14.0f, 4.0f)

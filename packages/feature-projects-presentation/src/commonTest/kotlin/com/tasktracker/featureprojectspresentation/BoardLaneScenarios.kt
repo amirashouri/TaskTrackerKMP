@@ -9,8 +9,11 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Dp
 import com.tasktracker.designsystem.DISC_TAG
 import com.tasktracker.designsystem.OVERFLOW_TAG
@@ -333,6 +336,8 @@ object BoardLaneScenarios {
         boardShowing(onAddTask = {}, activeSprint = ViewPreviewData.openSprint, canAddTask = false)
 
         WorkItemStatus.boardOrder.forEach { status ->
+            onNodeWithTag(BoardColumnMoreTag(statusDef(status)))
+                .performSemanticsAction(SemanticsActions.OnClick) { it() }
             onAllNodesWithTag(BoardColumnAddTaskTag(statusDef(status))).assertCountEquals(0)
         }
     }
@@ -350,6 +355,8 @@ object BoardLaneScenarios {
         boardShowing(onAddTask = {}, canAddTask = true)
 
         WorkItemStatus.boardOrder.forEach { status ->
+            onNodeWithTag(BoardColumnMoreTag(statusDef(status)))
+                .performSemanticsAction(SemanticsActions.OnClick) { it() }
             onAllNodesWithTag(BoardColumnAddTaskTag(statusDef(status))).assertCountEquals(1)
         }
     }

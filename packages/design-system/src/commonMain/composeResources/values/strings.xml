@@ -332,6 +332,7 @@
     <string name="board_empty_column">Nothing here yet</string>
     <string name="board_empty_column_body">Tasks in this column will show up here.</string>
     <string name="board_add_task">Add Task</string>
+    <string name="board_more_actions">More column actions</string>
     <string name="board_sort">Sort tasks</string>
     <string name="board_sort_default">Default order</string>
     <string name="board_sort_by_date">Sort by date</string>

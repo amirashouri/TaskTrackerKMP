@@ -1,7 +1,11 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -34,6 +40,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -60,11 +67,13 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.board_add_task
 import com.tasktracker.resources.board_empty_column
+import com.tasktracker.resources.board_more_actions
 import com.tasktracker.resources.board_select
 import com.tasktracker.resources.board_select_all
 import com.tasktracker.resources.board_selection_clear
 import com.tasktracker.resources.board_sort_by_date
 import com.tasktracker.resources.board_sort_by_priority
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -244,6 +253,7 @@ fun BoardColumnView(
                 .padding(horizontal = ttSpacing.sm)
                 .padding(top = ttSpacing.sm)
                 .ttGlassSurface(shape = RoundedCornerShape(ttRadius.control))
+                .testTag(BoardColumnHeaderTag(column.status))
                 .padding(
                     start = ttSpacing.md,
                     end = ttSpacing.xs,
@@ -285,38 +295,81 @@ fun BoardColumnView(
                     modifier = Modifier.testTag(BoardColumnSelectionClearTag(column.status)),
                 )
             } else if (!isSelecting) {
-                onStartSelecting?.let { startSelecting ->
-                    ttGlassIconButton(
-                        image = ttActionIcons.select,
-                        contentDescription = stringResource(Res.string.board_select),
-                        onClick = startSelecting,
-                        modifier = Modifier.testTag(BoardColumnSelectTag(column.status)),
-                    )
+                var isHovered by remember { mutableStateOf(false) }
+                var isTapped by remember { mutableStateOf(false) }
+                val isExpanded = isHovered || isTapped
+
+                LaunchedEffect(isTapped) {
+                    if (isTapped) {
+                        delay(5000)
+                        isTapped = false
+                    }
                 }
-                ttGlassIconButton(
-                    image = ttActionIcons.sort,
-                    contentDescription = stringResource(
-                        when (sortOrder) {
-                            ColumnSortOrder.ByDate -> Res.string.board_sort_by_date
-                            ColumnSortOrder.ByPriority -> Res.string.board_sort_by_priority
+
+                Row(
+                    modifier = Modifier
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    when (event.type) {
+                                        PointerEventType.Enter -> isHovered = true
+                                        PointerEventType.Exit -> isHovered = false
+                                    }
+                                }
+                            }
                         }
-                    ),
-                    onClick = {
-                        sortOrder = when (sortOrder) {
-                            ColumnSortOrder.ByDate -> ColumnSortOrder.ByPriority
-                            ColumnSortOrder.ByPriority -> ColumnSortOrder.ByDate
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessLow,
+                            ),
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                ) {
+                    if (!isExpanded) {
+                        ttGlassIconButton(
+                            image = ttActionIcons.more,
+                            contentDescription = stringResource(Res.string.board_more_actions),
+                            onClick = { isTapped = true },
+                            modifier = Modifier.testTag(BoardColumnMoreTag(column.status)),
+                        )
+                    } else {
+                        onStartSelecting?.let { startSelecting ->
+                            ttGlassIconButton(
+                                image = ttActionIcons.select,
+                                contentDescription = stringResource(Res.string.board_select),
+                                onClick = startSelecting,
+                                modifier = Modifier.testTag(BoardColumnSelectTag(column.status)),
+                            )
                         }
-                    },
-                    tint = ttAccent(),
-                    modifier = Modifier.testTag(BoardColumnSortTag(column.status)),
-                )
-                onAddTask?.let { addTask ->
-                    ttGlassIconButton(
-                        image = ttActionIcons.add,
-                        contentDescription = stringResource(Res.string.board_add_task),
-                        onClick = addTask,
-                        modifier = Modifier.testTag(BoardColumnAddTaskTag(column.status)),
-                    )
+                        ttGlassIconButton(
+                            image = ttActionIcons.sort,
+                            contentDescription = stringResource(
+                                when (sortOrder) {
+                                    ColumnSortOrder.ByDate -> Res.string.board_sort_by_date
+                                    ColumnSortOrder.ByPriority -> Res.string.board_sort_by_priority
+                                }
+                            ),
+                            onClick = {
+                                sortOrder = when (sortOrder) {
+                                    ColumnSortOrder.ByDate -> ColumnSortOrder.ByPriority
+                                    ColumnSortOrder.ByPriority -> ColumnSortOrder.ByDate
+                                }
+                            },
+                            tint = ttAccent(),
+                            modifier = Modifier.testTag(BoardColumnSortTag(column.status)),
+                        )
+                        onAddTask?.let { addTask ->
+                            ttGlassIconButton(
+                                image = ttActionIcons.add,
+                                contentDescription = stringResource(Res.string.board_add_task),
+                                onClick = addTask,
+                                modifier = Modifier.testTag(BoardColumnAddTaskTag(column.status)),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -340,6 +393,8 @@ class BoardCardDrag(
 const val BoardColumnTagPrefix = "board.column"
 
 fun BoardColumnTag(status: StatusDefinition): String = "$BoardColumnTagPrefix.${status.id}"
+fun BoardColumnHeaderTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.header"
+fun BoardColumnMoreTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.more"
 fun BoardColumnCountTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.count"
 fun BoardColumnEmptyTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.empty"
 fun BoardColumnAddTaskTag(status: StatusDefinition): String = "${BoardColumnTag(status)}.add"

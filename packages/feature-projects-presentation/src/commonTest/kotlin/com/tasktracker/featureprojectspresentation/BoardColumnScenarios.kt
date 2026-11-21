@@ -91,8 +91,8 @@ object BoardColumnScenarios {
         // The count is read off the node that carries it. Searching for the number instead
         // found three matches, because a board full of lanes has a `0` and a `2` in several
         // places at once - the number is not a unique handle, the lane is.
-        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), inProgress.size.toString())
-        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.Todo)), "0")
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.InProgress)), inProgress.size.toString(), useUnmerged = true)
+        assertText(BoardColumnCountTag(statusDef(WorkItemStatus.Todo)), "0", useUnmerged = true)
     }
 
     /** A card that is in the lane is in that lane. */
@@ -128,6 +128,7 @@ object BoardColumnScenarios {
         val items = ViewPreviewData.workItems.filter { it.status == WorkItemStatus.Todo }
         boardWith(mapOf(statusDef(WorkItemStatus.Todo) to items))
 
+        onNodeWithTag(BoardColumnMoreTag(statusDef(WorkItemStatus.Todo))).performClick()
         onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).assertIsDisplayed().performClick()
         onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).performClick()
         onNodeWithTag(BoardColumnSortTag(statusDef(WorkItemStatus.Todo))).performClick()
