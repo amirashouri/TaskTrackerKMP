@@ -527,7 +527,11 @@
     <string name="sprint_remove_confirm">Remove this sprint?</string>
     <string name="sprint_remove_confirm_body">%1$s will be deleted. Its tasks will be returned to the backlog.</string>
     <string name="sprint_section_in_progress">In Progress</string>
+    <string name="sprint_in_progress_empty_title">No sprint in progress</string>
+    <string name="sprint_in_progress_empty_body">Start a scheduled sprint to track work in progress.</string>
     <string name="sprint_section_scheduled">Scheduled</string>
+    <string name="sprint_scheduled_empty_title">No scheduled sprints</string>
+    <string name="sprint_scheduled_empty_body">Scheduled sprints waiting to start will appear here.</string>
     <string name="sprint_section_finished">Finished</string>
     <string name="sprint_status_scheduled">Scheduled</string>
     <string name="sprint_status_in_progress">In Progress</string>

@@ -44,6 +44,10 @@ import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.sprint_list_empty_body
 import com.tasktracker.resources.sprint_list_empty_title
 import com.tasktracker.resources.sprint_list_new
+import com.tasktracker.resources.sprint_in_progress_empty_body
+import com.tasktracker.resources.sprint_in_progress_empty_title
+import com.tasktracker.resources.sprint_scheduled_empty_body
+import com.tasktracker.resources.sprint_scheduled_empty_title
 import com.tasktracker.resources.sprint_section_finished
 import com.tasktracker.resources.sprint_section_in_progress
 import com.tasktracker.resources.sprint_section_scheduled
@@ -190,22 +194,78 @@ fun SprintListScreen(
                             },
                         )
                     } else {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().testTag(SprintListTag),
+                            contentPadding = PaddingValues(bottom = ttSpacing.xxxl),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                         ) {
-                            InProgressSection(
-                                rows = inProgressRows,
-                                onOpen = onOpen,
-                            )
-                            ScheduledSection(
-                                rows = scheduledRows,
-                                onOpen = onOpen,
-                            )
-                            FinishedSection(
-                                rows = finishedRows,
-                                onOpen = onOpen,
-                            )
+                            item(key = "in_progress_header") {
+                                SprintSectionHeader(
+                                    label = stringResource(Res.string.sprint_section_in_progress),
+                                    count = inProgressRows.size,
+                                    modifier = Modifier.padding(top = ttSpacing.lg),
+                                )
+                            }
+                            if (inProgressRows.isEmpty()) {
+                                item(key = "in_progress_empty") {
+                                    ProjectsEmptyState(
+                                        title = stringResource(Res.string.sprint_in_progress_empty_title),
+                                        body = stringResource(Res.string.sprint_in_progress_empty_body),
+                                        image = ttTabIcons.sprints,
+                                    )
+                                }
+                            } else {
+                                items(items = inProgressRows, key = { "ip_${it.sprint.id.stringValue}" }) { row ->
+                                    SprintListRowView(
+                                        row = row,
+                                        onClick = { onOpen(row.sprint.id) },
+                                    )
+                                }
+                            }
+
+                            item(key = "scheduled_header") {
+                                SprintSectionHeader(
+                                    label = stringResource(Res.string.sprint_section_scheduled),
+                                    count = scheduledRows.size,
+                                    modifier = Modifier.padding(top = ttSpacing.lg),
+                                )
+                            }
+                            if (scheduledRows.isEmpty()) {
+                                item(key = "scheduled_empty") {
+                                    ProjectsEmptyState(
+                                        title = stringResource(Res.string.sprint_scheduled_empty_title),
+                                        body = stringResource(Res.string.sprint_scheduled_empty_body),
+                                        image = ttTabIcons.sprints,
+                                    )
+                                }
+                            } else {
+                                items(items = scheduledRows, key = { "sch_${it.sprint.id.stringValue}" }) { row ->
+                                    SprintListRowView(
+                                        row = row,
+                                        onClick = { onOpen(row.sprint.id) },
+                                    )
+                                }
+                            }
+
+                            item(key = "finished_header") {
+                                SprintSectionHeader(
+                                    label = stringResource(Res.string.sprint_section_finished),
+                                    count = finishedRows.size,
+                                    modifier = Modifier.padding(top = ttSpacing.lg),
+                                )
+                            }
+                            if (finishedRows.isEmpty()) {
+                                item(key = "finished_empty") {
+                                    EmptySection(title = stringResource(Res.string.sprint_section_finished))
+                                }
+                            } else {
+                                items(items = finishedRows, key = { "fin_${it.sprint.id.stringValue}" }) { row ->
+                                    SprintListRowView(
+                                        row = row,
+                                        onClick = { onOpen(row.sprint.id) },
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -317,63 +377,6 @@ private fun SprintSectionList(
                 row = row,
                 onClick = { onOpen(row.sprint.id) },
             )
-        }
-    }
-}
-
-@Composable
-private fun InProgressSection(
-    rows: List<SprintListRow>,
-    onOpen: (SprintID) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier) {
-        SprintSectionHeader(
-            label = stringResource(Res.string.sprint_section_in_progress),
-            count = rows.size,
-        )
-        if (rows.isEmpty()) {
-            EmptySection(title = stringResource(Res.string.sprint_section_in_progress))
-        } else {
-            SprintSectionList(rows = rows, onOpen = onOpen)
-        }
-    }
-}
-
-@Composable
-private fun ScheduledSection(
-    rows: List<SprintListRow>,
-    onOpen: (SprintID) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier) {
-        SprintSectionHeader(
-            label = stringResource(Res.string.sprint_section_scheduled),
-            count = rows.size,
-        )
-        if (rows.isEmpty()) {
-            EmptySection(title = stringResource(Res.string.sprint_section_scheduled))
-        } else {
-            SprintSectionList(rows = rows, onOpen = onOpen)
-        }
-    }
-}
-
-@Composable
-private fun FinishedSection(
-    rows: List<SprintListRow>,
-    onOpen: (SprintID) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier) {
-        SprintSectionHeader(
-            label = stringResource(Res.string.sprint_section_finished),
-            count = rows.size,
-        )
-        if (rows.isEmpty()) {
-            EmptySection(title = stringResource(Res.string.sprint_section_finished))
-        } else {
-            SprintSectionList(rows = rows, onOpen = onOpen)
         }
     }
 }
