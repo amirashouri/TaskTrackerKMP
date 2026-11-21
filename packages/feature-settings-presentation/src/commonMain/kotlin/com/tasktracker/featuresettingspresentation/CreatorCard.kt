@@ -25,9 +25,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttOnAccent
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSettingsIconSize
 import com.tasktracker.designsystem.ttSettingsIcons
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
@@ -41,7 +44,7 @@ import com.tasktracker.resources.settings_creator_linkedin_description
 import com.tasktracker.resources.settings_creator_linkedin_label
 import com.tasktracker.resources.settings_creator_linkedin_value
 import com.tasktracker.resources.settings_creator_name
-import com.tasktracker.resources.settings_creator_section
+import com.tasktracker.resources.settings_creator_pill
 import org.jetbrains.compose.resources.stringResource
 
 /** The contact URIs come from the README badges; a tap opens a mail draft or a profile. */
@@ -49,6 +52,7 @@ private const val CreatorEmailUri = "mailto:amirashouri72@gmail.com"
 private const val CreatorLinkedInUri = "https://www.linkedin.com/in/amirreza-ashouri-229019156"
 
 const val CreatorCardTag = "settings.creator.card"
+const val CreatorPillTag = "settings.creator.pill"
 const val CreatorEmailRowTag = "settings.creator.email"
 const val CreatorLinkedInRowTag = "settings.creator.linkedin"
 
@@ -66,20 +70,43 @@ fun CreatorCard(modifier: Modifier = Modifier) {
     Box(modifier = modifier.testTag(CreatorCardTag)) {
         SettingsSection {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SettingsIconWell(icon = ttSettingsIcons.account, tint = ttAccent())
-                Column {
-                    ttText(
-                        text = stringResource(Res.string.settings_creator_section),
-                        style = ttTypography.caption,
-                        color = ttLabelSecondary(),
-                    )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SettingsIconWell(icon = ttSettingsIcons.account, tint = ttAccent())
                     ttText(
                         text = stringResource(Res.string.settings_creator_name),
                         style = ttTypography.headline,
                         color = ttLabel(),
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                // The capsule sits in the card's top-right corner and carries ink, so it takes
+                // the opaque accent fill that ttOnAccent is contrast-tested against — accent
+                // text on untinted glass disappears into the lens's own accent top stop.
+                Box(
+                    modifier = Modifier
+                        .ttGlassSurface(
+                            shape = RoundedCornerShape(percent = 50),
+                            tint = ttAccent(),
+                        )
+                        .padding(horizontal = ttSpacing.md, vertical = ttSpacing.xxs)
+                        .testTag(CreatorPillTag),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ttText(
+                        text = stringResource(Res.string.settings_creator_pill),
+                        style = ttTypography.captionEmphasised,
+                        color = ttOnAccent,
+                        maxLines = 1,
                     )
                 }
             }
@@ -87,7 +114,11 @@ fun CreatorCard(modifier: Modifier = Modifier) {
                 text = stringResource(Res.string.settings_creator_body),
                 style = ttTypography.footnote,
                 color = ttLabelSecondary(),
-                modifier = Modifier.padding(top = ttSpacing.md),
+                // Line up with the identity block, past the icon well and its gap.
+                modifier = Modifier.padding(
+                    start = ttSettingsIconSize.tile + ttSpacing.md,
+                    top = ttSpacing.md,
+                ),
             )
             SettingsDivider()
             CreatorContactRow(

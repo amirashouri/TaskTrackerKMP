@@ -235,6 +235,12 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   seam or new dependency is warranted. A recording handler in tests proves the
   exact URI; static creator copy belongs in `:packages:design-system`, the only
   module that configures `compose.resources`.
+- **A paused clock needs a frame-producing wait.** With reduced motion the
+  selection bar's `EnterTransition.None` asks the test clock for no frame, so a
+  bare `advanceTimeByFrame()` after the Select click can sample a tree in which
+  the bar was never composed on the Android host. Advance *until the node exists*
+  and keep the travel assertion at that first observation: reverting the reveal
+  to an animated spec fails with 0dp of travel against 54dp settled.
 
 - **Wide layouts cap reading width at the shell's breakpoint, per module.** The
   projects list, the backlog and the sprint list all switch at `840.dp` — the

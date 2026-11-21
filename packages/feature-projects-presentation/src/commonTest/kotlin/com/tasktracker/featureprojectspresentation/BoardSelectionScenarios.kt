@@ -231,8 +231,15 @@ object BoardSelectionScenarios {
         waitForIdle()
         mainClock.autoAdvance = false
         onNodeWithTag(BoardColumnSelectTag(done)).selectControl()
-        mainClock.advanceTimeByFrame()
-
+        // With reduced motion the enter transition is `None`, so no animation asks the test
+        // clock for a frame after the state change. A bare `advanceTimeByFrame()` therefore
+        // samples a tree in which the bar has not been composed at all on the Android host.
+        // Advancing *until the bar exists* produces exactly the frames the state change needs;
+        // the travel assertion below still runs against that first observation, so a reveal
+        // that ignored the reduced-motion flag cannot pass by settling.
+        mainClock.advanceTimeUntil(100) {
+            onAllNodesWithTag(ProjectBoardSelectionBarTag).fetchSemanticsNodes().isNotEmpty()
+        }
         onNodeWithTag(ProjectBoardSelectionBarTag).assertExists()
         val travelled =
             onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top - closedTop

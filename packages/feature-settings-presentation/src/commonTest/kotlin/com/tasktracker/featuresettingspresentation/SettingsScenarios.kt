@@ -44,6 +44,8 @@ import com.tasktracker.designsystem.LocalStatusBarScrollUnderInset
 import com.tasktracker.designsystem.TTBannerDismissTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.TTToastTag
+import com.tasktracker.designsystem.ttSettingsIconSize
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.featuresettingsdomain.AgentHost
 import com.tasktracker.featuresettingsdomain.AgentMachine
@@ -74,6 +76,7 @@ import com.tasktracker.resources.settings_creator_body
 import com.tasktracker.resources.settings_creator_email_description
 import com.tasktracker.resources.settings_creator_linkedin_description
 import com.tasktracker.resources.settings_creator_name
+import com.tasktracker.resources.settings_creator_pill
 import com.tasktracker.resources.settings_outcome_offline
 import com.tasktracker.resources.settings_position_label
 import com.tasktracker.resources.settings_profile_save_failed
@@ -1225,8 +1228,29 @@ object SettingsScenarios {
 
         onNodeWithTag(SettingsScreenTag).performScrollToNode(hasTestTag(CreatorCardTag))
         onNodeWithTag(CreatorCardTag).assertIsDisplayed()
+        onNodeWithText(getString(Res.string.settings_creator_pill)).assertIsDisplayed()
         onNodeWithText(getString(Res.string.settings_creator_name)).assertIsDisplayed()
         onNodeWithText(getString(Res.string.settings_creator_body)).assertIsDisplayed()
+        // The description is inset past the icon well; the capsule owns the card's top-right.
+        val cardBounds = onNodeWithTag(CreatorCardTag).getBoundsInRoot()
+        val pillBounds = onNodeWithTag(CreatorPillTag).getBoundsInRoot()
+        val nameBounds = onNodeWithText(getString(Res.string.settings_creator_name)).getBoundsInRoot()
+        val bodyLeft = onNodeWithText(getString(Res.string.settings_creator_body)).getBoundsInRoot().left
+        assertTrue(
+            bodyLeft - cardBounds.left >= ttSettingsIconSize.tile,
+            "the description starts only ${bodyLeft - cardBounds.left} into the card, level with the avatar",
+        )
+        val rightInset = (cardBounds.right - pillBounds.right).value
+        assertTrue(
+            rightInset >= ttSpacing.xl.value && rightInset <= ttSpacing.xxxl.value,
+            "the capsule sits $rightInset.dp from the card's right edge, not in its inner inset",
+        )
+        val pillMidY = (pillBounds.top.value + pillBounds.bottom.value) / 2f
+        val nameMidY = (nameBounds.top.value + nameBounds.bottom.value) / 2f
+        assertTrue(
+            abs(pillMidY - nameMidY) <= ttSpacing.md.value + 1f,
+            "the capsule is not level with the name row at the top of the card",
+        )
         onNodeWithContentDescription(getString(Res.string.settings_creator_email_description)).assertIsDisplayed()
         onNodeWithContentDescription(getString(Res.string.settings_creator_linkedin_description)).assertIsDisplayed()
 
