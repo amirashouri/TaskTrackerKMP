@@ -406,6 +406,7 @@ class RouterTest {
                 AppTab.Board,
                 AppTab.Backlog,
                 AppTab.Sprints,
+                AppTab.Notifications,
                 AppTab.Settings,
             ),
             AppTab.entries.toList(),

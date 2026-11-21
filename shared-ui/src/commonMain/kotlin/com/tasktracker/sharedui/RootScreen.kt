@@ -35,6 +35,7 @@ import com.tasktracker.di.Resolver
 import com.tasktracker.featureauthdomain.AuthSessionPort
 import com.tasktracker.featureauthpresentation.ProvideAuthSession
 import com.tasktracker.featureauthpresentation.SignInView
+import com.tasktracker.featurenotificationsdomain.NotificationPort
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.AgentPairingPort
 import com.tasktracker.featureprojectsdomain.AgentRunsPort
@@ -196,6 +197,10 @@ fun RootScreen(
     // one tab's sentence rather than a crash or a whole-shell fallback.
     val settings = remember(resolver) { resolver.getOrNull(SettingsPort::class) }
 
+    // The inbox is local-first: this is bound in a demo graph too, so the page works and
+    // simply stays empty. The popup collector reads it below the shell.
+    val notifications = remember(resolver) { resolver.getOrNull(NotificationPort::class) }
+
     var hasHeldMinimum by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         delay(splashMinimumHoldMillis)
@@ -354,6 +359,7 @@ fun RootScreen(
                                         SignedInArea(
                                             environment = environment,
                                             settings = settings,
+                                            notifications = notifications,
                                             preferences = preferences,
                                             router = router,
                                         )
@@ -440,6 +446,7 @@ private suspend fun restoreLastProject(
 private fun SignedInArea(
     environment: ProjectEnvironment?,
     settings: SettingsPort?,
+    notifications: NotificationPort?,
     preferences: ShellPreferences,
     router: Router,
 ) {
@@ -451,14 +458,26 @@ private fun SignedInArea(
     }
 
     ProvideProjectEnvironment(environment) {
-        NavigationHost(
-            router = router,
-            environment = environment,
-            settings = settings,
-            preferences = preferences,
-            themeScheme = themeScheme,
-            modifier = Modifier.testTag(SignedInShellTag),
-        )
+        Box(modifier = Modifier.fillMaxSize()) {
+            NavigationHost(
+                router = router,
+                environment = environment,
+                settings = settings,
+                preferences = preferences,
+                themeScheme = themeScheme,
+                notifications = notifications,
+                modifier = Modifier.testTag(SignedInShellTag),
+            )
+            // Over the shell rather than inside a tab, so an arrival is visible on every
+            // screen — including a pushed editor. The host composes nothing while no popup is
+            // due, so it costs the tree one empty node.
+            NotificationArrivalHost(
+                router = router,
+                port = notifications,
+                preferences = preferences,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 

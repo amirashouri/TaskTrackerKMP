@@ -18,6 +18,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.sync.RemoteChange
 import com.tasktracker.sync.SyncApplySink
+import com.tasktracker.sync.SyncException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.KSerializer
 
@@ -119,6 +120,11 @@ class LocalDataSyncSink(
                 val owner = applyAttachment(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = owner))
             }
+
+            // Notifications name no project and are applied by their own sink. Reaching this
+            // one is a graph-wiring bug, so it fails loudly rather than writing a project
+            // column that does not exist.
+            OutboxEntity.Notification -> throw SyncException.NoSink(OutboxEntity.Notification)
         }
     }
 

@@ -154,6 +154,7 @@ import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.resources.tab_notifications
 import com.tasktracker.resources.tab_sprints
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
@@ -1979,8 +1980,8 @@ object ShellScenarios {
     /** The narrowest phone this app ships to, as a fixed number rather than a device's. */
     private val PHONE_WIDTH = 390.dp
 
-    /** Five, written out so a sixth tab has to change this on purpose. */
-    private const val PHONE_TAB_COUNT = 5
+    /** Six, written out so a seventh tab has to change this on purpose. */
+    private const val PHONE_TAB_COUNT = 6
 
     /**
      * A desktop window, as a fixed number rather than a device's.
@@ -5572,6 +5573,7 @@ object ShellScenarios {
         AppTab.Board -> getString(Res.string.tab_board)
         AppTab.Backlog -> getString(Res.string.tab_backlog)
         AppTab.Sprints -> getString(Res.string.tab_sprints)
+        AppTab.Notifications -> getString(Res.string.tab_notifications)
         AppTab.Settings -> getString(Res.string.tab_settings)
     }
 }

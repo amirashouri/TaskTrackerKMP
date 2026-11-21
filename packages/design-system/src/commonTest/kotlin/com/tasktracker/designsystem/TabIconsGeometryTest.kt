@@ -191,6 +191,7 @@ class TabIconsGeometryTest {
                 "rectangle.split.3x1",
                 "tray",
                 ttTabIcons.NO_COUNTERPART,
+                "bell",
                 "gearshape",
             ),
             ttTabIcons.mapping.keys.toList(),

@@ -29,6 +29,16 @@ enum class SyncScope(val wireValue: String) {
      * streams named here.
      */
     Attachments("attachments"),
+
+    /**
+     * The caller's own notification inbox.
+     *
+     * Recipient-scoped on the server: it is not a project-membership feed, so another
+     * member of the same project never sees these rows. A separate scope because an
+     * installed client never requests it, and a new entity in an old scope would be a
+     * payload it cannot decode.
+     */
+    Notifications("notifications"),
     ;
 
     companion object {

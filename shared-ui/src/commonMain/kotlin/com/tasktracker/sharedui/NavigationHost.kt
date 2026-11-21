@@ -81,6 +81,7 @@ import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.featurenotificationsdomain.NotificationPort
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectAdminStatus
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
@@ -132,6 +133,7 @@ import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.resources.tab_notifications
 import com.tasktracker.resources.tab_sprints
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
@@ -180,6 +182,7 @@ fun NavigationHost(
     settings: SettingsPort?,
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
+    notifications: NotificationPort? = null,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -467,6 +470,7 @@ fun NavigationHost(
                         preferences = preferences,
                         themeScheme = themeScheme,
                         scope = scope,
+                        notifications = notifications,
                         isWide = layoutClass.isWide,
                         // Only under a wide class: on a compact window the destination keeps the
                         // editor to itself and draws it as the sheet it always was.
@@ -562,6 +566,7 @@ fun NavigationHost(
                         preferences = preferences,
                         teamPort = environment.teamPort,
                         adminProjectsPort = adminProjectsPort,
+                        focusCommentID = editorRoute.focusCommentID,
                         onDismiss = { dismissEditor(editorRoute) },
                     )
                 }
@@ -858,6 +863,7 @@ private fun TabRoot(
     preferences: ShellPreferences,
     themeScheme: ThemeScheme,
     scope: CoroutineScope,
+    notifications: NotificationPort? = null,
     isWide: Boolean = false,
     /**
      * Where the wide arrangement wants the Sprints tab's "New sprint" form drawn, or `null`
@@ -944,6 +950,18 @@ private fun TabRoot(
                 preferences = preferences,
                 requestNewSprint = requestNewSprint,
                 onSprintOpened = onSprintOpened,
+            )
+        }
+
+        AppTab.Notifications -> if (notifications == null) {
+            NotificationsUnavailableView()
+        } else {
+            NotificationsDestination(
+                port = notifications,
+                router = router,
+                preferences = preferences,
+                dateProvider = environment.dateProvider,
+                scope = scope,
             )
         }
 
@@ -2197,6 +2215,7 @@ private fun WorkItemEditorDestination(
      * Supplied by the shell rather than read here because the port is a property of the graph.
      */
     adminProjectsPort: AdminProjectsPort? = null,
+    focusCommentID: com.tasktracker.core.CommentID? = null,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -2371,6 +2390,7 @@ private fun WorkItemEditorDestination(
     val agentSectionModel = agentModel
 
     WorkItemEditorSheet(
+        focusCommentID = focusCommentID,
         title = model.title,
         agentSection = if (agentSectionModel != null && model.status == WorkItemStatus.InProgress) {
             {
@@ -2977,6 +2997,7 @@ internal fun tabTitle(tab: AppTab): String = when (tab) {
     AppTab.Board -> stringResource(Res.string.tab_board)
     AppTab.Backlog -> stringResource(Res.string.tab_backlog)
     AppTab.Sprints -> stringResource(Res.string.tab_sprints)
+    AppTab.Notifications -> stringResource(Res.string.tab_notifications)
     AppTab.Settings -> stringResource(Res.string.tab_settings)
 }
 
@@ -3001,6 +3022,7 @@ internal fun tabIcon(tab: AppTab): ImageVector = when (tab) {
     AppTab.Board -> ttTabIcons.board
     AppTab.Backlog -> ttTabIcons.backlog
     AppTab.Sprints -> ttTabIcons.sprints
+    AppTab.Notifications -> ttTabIcons.notifications
     AppTab.Settings -> ttTabIcons.settings
 }
 

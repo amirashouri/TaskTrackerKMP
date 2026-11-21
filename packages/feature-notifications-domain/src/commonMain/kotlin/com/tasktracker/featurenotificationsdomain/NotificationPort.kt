@@ -3,6 +3,8 @@ package com.tasktracker.featurenotificationsdomain
 import com.tasktracker.core.NotificationID
 import com.tasktracker.core.UserID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlin.time.Instant
 
 /**
@@ -53,6 +55,33 @@ interface NotificationPort {
      */
     fun changes(userID: UserID): Flow<NotificationChange>
 
+    /** One notification by id, scoped to its owner. */
+    suspend fun notification(id: NotificationID): Notification?
+
+    /**
+     * A live inbox: the current list, then a fresh one after every committed write.
+     *
+     * A default so a test double only has to implement the read it asserts on.
+     */
+    fun notificationsStream(userID: UserID): Flow<List<Notification>> = flow {
+        emit(notifications(userID))
+        changes(userID).collect { emit(notifications(userID)) }
+    }
+
+    /** A live unread count, for the badge and the mark-all action. */
+    fun unreadCountStream(userID: UserID): Flow<Int> = flow {
+        emit(unreadCount(userID))
+        changes(userID).collect { emit(unreadCount(userID)) }
+    }
+
+    /**
+     * Notifications that have just arrived from the server, for the in-app popup.
+     *
+     * Local writes do not emit here: only a notification the server delivered is an
+     * event worth interrupting the user for.
+     */
+    fun arrivals(userID: UserID): Flow<Notification> = emptyFlow()
+
     // MARK: Writes
 
     /**
@@ -74,6 +103,13 @@ interface NotificationPort {
      * Marks a notification as read (or unread).
      */
     suspend fun setRead(id: NotificationID, isRead: Boolean, now: Instant): Notification
+
+    /**
+     * Removes one notification from the inbox and queues the dismissal.
+     *
+     * Answers `false` for an unknown id, so a replayed delete is a harmless no-op.
+     */
+    suspend fun deleteNotification(id: NotificationID, now: Instant): Boolean = false
 
     /**
      * Marks all notifications for [userID] as read.

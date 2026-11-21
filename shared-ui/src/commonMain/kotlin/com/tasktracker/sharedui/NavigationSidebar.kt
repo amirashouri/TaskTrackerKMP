@@ -285,6 +285,24 @@ internal fun NavigationSidebar(
 
                         Spacer(Modifier.height(ttSpacing.xl))
 
+                        // Above Settings, as the requirement names it, and outside the
+                        // project-scoped loop because the inbox is per-account rather than
+                        // per-project.
+                        SidebarDestinationRow(
+                            label = tabTitle(AppTab.Notifications),
+                            icon = tabIcon(AppTab.Notifications),
+                            isSelected = selected == AppTab.Notifications,
+                            selectedInk = selectedInk,
+                            inactiveInk = inactiveInk,
+                            onClick = { onSelect(AppTab.Notifications) },
+                            modifier = Modifier
+                                .testTag(SidebarButtonTag(AppTab.Notifications))
+                                .onGloballyPositioned { coordinates ->
+                                    rowCoordinates[AppTab.Notifications] = coordinates
+                                    refreshRowRects()
+                                },
+                        )
+
                         SidebarDestinationRow(
                             label = tabTitle(AppTab.Settings),
                             icon = tabIcon(AppTab.Settings),

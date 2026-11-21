@@ -136,6 +136,10 @@ private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     // work, and a `when` over the enum without it does not compile.
     OutboxEntity.Attachment -> SyncScope.Attachments
     OutboxEntity.SprintMember -> SyncScope.SprintMembers
+    // The demo server has no notification generator, so this stream stays empty until a real
+    // backend writes a row. Filing it anywhere else would deliver a payload no installed
+    // scope can decode.
+    OutboxEntity.Notification -> SyncScope.Notifications
 }
 
 private fun OutboxEntry.toRemoteChange(): RemoteChange = RemoteChange(

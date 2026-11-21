@@ -90,6 +90,30 @@ interface NotificationDao {
     suspend fun setRead(id: String, isRead: Boolean, now: Instant)
 
     /**
+     * Replaces the server-owned fields of an existing row.
+     *
+     * The pull path calls this instead of an upsert: a notification is server-generated, so a
+     * pulled document may only overwrite a row this device already knows about. An unknown id
+     * is ignored by the repository rather than inserted, because a client cannot mint one.
+     */
+    @Query(
+        "UPDATE notifications SET kind = :kind, payload = :payload, isRead = :isRead, " +
+            "createdAt = :createdAt, updatedAt = :updatedAt WHERE id = :id",
+    )
+    suspend fun updateFromRemote(
+        id: String,
+        kind: String,
+        payload: String,
+        isRead: Boolean,
+        createdAt: Instant,
+        updatedAt: Instant,
+    )
+
+    /** Dismisses one row. Idempotent: a missing id removes nothing. */
+    @Query("DELETE FROM notifications WHERE id = :id")
+    suspend fun deleteByID(id: String)
+
+    /**
      * Marks all notifications for a user as read.
      */
     @Query("UPDATE notifications SET isRead = 1, updatedAt = :now WHERE userID = :userID AND isRead = 0")

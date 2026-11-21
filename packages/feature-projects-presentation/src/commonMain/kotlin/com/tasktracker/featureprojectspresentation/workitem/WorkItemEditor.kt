@@ -224,6 +224,8 @@ fun WorkItemEditorSheet(
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
     comments: List<Comment>? = null,
+    /** The comment a notification opened this editor for, if any. */
+    focusCommentID: CommentID? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
     onCommentDraftChanged: (String) -> Unit = {},
@@ -295,6 +297,7 @@ fun WorkItemEditorSheet(
         onRemoveBlocker = onRemoveBlocker,
         onAddBlockerClick = onAddBlockerClick,
         comments = comments,
+        focusCommentID = focusCommentID,
         commentAuthorNames = commentAuthorNames,
         commentDraft = commentDraft,
         onCommentDraftChanged = onCommentDraftChanged,
@@ -368,6 +371,8 @@ private fun ProjectsEditorFullScreen(
     onRemoveBlocker: (WorkItemID) -> Unit = {},
     onAddBlockerClick: () -> Unit = {},
     comments: List<Comment>? = null,
+    /** The comment a notification opened this editor for, if any. */
+    focusCommentID: CommentID? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
     onCommentDraftChanged: (String) -> Unit = {},
@@ -577,6 +582,7 @@ private fun ProjectsEditorFullScreen(
                 if (!isCreating) {
                     CommentThread(
                         comments = thread,
+                        highlightedCommentID = focusCommentID,
                         authorNames = commentAuthorNames,
                         canComment = currentUserID != null,
                         draft = commentDraft,
@@ -712,6 +718,8 @@ private fun WorkItemEditorForm(
     onAddBlockerClick: () -> Unit = {},
     onBack: (() -> Unit)? = null,
     comments: List<Comment>? = null,
+    /** The comment a notification opened this editor for, if any. */
+    focusCommentID: CommentID? = null,
     commentAuthorNames: Map<UserID, String> = emptyMap(),
     commentDraft: String = "",
     onCommentDraftChanged: (String) -> Unit = {},
@@ -873,6 +881,7 @@ private fun WorkItemEditorForm(
             if (!isCreating) {
                 CommentThread(
                     comments = thread,
+                    highlightedCommentID = focusCommentID,
                     authorNames = commentAuthorNames,
                     canComment = currentUserID != null,
                     draft = commentDraft,
