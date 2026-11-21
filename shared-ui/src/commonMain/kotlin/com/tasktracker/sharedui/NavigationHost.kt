@@ -202,6 +202,21 @@ fun NavigationHost(
     // layout this shell is in.
     val layoutClass = LocalShellLayoutClass.current
 
+    // The inbox badge is one live count for all three chromes. Collected here rather than in
+    // each chrome so the bar, the rail and the sidebar cannot disagree about unread while a
+    // read/dismiss is landing.
+    val notificationUserID by preferences.currentUserID.collectAsState()
+    var unreadNotificationCount by remember(notifications, notificationUserID) { mutableStateOf(0) }
+    LaunchedEffect(notifications, notificationUserID) {
+        val port = notifications
+        val id = notificationUserID
+        if (port == null || id == null) {
+            unreadNotificationCount = 0
+            return@LaunchedEffect
+        }
+        port.unreadCountStream(id).collect { unreadNotificationCount = it }
+    }
+
     // The sidebar's appearance panel writes through the same shell preferences as Settings.
     // Reading them here, once, keeps the chrome and the screen on one value per frame.
     val sidebarAccentPalette by preferences.accentPalette.collectAsState()
@@ -782,6 +797,7 @@ fun NavigationHost(
                 ShellLayoutClass.Compact -> TabBar(
                     selected = tab,
                     onSelect = router::selectTab,
+                    badgeCount = unreadNotificationCount,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .onSizeChanged { size: IntSize ->
@@ -792,6 +808,7 @@ fun NavigationHost(
                 ShellLayoutClass.Expanded -> NavigationRail(
                     selected = tab,
                     onSelect = router::selectTab,
+                    badgeCount = unreadNotificationCount,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { size: IntSize ->
@@ -820,6 +837,7 @@ fun NavigationHost(
                     onGlassIntensityCommit = { intensity ->
                         scope.launch { preferences.commitGlassIntensity(intensity) }
                     },
+                    notificationsUnreadCount = unreadNotificationCount,
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .onSizeChanged { size: IntSize ->
@@ -2889,6 +2907,7 @@ private fun SettingsDestination(
 private fun TabBar(
     selected: AppTab,
     onSelect: (AppTab) -> Unit,
+    badgeCount: Int,
     modifier: Modifier = Modifier,
 ) {
     val tabs = AppTab.entries
@@ -2914,6 +2933,7 @@ private fun TabBar(
             onSelect = onSelect,
             title = { tabTitle(it) },
             icon = { tabIcon(it) },
+            badge = { if (it == AppTab.Notifications) badgeCount else 0 },
             tabModifier = { Modifier.testTag(TabButtonTag(it)) },
         )
     }
@@ -2950,6 +2970,7 @@ private fun TabBar(
 private fun NavigationRail(
     selected: AppTab,
     onSelect: (AppTab) -> Unit,
+    badgeCount: Int,
     modifier: Modifier = Modifier,
 ) {
     val tabs = AppTab.entries
@@ -2979,6 +3000,7 @@ private fun NavigationRail(
             onSelect = onSelect,
             title = { tabTitle(it) },
             icon = { tabIcon(it) },
+            badge = { if (it == AppTab.Notifications) badgeCount else 0 },
             destinationModifier = { Modifier.testTag(NavigationRailButtonTag(it)) },
         )
     }

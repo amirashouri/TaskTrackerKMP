@@ -49,6 +49,7 @@ import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttCountBadge
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.TTGlassSurface
 import com.tasktracker.designsystem.ttGlassLens
@@ -85,6 +86,7 @@ internal fun NavigationSidebar(
     onAccentPaletteChange: (AccentPalette) -> Unit,
     onGlassIntensityPreview: (Float) -> Unit,
     onGlassIntensityCommit: (Float) -> Unit,
+    notificationsUnreadCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     // The same two inks the rail's cells use, for the same reason: both put a label on glass with
@@ -291,6 +293,7 @@ internal fun NavigationSidebar(
                         SidebarDestinationRow(
                             label = tabTitle(AppTab.Notifications),
                             icon = tabIcon(AppTab.Notifications),
+                            badgeCount = notificationsUnreadCount,
                             isSelected = selected == AppTab.Notifications,
                             selectedInk = selectedInk,
                             inactiveInk = inactiveInk,
@@ -344,6 +347,7 @@ private fun SidebarDestinationRow(
     label: String,
     icon: ImageVector,
     isSelected: Boolean,
+    badgeCount: Int = 0,
     selectedInk: Color,
     inactiveInk: Color,
     onClick: () -> Unit,
@@ -380,7 +384,9 @@ private fun SidebarDestinationRow(
             style = ttTypography.callout,
             color = if (isSelected) selectedInk else inactiveInk,
             maxLines = 1,
+            modifier = Modifier.weight(1f),
         )
+        ttCountBadge(count = badgeCount)
     }
 }
 

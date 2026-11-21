@@ -102,6 +102,13 @@ fun <Tab> TTGlassTabBar(
      */
     icon: (Tab) -> ImageVector,
     /**
+     * A per-tab unread count. Zero draws no badge; the count is capped at `99+`.
+     *
+     * Drawn inside the fixed icon box rather than beside it, so the cell's measured size —
+     * and therefore the lens's segment width — is unchanged by whether a badge is showing.
+     */
+    badge: (Tab) -> Int = { 0 },
+    /**
      * A per-tab modifier, for the caller's own [androidx.compose.ui.platform.testTag] or
      * anything else that has to address one tab specifically.
      *
@@ -185,6 +192,7 @@ fun <Tab> TTGlassTabBar(
                         label = title(tab),
                         icon = icon(tab),
                         isSelected = index == selectedIndex,
+                        badgeCount = badge(tab),
                         accent = selectedInk,
                         inactiveInk = inactiveInk,
                         onClick = { onSelect(tab) },
@@ -332,6 +340,7 @@ private fun TabCell(
     label: String,
     icon: ImageVector,
     isSelected: Boolean,
+    badgeCount: Int = 0,
     accent: Color,
     inactiveInk: Color,
     onClick: () -> Unit,
@@ -378,14 +387,23 @@ private fun TabCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ttSpacing.tabBarIconLabelGap),
     ) {
-        ttIcon(
-            image = icon,
-            contentDescription = null,
-            tint = if (isSelected) accent else inactiveInk,
-            modifier = Modifier
-                .size(ttIconSize.tab)
-                .scale(iconScale),
-        )
+        Box(
+            modifier = Modifier.size(ttIconSize.tab),
+            contentAlignment = Alignment.Center,
+        ) {
+            ttIcon(
+                image = icon,
+                contentDescription = null,
+                tint = if (isSelected) accent else inactiveInk,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .scale(iconScale),
+            )
+            ttCountBadge(
+                count = badgeCount,
+                modifier = Modifier.align(Alignment.TopEnd),
+            )
+        }
         ttText(
             text = label,
             style = ttTypography.caption,

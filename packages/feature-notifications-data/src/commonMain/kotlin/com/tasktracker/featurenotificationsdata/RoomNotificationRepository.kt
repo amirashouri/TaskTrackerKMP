@@ -5,6 +5,8 @@ import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.NotificationID
 import com.tasktracker.core.UserID
+import com.tasktracker.core.TTLogger
+import com.tasktracker.core.logMessage
 import com.tasktracker.core.randomNotificationID
 import com.tasktracker.database.NewOutboxEntry
 import com.tasktracker.database.NotificationRecord
@@ -14,8 +16,10 @@ import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.inTransaction
 import com.tasktracker.featurenotificationsdomain.Notification
 import com.tasktracker.featurenotificationsdomain.NotificationChange
+import com.tasktracker.featurenotificationsdomain.LocalNotifier
 import com.tasktracker.featurenotificationsdomain.NotificationKind
 import com.tasktracker.featurenotificationsdomain.NotificationPort
+import com.tasktracker.featurenotificationsdomain.Trigger
 import com.tasktracker.featurenotificationsdomain.wireValue
 import com.tasktracker.sync.RemoteChange
 import com.tasktracker.sync.SyncApplySink
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.builtins.serializer
+import kotlin.time.Duration.Companion.ZERO
 import kotlin.time.Instant
 
 /**
@@ -46,6 +51,7 @@ import kotlin.time.Instant
  */
 class RoomNotificationRepository(
     private val database: TaskTrackerDatabase,
+    private val localNotifier: LocalNotifier,
 ) : NotificationPort, SyncApplySink {
 
     private val changesBus = Broadcaster<NotificationChange>()
@@ -119,6 +125,8 @@ class RoomNotificationRepository(
             next
         }
         announce(UserID(stored.userID))
+        // Reading on the device is also the moment the OS banner stops being useful.
+        if (isRead) cancelLocal(NotificationID(stored.id))
         return toDomain(stored)
     }
 
@@ -132,6 +140,7 @@ class RoomNotificationRepository(
             }
         }
         announce(userID)
+        runCatching { localNotifier.cancelAll() }
         return unread.size
     }
 
@@ -143,13 +152,17 @@ class RoomNotificationRepository(
             record
         } ?: return false
         announce(UserID(stored.userID))
+        cancelLocal(NotificationID(stored.id))
         return true
     }
 
     /** Sign-out cleanup. Local only: the server keeps the account's rows. */
     override suspend fun deleteForUser(userID: UserID): Int {
         val count = dao.deleteByUser(userID.stringValue)
-        if (count > 0) announce(userID)
+        if (count > 0) {
+            announce(userID)
+            runCatching { localNotifier.cancelAll() }
+        }
         return count
     }
 
@@ -164,6 +177,7 @@ class RoomNotificationRepository(
                 val existing = dao.byID(change.entityID) ?: return
                 inTransaction(database) { dao.deleteByID(change.entityID) }
                 announce(UserID(existing.userID))
+                cancelLocal(NotificationID(change.entityID))
             }
 
             OutboxOperation.Upsert -> {
@@ -195,7 +209,28 @@ class RoomNotificationRepository(
                 }
 
                 announce(incoming.userID)
-                if (inserted && !incoming.isRead) arrivalsBus.send(incoming)
+                // A read served from another device should clear this device's banner too;
+                // the insert branch below only handles the notification's first arrival.
+                if (!inserted && incoming.isRead) cancelLocal(incoming.id)
+                if (inserted && !incoming.isRead) {
+                    arrivalsBus.send(incoming)
+                    // A server-delivered row is the one moment the operating system should
+                    // speak: the inbox popup only exists while the shell is composed, while a
+                    // local notification also reaches a backgrounded app. Best-effort, because
+                    // a denied permission must not fail the sync apply that delivered it.
+                    runCatching {
+                        localNotifier.schedule(incoming, Trigger.In(ZERO))
+                    }.onFailure { error ->
+                        TTLogger.notifications.warning {
+                            logMessage {
+                                append("local-notifier: could not show ")
+                                append(incoming.id.stringValue)
+                                append(": ")
+                                append(error.message ?: "unknown error")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -277,5 +312,9 @@ class RoomNotificationRepository(
 
     private suspend fun announce(userID: UserID) {
         changesBus.send(NotificationChange(NotificationChange.Kind.Notifications, userID))
+    }
+
+    private suspend fun cancelLocal(id: NotificationID) {
+        runCatching { localNotifier.cancel(id) }
     }
 }
