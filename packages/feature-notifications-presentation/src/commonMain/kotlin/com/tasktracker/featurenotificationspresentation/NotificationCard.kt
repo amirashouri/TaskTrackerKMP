@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
+import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
@@ -157,6 +158,7 @@ fun NotificationCard(
                         contentDescription = stringResource(Res.string.notifications_delete),
                         onClick = { onDelete(notification) },
                         modifier = Modifier.testTag(NotificationDeleteTag),
+                        tint = ttError(),
                     )
                 }
             }

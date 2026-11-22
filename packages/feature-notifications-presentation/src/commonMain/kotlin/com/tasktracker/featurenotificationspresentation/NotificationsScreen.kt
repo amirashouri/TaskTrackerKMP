@@ -117,7 +117,7 @@ fun NotificationsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(NotificationsScreenTag)
-                .padding(horizontal = ttSpacing.screenGutterLarge),
+                .padding(horizontal = ttSpacing.xxl),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
         ) {
         Row(
