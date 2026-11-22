@@ -110,13 +110,10 @@ class TabBarScreenshotTest {
 
         val written = mutableListOf<File>()
         for (tab in AppTab.entries) {
-            // Through semantics, not `performClick`. This is not a shortcut, it is the only
-            // way to get a clean frame: `performClick` sends press and release input, the
-            // desktop indication stays down because the virtual pointer is left resting on
-            // the node it clicked, and it darkens that one segment by 0.14 of relative
-            // luminance — which is more than twice the lens's own contribution, and made the
-            // selected tab look *darker* than the unselected ones in every frame.
-            // `advanceTimeBy` does not clear it, because it is not an animation in flight.
+            if (tab == AppTab.Notifications || tab == AppTab.Settings) {
+                onNodeWithTag(MoreTabTag).performSemanticsAction(SemanticsActions.OnClick)
+                waitForIdle()
+            }
             onNodeWithTag(TabButtonTag(tab))
                 .performSemanticsAction(SemanticsActions.OnClick)
             waitForIdle()
@@ -133,11 +130,20 @@ class TabBarScreenshotTest {
             write(onRoot().captureToImage(), it)
         }
 
+        // And one frame with the speed dial open. The per-tab frames above each catch the
+        // destination the action navigates to; none of them shows the menu the user actually
+        // sees before choosing one.
+        onNodeWithTag(MoreTabTag).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        written += File(output, "more-menu-${scheme.wireValue}.png").also {
+            write(onNodeWithTag(TabBarTag).captureToImage(), it)
+        }
+
         // Asserted per appearance, on the files this render was supposed to produce. The
         // previous total-file count was a cross-test check that only held if both tests had
         // already run in the same invocation, so a filtered `--tests` run failed on a count
         // that had nothing to do with the code under test.
-        val expected = AppTab.entries.size + 1
+        val expected = AppTab.entries.size + 2
         val missing = written.filterNot { it.isFile && it.length() > 0 }
         assertTrue(
             missing.isEmpty(),

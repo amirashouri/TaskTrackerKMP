@@ -42,6 +42,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -66,6 +68,7 @@ import com.tasktracker.designsystem.TTGlassTabBar
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttLabel
@@ -131,6 +134,7 @@ import com.tasktracker.resources.scoped_no_project_body
 import com.tasktracker.resources.scoped_no_project_title
 import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
+import com.tasktracker.resources.tab_more
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
 import com.tasktracker.resources.tab_notifications
@@ -2903,6 +2907,19 @@ private fun SettingsDestination(
  * re-derived by anything else that wanted a tab bar, and there is only ever going to be one tab
  * bar, so that is a split that buys nothing.
  */
+private sealed interface MobileTab {
+    data class Direct(val appTab: AppTab) : MobileTab
+    object More : MobileTab
+}
+
+private val mobileTabs = listOf(
+    MobileTab.Direct(AppTab.Projects),
+    MobileTab.Direct(AppTab.Board),
+    MobileTab.Direct(AppTab.Backlog),
+    MobileTab.Direct(AppTab.Sprints),
+    MobileTab.More,
+)
+
 @Composable
 private fun TabBar(
     selected: AppTab,
@@ -2910,8 +2927,21 @@ private fun TabBar(
     badgeCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = AppTab.entries
     val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+    var moreMenuOpen by remember { mutableStateOf(false) }
+    // The speed dial is anchored to the cell, not to a computed slice of the bar: the bar adds
+    // its own horizontal inset and rounds segments, so a formula is a few dp out on some hosts.
+    var moreCellCentreX by remember { mutableStateOf<Float?>(null) }
+
+    // While the speed dial is open the lens sits on the cell it grew from, even if the
+    // destination underneath is still Projects. Once it closes, a hidden destination keeps the
+    // lens on More, because neither Settings nor Inbox has its own compact cell any more.
+    val selectedMobileTab = when {
+        moreMenuOpen -> MobileTab.More
+        selected == AppTab.Notifications || selected == AppTab.Settings -> MobileTab.More
+        else -> MobileTab.Direct(selected)
+    }
+    val selectedIndex = mobileTabs.indexOf(selectedMobileTab)
 
     Box(
         modifier = modifier
@@ -2927,15 +2957,66 @@ private fun TabBar(
             // would not be able to tell a floating bar from an edge-anchored one.
             .testTag(TabBarTag),
     ) {
-        TTGlassTabBar(
-            tabs = tabs,
-            selectedIndex = tabs.indexOf(selected),
-            onSelect = onSelect,
-            title = { tabTitle(it) },
-            icon = { tabIcon(it) },
-            badge = { if (it == AppTab.Notifications) badgeCount else 0 },
-            tabModifier = { Modifier.testTag(TabButtonTag(it)) },
-        )
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            MoreActionMenu(
+                visible = moreMenuOpen,
+                selected = selected,
+                badgeCount = badgeCount,
+                cellCount = mobileTabs.size,
+                anchorCentreX = moreCellCentreX,
+                onSelect = { tab ->
+                    moreMenuOpen = false
+                    onSelect(tab)
+                },
+            )
+
+            TTGlassTabBar(
+                tabs = mobileTabs,
+                selectedIndex = if (selectedIndex >= 0) selectedIndex else 0,
+                onSelect = { tab ->
+                    when (tab) {
+                        is MobileTab.Direct -> {
+                            moreMenuOpen = false
+                            onSelect(tab.appTab)
+                        }
+                        MobileTab.More -> {
+                            moreMenuOpen = !moreMenuOpen
+                        }
+                    }
+                },
+                title = { tab ->
+                    when (tab) {
+                        is MobileTab.Direct -> tabTitle(tab.appTab)
+                        MobileTab.More -> stringResource(Res.string.tab_more)
+                    }
+                },
+                icon = { tab ->
+                    when (tab) {
+                        is MobileTab.Direct -> tabIcon(tab.appTab)
+                        MobileTab.More -> if (moreMenuOpen) ttActionIcons.close else ttActionIcons.more
+                    }
+                },
+                badge = { tab ->
+                    when (tab) {
+                        is MobileTab.Direct -> if (tab.appTab == AppTab.Notifications) badgeCount else 0
+                        MobileTab.More -> badgeCount
+                    }
+                },
+                tabModifier = { tab ->
+                    when (tab) {
+                        is MobileTab.Direct -> Modifier.testTag(TabButtonTag(tab.appTab))
+                        MobileTab.More -> Modifier
+                            .testTag(MoreTabTag)
+                            .onGloballyPositioned {
+                                moreCellCentreX = it.boundsInRoot().center.x
+                            }
+                    }
+                },
+            )
+        }
     }
 }
 

@@ -16,6 +16,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -154,6 +155,7 @@ import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.resources.tab_more
 import com.tasktracker.resources.tab_notifications
 import com.tasktracker.resources.tab_sprints
 import com.tasktracker.routing.AppRoute
@@ -169,7 +171,7 @@ import com.tasktracker.sharedui.ShellScenarios.SIDEBAR_WIDTH
 import com.tasktracker.sharedui.ShellScenarios.assertBottomMostRowClearsTheBar
 import com.tasktracker.sharedui.ShellScenarios.selectedRailDestinations
 import com.tasktracker.sharedui.ShellScenarios.selectedSidebarDestinations
-import com.tasktracker.sharedui.ShellScenarios.selectedTabs
+import com.tasktracker.sharedui.ShellScenarios.selectedTabTags
 import com.tasktracker.userdefaults.DefaultsKey
 import com.tasktracker.userdefaults.InMemoryPreferences
 import com.tasktracker.userdefaults.UserDefaultsStore
@@ -519,7 +521,7 @@ object ShellScenarios {
         setUpShell(session = session, settings = settings)
 
         waitForIdle()
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         // Scrolled to the true end, not merely into the viewport: the last rows sit under the
         // floating tab bar, which takes the touch when a coordinate click lands there. The
@@ -567,7 +569,9 @@ object ShellScenarios {
         deepLinks.receive("tasktracker://connect?url=https%3A%2F%2Ftasks.example.com%2Fa%252Fb")
         waitForIdle()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).assertIsSelected()
+        // Settings no longer has a compact cell of its own; the More cell carries the selection
+        // for both hidden destinations.
+        onNodeWithTag(MoreTabTag).assertIsSelected()
         onNodeWithTag(ServerAddressFieldTag)
             .assertIsDisplayed()
             .assert(hasText("https://tasks.example.com/a%2Fb"))
@@ -934,7 +938,7 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(SprintListScreenTag).assertIsDisplayed()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         onNodeWithTag(SettingsScreenTag).assertIsDisplayed()
 
@@ -1108,45 +1112,48 @@ object ShellScenarios {
     }
 
     /**
-     * The bar is wider than one tab, and the four tabs split it evenly.
+     * The bar is wider than one cell, and its five cells split it evenly.
      *
      * Two properties, and the second is the one that actually earns the lens. The lens's travel
      * is `selectedIndex * segmentWidth`, so an unequal split does not merely look untidy — it
-     * puts the highlight somewhere other than the tab it is meant to be on. This is not
+     * puts the highlight somewhere other than the cell it is meant to be on. This is not
      * hypothetical here: an early version of the new bar did not fill the width it was given,
-     * wrapped to the sum of its four labels instead, and measured a 540pt bar in a 1024pt
-     * window with four different segment widths.
+     * wrapped to the sum of its labels instead, and measured a 540pt bar in a 1024pt window with
+     * different segment widths.
+     *
+     * The cells are the compact bar's, not [AppTab.entries]: Settings and Notifications are
+     * speed-dial actions now, so they have no segment to measure and no tag in this row. More is
+     * the fifth cell and closes off the row, so it has to be included for the span and the lens
+     * travel to mean anything.
      */
     val theTabBarIsWiderThanItsTabs: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()))
 
         waitForIdle()
         val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
-        val tabs = AppTab.entries.map { onNodeWithTag(TabButtonTag(it)).getBoundsInRoot() }
+        val cells = compactBarCellTags().map { onNodeWithTag(it).getBoundsInRoot() }
         val barWidth = (bar.right - bar.left).value.toDouble()
 
-        val tabWidth = (tabs.first().right - tabs.first().left).value.toDouble()
+        val cellWidth = (cells.first().right - cells.first().left).value.toDouble()
         assertTrue(
-            barWidth > tabWidth,
-            "expected the bar to be wider than one tab ($barWidth vs $tabWidth), " +
+            barWidth > cellWidth,
+            "expected the bar to be wider than one cell ($barWidth vs $cellWidth), " +
                 "so there is material to float over",
         )
 
-        // One point, and that number is measured rather than guessed. The segments come out
-        // `[246, 246, 247, 247]` on a 986pt row: the host rounds layout to whole pixels and
-        // 986/4 is 246.5, so two of the four round up and two round down. An exact assertion
-        // would therefore be asserting a rounding accident; the point of this check is that the
-        // spread is a *pixel*, not that it is zero — a bar that did not fill its width gave
-        // `[135, 135, 135, 133]` on the same row, which is a 2pt spread and a lens that lands
-        // on the wrong tab.
-        val widths = tabs.map { (it.right - it.left).value.toDouble() }
+        // One pixel of tolerance, not exact equality. The host rounds layout to whole pixels,
+        // so an exact assertion would be pinning a rounding accident; the point of this check is
+        // that the spread is a pixel rather than a real difference. A bar that did not fill its
+        // width used to give a multi-point spread and a lens that landed on the wrong cell.
+        val widths = cells.map { (it.right - it.left).value.toDouble() }
         val spread = widths.max() - widths.min()
         assertTrue(
             spread <= 1.0,
-            "expected the four tabs to split the bar evenly to within a pixel, got $widths",
+            "expected the ${cells.size} compact cells to split the bar evenly to within a pixel, " +
+                "got $widths",
         )
 
-        // And the row has to actually span the bar, or "evenly" is four equal narrow columns
+        // And the row has to actually span the bar, or "evenly" is five equal narrow columns
         // floating in the middle of a wide capsule. It starts one [ttSpacing.hairlineInset]
         // inside the glass on each side, which is the same inset [TTGlassSegmentedPicker] puts
         // inside its slab: the padding is content inset so the hairline keeps its distance from
@@ -1154,15 +1161,15 @@ object ShellScenarios {
         // what's pinned — measured, the row is at 19 and 1005 inside a bar at 16 and 1008.
         assertEquals(
             (bar.left + ttSpacing.hairlineInset).value.toDouble(),
-            tabs.first().left.value.toDouble(),
+            cells.first().left.value.toDouble(),
             0.01,
-            "expected the first tab to start one hairline inset inside the bar's left edge",
+            "expected the first cell to start one hairline inset inside the bar's left edge",
         )
         assertEquals(
             (bar.right - ttSpacing.hairlineInset).value.toDouble(),
-            tabs.last().right.value.toDouble(),
+            cells.last().right.value.toDouble(),
             0.01,
-            "expected the last tab to end one hairline inset inside the bar's right edge",
+            "expected the last cell (More) to end one hairline inset inside the bar's right edge",
         )
     }
 
@@ -1822,7 +1829,7 @@ object ShellScenarios {
     }
 
     /**
-     * Five tabs fit at phone width, and every one of them keeps its whole label.
+     * Five compact-bar cells fit at phone width, and every one keeps its whole label.
      *
      * ## Why this is a *fixed* expectation and not whatever the host produced
      *
@@ -1831,13 +1838,18 @@ object ShellScenarios {
      * an assertion about the host. 23.6.6 asks for a fixed expectation, and these are what
      * it means:
      *
-     * - **five** tabs, written as a literal rather than as [AppTab.entries].size — a sixth
-     *   tab is a design decision and has to change this number on purpose;
+     * - **five cells**, written as a literal rather than as [AppTab.entries].size — the enum
+     *   counts destinations, and two of those now live behind More rather than in the bar;
      * - **390dp**, the narrowest phone this app ships to, pinned as a literal rather than
      *   taken from whatever device the build is on;
      * - **44dp**, the minimum hit target both platforms' accessibility guidance names,
      *   read from [ttSpacing.iconButtonSize] so the assertion tracks the token rather than
      *   a number that can drift away from it.
+     *
+     * Adding a destination must still be deliberate: the four direct tabs plus the two More
+     * actions must account for every [AppTab.entries] member. That check is separate from the
+     * cell count precisely so hiding a new destination cannot make this scenario go green by
+     * quietly dropping it.
      *
      * ## The shell is constrained, not the window resized
      *
@@ -1853,15 +1865,19 @@ object ShellScenarios {
      * ## Why the labels are what is worth asserting
      *
      * The segments splitting evenly is already [theTabBarIsWiderThanItsTabs]. What is new
-     * with a fifth tab is that every segment is **narrower**, and the caption is the only
+     * with a fifth cell is that every segment is **narrower**, and the caption is the only
      * thing in a segment with an intrinsic width. It is `maxLines = 1` with **no**
      * `overflow`, so a caption that does not fit is *clipped* — not ellipsised — and a
      * clipped caption still renders as text, still measures as non-empty, and is exactly
      * the kind of fault that survives a screenshot review.
      *
-     * So the check is each caption's laid-out width against the box it was given, with the
-     * numbers dumped when it fails. A caption *narrower* than its box is fitting; one
-     * exactly as wide has been cut.
+     * The More actions have no captions at all by design; their names are content descriptions,
+     * asserted in `everyTabIsNamedAndCarriesTheTabRole`. Measuring a caption inside them here
+     * would be asserting the rectangular menu this change removed.
+     *
+     * So the check is each cell caption's laid-out width against the box it was given, with the
+     * numbers dumped when it fails. A caption *narrower* than its box is fitting; one exactly
+     * as wide has been cut.
      */
     val fiveTabsFitAtPhoneWidth: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()), width = PHONE_WIDTH)
@@ -1869,16 +1885,24 @@ object ShellScenarios {
 
         assertEquals(
             PHONE_TAB_COUNT,
-            AppTab.entries.size,
-            "the tab count is a fixed expectation rather than whatever the enum currently says — " +
-                "a sixth tab is a design decision and has to change this number on purpose",
+            compactDirectTabs.size + 1,
+            "the compact bar has a fixed cell count rather than whatever the enum currently " +
+                "says — a sixth bottom cell is a design decision and has to change this " +
+                "number on purpose",
+        )
+        assertEquals(
+            AppTab.entries.toSet(),
+            (compactDirectTabs + hiddenMoreTabs).toSet(),
+            "every destination must be placed either directly in the compact bar or behind " +
+                "More; a new enum entry that is in neither is a destination the user cannot reach",
         )
 
         val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
         val barWidthPx = bar.widthPx()
-        val captions = AppTab.entries.associateWith { captionInside(it) }
-        val segments = AppTab.entries.associateWith {
-            onNodeWithTag(TabButtonTag(it)).getBoundsInRoot().widthPx()
+        val cellTags = compactBarCellTags()
+        val captions = cellTags.associateWith { captionInside(it) }
+        val segments = cellTags.associateWith {
+            onNodeWithTag(it).getBoundsInRoot().widthPx()
         }
 
         // The numbers below, measured on the JVM host at 390dp and density 1, with the whole
@@ -1886,10 +1910,10 @@ object ShellScenarios {
         //
         //   bar            x 16.0..374.0 dp, 358px wide  (= 390 − 2 × tabBarEdgeInset 16)
         //   segments       71, 71, 70, 70, 70 px       (= (358 − 2 × hairlineInset 3) / 5 = 70.4)
-        //   captions       projects 47, board 34, backlog 46, sprints 41, settings 47 px
+        //   direct captions  projects 47, board 34, backlog 46, sprints 41 px; More is shorter
         //   caption boxes  71, 71, 70, 70, 70 px
         //
-        // The segment widths are the point of 23.6.6: five tabs is the first count this bar
+        // The segment widths are the point of 23.6.6: five cells is the first count this bar
         // has been laid out at, and 70.4px is comfortably above the 44px minimum — the
         // finding is that it fits, not that it is tight.
         val measured = buildString {
@@ -1900,16 +1924,16 @@ object ShellScenarios {
         }
 
         // The even split, restated for five. The lens travels `selectedIndex * segmentWidth`,
-        // so an uneven split puts the highlight on the wrong tab — which is the failure this
+        // so an uneven split puts the highlight on the wrong cell — which is the failure this
         // is looking for, and the reason the check is not merely "it fits".
         val segmentWidths = segments.values.toList()
         val spread = segmentWidths.max() - segmentWidths.min()
         assertTrue(
             spread <= 1.0,
-            "expected the five tabs to split a ${barWidthPx}px bar evenly to within a pixel, " +
-                "got $segmentWidths (spread ${spread}px)$measured. The lens's travel is " +
-                "`selectedIndex * segmentWidth`, so an uneven split puts the highlight on the " +
-                "wrong tab.",
+            "expected the five compact cells to split a ${barWidthPx}px bar evenly to within " +
+                "a pixel, got $segmentWidths (spread ${spread}px)$measured. The lens's travel " +
+                "is `selectedIndex * segmentWidth`, so an uneven split puts the highlight on " +
+                "the wrong cell.",
         )
 
         // The fit itself, derived from tokens rather than read from this host. The bar insets
@@ -1919,7 +1943,7 @@ object ShellScenarios {
         val widestPossibleSegment = (PHONE_WIDTH - insets) / PHONE_TAB_COUNT.toFloat()
         assertTrue(
             widestPossibleSegment >= ttSpacing.iconButtonSize,
-            "at ${PHONE_WIDTH.value}dp a $PHONE_TAB_COUNT-tab bar gives each tab at most " +
+            "at ${PHONE_WIDTH.value}dp a $PHONE_TAB_COUNT-cell bar gives each cell at most " +
                 "${widestPossibleSegment.value}dp, below the ${ttSpacing.iconButtonSize.value}dp " +
                 "minimum hit target$measured",
         )
@@ -1933,32 +1957,32 @@ object ShellScenarios {
         // the JVM. That is not a wide margin for a word like "Backlog" in a larger language,
         // which is why the failure message carries every caption rather than just the one that
         // broke.
-        for ((tab, caption) in captions) {
+        for ((tag, caption) in captions) {
             assertTrue(
                 caption.drawnWidth <= caption.boxWidth,
-                "the ${tab.wireValue} caption laid out ${caption.drawnWidth}px wide inside a " +
+                "the $tag caption laid out ${caption.drawnWidth}px wide inside a " +
                     "${caption.boxWidth}px segment, which is what a clipped label looks like — " +
                     "the tab bar's caption is `maxLines = 1` with no overflow, so a label that " +
                     "does not fit is cut mid-glyph rather than ellipsised. Every caption: " +
-                    "${captions.entries.joinToString { "${it.key.wireValue}=${it.value}" }}$measured",
+                    "${captions.entries.joinToString { "${it.key}=${it.value}" }}$measured",
             )
         }
     }
 
-    /** A tab's caption: how wide the text laid out, and how wide the box it was given. */
+    /** A cell's caption: how wide the text laid out, and how wide the box it was given. */
     private data class Caption(val drawnWidth: Double, val boxWidth: Double) {
         override fun toString(): String = "${drawnWidth}px in ${boxWidth}px"
     }
 
     /**
-     * The caption node inside a tab.
+     * The caption node inside a compact-bar cell.
      *
-     * A tab is a `clickable`, so its subtree is merged and this node exists **only in the
+     * A cell is a `clickable`, so its subtree is merged and this node exists **only in the
      * unmerged tree** — the same trap `TestQueries.onNested` documents for the board's cards,
      * and the reason this reaches for `useUnmergedTree` rather than for a tag.
      */
-    private fun ComposeUiTest.captionInside(tab: AppTab): Caption {
-        val node = onNodeWithTag(TabButtonTag(tab), useUnmergedTree = true)
+    private fun ComposeUiTest.captionInside(tag: String): Caption {
+        val node = onNodeWithTag(tag, useUnmergedTree = true)
             .fetchSemanticsNode()
         val text = node.children
             .first { it.config.getOrElseNullable(SemanticsProperties.Text) { null } != null }
@@ -1980,8 +2004,26 @@ object ShellScenarios {
     /** The narrowest phone this app ships to, as a fixed number rather than a device's. */
     private val PHONE_WIDTH = 390.dp
 
-    /** Six, written out so a seventh tab has to change this on purpose. */
-    private const val PHONE_TAB_COUNT = 6
+    /** Five items on the mobile bottom tab bar (Projects, Board, Backlog, Sprints, More). */
+    private const val PHONE_TAB_COUNT = 5
+
+    /** Six destinations on the desktop/tablet navigation rail. */
+    private const val RAIL_TAB_COUNT = 6
+
+    /** Destinations with their own cell in the compact bar, in bar order. */
+    private val compactDirectTabs = listOf(
+        AppTab.Projects,
+        AppTab.Board,
+        AppTab.Backlog,
+        AppTab.Sprints,
+    )
+
+    /** Destinations reached through the compact bar's More cell rather than directly. */
+    private val hiddenMoreTabs = listOf(AppTab.Notifications, AppTab.Settings)
+
+    /** Test tags for the five cells the compact bar actually lays out, in order. */
+    private fun compactBarCellTags(): List<String> =
+        compactDirectTabs.map(::TabButtonTag) + MoreTabTag
 
     /**
      * A desktop window, as a fixed number rather than a device's.
@@ -2162,10 +2204,10 @@ object ShellScenarios {
         ).getBoundsInRoot()
         val cellHeight = firstCell.bottom.value - firstCell.top.value
         assertEquals(
-            cellHeight * PHONE_TAB_COUNT,
+            cellHeight * RAIL_TAB_COUNT,
             railHeight - ttSpacing.hairlineInset.value * 2,
             cellHeight * QUARTER,
-            "the rail's ${railHeight}dp should be $PHONE_TAB_COUNT destinations of $cellHeight dp " +
+            "the rail's ${railHeight}dp should be $RAIL_TAB_COUNT destinations of $cellHeight dp " +
                 "plus ${ttSpacing.hairlineInset.value * 2}dp of its own vertical padding. Cells " +
                 "that do not share the height equally put the lens's segment — the rail's height " +
                 "divided by the destination count — in the wrong place",
@@ -2237,11 +2279,11 @@ object ShellScenarios {
         // destination on it. The bar has `fiveTabsFitAtPhoneWidth` for this; the rail needed the
         // equivalent and did not have one.
         assertEquals(
-            PHONE_TAB_COUNT,
+            RAIL_TAB_COUNT,
             AppTab.entries.count {
                 onAllNodesWithTag(NavigationRailButtonTag(it)).fetchSemanticsNodes().isNotEmpty()
             },
-            "the rail should carry all $PHONE_TAB_COUNT destinations, one " +
+            "the rail should carry all $RAIL_TAB_COUNT destinations, one " +
                 "NavigationRailButtonTag each. A cell that stopped composing is invisible to the " +
                 "selection scenarios, which only ever look at the selected one",
         )
@@ -4058,7 +4100,7 @@ object ShellScenarios {
             )
             waitForIdle()
 
-            onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+            openMoreAction(AppTab.Settings)
             waitForIdle()
             onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
             waitForIdle()
@@ -4180,7 +4222,7 @@ object ShellScenarios {
         )
         waitForIdle()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         onNodeWithTag(SettingsManageMembersTag).performScrollTo().performClick()
         waitForIdle()
@@ -4357,7 +4399,7 @@ object ShellScenarios {
         )
         waitForIdle()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
         waitForIdle()
@@ -4423,7 +4465,7 @@ object ShellScenarios {
         )
         waitForIdle()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         onNodeWithTag(SettingsManageProjectsTag).performScrollTo().performClick()
         waitForIdle()
@@ -4808,7 +4850,7 @@ object ShellScenarios {
             lensAfterTap.top.value > lensOnLanding.top.value,
             "after tapping Settings the lens moved from ${lensOnLanding.top.value}dp to " +
                 "${lensAfterTap.top.value}dp — it did not travel at all. Settings is the last of " +
-                "$PHONE_TAB_COUNT destinations, so the lens should have gone down the rail",
+                "$RAIL_TAB_COUNT destinations, so the lens should have gone down the rail",
         )
         assertTrue(
             lensAfterTap.bottom.value <= settingsBottom + ONE_POINT &&
@@ -4878,19 +4920,18 @@ object ShellScenarios {
 
 
     /**
-     * Every destination is named in the bar, and exactly one of them says it is the current one.
+     * Exactly one compact bar cell says it is the current one.
      *
      * Selection is carried by three independent things — tint, label weight, and this
      * `selected` property — precisely so it survives someone who cannot separate the two
      * colours. That redundancy is only worth anything if the semantics property is actually
      * set, and a semantics property that is silently never set is invisible to every other test
-     * in this file: the tabs still navigate, the screens still change, and VoiceOver still
-     * reads four buttons with no indication of which one is showing.
+     * in this file: the cells still navigate, the screens still change, and VoiceOver still
+     * reads five buttons with no indication of which one is showing.
      *
-     * Checked on two tabs rather than one, because "the property is set" and "the property
-     * *follows* the route" fail differently: the first is a missing `semantics { }`, the second
-     * is a `selected` that is read once and never updates. Asserting only the landing tab
-     * passes under both.
+     * Checked on two states rather than one, because "the property is set" and "the property
+     * *follows* the route" fail differently. Once a hidden destination is showing, the More
+     * cell carries the selection: Settings and Inbox have no bar cell of their own any more.
      */
     val exactlyOneTabIsMarkedSelected: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()))
@@ -4898,40 +4939,115 @@ object ShellScenarios {
         waitForIdle()
         // Projects is the landing tab.
         assertEquals(
-            listOf(AppTab.Projects),
-            selectedTabs(),
+            listOf(TabButtonTag(AppTab.Projects)),
+            selectedTabTags(),
             "expected the landing tab to be the selected one",
         )
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         assertEquals(
-            listOf(AppTab.Settings),
-            selectedTabs(),
-            "expected selection to follow the tab that was chosen",
+            listOf(MoreTabTag),
+            selectedTabTags(),
+            "expected the More cell to carry selection while a hidden destination is showing",
         )
     }
 
     /**
-     * Each tab reads to a screen reader as a tab, and each is named.
+     * The bar's five cells are named as tabs, and the speed dial is named as buttons.
      *
-     * Two things that are one line of code each and that nothing else in the suite can see.
-     * [Role.Tab] is what gets a tab announced as a tab rather than as another button, and it is
-     * a `Role` argument on `clickable` — omitting it changes nothing about the app and is
-     * caught by nothing. The labels are asserted because the glyphs are deliberately
-     * unlabelled for accessibility (the label below each one already names it), so a missing
-     * string resource would leave a tab with no name *at all*.
+     * [Role.Tab] is what gets a bar cell announced as a tab rather than as another button, and
+     * it is a `Role` argument on `clickable` — omitting it changes nothing visible and is caught
+     * by nothing else. The labels are asserted for the same reason: the glyphs are deliberately
+     * unlabelled for accessibility, so a missing string resource would leave a cell with no name
+     * at all.
+     *
+     * The expanded actions deliberately invert that contract. They carry their captions as
+     * `contentDescription` but draw no caption at all — the old rectangular rows with "Settings"
+     * and "Inbox" printed inside were the thing being replaced — so this scenario also measures
+     * them as circles, checks their spoken names, and proves the bottom one grows out of the
+     * More cell rather than from the screen edge.
      */
     val everyTabIsNamedAndCarriesTheTabRole: suspend ComposeUiTest.() -> Unit = {
         setUpShell(session = ScriptedSession(restored = signedIn()))
 
         waitForIdle()
-        AppTab.entries.forEach { tab ->
+        listOf(AppTab.Projects, AppTab.Board, AppTab.Backlog, AppTab.Sprints).forEach { tab ->
             onNodeWithTag(TabButtonTag(tab))
                 .assertIsDisplayed()
                 .assert(expectTabRole())
                 .assert(hasText(tabLabel(tab), substring = true))
         }
+        onNodeWithTag(MoreTabTag)
+            .assertIsDisplayed()
+            .assert(expectTabRole())
+            .assert(hasText(getString(Res.string.tab_more), substring = true))
+
+        // Open from the anchor, and verify what is actually rendered above it.
+        onNodeWithTag(MoreTabTag).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        listOf(AppTab.Settings, AppTab.Notifications).forEach { tab ->
+            val action = onNodeWithTag(TabButtonTag(tab))
+            action.assertIsDisplayed().assert(expectButtonRole())
+            val node = action.fetchSemanticsNode()
+            assertEquals(
+                listOf(tabLabel(tab)),
+                node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty(),
+                "the icon-only $tab action must still be named for a screen reader",
+            )
+            val renderedText = node.config.getOrNull(SemanticsProperties.Text)
+                .orEmpty()
+                .joinToString { it.text }
+            assertTrue(
+                !renderedText.contains(tabLabel(tab), ignoreCase = true),
+                "the $tab action drew '$renderedText'; the speed dial must not print its caption",
+            )
+            assertTrue(
+                onAllNodesWithText(tabLabel(tab)).fetchSemanticsNodes().isEmpty(),
+                "the $tab caption is rendered somewhere in the shell; the speed dial must be " +
+                    "icon-only",
+            )
+            val bounds = action.getBoundsInRoot()
+            val actionWidth = (bounds.right - bounds.left).value
+            val actionHeight = (bounds.bottom - bounds.top).value
+            assertTrue(
+                abs(actionWidth - actionHeight) < 1f,
+                "the $tab action is ${actionWidth}dp by ${actionHeight}dp; " +
+                    "an icon-only action must be circular",
+            )
+            assertTrue(
+                actionWidth >= ttSpacing.iconButtonSize.value - 1f,
+                "the $tab action is only ${actionWidth}dp wide; the minimum target is " +
+                    "${ttSpacing.iconButtonSize.value}dp",
+            )
+        }
+
+        val anchor = onNodeWithTag(MoreTabTag).getBoundsInRoot()
+        val inbox = onNodeWithTag(TabButtonTag(AppTab.Notifications)).getBoundsInRoot()
+        assertTrue(
+            inbox.bottom.value < anchor.top.value,
+            "the Inbox action ends at ${inbox.bottom.value}dp but the More cell starts at " +
+                "${anchor.top.value}dp; the speed dial must sit above the cell it grows from",
+        )
+        assertTrue(
+            abs(
+                (inbox.left.value + inbox.right.value) / 2f -
+                    (anchor.left.value + anchor.right.value) / 2f,
+            ) < 2f,
+            "the Inbox action is centred on ${(inbox.left.value + inbox.right.value) / 2f}dp " +
+                "but the More cell is centred on " +
+                "${(anchor.left.value + anchor.right.value) / 2f}dp; the dial must grow out of " +
+                "that cell, not the screen edge",
+        )
+
+        // And the same anchor closes it. This is the half that catches an always-composed menu
+        // hidden only by alpha: it is still in the tree, and this assertion would fail.
+        onNodeWithTag(MoreTabTag).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        assertNothingTagged(
+            TabButtonTag(AppTab.Settings),
+            "tapping More again must close the speed dial",
+        )
     }
 
     /**
@@ -5017,7 +5133,7 @@ object ShellScenarios {
             preferences = store,
         )
         waitForIdle()
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         // The theme picker is a section of a LazyColumn, so on a phone viewport it is not
         // composed until the list reaches it — and the schemes themselves live in the dropdown
@@ -5059,7 +5175,7 @@ object ShellScenarios {
         setUpShell(session = session, settings = settings, preferences = store)
         waitForIdle()
 
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         // The Settings screen no longer renders a force-offline toggle (it was replaced by the
         // user-status picker), so the device-level intent is written straight to the raw key —
@@ -5125,8 +5241,14 @@ object ShellScenarios {
         openSeededProject(seeded)
 
         for ((tab, regionTag) in scrollRegionUnderTheBar) {
-            onNodeWithTag(TabButtonTag(tab)).performClick()
-            waitForIdle()
+            // Settings is behind More on the compact bar, so it has no bottom cell to click.
+            // Reach it through the speed dial instead; the other destinations keep their cells.
+            if (tab in hiddenMoreTabs) {
+                openMoreAction(tab)
+            } else {
+                onNodeWithTag(TabButtonTag(tab)).performClick()
+                waitForIdle()
+            }
 
             val bar = onNodeWithTag(TabBarTag).getBoundsInRoot()
             val region = onNodeWithTag(regionTag).getBoundsInRoot()
@@ -5195,7 +5317,7 @@ object ShellScenarios {
         // a second `setContent` that Android's `ComponentActivity` rejects with "has already set
         // content" — so this scenario measures the per-list row clearance and leaves the region
         // reach to the scenario that owns it.
-        onNodeWithTag(TabButtonTag(AppTab.Settings)).performClick()
+        openMoreAction(AppTab.Settings)
         waitForIdle()
         scrollSettingsListToEnd()
         assertLastRowClearsTheBar(
@@ -5522,25 +5644,38 @@ object ShellScenarios {
     private const val OVERFLOWING_ROWS = 40
 
     /**
-     * Which tabs the semantics tree is currently claiming as selected, in [AppTab] order.
+     * Which compact bar cell the semantics tree claims as selected, by test tag.
      *
      * Read from the tree rather than from the router on purpose. Asserting the router would
      * pass no matter what the bar drew, and the whole failure being guarded against is the bar
      * drawing something other than what the router says — a `selected` that never updates, or
-     * one that was set once at construction. The router is read nowhere in here for exactly
-     * that reason.
+     * one that was set once at construction.
      *
-     * Compared as a list so that "two tabs are selected" fails as loudly as "none is": a
-     * count-only assertion (`assertEquals(1, size)`) would accept a bar that lit the wrong
-     * single tab.
+     * More is in the list because hidden destinations no longer have a cell of their own: the
+     * anchor carries their selection. Compared as a list so that "two cells are selected" fails
+     * as loudly as "none is".
      */
-    private fun ComposeUiTest.selectedTabs(): List<AppTab> =
-        AppTab.entries
-            .filter { tab ->
+    private fun ComposeUiTest.selectedTabTags(): List<String> =
+        (AppTab.entries.map(::TabButtonTag) + MoreTabTag)
+            .filter { tag ->
                 onAllNodes(
-                    hasTestTag(TabButtonTag(tab)) and isSelected(),
+                    hasTestTag(tag) and isSelected(),
                 ).fetchSemanticsNodes().isNotEmpty()
             }
+
+    /**
+     * Reach a destination that lives behind the compact bar's More cell.
+     *
+     * Through semantics rather than a coordinate click: the action is a small circle that can
+     * sit under the virtual pointer of a preceding click, and the test is about the wiring from
+     * the speed dial to the router, not about touch dispatch.
+     */
+    private suspend fun ComposeUiTest.openMoreAction(tab: AppTab) {
+        onNodeWithTag(MoreTabTag).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(tab)).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+    }
 
     /**
      * A tab's label, read from the same string resource the bar uses.
@@ -5548,26 +5683,13 @@ object ShellScenarios {
      * Not a literal. If these were hardcoded English strings, renaming `tab_projects` in
      * `strings.xml` would fail this test — which sounds helpful until you remember that these
      * labels are localised, and that the test's job is to prove the bar renders *a* label for
-     * each tab, not to pin the English wording of four of them. Going through the resource
-     * means a missing or renamed resource is still a failure, and a translation is not.
+     * each cell, not to pin the English wording of four of them. The speed dial reuses these
+     * strings as content descriptions: invisible text still has to be named correctly.
      *
      * [getString] rather than `stringResource`, because this is a `suspend` test body and not
      * a composable one; there is no composition to read from here, which is the same reason
      * every other scenario in the project asserts against `getString`.
      */
-    /**
-     * Matches a node that announces itself as a tab rather than as a button.
-     *
-     * Spelled out rather than reached for as `hasRole`, because `ui-test` has no `hasRole` at
-     * all — the available matchers are `hasClickAction`, `hasText`, `hasTestTag` and friends,
-     * and role is one of the few semantics properties that has to go through
-     * `SemanticsMatcher.expectValue` by hand. Which is a decent argument on its own for the
-     * assertion existing: it is the reason to find out that a matcher you assumed was there
-     * is not.
-     */
-    private fun expectTabRole(): SemanticsMatcher =
-        SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
-
     private suspend fun tabLabel(tab: AppTab): String = when (tab) {
         AppTab.Projects -> getString(Res.string.tab_projects)
         AppTab.Board -> getString(Res.string.tab_board)
@@ -5576,5 +5698,18 @@ object ShellScenarios {
         AppTab.Notifications -> getString(Res.string.tab_notifications)
         AppTab.Settings -> getString(Res.string.tab_settings)
     }
+
+    /**
+     * Matches a node that announces itself as a tab rather than as a button.
+     *
+     * `ui-test` has no `hasRole`, so role has to go through `SemanticsMatcher.expectValue`
+     * by hand. The speed dial's actions are deliberately buttons, not tabs: they are a menu
+     * opened by a tab, and announcing them as two more peers would misstate the bar's shape.
+     */
+    private fun expectTabRole(): SemanticsMatcher =
+        SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)
+
+    private fun expectButtonRole(): SemanticsMatcher =
+        SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
 }
 
