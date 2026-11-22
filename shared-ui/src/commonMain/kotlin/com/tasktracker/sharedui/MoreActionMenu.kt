@@ -31,10 +31,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.LocalReducedMotion
-import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttCountBadge
 import com.tasktracker.designsystem.ttGlassIconButton
-import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttSelectionLabelInk
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.routing.AppTab
 
@@ -160,7 +159,9 @@ private fun MoreActionButton(
         ttGlassIconButton(
             image = tabIcon(tab),
             contentDescription = tabTitle(tab),
-            tint = if (selected) ttAccent() else ttLabel(),
+            // The glass button's top fill stop is the accent. Accent ink here would be
+            // accent-on-accent; this pairing is contrast-tested for both selection states.
+            tint = ttSelectionLabelInk(selected),
             onClick = { onSelect(tab) },
             modifier = Modifier.testTag(TabButtonTag(tab)),
         )

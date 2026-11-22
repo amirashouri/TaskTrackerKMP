@@ -24,9 +24,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import com.tasktracker.designsystem.ttActionIcons
-import com.tasktracker.resources.tab_more
-import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -71,6 +68,7 @@ import com.tasktracker.designsystem.TTGlassTabBar
 import com.tasktracker.designsystem.AccentPalette
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttAccent
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttLabel
@@ -136,6 +134,7 @@ import com.tasktracker.resources.scoped_no_project_body
 import com.tasktracker.resources.scoped_no_project_title
 import com.tasktracker.resources.tab_backlog
 import com.tasktracker.resources.tab_board
+import com.tasktracker.resources.tab_more
 import com.tasktracker.resources.tab_projects
 import com.tasktracker.resources.tab_settings
 import com.tasktracker.resources.tab_notifications
