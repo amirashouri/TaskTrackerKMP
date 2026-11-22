@@ -725,4 +725,14 @@ class ProjectsUiAndroidHostTest {
     @Test
     fun wideLayoutClampsSprintContentWidthAndCenters() =
         runComposeUiTest(block = SprintListScenarios.wideLayoutClampsContentWidthAndCenters)
+
+    /** A finished sprint card archives in one tap without opening the detail page. */
+    @Test
+    fun theFinishedSprintCardArchivesWithoutOpeningTheSprint() =
+        runComposeUiTest(block = SprintListScenarios.theFinishedCardArchivesWithoutOpeningTheSprint)
+
+    /** An open sprint card offers no archive action. */
+    @Test
+    fun anOpenSprintCardOffersNoArchiveAction() =
+        runComposeUiTest(block = SprintListScenarios.anOpenCardOffersNoArchiveAction)
 }
