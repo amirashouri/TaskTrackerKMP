@@ -16,9 +16,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import com.tasktracker.core.SprintID
+import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttDateRange
 import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -26,6 +28,7 @@ import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.resources.Res
+import com.tasktracker.resources.sprint_archive
 import com.tasktracker.resources.sprint_finished
 import com.tasktracker.resources.sprint_open
 import com.tasktracker.resources.sprint_progress
@@ -34,12 +37,17 @@ import org.jetbrains.compose.resources.stringResource
 /**
  * List row representing a sprint, displaying name, date window, story point progress,
  * lifecycle status badge (Open/Finished), and a complete badge once its goal is reached.
+ *
+ * [onArchive] is supplied by the Finished section only. It shares the sprint-progress row as an
+ * action button rather than a menu item, so filing a finished sprint away is one tap from the
+ * list it is read on. The icon button owns its own tap, so it never opens the detail screen.
  */
 @Composable
 fun SprintListRowView(
     row: SprintListRow,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onArchive: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -81,15 +89,32 @@ fun SprintListRowView(
             color = ttLabelSecondary(),
         )
         SprintProgressBar(fraction = row.progressFraction)
-        ttText(
-            text = stringResource(
-                Res.string.sprint_progress,
-                row.achievedStoryPoints,
-                row.sprint.goalStoryPoints,
-            ),
-            style = ttTypography.caption,
-            color = ttBodyLabel(),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+        ) {
+            ttText(
+                text = stringResource(
+                    Res.string.sprint_progress,
+                    row.achievedStoryPoints,
+                    row.sprint.goalStoryPoints,
+                ),
+                style = ttTypography.caption,
+                color = ttBodyLabel(),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(SprintProgressTextTag(row.sprint.id)),
+            )
+            if (onArchive != null) {
+                ttGlassIconButton(
+                    image = ttActionIcons.archive,
+                    contentDescription = stringResource(Res.string.sprint_archive),
+                    onClick = onArchive,
+                    modifier = Modifier.testTag(SprintArchiveActionTag(row.sprint.id)),
+                )
+            }
+        }
     }
 }
 
@@ -109,6 +134,10 @@ private fun SprintStatusBadge(
 }
 
 fun SprintRowTag(sprintID: SprintID): String = "sprints.row.${sprintID.stringValue}"
+
+fun SprintArchiveActionTag(sprintID: SprintID): String = "sprints.row.archive.${sprintID.stringValue}"
+
+fun SprintProgressTextTag(sprintID: SprintID): String = "sprints.row.progress.${sprintID.stringValue}"
 
 const val SprintStatusBadgeTag = "sprints.row.badge"
 

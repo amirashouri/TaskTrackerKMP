@@ -1756,6 +1756,7 @@ private fun SprintsDestination(
         // opened would have to read it first to know what it is editing. The destination used
         // to carry a nullable `editorSprintID` for the second case and never set it to anything
         // but null.
+        onArchive = { sprintID -> scope.launch { model.archive(sprintID) } },
         onNewSprint = requestNewSprint ?: { isEditorVisible = true },
         onDismissError = model::dismissError,
         onOpenSwitcher = { router.popToRoot() },

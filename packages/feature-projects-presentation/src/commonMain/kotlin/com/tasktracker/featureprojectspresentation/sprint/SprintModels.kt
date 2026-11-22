@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.SprintID
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintGoal
+import com.tasktracker.featureprojectsdomain.ArchiveSprint
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.domain.sprintSummary
@@ -62,6 +64,8 @@ class SprintListModel(
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
 ) : ObservingProjectModel(repository) {
 
+    private val archiveSprint = ArchiveSprint(repository, dateProvider)
+
     var inProgressRows: List<SprintListRow> by mutableStateOf(emptyList())
         private set
 
@@ -80,6 +84,14 @@ class SprintListModel(
     }
 
     val archivedIsEmpty: Boolean? get() = if (isLoading) null else archivedRows.isEmpty()
+
+    /**
+     * Files a finished sprint away from its card, the same use case the detail screen's Archive
+     * action runs. The repository emits a change, so the row moves itself from Finished to
+     * Archived; there is no local list surgery here.
+     */
+    suspend fun archive(sprintID: SprintID): Boolean =
+        reporting { archiveSprint(sprintID) } != null
 
     override fun isRelevant(change: ProjectChange): Boolean =
         change.projectID == null || change.projectID == projectID

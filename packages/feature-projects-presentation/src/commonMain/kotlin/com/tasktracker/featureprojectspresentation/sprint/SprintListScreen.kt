@@ -71,6 +71,7 @@ fun SprintListScreen(
     errorMessage: String?,
     project: Project? = null,
     onOpen: (SprintID) -> Unit,
+    onArchive: (SprintID) -> Unit,
     onNewSprint: () -> Unit,
     onDismissError: () -> Unit,
     onOpenSwitcher: (() -> Unit)? = null,
@@ -263,6 +264,10 @@ fun SprintListScreen(
                                     SprintListRowView(
                                         row = row,
                                         onClick = { onOpen(row.sprint.id) },
+                                        // Only this section offers the action: the archived list
+                                        // reuses the row, and a finished sprint already filed
+                                        // away has nothing left to archive.
+                                        onArchive = { onArchive(row.sprint.id) },
                                     )
                                 }
                             }

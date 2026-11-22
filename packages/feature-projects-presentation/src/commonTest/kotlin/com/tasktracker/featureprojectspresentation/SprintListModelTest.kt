@@ -453,4 +453,49 @@ class SprintListModelTest {
         // must not show a verdict it invented.
         assertNull(rows.getValue("No goal").didHitGoal)
     }
+
+    @Test
+    fun `archiving a finished sprint moves it out of the finished section`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isFinished = true)
+        repository.seed(sprint)
+
+        val model = listModel(repository, project.id)
+        model.observe(eagerScope())
+        advanceUntilIdle()
+        assertTrue(model.finishedRows.any { it.sprint.id == sprint.id })
+
+        assertTrue(model.archive(sprint.id))
+        advanceUntilIdle()
+
+        // The section move comes from the repository's change, not from this model editing
+        // its own lists: a screen that also mutated local state would disagree after a pull.
+        assertTrue(model.finishedRows.none { it.sprint.id == sprint.id })
+        assertTrue(model.archivedRows.any { it.sprint.id == sprint.id })
+        assertTrue("archiveSprint" in repository.writes)
+        assertNull(model.errorMessage)
+    }
+
+    @Test
+    fun `archiving an unfinished sprint reports the refusal`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        repository.seed(project)
+        val sprint = testSprint(project.id, isFinished = false)
+        repository.seed(sprint)
+
+        val model = listModel(repository, project.id, clockDate = Instant.parse("2026-03-10T00:00:00Z"))
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertFalse(model.archive(sprint.id))
+        advanceUntilIdle()
+
+        assertTrue(model.errorMessage != null, "the refusal should reach the screen's banner")
+        // Still in progress: a failed archive must not move the row anywhere.
+        assertTrue(model.inProgressRows.any { it.sprint.id == sprint.id })
+        assertTrue(model.archivedRows.none { it.sprint.id == sprint.id })
+    }
 }

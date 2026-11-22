@@ -20,13 +20,17 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.SprintID
 import com.tasktracker.domain.Sprint
 import kotlinx.datetime.LocalDate
 import kotlin.math.abs
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -152,6 +156,65 @@ object SprintListScenarios {
     }
 
     /**
+     * The Finished card files its sprint away in one tap, and that tap does not open the detail
+     * page.
+     *
+     * The action shares the sprint-progress row rather than the header: the header already holds
+     * the name, the complete badge and the status, and a control there would compete with a
+     * two-line title. The bounds assertion pins that it overlaps the progress row, and the click
+     * assertion proves the icon button consumes its own tap instead of falling through to the
+     * card's `onClick`.
+     */
+    val theFinishedCardArchivesWithoutOpeningTheSprint: suspend ComposeUiTest.() -> Unit = {
+        val finished = finishedSprintRows().single()
+        var archived: SprintID? = null
+        var opened = false
+
+        sprintListShowing(
+            activeRows = emptyList(),
+            finishedRows = listOf(finished),
+            onOpen = { opened = true },
+            onArchive = { archived = it },
+        )
+        waitForIdle()
+
+        onNodeWithTag(SprintArchiveActionTag(finished.sprint.id)).assertIsDisplayed()
+
+        // Both are children of the merged card node, so their tags are only visible unmerged.
+        val progress = onNodeWithTag(SprintProgressTextTag(finished.sprint.id), useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val action = onNodeWithTag(SprintArchiveActionTag(finished.sprint.id))
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            action.top < progress.bottom - EDGE_TOLERANCE_PX &&
+                progress.top < action.bottom - EDGE_TOLERANCE_PX,
+            "the archive action (${action.top}..${action.bottom}) and the sprint progress " +
+                "(${progress.top}..${progress.bottom}) do not overlap vertically, so the action " +
+                "is not on the progress row: action=$action progress=$progress",
+        )
+
+        onNodeWithTag(SprintArchiveActionTag(finished.sprint.id)).performClick()
+        waitForIdle()
+
+        assertEquals(finished.sprint.id, archived, "the action should archive the sprint it belongs to")
+        assertFalse(opened, "archiving from the card must not open the sprint detail")
+    }
+
+    /**
+     * An open sprint's card offers no archive action.
+     *
+     * The use case refuses an unfinished sprint, so a button here would only be a way to
+     * produce an error banner. Its absence is the assertion.
+     */
+    val anOpenCardOffersNoArchiveAction: suspend ComposeUiTest.() -> Unit = {
+        val open = activeSprintRows().single()
+        sprintListShowing(activeRows = listOf(open))
+        waitForIdle()
+
+        onNodeWithTag(SprintArchiveActionTag(open.sprint.id)).assertDoesNotExist()
+    }
+
+    /**
      * Half a pixel of slack for a bounds comparison.
      *
      * Layout works in integers at the host's density, but the comparison is in floating-point
@@ -188,6 +251,20 @@ private fun activeSprintRows(sprint: Sprint = ViewPreviewData.openSprint): List<
         ),
     )
 
+/** A finished sprint, which is the only kind that may offer the archive action. */
+private fun finishedSprintRows(
+    sprint: Sprint = ViewPreviewData.finishedSprint,
+): List<SprintListRow> = listOf(
+    SprintListRow(
+        sprint = sprint,
+        startDate = LocalDate(2026, 2, 9),
+        endDate = LocalDate(2026, 2, 20),
+        committedStoryPoints = 8,
+        achievedStoryPoints = 8,
+        didHitGoal = true,
+    ),
+)
+
 /**
  * The sprint list at a fixed width.
  *
@@ -196,7 +273,13 @@ private fun activeSprintRows(sprint: Sprint = ViewPreviewData.openSprint): List<
  * to be on screen, and every control measured starts there.
  */
 @OptIn(ExperimentalTestApi::class)
-private fun ComposeUiTest.sprintListShowing(width: Dp? = null) {
+private fun ComposeUiTest.sprintListShowing(
+    width: Dp? = null,
+    activeRows: List<SprintListRow> = activeSprintRows(),
+    finishedRows: List<SprintListRow> = emptyList(),
+    onOpen: () -> Unit = {},
+    onArchive: (SprintID) -> Unit = {},
+) {
     setContent {
         Themed {
             Box(
@@ -207,15 +290,16 @@ private fun ComposeUiTest.sprintListShowing(width: Dp? = null) {
                 },
             ) {
                 SprintListScreen(
-                    inProgressRows = activeSprintRows(),
+                    inProgressRows = activeRows,
                     scheduledRows = emptyList(),
-                    finishedRows = emptyList(),
+                    finishedRows = finishedRows,
                     archivedRows = emptyList(),
-                    activeIsEmpty = false,
+                    activeIsEmpty = activeRows.isEmpty() && finishedRows.isEmpty(),
                     archivedIsEmpty = true,
                     errorMessage = null,
                     project = ViewPreviewData.seededProject,
-                    onOpen = {},
+                    onOpen = { onOpen() },
+                    onArchive = onArchive,
                     onNewSprint = {},
                     onDismissError = {},
                     onOpenSwitcher = {},
