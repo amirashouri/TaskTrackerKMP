@@ -234,18 +234,19 @@ fun WorkItemBacklogRow(
                             onClick = onUnarchive,
                             testTag = BacklogUnarchiveTag(item),
                         )
-                    } else if (!effectiveStatus.isTerminal) {
-                        BacklogAction(
-                            label = stringResource(Res.string.work_item_archive),
-                            isBusy = isBusy,
-                            onClick = onFileAway,
-                            testTag = BacklogFileAwayTag(item),
-                        )
                     }
+                }
+                Spacer(Modifier.weight(1f))
+                if (!effectiveStatus.isTerminal) {
+                    ttGlassIconButton(
+                        image = ttActionIcons.archive,
+                        contentDescription = stringResource(Res.string.work_item_archive),
+                        onClick = { if (!isBusy) onFileAway() },
+                        modifier = Modifier.testTag(BacklogFileAwayTag(item)),
+                    )
                 }
                 // Copy stays active while busy: reads in-memory text without racing pending write mutations
                 if (onCopy != null) {
-                    Spacer(Modifier.weight(1f))
                     ttGlassIconButton(
                         image = ttActionIcons.copy,
                         contentDescription = stringResource(Res.string.work_item_copy),
