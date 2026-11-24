@@ -163,16 +163,23 @@ fun EpicEditorScreen(
             imeAction = ImeAction.Default,
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.xs)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+            // Bottom-aligned with the field itself, not the label above it, so the cross
+            // sits on the control's line instead of floating beside the caption.
+            verticalAlignment = Alignment.Bottom,
+        ) {
             TTDateField(
                 label = stringResource(Res.string.epic_due_label),
                 value = model.dueDate,
                 onValueChange = { model.onDueDateChanged(it) },
-                modifier = Modifier.testTag(EpicEditorDueTag),
+                modifier = Modifier.weight(1f).testTag(EpicEditorDueTag),
             )
             if (model.dueDate != null) {
-                ttGlassButton(
-                    label = stringResource(Res.string.epic_due_clear),
+                ttGlassIconButton(
+                    image = ttActionIcons.close,
+                    contentDescription = stringResource(Res.string.epic_due_clear),
                     onClick = { model.onDueDateChanged(null) },
                     modifier = Modifier.testTag(EpicEditorClearDueTag),
                 )
