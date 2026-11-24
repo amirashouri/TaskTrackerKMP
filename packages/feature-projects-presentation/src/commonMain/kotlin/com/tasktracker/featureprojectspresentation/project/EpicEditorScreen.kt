@@ -34,6 +34,7 @@ import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -274,11 +275,15 @@ fun EpicEditorScreen(
                                     color = ttAccent(),
                                 )
                             }
+                            // An annotation on the row, not the row's action: the inline close
+                            // glyph keeps the unlink well from dominating the task title.
                             ttGlassIconButton(
                                 image = ttActionIcons.close,
                                 contentDescription = stringResource(Res.string.epic_unlink_item),
                                 onClick = { scope.launch { model.unlink(item.id) } },
                                 modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
+                                size = ttSpacing.xxxl,
+                                iconSize = ttIconSize.close,
                             )
                         }
                     }
