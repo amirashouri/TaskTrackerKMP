@@ -2,6 +2,9 @@ package com.tasktracker.featureprojectspresentation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
@@ -170,6 +173,35 @@ object WorkItemBacklogRowScenarios {
         rowShowing(item = item, onCopy = null)
 
         onNested(BacklogCopyTag(item)).assertDoesNotExist()
+    }
+
+    /**
+     * The link action is offered for an unlinked item and disappears as soon as the item carries
+     * an epic, which is what the row receives after a successful link reloads the backlog.
+     */
+    val theEpicLinkControlHidesOnceTheItemIsLinked: suspend ComposeUiTest.() -> Unit = {
+        val epic = testEpic(listOf(ViewPreviewData.seededProject.id), title = "Ship it")
+        val item = ViewPreviewData.workItems
+            .first { it.status == WorkItemStatus.Backlog }
+            .copy(epicID = null)
+        var isLinked by mutableStateOf(false)
+
+        setContent {
+            Themed {
+                WorkItemBacklogRow(
+                    item = if (isLinked) item.copy(epicID = epic.id) else item,
+                    onPutOnBoard = {},
+                    onFileAway = {},
+                    onLinkToEpic = { isLinked = true },
+                )
+            }
+        }
+
+        onNested(BacklogLinkEpicTag(item)).assertIsDisplayed()
+        onNested(BacklogLinkEpicTag(item)).performClick()
+        waitForIdle()
+
+        onNested(BacklogLinkEpicTag(item)).assertDoesNotExist()
     }
 
     /**

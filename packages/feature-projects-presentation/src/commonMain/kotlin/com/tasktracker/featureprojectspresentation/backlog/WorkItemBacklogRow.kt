@@ -39,6 +39,7 @@ import com.tasktracker.domain.WorkItem
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.archive_reopen
+import com.tasktracker.resources.backlog_link_epic
 import com.tasktracker.resources.backlog_put_on_board
 import com.tasktracker.resources.sprint_remove_from_sprint
 import com.tasktracker.resources.work_item_archive
@@ -47,8 +48,9 @@ import org.jetbrains.compose.resources.stringResource
 
 /**
  * Full-width task row used across Backlog, Kanban, Archive, and Sprint views.
- * Action buttons adapt to context: Backlog (Put on Board, Archive), Kanban (Archive), Archive
- * (Reopen), Sprint (Remove).
+ * Action buttons adapt to context: Backlog (Put on Board, Link to epic, Archive), Kanban
+ * (Archive), Archive (Reopen), Sprint (Remove). The epic action disappears once the item has
+ * an epic: the link is one field, and a second action could only replace the first silently.
  *
  * A terminal row (`Done` or `Closed`) never offers "File away" — it is already filed away, and
  * `ArchiveWorkItem` refuses the write. Where a reopen handler is supplied it offers Reopen
@@ -74,6 +76,8 @@ fun WorkItemBacklogRow(
     onOpen: (() -> Unit)? = null,
     onUnarchive: (() -> Unit)? = null,
     onRemoveFromSprint: (() -> Unit)? = null,
+    /** Opens the epic picker; null draws no control, and a linked item draws none either. */
+    onLinkToEpic: (() -> Unit)? = null,
     /** Invoked with item summary for clipboard copy; null draws no copy control. */
     onCopy: ((String) -> Unit)? = null,
     /** Project tag definitions used to resolve [WorkItem.tagIDs] into icons. */
@@ -237,6 +241,14 @@ fun WorkItemBacklogRow(
                     }
                 }
                 Spacer(Modifier.weight(1f))
+                if (onLinkToEpic != null && item.epicID == null) {
+                    ttGlassIconButton(
+                        image = ttActionIcons.link,
+                        contentDescription = stringResource(Res.string.backlog_link_epic),
+                        onClick = { if (!isBusy) onLinkToEpic() },
+                        modifier = Modifier.testTag(BacklogLinkEpicTag(item)),
+                    )
+                }
                 if (!effectiveStatus.isTerminal) {
                     ttGlassIconButton(
                         image = ttActionIcons.archive,
@@ -280,6 +292,7 @@ const val WorkItemBacklogRowTagPrefix = "backlog.row"
 
 fun WorkItemBacklogRowTag(item: WorkItem): String = "$WorkItemBacklogRowTagPrefix.${item.key}"
 fun BacklogPutOnBoardTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.putOnBoard"
+fun BacklogLinkEpicTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.linkEpic"
 fun BacklogFileAwayTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.fileAway"
 fun BacklogUnarchiveTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.unarchive"
 fun BacklogRemoveFromSprintTag(item: WorkItem): String = "${WorkItemBacklogRowTag(item)}.removeFromSprint"

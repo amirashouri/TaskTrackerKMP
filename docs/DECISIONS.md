@@ -168,6 +168,12 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   The picker is single-select with no "unassigned" entry: the server gives a create its
   deterministic admin default and keeps the stored owner when an update omits it. Null is
   therefore a legacy or deleted-account value, not a state the UI may offer.
+- **A backlog item links to an epic through a project-scoped picker, and the action hides
+  once linked.** The picker offers only active epics that list the item's project — the same
+  rule `SetWorkItemEpic` enforces — because anything else is a choice the write refuses.
+  `WorkItem.epicID` is the single link field, so showing the action on an already-linked row
+  would either do nothing or replace the link without saying so. Load the choices on demand;
+  the backlog's projection is the list being read, and an unopened picker owes it no read.
 
 ### Selection and batches
 

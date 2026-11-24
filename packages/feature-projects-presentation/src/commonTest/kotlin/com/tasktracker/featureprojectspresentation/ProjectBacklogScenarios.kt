@@ -44,10 +44,12 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.designsystem.TTToastTag
 import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -730,6 +732,10 @@ private fun ComposeUiTest.backlogShowing(
     onClearSelection: () -> Unit = {},
     onPutSelectionOnBoard: (String?) -> Unit = {},
     onArchiveSelection: () -> Unit = {},
+    availableEpics: List<Epic> = emptyList(),
+    isLoadingEpics: Boolean = false,
+    onLoadEpics: () -> Unit = {},
+    onLinkItemToEpic: (WorkItemID, EpicID) -> Unit = { _, _ -> },
 ) {
     setContent {
         Themed {
@@ -767,11 +773,54 @@ private fun ComposeUiTest.backlogShowing(
                     onClearSelection = onClearSelection,
                     onPutSelectionOnBoard = onPutSelectionOnBoard,
                     onArchiveSelection = onArchiveSelection,
+                    availableEpics = availableEpics,
+                    isLoadingEpics = isLoadingEpics,
+                    onLoadEpics = onLoadEpics,
+                    onLinkItemToEpic = onLinkItemToEpic,
                 )
             }
         }
     }
 
+    }
+
+    /**
+     * The row's link action opens the project's epic list and the tapped epic is the one
+     * committed. The sheet's title is asserted before the tap because an empty sheet would also
+     * close on a row tap that had nothing to do with the epic.
+     */
+    val linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice: suspend ComposeUiTest.() -> Unit = {
+        val project = ViewPreviewData.seededProject
+        val item = backlogItems().first().copy(epicID = null)
+        val epic = testEpic(listOf(project.id), title = "Ship it")
+        var loaded = false
+        var linkedItem: WorkItemID? = null
+        var linkedEpic: EpicID? = null
+
+        backlogShowing(
+            items = listOf(item),
+            onAddTask = null,
+            project = project,
+            availableEpics = listOf(epic),
+            onLoadEpics = { loaded = true },
+            onLinkItemToEpic = { workItemID, epicID ->
+                linkedItem = workItemID
+                linkedEpic = epicID
+            },
+        )
+
+        onNested(BacklogLinkEpicTag(item)).assertIsDisplayed()
+        onNested(BacklogLinkEpicTag(item)).performClick()
+        waitForIdle()
+
+        assertTrue(loaded, "opening the picker must ask the host for this project's epics")
+        onNodeWithTag(BacklogEpicPickerTag).assertIsDisplayed()
+        onNodeWithTag(BacklogEpicPickerRowTag(epic.id.stringValue)).assertIsDisplayed()
+        onNodeWithTag(BacklogEpicPickerRowTag(epic.id.stringValue)).performClick()
+        waitForIdle()
+
+        assertEquals(item.id, linkedItem)
+        assertEquals(epic.id, linkedEpic)
     }
 
     // ---- Multi-select ----

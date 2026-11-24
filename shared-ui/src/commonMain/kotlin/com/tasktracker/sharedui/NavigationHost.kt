@@ -1651,6 +1651,10 @@ private fun BacklogDestination(
         onClearSelection = model::clearSelection,
         onPutSelectionOnBoard = { statusKey -> scope.launch { model.putSelectionOnBoard(statusKey) } },
         onArchiveSelection = { scope.launch { model.archiveSelection() } },
+        availableEpics = model.linkableEpics,
+        isLoadingEpics = model.isLoadingEpics,
+        onLoadEpics = { scope.launch { model.loadLinkableEpics() } },
+        onLinkItemToEpic = { itemID, epicID -> scope.launch { model.linkToEpic(itemID, epicID) } },
     )
 }
 

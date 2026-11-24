@@ -486,6 +486,60 @@ class ProjectBacklogModelTest {
         assertTrue(repository.writes.isEmpty(), "no selection means no per-item write")
     }
 
+    // MARK: Link to epic
+
+    /**
+     * The picker offers exactly the epics a link would be accepted into: active, and spanning
+     * this project. An archived epic and an epic in another project are both refused by the rule,
+     * so showing either would be an action that always fails.
+     */
+    @Test
+    fun `link choices are active epics that span this project`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val otherProject = testProject(name = "Borealis")
+        val spanning = testEpic(listOf(project.id, otherProject.id), title = "Ship it")
+        val archived = testEpic(listOf(project.id), title = "Old story", isArchived = true)
+        val foreign = testEpic(listOf(otherProject.id), title = "Elsewhere")
+        repository.seed(project)
+        repository.seed(otherProject)
+        repository.seed(spanning)
+        repository.seed(archived)
+        repository.seed(foreign)
+
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        model.loadLinkableEpics()
+
+        assertEquals(listOf(spanning.id), model.linkableEpics.map { it.id })
+        assertFalse(model.isLoadingEpics)
+    }
+
+    /** Linking writes the item's one epic field, so the row can hide its action on reload. */
+    @Test
+    fun `linking a backlog item records the epic on the item`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val epic = testEpic(listOf(project.id), title = "Ship it")
+        val item = testWorkItem(project.id, key = "AP-1", status = WorkItemStatus.Backlog)
+        repository.seed(project)
+        repository.seed(epic)
+        repository.seed(item)
+
+        val model = ProjectBacklogModel(project.id, repository, TestDateProvider())
+        model.observe(eagerScope())
+        advanceUntilIdle()
+
+        assertTrue(model.linkToEpic(item.id, epic.id))
+        advanceUntilIdle()
+
+        assertEquals(epic.id, repository.workItem(item.id)?.epicID)
+        assertEquals(epic.id, model.projection.backlog.single().epicID)
+        assertNull(model.busyItemID)
+    }
+
     @Test
     fun `dismissing the error clears it`() = runTest {
         val repository = FakeProjectRepository()

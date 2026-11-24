@@ -227,8 +227,16 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = ProjectBacklogScenarios.theAddActionTrailsTheSwitcher)
 
     @Test
+    fun linkingABacklogItemOpensTheProjectsEpicsAndCommitsTheChoice() =
+        runComposeUiTest(block = ProjectBacklogScenarios.linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice)
+
+    @Test
     fun backlogRowShowsTheCopyControl() =
         runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTheCopyControl)
+
+    @Test
+    fun aBacklogRowHidesTheEpicLinkControlOnceLinked() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.theEpicLinkControlHidesOnceTheItemIsLinked)
 
     @Test
     fun backlogRowShowsTwoLinesOfTheDescription() =

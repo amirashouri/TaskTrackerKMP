@@ -318,6 +318,9 @@
     <string name="epic_subtasks_empty">Link tasks from any project this epic spans.</string>
     <string name="epic_link_items">Link Tasks</string>
     <string name="epic_unlink_item">Remove from epic</string>
+    <string name="backlog_link_epic">Link to epic</string>
+    <string name="backlog_link_epic_empty">No epics include this project yet.</string>
+    <string name="backlog_link_epic_loading">Loading epics…</string>
     <string name="epic_archive">Archive Epic</string>
     <string name="epic_unarchive">Unarchive</string>
     <string name="epic_archive_title">Archive %1$s?</string>
