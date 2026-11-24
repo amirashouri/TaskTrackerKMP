@@ -638,11 +638,11 @@ private fun ProjectsEditorFullScreen(
 
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
-        Row(
+            Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .widthIn(max = BacklogMaxContentWidth)
-                .fillMaxWidth()
+                .wrapContentWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge)
                 .then(
                     if (keyboardVisible) {
@@ -655,7 +655,7 @@ private fun ProjectsEditorFullScreen(
                 .background(Color.Transparent)
                 .pointerInput(Unit) { }
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!isFiledAway) {
