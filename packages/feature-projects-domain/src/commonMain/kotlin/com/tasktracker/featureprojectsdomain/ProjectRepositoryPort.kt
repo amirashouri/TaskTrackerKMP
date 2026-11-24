@@ -167,8 +167,8 @@ interface ProjectRepositoryPort {
     /**
      * Creates an epic spanning [projectIDs], and queues it.
      *
-     * The two-project minimum is the use case's rule, not this one: a store asked directly
-     * for a one-project epic writes what it was told, and the server tolerates it. See
+     * The one-project minimum is the use case's rule, not this one: a store asked directly
+     * for an epic with no projects writes what it was told. See
      * [com.tasktracker.featureprojectsdomain.CreateEpic].
      */
     suspend fun createEpic(

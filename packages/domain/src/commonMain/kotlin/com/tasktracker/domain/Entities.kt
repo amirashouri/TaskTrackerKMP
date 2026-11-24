@@ -752,7 +752,7 @@ fun deriveEpicStatus(subtasks: List<WorkItem>): EpicStatus {
 }
 
 /**
- * A container for work items across two or more projects.
+ * A container for work items across one or more projects.
  *
  * The epic is authored state only: [title], [details], [dueDate] and [isArchived]. Its
  * status and progress are derived from its subtasks (see [deriveEpicStatus]) and have no

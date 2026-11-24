@@ -307,8 +307,8 @@
     <string name="epic_due_set">Set a due date</string>
     <string name="epic_due_clear">Clear the due date</string>
     <string name="epic_projects_label">Projects</string>
-    <string name="epic_projects_hint">An epic spans at least two projects.</string>
-    <string name="epic_projects_short">Pick two or more projects.</string>
+    <string name="epic_projects_hint">An epic spans at least one project.</string>
+    <string name="epic_projects_short">Pick at least one project.</string>
     <string name="epic_create">Create</string>
     <string name="epic_progress">%1$d of %2$d done</string>
     <string name="epic_progress_empty">No tasks yet</string>
@@ -328,7 +328,7 @@
     </plurals>
     <string name="epic_restore_subtasks">Unarchive epic and its tasks</string>
     <string name="epic_empty_title">No epics yet</string>
-    <string name="epic_empty_body">An epic groups work across two or more projects and shows how far the whole story has come.</string>
+    <string name="epic_empty_body">An epic groups work across one or more projects and shows how far the whole story has come.</string>
 
     <!-- The work item editor, and the card's own affordances. -->
     <string name="work_item_editor_new_title">New Task</string>

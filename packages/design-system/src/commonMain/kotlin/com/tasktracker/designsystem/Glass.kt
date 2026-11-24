@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -822,7 +823,13 @@ data class TTGlassButtonStyle(
     }
 }
 
-/** Interactive glass button supporting resting, prominent tints, and loading states. */
+/**
+ * Interactive glass button supporting resting, prominent tints, and loading states.
+ *
+ * [trailingIcon] is decorative and sits inside the pill after the label; the label remains the
+ * button's announced description. [trailingIconRotation] exists for stateful affordances such as
+ * a dropdown chevron that turns to point at the list it opened.
+ */
 @Composable
 fun ttGlassButton(
     label: String,
@@ -831,6 +838,9 @@ fun ttGlassButton(
     style: TTGlassButtonStyle = TTGlassButtonStyle.resting,
     enabled: Boolean = true,
     loading: Boolean = false,
+    trailingIcon: ImageVector? = null,
+    trailingIconRotation: Float = 0f,
+    trailingIconSize: Dp = ttIconSize.close,
 ) {
     val accent = ttAccent()
     val resolvedTint = if (style.prominent) (style.tint ?: accent) else style.tint
@@ -886,12 +896,27 @@ fun ttGlassButton(
                 .alpha(if (loading) 0f else 1f)
                 .semantics { contentDescription = label },
         ) {
-            ttText(
-                text = label,
-                style = ttTypography.button,
-                color = content,
-                textAlign = TextAlign.Center,
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ttText(
+                    text = label,
+                    style = ttTypography.button,
+                    color = content,
+                    textAlign = TextAlign.Center,
+                )
+                if (trailingIcon != null) {
+                    ttIcon(
+                        image = trailingIcon,
+                        contentDescription = null,
+                        tint = content,
+                        modifier = Modifier
+                            .size(trailingIconSize)
+                            .rotate(trailingIconRotation),
+                    )
+                }
+            }
         }
         if (loading) {
             Box(modifier = Modifier.alpha(1f - if (loading) 0f else 1f)) {

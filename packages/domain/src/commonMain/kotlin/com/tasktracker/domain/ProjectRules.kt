@@ -193,12 +193,10 @@ object EpicRules {
     /**
      * How many projects an epic must span.
      *
-     * Two, because that is the entity's reason to exist: a one-project container is a
-     * label, and the product already has those. The server accepts one project so that a
-     * project being removed from an epic does not invalidate the row mid-edit; the client
-     * creation and edit rules are the strict ones.
+     * One, matching the server: an epic may name a single project. Zero is still refused,
+     * because an epic with no scope has nowhere for its linked items to live.
      */
-    const val MIN_PROJECTS = 2
+    const val MIN_PROJECTS = 1
 
     @Throws(AppError::class)
     fun normaliseTitle(raw: String): String {
@@ -231,7 +229,7 @@ object EpicRules {
     fun normaliseProjectIDs(raw: List<ProjectID>): List<ProjectID> {
         val distinct = raw.distinct()
         if (distinct.size < MIN_PROJECTS) {
-            throw AppError.Validation("An epic must span at least two projects.")
+            throw AppError.Validation("An epic must span at least one project.")
         }
         return distinct
     }

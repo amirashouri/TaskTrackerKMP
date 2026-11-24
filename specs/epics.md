@@ -6,7 +6,7 @@
 - **blocked by:** none — the server half landed on `TaskTrackerServer` `feat/epics`
   (unmerged); `../TaskTrackerServer/docs/API.md` §Sync is the contract. Client work goes
   model/network → data → UI.
-- **context:** Requested 2026-11-24: an Epic groups work items across two or more projects,
+- **context:** Requested 2026-11-24: an Epic groups work items across one or more projects,
   carries title/description/due date/archive state, and derives status and progress from its
   subtasks. The Projects tab gains a Project | Epic segment, and its "+" creates the kind
   the showing segment lists. This is the client half of a cross-repo change; read `../AGENTS.md` §1/§2.
@@ -90,6 +90,8 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - [x] The project picker expands as an inline multi-select list in the editor and collapses
       from the same trigger, with no popup Done action
       (`epicProjectPickerSurvivesAnEmptyCatalog`).
+- [x] An epic may name one project but not zero; the rule is shared by the editor's Save state
+      and the use case, and the copy says "at least one project" (`EpicUseCasesTest`).
 - [x] Reverting the derivation (e.g. treating `InReview` as Done) turns a named test red.
 
 **KMP Constraint:** no platform APIs in `commonMain`; no new `expect`/`actual` is expected.
@@ -136,14 +138,20 @@ New resources land only in `:packages:design-system`.
   and a hairline separator sits between adjacent links so each unlink reads as belonging to
   the row above it. `EpicProjectPickerSheet` became `EpicProjectDropdown`: the project set is
   now a multi-select list that expands in the form, stays open across toggles, and closes from
-  the trigger; `scripts/check.sh full` and `scripts/check-baseline.sh` are green
-  (2446 / 2381 / 2017).
+  the trigger. `ttGlassButton` gained an optional trailing icon so the chevron sits inside the
+  Projects button and turns to point at the open list. The minimum is now one project, matching
+  the server and the copy: `EpicRules.MIN_PROJECTS` is the single source for the editor's Save
+  state and the use case's validation. `scripts/check.sh full` and `scripts/check-baseline.sh`
+  remain green (2446 / 2381 / 2017).
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against
   it, then delete this spec and keep the `DECISIONS.md` bullets.
 - **Gotchas:**
   - The status is derived and never stored; do not add a Room column or a wire key for it.
+  - The project minimum is one; `EpicRules.MIN_PROJECTS` is the source for both the Save state
+    and the use case. The server tolerates zero, but the client must still refuse a scope-less
+    epic.
   - Progress counts only the subtasks this device can see, so a member of one linked
     project sees a smaller total than a member of both. That is the permission boundary,
     not a bug; copy stays neutral.

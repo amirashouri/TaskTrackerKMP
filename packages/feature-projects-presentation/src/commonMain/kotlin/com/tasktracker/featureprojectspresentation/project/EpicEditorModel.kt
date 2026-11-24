@@ -8,6 +8,7 @@ import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Epic
+import com.tasktracker.domain.EpicRules
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.featureprojectsdomain.CreateEpic
@@ -90,7 +91,7 @@ class EpicEditorModel(
 
     val canSave: Boolean
         get() = title.isNotBlank() &&
-            projectIDs.distinct().size >= 2 &&
+            projectIDs.distinct().size >= EpicRules.MIN_PROJECTS &&
             (isCreating || hasChanges)
 
     suspend fun load() {

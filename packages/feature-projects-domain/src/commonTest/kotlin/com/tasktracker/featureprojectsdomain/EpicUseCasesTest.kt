@@ -16,10 +16,10 @@ import kotlin.time.Instant
 /**
  * The epic use cases' decisions, tested against the fake port.
  *
- * The two rules the product states are here rather than only in the picker: a container
- * that spans one project is a label, and a link to an epic that does not list the item's
- * project is refused by the server on the next push. A picker that offered neither is a
- * convenience, not the rule, so the rule is tested where it is enforced.
+ * The two rules the product states are here rather than only in the picker: an epic must name
+ * at least one project, and a link to an epic that does not list the item's project is refused
+ * by the server on the next push. A picker that offered neither is a convenience, not the rule,
+ * so the rule is tested where it is enforced.
  */
 class EpicUseCasesTest {
 
@@ -38,16 +38,19 @@ class EpicUseCasesTest {
         SetWorkItemEpic(repository, TestDateProvider(now))
 
     @Test
-    fun anEpicSpanningOneProjectIsRefused() = runTest {
+    fun anEpicMustNameAtLeastOneProject() = runTest {
         val repository = FakeProjectRepository()
         val (apollo, _) = twoProjects(repository)
 
+        val epic = create(repository)(projectIDs = listOf(apollo.id), title = "Checkout")
+        assertEquals(listOf(apollo.id), epic.projectIDs)
+
         val failure = assertFailsWith<AppError.Validation> {
-            create(repository)(projectIDs = listOf(apollo.id), title = "Checkout")
+            create(repository)(projectIDs = emptyList(), title = "No scope")
         }
 
-        assertTrue(failure.message.orEmpty().contains("two projects"))
-        assertTrue(repository.epics().isEmpty(), "a refused create must write nothing")
+        assertTrue(failure.message.orEmpty().contains("one project"))
+        assertEquals(1, repository.epics().size, "a refused create must write nothing")
     }
 
     @Test

@@ -12,11 +12,11 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Instant
 
 /**
- * Creates an epic spanning two or more projects.
+ * Creates an epic spanning one or more projects.
  *
- * The two-project minimum is enforced here rather than by the picker: the picker is one
- * caller, and a store reachable from a preview or a test must not be able to write a
- * container that the product would never have offered.
+ * The minimum is enforced here rather than by the picker: the picker is one caller, and a
+ * store reachable from a preview or a test must not be able to write a container that the
+ * product would never have offered.
  */
 class CreateEpic(
     private val repository: ProjectRepositoryPort,
