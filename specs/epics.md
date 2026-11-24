@@ -129,8 +129,10 @@ New resources land only in `:packages:design-system`.
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
   Follow-up: the epic editor's linked-item unlink control now uses the 24dp inline close
-  well (`ttSpacing.xxxl` / `ttIconSize.close`) instead of the 44dp standalone icon button;
-  `scripts/check.sh full` and `scripts/check-baseline.sh` are green (2446 / 2381 / 2017).
+  well (`ttSpacing.xxxl` / `ttIconSize.close`) instead of the 44dp standalone icon button,
+  and a hairline separator sits between adjacent links so each unlink reads as belonging to
+  the row above it; `scripts/check.sh full` and `scripts/check-baseline.sh` are green
+  (2446 / 2381 / 2017).
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against

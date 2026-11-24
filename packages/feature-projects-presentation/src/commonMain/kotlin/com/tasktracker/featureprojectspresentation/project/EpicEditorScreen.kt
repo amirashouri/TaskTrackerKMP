@@ -249,7 +249,7 @@ fun EpicEditorScreen(
                     modifier = Modifier.fillMaxWidth().testTag(EpicEditorSubtasksTag),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
                 ) {
-                    subtasks.forEach { item ->
+                    subtasks.forEachIndexed { index, item ->
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
@@ -284,6 +284,16 @@ fun EpicEditorScreen(
                                 modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
                                 size = ttSpacing.xxxl,
                                 iconSize = ttIconSize.close,
+                            )
+                        }
+                        // Between links only: the line pairs each unlink with the row above it,
+                        // without leaving a stray rule under the last item.
+                        if (index < subtasks.lastIndex) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(DIVIDER_HEIGHT)
+                                    .background(ttSeparator()),
                             )
                         }
                     }
