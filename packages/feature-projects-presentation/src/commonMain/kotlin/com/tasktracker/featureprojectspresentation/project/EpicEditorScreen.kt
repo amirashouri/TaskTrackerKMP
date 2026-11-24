@@ -54,7 +54,6 @@ import com.tasktracker.resources.epic_due_label
 import com.tasktracker.resources.epic_editor_edit_title
 import com.tasktracker.resources.epic_editor_new_title
 import com.tasktracker.resources.epic_link_items
-import com.tasktracker.resources.epic_projects_label
 import com.tasktracker.resources.epic_subtasks_empty
 import com.tasktracker.resources.epic_subtasks_label
 import com.tasktracker.resources.epic_title_label
@@ -84,7 +83,6 @@ fun EpicEditorScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var isProjectPickerOpen by remember { mutableStateOf(false) }
     var isItemPickerOpen by remember { mutableStateOf(false) }
     var isArchiveSheetOpen by remember { mutableStateOf(false) }
 
@@ -173,23 +171,11 @@ fun EpicEditorScreen(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            ttText(
-                text = stringResource(Res.string.epic_projects_label),
-                style = ttTypography.captionEmphasised,
-                color = ttLabelSecondary(),
-                modifier = Modifier.weight(1f),
-            )
-            ttGlassButton(
-                label = stringResource(Res.string.epic_projects_label),
-                onClick = { isProjectPickerOpen = true },
-                modifier = Modifier.testTag(EpicEditorPickProjectsTag),
-            )
-        }
+        EpicProjectDropdown(
+            projects = model.availableProjects,
+            selected = model.projectIDs,
+            onToggle = model::toggleProject,
+        )
         FlowRow(
             modifier = Modifier.fillMaxWidth().testTag(EpicEditorProjectChipsTag),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
@@ -315,15 +301,6 @@ fun EpicEditorScreen(
             )
         }
     }
-
-    EpicProjectPickerSheet(
-        projects = model.availableProjects,
-        selected = model.projectIDs,
-        onToggle = model::toggleProject,
-        visible = isProjectPickerOpen,
-        onDismissRequest = { isProjectPickerOpen = false },
-        onDismissed = { isProjectPickerOpen = false },
-    )
 
     EpicItemPickerSheet(
         items = model.candidateItems,

@@ -114,7 +114,7 @@ import com.tasktracker.featureprojectspresentation.EpicEditorStatusTag
 import com.tasktracker.featureprojectspresentation.EpicGlyphTag
 import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
 import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
-import com.tasktracker.featureprojectspresentation.EpicProjectPickerDoneTag
+import com.tasktracker.featureprojectspresentation.EpicProjectPickerRowsTag
 import com.tasktracker.featureprojectspresentation.EpicProjectPickerTag
 import com.tasktracker.featureprojectspresentation.EpicRowTag
 import com.tasktracker.featureprojectspresentation.ProjectsSegment
@@ -1080,11 +1080,12 @@ object ShellScenarios {
     }
 
     /**
-     * The project picker opens even when the catalog has nothing in it.
+     * The inline project picker expands even when the catalog has nothing in it.
      *
      * A device with no projects yet is the first run of a fresh install, not an edge case: the
      * epic form is reachable from the segment and its project button has to answer with an
-     * empty list rather than crashing on an assumption that a project exists.
+     * empty list rather than crashing on an assumption that a project exists. It expands in
+     * the form now, so the trigger itself closes it — there is no popup Done action.
      */
     val epicProjectPickerSurvivesAnEmptyCatalog: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
@@ -1100,8 +1101,17 @@ object ShellScenarios {
         onNodeWithTag(EpicEditorPickProjectsTag).performClick()
         waitForIdle()
         onNodeWithTag(EpicProjectPickerTag).assertIsDisplayed()
-        onNodeWithTag(EpicProjectPickerDoneTag).performClick()
+        onNodeWithTag(EpicProjectPickerRowsTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag("projects.epic.picker.projects.done")).fetchSemanticsNodes().isEmpty(),
+            "an inline picker closes from its trigger, not a popup Done button",
+        )
+        onNodeWithTag(EpicEditorPickProjectsTag).performClick()
         waitForIdle()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicProjectPickerTag)).fetchSemanticsNodes().isEmpty(),
+            "tapping the trigger again collapses the inline list",
+        )
         onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
     }
 

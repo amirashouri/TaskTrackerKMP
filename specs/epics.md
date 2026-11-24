@@ -54,7 +54,7 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - `packages/routing/.../Routes.kt` — `AppRoute.EpicEditor(epicID)`.
 - `packages/feature-projects-presentation/.../project/EpicListModel.kt`.
 - `.../project/EpicRow.kt`, `EpicEditorModel.kt`, `EpicEditorScreen.kt`,
-  `EpicProjectPickerSheet.kt`, `EpicItemPickerSheet.kt`, `EpicArchiveSheet.kt`,
+  `EpicProjectDropdown.kt`, `EpicItemPickerSheet.kt`, `EpicArchiveSheet.kt`,
   `EpicProgress.kt`.
 - `.../project/ProjectsListModel.kt`, `ProjectsComponents.kt`, `ProjectsListScreen.kt` —
   the segment, the add action, and the epic list.
@@ -87,6 +87,9 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
       count (`epicArchiveDialogScenarios`).
 - [x] The progress bar and status are absent in create and present in edit/detail
       (`epicEditorScenarios`).
+- [x] The project picker expands as an inline multi-select list in the editor and collapses
+      from the same trigger, with no popup Done action
+      (`epicProjectPickerSurvivesAnEmptyCatalog`).
 - [x] Reverting the derivation (e.g. treating `InReview` as Done) turns a named test red.
 
 **KMP Constraint:** no platform APIs in `commonMain`; no new `expect`/`actual` is expected.
@@ -131,7 +134,9 @@ New resources land only in `:packages:design-system`.
   Follow-up: the epic editor's linked-item unlink control now uses the 24dp inline close
   well (`ttSpacing.xxxl` / `ttIconSize.close`) instead of the 44dp standalone icon button,
   and a hairline separator sits between adjacent links so each unlink reads as belonging to
-  the row above it; `scripts/check.sh full` and `scripts/check-baseline.sh` are green
+  the row above it. `EpicProjectPickerSheet` became `EpicProjectDropdown`: the project set is
+  now a multi-select list that expands in the form, stays open across toggles, and closes from
+  the trigger; `scripts/check.sh full` and `scripts/check-baseline.sh` are green
   (2446 / 2381 / 2017).
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
@@ -150,9 +155,10 @@ New resources land only in `:packages:design-system`.
   - The "+" creates for the showing segment, with no dropdown and no chooser sheet; switching
     the segment is the choice.
   - A sheet's content must not add its own `verticalScroll`: `TTBottomSheetScaffold` already
-    scrolls the card, and a nested one throws on open. The epic project picker did that and
-    crashed on the first project-button tap; `epicProjectPickerSurvivesAnEmptyCatalog` guards
-    it, and an empty catalog now reads "No projects yet".
+    scrolls the card, and a nested one throws on open. The epic project picker used to do that
+    and crashed on the first project-button tap; it is an inline dropdown now, and the scenario
+    still guards the empty catalog, which reads "No projects yet". The item picker and archive
+    sheets remain sheets, so the rule still applies to them.
   - `EpicEditorModel` sends `Patch.Unmentioned` for an unchanged due date and a null project
     set for an unchanged one; sending them unconditionally costs the remove-project relink
     sweep on every save.
