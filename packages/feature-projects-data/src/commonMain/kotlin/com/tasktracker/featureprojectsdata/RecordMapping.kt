@@ -6,6 +6,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.parseAttachmentID
 import com.tasktracker.core.parseCommentID
+import com.tasktracker.core.parseEpicID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseStatusChangeID
@@ -14,6 +15,7 @@ import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.database.AttachmentRecord
 import com.tasktracker.database.CommentRecord
+import com.tasktracker.database.EpicRecord
 import com.tasktracker.database.ProjectRecord
 import com.tasktracker.database.SprintMemberRecord
 import com.tasktracker.database.SprintRecord
@@ -21,6 +23,7 @@ import com.tasktracker.database.StatusChangeRecord
 import com.tasktracker.database.WorkItemRecord
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
@@ -332,6 +335,8 @@ internal fun WorkItem.toRecord(): WorkItemRecord {
         recurrenceRaw = reconciled.recurrence.toRecurrenceColumn(),
         recurrenceUntil = reconciled.recurrence?.until,
         sprintID = reconciled.sprintID?.stringValue,
+        epicID = reconciled.epicID?.stringValue,
+        isArchived = reconciled.isArchived,
     )
 }
 
@@ -379,6 +384,11 @@ internal fun WorkItemRecord.apply(value: WorkItem): WorkItemRecord {
         // ever add one locally. The incoming value wins outright, including its absence —
         // the same treatment every other field here gets.
         sprintID = reconciled.sprintID?.stringValue,
+        // An epic link and a filing choice are both pulled values for the same reason: a
+        // device has to be able to learn that a card joined a story, left one, or was filed
+        // away with it on another device — including the absence of a link.
+        epicID = reconciled.epicID?.stringValue,
+        isArchived = reconciled.isArchived,
     )
 }
 
@@ -427,6 +437,12 @@ internal val WorkItemRecord.domainValue: WorkItem?
             statusKey = statusKey,
             recurrence = recurrenceRaw.toRecurrence(recurrenceUntil),
             sprintID = parsedSprint,
+            // An unreadable epic id reads as `null` — "no epic" — the same trade as an
+            // unreadable sprint id: the card stays and one link is lost, where throwing
+            // would cost the work. The epic the link pointed at is recoverable on the next
+            // pull; the card is not.
+            epicID = epicID?.let { parseEpicID(it) },
+            isArchived = isArchived,
         )
         value.reconcileResolutionAt(updatedAt)
         return value
@@ -449,6 +465,70 @@ internal val WorkItemRecord.orderingKey: WorkItemOrderingKey
         createdAt = createdAt,
         tieBreaker = key,
     )
+
+// MARK: - Epic
+
+/**
+ * A new row for [this].
+ *
+ * The project set is comma-joined in the order the user chose, the same encoding
+ * [WorkItemRecord.blockedByIDs] uses: it is read and written only as a whole, and a join
+ * table would be a second table for a column nobody queries on its own.
+ */
+internal fun Epic.toRecord(): EpicRecord = EpicRecord(
+    id = id.stringValue,
+    projectIDs = projectIDs.joinToString(",") { it.stringValue },
+    title = title,
+    details = details,
+    dueDate = dueDate,
+    isArchived = isArchived,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+    version = version,
+)
+
+/**
+ * A copy of this row carrying the state in [value], without touching
+ * [EpicRecord.id] or [EpicRecord.createdAt].
+ *
+ * See [ProjectRecord.apply] for why this returns a copy rather than mutating, and
+ * [WorkItemRecord.apply] for why the id and creation time are excluded: a payload may not
+ * rename a row or make it younger than it is.
+ */
+internal fun EpicRecord.apply(value: Epic): EpicRecord = copy(
+    projectIDs = value.projectIDs.joinToString(",") { it.stringValue },
+    title = value.title,
+    details = value.details,
+    dueDate = value.dueDate,
+    isArchived = value.isArchived,
+    updatedAt = value.updatedAt,
+    version = value.version,
+)
+
+/**
+ * `null` for a row whose id cannot be parsed, for the reason [ProjectRecord.domainValue]
+ * gives: inventing one produces a phantom that no delete can reach.
+ *
+ * An unreadable project id in the set is **dropped** rather than dropping the epic: an epic
+ * whose second project this build cannot read still belongs to the first, and its title and
+ * subtasks are still the user's. The set is visibility as well as scope, so the loss is the
+ * same one a membership change makes — the epic stays, one project is no longer named.
+ */
+internal val EpicRecord.domainValue: Epic?
+    get() {
+        val epicID = parseEpicID(id) ?: return null
+        return Epic(
+            id = epicID,
+            projectIDs = projectIDs.split(',').mapNotNull(::parseProjectID),
+            title = title,
+            details = details,
+            dueDate = dueDate,
+            isArchived = isArchived,
+            createdAt = createdAt,
+            updatedAt = updatedAt,
+            version = version,
+        )
+    }
 
 // MARK: - Sprint
 

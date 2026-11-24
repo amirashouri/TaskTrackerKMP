@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TagID
@@ -20,6 +21,7 @@ import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.StatusChange
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
@@ -87,6 +89,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
      */
     private val queuedAttachmentChangeIDs = mutableListOf<AttachmentID>()
     private val storedSprints = mutableListOf<Sprint>()
+    private val storedEpics = mutableListOf<Epic>()
     private val recordedChanges = mutableListOf<ProjectChange>()
 
     private var itemCounter = 0
@@ -124,6 +127,21 @@ class FakeProjectRepository : ProjectRepositoryPort {
     override suspend fun workItem(id: WorkItemID): WorkItem? {
         throwIfFailing()
         return lock.withLock { storedItems.firstOrNull { it.id == id } }
+    }
+
+    override suspend fun epics(): List<Epic> {
+        throwIfFailing()
+        return lock.withLock { storedEpics.sortedByDescending { it.updatedAt } }
+    }
+
+    override suspend fun epic(id: EpicID): Epic? {
+        throwIfFailing()
+        return lock.withLock { storedEpics.firstOrNull { it.id == id } }
+    }
+
+    override suspend fun workItemsForEpic(id: EpicID): List<WorkItem> {
+        throwIfFailing()
+        return lock.withLock { storedItems.filter { it.epicID == id } }
     }
 
     override suspend fun counts(projectID: ProjectID): Map<WorkItemStatus, Int> {
@@ -396,6 +414,117 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 updatedAt = epoch,
             )
             true
+        }
+    }
+
+    // MARK: Epic writes
+
+    override suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        now: Instant,
+    ): Epic {
+        throwIfFailing()
+        return lock.withLock {
+            val epic = Epic(
+                projectIDs = projectIDs,
+                title = title,
+                details = details,
+                dueDate = dueDate,
+                createdAt = now,
+                updatedAt = now,
+            )
+            storedEpics += epic
+            publish(ProjectChange(ProjectChange.Kind.Epics))
+            epic
+        }
+    }
+
+    override suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        now: Instant,
+    ): Epic {
+        throwIfFailing()
+        return lock.withLock {
+            val index = storedEpics.indexOfFirst { it.id == id }
+                .also { requireFound(it, "No such epic.") }
+            val epic = storedEpics[index]
+            if (title != null) epic.title = title
+            if (details != null) epic.details = details
+            if (dueDate is Patch.Of) epic.dueDate = dueDate.value
+            if (projectIDs != null) {
+                epic.projectIDs = projectIDs.distinct()
+                for (item in storedItems) {
+                    if (item.epicID == id && item.projectID !in epic.projectIDs) {
+                        item.epicID = null
+                        item.updatedAt = now
+                        publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
+                    }
+                }
+            }
+            epic.updatedAt = now
+            publish(ProjectChange(ProjectChange.Kind.Epics))
+            epic
+        }
+    }
+
+    override suspend fun setEpicArchived(
+        id: EpicID,
+        isArchived: Boolean,
+        archiveSubtasks: Boolean,
+        now: Instant,
+    ): Epic {
+        throwIfFailing()
+        return lock.withLock {
+            val index = storedEpics.indexOfFirst { it.id == id }
+                .also { requireFound(it, "No such epic.") }
+            val epic = storedEpics[index]
+            epic.isArchived = isArchived
+            epic.updatedAt = now
+            if (archiveSubtasks) {
+                for (item in storedItems) {
+                    if (item.epicID != id) continue
+                    item.isArchived = isArchived
+                    item.updatedAt = now
+                    publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
+                }
+            }
+            publish(ProjectChange(ProjectChange.Kind.Epics))
+            epic
+        }
+    }
+
+    override suspend fun setWorkItemEpic(
+        workItemID: WorkItemID,
+        epicID: Patch<EpicID?>,
+        now: Instant,
+    ): WorkItem {
+        throwIfFailing()
+        return lock.withLock {
+            val index = storedItems.indexOfFirst { it.id == workItemID }
+                .also { requireFound(it, "No such work item.") }
+            val item = storedItems[index]
+            if (epicID is Patch.Of) {
+                val target = epicID.value
+                if (target != null) {
+                    val epic = storedEpics.firstOrNull { it.id == target }
+                        ?: throw AppError.Validation("No such epic.")
+                    if (item.projectID !in epic.projectIDs) {
+                        throw AppError.Validation("That epic does not span this item's project.")
+                    }
+                }
+                item.epicID = target
+                item.updatedAt = now
+                publish(ProjectChange(ProjectChange.Kind.WorkItems, item.projectID))
+                publish(ProjectChange(ProjectChange.Kind.Epics))
+            }
+            item
         }
     }
 

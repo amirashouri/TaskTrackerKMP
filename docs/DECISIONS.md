@@ -147,6 +147,20 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   failed profile PATCH restores the last server-confirmed snapshot rather than
   re-reading `port.userDetails()`, which is a networked read-through.
 
+- **Epic status and progress are derived, never stored.** `deriveEpicStatus` reads only
+  the coarse `WorkItemStatus` category: all terminal → `Done`; any `InProgress`/`InReview`
+  → `InProgress`; any `Todo` → `Todo`; otherwise `Backlog`; an empty list is `Backlog`, not
+  `Done`. `Closed` counts as terminal. No Room column, no wire key, no cached percentage —
+  a stored status would be a second answer that drifts the moment a subtask moves.
+  Mutation-checked: treating `InReview` as `Done` turns `EpicStatusTest.inReviewIsInProgress`
+  red.
+- **Epic progress is what this device can see.** The total is `workItemsForEpic(id).size`,
+  which is the permission boundary rather than a bug: a member of one linked project sees a
+  smaller total than a member of both, and the copy stays neutral about it. Never resurrect
+  the total from a server count. `WorkItem.isArchived` is a filing choice: archive-all sets
+  it on the epic's subtasks and unarchive restores them; no listing may read it as
+  "finished".
+
 ### Selection and batches
 
 - **A batch is presentation convenience over per-item commands.** `PutWorkItemsOnBoard` and
@@ -201,6 +215,14 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   uncomposed bar cannot animate away. A `Column`'s `spacedBy` counts children, so an
   `AnimatedVisibility` left as a sibling spends a gap even while empty: supply the gap
   inside the animated content, or swap the bar in place through a single child.
+- **The Project | Epic segment is a preference, not screen state.** It is top-level and a
+  `remember` in the destination dies on a tab switch, so it lives in `ShellPreferences`
+  (`DefaultsKey.ProjectsSegment`) with the value plus a change callback threaded into
+  `ProjectsHost`. The same rule as backlog sort: store choices, not screen state.
+- **The Projects "+" is a two-choice sheet.** There is no dropdown primitive, so the menu is
+  the existing bottom-sheet scaffold with New Project and New Epic; each opens its own
+  editor, and the epic editor is a pushed route (`AppRoute.EpicEditor`) rather than a
+  modal.
 - **Silent rendering failures.** `ImageVector.Builder.addPath` draws nothing
   without a `Brush` fill, and equal contours cancel under even-odd just as
   silently. A gradient with `endY = Float.POSITIVE_INFINITY` interpolates at ~0

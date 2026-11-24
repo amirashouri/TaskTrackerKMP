@@ -19,6 +19,16 @@ enum class SyncScope(val wireValue: String) {
     SprintMembers("sprintMembers"),
 
     /**
+     * Epic documents, delivered to a member of **any** project the epic spans.
+     *
+     * A separate stream rather than riding `workItems`: an epic's payload has its own key
+     * set, and a dedicated scope is what lets the server fan one log row out to every linked
+     * project without asking a subscriber to decode an entity it never requested. The wire
+     * value is the server's route value (`/v1/sync/changes/epics`).
+     */
+    Epics("epics"),
+
+    /**
      * Attachment **metadata**, so an attachment another member added appears on a card
      * without the reader polling. The bytes do not travel here — they go through the blob
      * API — but the row that names the file is a change like any other.

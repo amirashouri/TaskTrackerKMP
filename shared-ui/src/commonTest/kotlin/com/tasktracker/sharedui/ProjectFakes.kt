@@ -1,8 +1,10 @@
 package com.tasktracker.sharedui
 
+import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TagID
@@ -13,6 +15,7 @@ import com.tasktracker.core.randomCommentID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -83,6 +86,13 @@ class FakeProjectRepository : ProjectRepositoryPort {
     // scenario drives those forms yet, and still fail loudly when one tries.
     private val storedSprints = mutableListOf<Sprint>()
 
+    /**
+     * Epics are read and written for real: the Epic segment and its editor are shell surfaces,
+     * and a fake that threw on `epics()` would make every scenario about that segment fail on
+     * its first frame for the wrong reason.
+     */
+    private val storedEpics = mutableListOf<Epic>()
+
     // Attachments are needed by the WorkItemEditorDestination in NavigationHost, which loads
     // them when the editor opens. A fake that threw would make every editor scenario fail on
     // read.
@@ -91,6 +101,11 @@ class FakeProjectRepository : ProjectRepositoryPort {
     /** Seeds a sprint directly, the way [seed] does for a project. */
     fun seedSprint(sprint: Sprint) {
         storedSprints += sprint.copy()
+    }
+
+    /** Seeds an epic directly, without recording a write or announcing a change. */
+    fun seedEpic(epic: Epic) {
+        storedEpics += epic
     }
 
     /** Every write the shell's code path made, so a test can assert a verb reached the store. */
@@ -122,6 +137,108 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun workItem(id: WorkItemID): WorkItem? = locked {
         storedItems.firstOrNull { it.id == id }?.copy()
+    }
+
+    override suspend fun epics(): List<Epic> = locked {
+        storedEpics.sortedByDescending { it.updatedAt }.map { it.copy() }
+    }
+
+    override suspend fun epic(id: EpicID): Epic? = locked {
+        storedEpics.firstOrNull { it.id == id }?.copy()
+    }
+
+    override suspend fun workItemsForEpic(id: EpicID): List<WorkItem> = locked {
+        storedItems.filter { it.epicID == id }.map { it.copy() }
+    }
+
+    override suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        now: Instant,
+    ): Epic {
+        var created: Epic? = null
+        val result = writing(ProjectChange.Kind.Epics) {
+            val epic = Epic(
+                projectIDs = projectIDs,
+                title = title,
+                details = details,
+                dueDate = dueDate,
+                createdAt = now,
+                updatedAt = now,
+            )
+            storedEpics += epic
+            created = epic
+            epic
+        }
+        writes += "createEpic"
+        return created ?: result
+    }
+
+    override suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        now: Instant,
+    ): Epic = writing(ProjectChange.Kind.Epics) {
+        val epic = storedEpics.firstOrNull { it.id == id }
+            ?: throw AppError.Validation("No such epic.")
+        if (title != null) epic.title = title
+        if (details != null) epic.details = details
+        if (dueDate is Patch.Of) epic.dueDate = dueDate.value
+        if (projectIDs != null) {
+            epic.projectIDs = projectIDs.distinct()
+            for (item in storedItems) {
+                if (item.epicID == id && item.projectID !in epic.projectIDs) item.epicID = null
+            }
+        }
+        epic.updatedAt = now
+        epic
+    }
+
+    override suspend fun setEpicArchived(
+        id: EpicID,
+        isArchived: Boolean,
+        archiveSubtasks: Boolean,
+        now: Instant,
+    ): Epic = writing(ProjectChange.Kind.Epics) {
+        val epic = storedEpics.firstOrNull { it.id == id }
+            ?: throw AppError.Validation("No such epic.")
+        epic.isArchived = isArchived
+        epic.updatedAt = now
+        if (archiveSubtasks) {
+            for (item in storedItems) {
+                if (item.epicID != id) continue
+                item.isArchived = isArchived
+                item.updatedAt = now
+            }
+        }
+        epic
+    }
+
+    override suspend fun setWorkItemEpic(
+        workItemID: WorkItemID,
+        epicID: Patch<EpicID?>,
+        now: Instant,
+    ): WorkItem = writing(ProjectChange.Kind.WorkItems) {
+        val item = storedItems.firstOrNull { it.id == workItemID }
+            ?: throw AppError.Validation("No such work item.")
+        if (epicID is Patch.Of) {
+            val target = epicID.value
+            if (target != null) {
+                val epic = storedEpics.firstOrNull { it.id == target }
+                    ?: throw AppError.Validation("No such epic.")
+                if (item.projectID !in epic.projectIDs) {
+                    throw AppError.Validation("That epic does not span this item's project.")
+                }
+            }
+            item.epicID = target
+            item.updatedAt = now
+        }
+        item
     }
 
     /** Derived from the stored items, so it cannot drift from what the screens are drawing. */
@@ -494,6 +611,17 @@ fun shellTestProject(
     nextItemNumber = 1,
     createdAt = updatedAt,
     updatedAt = updatedAt,
+)
+
+/** An epic fixture on the same fixed clock as the project and work-item fixtures. */
+fun shellTestEpic(
+    projectIDs: List<ProjectID>,
+    title: String = "Checkout",
+): Epic = Epic(
+    projectIDs = projectIDs,
+    title = title,
+    createdAt = Instant.fromEpochSeconds(1_760_000_000),
+    updatedAt = Instant.fromEpochSeconds(1_760_000_000),
 )
 
 /** A work item fixture on a fixed clock, with a key built from its project's prefix. */

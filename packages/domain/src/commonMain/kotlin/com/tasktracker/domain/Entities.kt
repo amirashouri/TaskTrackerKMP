@@ -2,6 +2,7 @@ package com.tasktracker.domain
 
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.StatusChangeID
@@ -11,6 +12,7 @@ import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
+import com.tasktracker.core.randomEpicID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
@@ -711,6 +713,95 @@ enum class SprintStatus {
     }
 }
 
+/**
+ * The status an epic shows, derived from its subtasks.
+ *
+ * There is deliberately no stored counterpart: a stored status would be a second answer
+ * that drifts the moment a subtask moves, and two devices that can see different subtasks
+ * would still need one rule. Only these four coarse states exist — the workflow lanes
+ * belong to the items, and an epic spans projects that may define different catalogs.
+ */
+enum class EpicStatus {
+    Backlog,
+    Todo,
+    InProgress,
+    Done,
+}
+
+/**
+ * The status an epic shows for [subtasks] — the items this device can see.
+ *
+ * Order matters: "everything is finished" is checked first so one stray Todo cannot keep a
+ * completed epic out of Done, and an in-progress item outranks a todo one because the epic
+ * is reporting whether the work is still moving, not what is left to start.
+ *
+ * Only [WorkItemStatus] is read, never a project's custom lane: the epic spans projects
+ * whose catalogs are not comparable. `Closed` counts as terminal alongside `Done`, and
+ * `InReview` as in progress. An empty list is [EpicStatus.Backlog] rather than Done —
+ * "nothing visible" is not "everything finished", and a device that can see only some of
+ * the linked projects must not claim the whole epic is complete.
+ */
+fun deriveEpicStatus(subtasks: List<WorkItem>): EpicStatus {
+    if (subtasks.isEmpty()) return EpicStatus.Backlog
+    if (subtasks.all { it.status.isTerminal }) return EpicStatus.Done
+    if (subtasks.any { it.status == WorkItemStatus.InProgress || it.status == WorkItemStatus.InReview }) {
+        return EpicStatus.InProgress
+    }
+    if (subtasks.any { it.status == WorkItemStatus.Todo }) return EpicStatus.Todo
+    return EpicStatus.Backlog
+}
+
+/**
+ * A container for work items across two or more projects.
+ *
+ * The epic is authored state only: [title], [details], [dueDate] and [isArchived]. Its
+ * status and progress are derived from its subtasks (see [deriveEpicStatus]) and have no
+ * field here — a stored status would drift, and a stored count would leak work the reader
+ * cannot see.
+ *
+ * [projectIDs] is the set the epic spans, in the order the user chose. It is also the
+ * epic's visibility: the server delivers it to a member of **any** listed project, so a
+ * reader may hold an epic whose other projects it cannot see.
+ */
+@Serializable
+data class Epic(
+    val id: EpicID = randomEpicID(),
+    /**
+     * The projects this epic spans, in the order the user chose.
+     *
+     * Spelled `projectIDs` here and `projectIds` on the wire, which is the server's
+     * documented key. Unlike a project's member list, this entity is new, so the client
+     * encodes the exact spelling rather than relying on the server's case-insensitive
+     * decoder.
+     */
+    @SerialName("projectIds")
+    var projectIDs: List<ProjectID>,
+    var title: String,
+    var details: String = "",
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    var dueDate: Instant? = null,
+    var isArchived: Boolean = false,
+    val createdAt: Instant,
+    var updatedAt: Instant,
+    /**
+     * The server's optimistic-locking token for the row.
+     *
+     * Redundant with the envelope-level `RemoteChange.version`, but the server re-serves it
+     * inside the payload, so the client must tolerate it. Defaulted so a stored row written
+     * before this field existed still decodes.
+     */
+    @SerialName("version")
+    var version: String = "",
+) {
+    init {
+        // The wire may repeat an id and the join table cannot, so the set is normalised
+        // where every instance is built — a decoded payload does not pass an editor.
+        if (projectIDs.distinct().size != projectIDs.size) {
+            projectIDs = projectIDs.distinct()
+        }
+    }
+}
+
 /** One unit of work. */
 @Serializable
 data class WorkItem(
@@ -795,6 +886,19 @@ data class WorkItem(
      * the board, and a sprint is not a column.
      */
     var sprintID: SprintID? = null,
+    /**
+     * The epic this item belongs to, or `null` for none.
+     *
+     * At most one: an item is either part of a story or not, and a second epic would make
+     * "the epic's progress" ambiguous. The epic must span this item's project — the picker
+     * enforces that, and the server re-checks it because an offline device can queue a link
+     * the picker never saw.
+     *
+     * Defaulted and never encoded when null, so an item with no epic gains no key on the
+     * wire and a payload from a server that predates the field still decodes.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    var epicID: EpicID? = null,
     /**
      * Manual position within its status column. Lower sorts first.
      *

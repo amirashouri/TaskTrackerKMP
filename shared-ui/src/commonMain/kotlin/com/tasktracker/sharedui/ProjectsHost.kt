@@ -13,11 +13,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.WorkItemStatus
+import com.tasktracker.featureprojectspresentation.EpicEditorModel
+import com.tasktracker.featureprojectspresentation.EpicEditorScreen
+import com.tasktracker.featureprojectspresentation.EpicListModel
 import com.tasktracker.featureprojectspresentation.NewProjectSheet
+import com.tasktracker.featureprojectspresentation.ProjectsSegment
 import com.tasktracker.featureprojectspresentation.ProjectBoardModel
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreen
 import com.tasktracker.featureprojectspresentation.ProjectEditorModel
@@ -85,6 +90,15 @@ fun ProjectsHost(
     currentUserID: StateFlow<UserID?> = MutableStateFlow(null),
     currentUserName: StateFlow<String?> = MutableStateFlow(null),
     isWide: Boolean = false,
+    /**
+     * The Projects tab's half, held by the shell so a tab switch cannot reset it.
+     *
+     * Passed in rather than read here because [ProjectsHost] has no preferences object; the
+     * shell owns the flow and the setter, exactly as it owns the theme and the backlog's
+     * ordering.
+     */
+    projectsSegment: ProjectsSegment = ProjectsSegment.Projects,
+    onProjectsSegmentChanged: (ProjectsSegment) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var navigation by remember(router) { mutableStateOf(router.state.value) }
@@ -109,11 +123,12 @@ fun ProjectsHost(
         // here, not a runtime fall-through — this is the same guarantee the sealed interface
         // was built to give.
         //
-        // Only `Board` is a destination of *this* tab: `openProject` pushes nothing else, and
-        // the routes that do belong to the Board, Backlog, Sprints and Archive tabs are not
-        // pushed onto Projects by anything the shell does. The list is the tab's root, so an
-        // unrecognised or not-yet-implemented case falls back to the root rather than to a
-        // blank frame — visible, and honest about not being that screen.
+        // Only `Board` and `EpicEditor` are destinations of *this* tab: `openProject` pushes
+        // the board, and the Epic segment pushes its editor. The routes that belong to the
+        // Backlog, Sprints and Archive tabs are not pushed onto Projects by anything the shell
+        // does. The list is the tab's root, so an unrecognised or not-yet-implemented case
+        // falls back to the root rather than to a blank frame — visible, and honest about not
+        // being that screen.
         when (val route = navigation.projectsPath.lastOrNull()) {
             is AppRoute.Board -> ProjectBoardDestination(
                 projectID = route.projectID,
@@ -138,6 +153,14 @@ fun ProjectsHost(
                         AppTab.Projects,
                     )
                 },
+            )
+
+            is AppRoute.EpicEditor -> EpicEditorDestination(
+                epicID = route.epicID,
+                environment = environment,
+                scope = scope,
+                onBack = { popProjectsEditor(router) },
+                onSaved = { popProjectsEditor(router) },
             )
 
             null,
@@ -171,6 +194,10 @@ fun ProjectsHost(
                         isProjectEditorOpen = true
                     }
                 },
+                segment = projectsSegment,
+                onSegmentChanged = onProjectsSegmentChanged,
+                onNewEpic = { router.push(AppRoute.EpicEditor(null), AppTab.Projects) },
+                onEditEpic = { id -> router.push(AppRoute.EpicEditor(id), AppTab.Projects) },
             )
         }
 
@@ -238,6 +265,10 @@ private fun ProjectsListDestination(
     onOpenProject: (ProjectID) -> Unit,
     onNewProject: () -> Unit,
     onEditProject: (ProjectID) -> Unit,
+    segment: ProjectsSegment,
+    onSegmentChanged: (ProjectsSegment) -> Unit,
+    onNewEpic: () -> Unit,
+    onEditEpic: (EpicID) -> Unit,
 ) {
     val model = remember(environment) {
         ProjectsListModel(environment.repository, environment.dateProvider)
@@ -247,11 +278,22 @@ private fun ProjectsListDestination(
         onDispose { model.stopObserving() }
     }
 
+    // Observed unconditionally rather than only while the Epic segment is selected: a model
+    // started on selection would show an empty list for one frame every time the user switched
+    // back to it, and an epic created from the other segment would not be there when they did.
+    val epics = remember(environment) {
+        EpicListModel(environment.repository, environment.dateProvider)
+    }
+    DisposableEffect(epics) {
+        epics.observe(scope)
+        onDispose { epics.stopObserving() }
+    }
+
     ProjectsListScreen(
         rows = model.rows,
         notice = model.notice,
         isLoading = model.isLoading,
-        errorMessage = model.errorMessage,
+        errorMessage = model.errorMessage ?: epics.errorMessage,
         onOpen = onOpenProject,
         onConfirmRemove = { projectID -> scope.launch { model.remove(projectID) } },
         // The screen keeps the pending removal itself and only calls this when the project
@@ -259,10 +301,58 @@ private fun ProjectsListDestination(
         // confirmation is a local flag in the screen, not a dialog owned by this host.
         onDismissRemove = {},
         onDismissNotice = model::dismissNotice,
-        onDismissError = model::dismissError,
+        onDismissError = {
+            model.dismissError()
+            epics.dismissError()
+        },
         onNewProject = onNewProject,
         onEditProject = onEditProject,
+        segment = segment,
+        onSegmentChanged = onSegmentChanged,
+        epicRows = epics.rows,
+        epicsLoading = epics.isLoading,
+        onNewEpic = onNewEpic,
+        onOpenEpic = onEditEpic,
+        onEditEpic = onEditEpic,
+        onArchiveEpic = { id, archiveSubtasks ->
+            scope.launch { epics.archive(id, archiveSubtasks) }
+        },
+        onUnarchiveEpic = { id -> scope.launch { epics.unarchive(id, archiveSubtasks = true) } },
     )
+}
+
+/** One epic's editor, as a pushed route on the Projects stack. */
+@Composable
+internal fun EpicEditorDestination(
+    epicID: EpicID?,
+    environment: ProjectEnvironment,
+    scope: CoroutineScope,
+    onBack: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    var model by remember(epicID, environment) { mutableStateOf<EpicEditorModel?>(null) }
+
+    LaunchedEffect(epicID, environment) {
+        val epic = epicID?.let { environment.repository.epic(it) }
+        val built = EpicEditorModel(epic, environment.repository, environment.dateProvider)
+        built.load()
+        model = built
+    }
+
+    model?.let { current ->
+        EpicEditorScreen(
+            model = current,
+            onBack = onBack,
+            onSave = { scope.launch { if (current.save()) onSaved() } },
+        )
+    }
+}
+
+/** Drops the editor from the Projects stack, leaving the list beneath it. */
+private fun popProjectsEditor(router: Router) {
+    val path = router.path(AppTab.Projects)
+    // The Projects tab's root is an empty stack, so the editor may be its only route.
+    if (path.isNotEmpty()) router.setPath(path.dropLast(1), AppTab.Projects)
 }
 
 /**

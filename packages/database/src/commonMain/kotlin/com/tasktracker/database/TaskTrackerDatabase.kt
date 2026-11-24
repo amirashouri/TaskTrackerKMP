@@ -61,7 +61,8 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
  * upgrade story — a store left by an earlier dev build is dropped and recreated, never
  * migrated. [exportSchema] stays on so a schema change is still visible in review.
  *
- * Version 2 adds `projects.repoUrl`; version 3 adds the `sprintMembers` table.
+ * Version 2 adds `projects.repoUrl`; version 3 adds the `sprintMembers` table; version 4
+ * adds the `epics` table, `work_items.epicID` and `work_items.isArchived`.
  * The same destructive fallback covers the earlier stores on developer machines,
  * because there is still nothing shipped to preserve.
  *
@@ -76,6 +77,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         SessionRecord::class,
         ProjectRecord::class,
         WorkItemRecord::class,
+        EpicRecord::class,
         StatusChangeRecord::class,
         SprintRecord::class,
         SprintMemberRecord::class,
@@ -83,7 +85,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         AttachmentRecord::class,
         NotificationRecord::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)
@@ -97,6 +99,8 @@ abstract class TaskTrackerDatabase : RoomDatabase() {
     abstract fun projectDao(): ProjectDao
 
     abstract fun workItemDao(): WorkItemDao
+
+    abstract fun epicDao(): EpicDao
 
     abstract fun statusChangeDao(): StatusChangeDao
 

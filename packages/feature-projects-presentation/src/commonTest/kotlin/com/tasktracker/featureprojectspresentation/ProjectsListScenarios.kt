@@ -248,6 +248,7 @@ object ProjectsListScenarios {
 
         onNodeWithTag(ProjectsListNewTag).assertIsDisplayed()
         onNodeWithTag(ProjectsListNewTag).performClick()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
 
         assertTrue(asked, "expected the new-project button to be reachable with rows present")
     }

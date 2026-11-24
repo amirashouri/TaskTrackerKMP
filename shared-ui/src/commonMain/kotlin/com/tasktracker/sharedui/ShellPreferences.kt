@@ -7,6 +7,7 @@ import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.domain.BacklogSortOrder
 import com.tasktracker.featureauthdomain.UserIdentity
 import com.tasktracker.featureauthdomain.UserRole
+import com.tasktracker.featureprojectspresentation.ProjectsSegment
 import com.tasktracker.featuresettingsdomain.UserDetails
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.DefaultsKey
@@ -48,6 +49,17 @@ class ShellPreferences(
      */
     private val _backlogSortOrder = MutableStateFlow(BacklogSortOrder())
     val backlogSortOrder: StateFlow<BacklogSortOrder> = _backlogSortOrder.asStateFlow()
+
+    /**
+     * Which half of the Projects tab is showing.
+     *
+     * Held here rather than in the destination because the segment is top-level: a tab switch
+     * disposes the destination, and a `remember` would return the user to the project list
+     * every time. One value for the whole app, like [backlogSortOrder] — it is a reading habit
+     * ("I am looking at stories this week"), not a per-project choice.
+     */
+    private val _projectsSegment = MutableStateFlow(ProjectsSegment.Projects)
+    val projectsSegment: StateFlow<ProjectsSegment> = _projectsSegment.asStateFlow()
 
     /**
      * The remembered "Put on board" target for each project, keyed by [ProjectID.stringValue]
@@ -100,6 +112,10 @@ class ShellPreferences(
         // here also states the stored shape without the reader having to open the codec.
         _backlogSortOrder.value = BacklogSortCodec.decode(
             runCatching { store.value<List<String>>(DefaultsKey.BacklogSort) }.getOrNull(),
+        )
+
+        _projectsSegment.value = ProjectsSegment.fromWireValue(
+            runCatching { store.value<String>(DefaultsKey.ProjectsSegment) }.getOrNull(),
         )
 
         // A `Map` of opaque ids rather than renamable tokens, so a missing or unreadable entry
@@ -193,6 +209,17 @@ class ShellPreferences(
         val next = _putOnBoardStatusKeys.value.toMutableMap().apply { put(projectID.stringValue, statusKey) }
         _putOnBoardStatusKeys.value = next
         runCatching { store.set(next, DefaultsKey.PutOnBoardStatus) }
+    }
+
+    /**
+     * Remembers the Projects tab's segment, memory first and disk second.
+     *
+     * Same order as [setBacklogSortOrder], for the same reason: the picker reads the flow, so a
+     * tap is visible on the next frame even if the write is slow.
+     */
+    suspend fun setProjectsSegment(segment: ProjectsSegment) {
+        _projectsSegment.value = segment
+        runCatching { store.set(segment.wireValue, DefaultsKey.ProjectsSegment) }
     }
 
     suspend fun rememberActiveProject(projectID: ProjectID?) {

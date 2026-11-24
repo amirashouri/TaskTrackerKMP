@@ -38,7 +38,11 @@ import kotlin.time.Instant
      * a prefix scan and the per-column read exactly, so a second index on `projectID` alone
      * would only be a smaller copy of the left-hand edge of this one.
      */
-    indices = [Index(value = ["projectID", "statusRaw"]), Index(value = ["sprintID"])],
+    indices = [
+        Index(value = ["projectID", "statusRaw"]),
+        Index(value = ["sprintID"]),
+        Index(value = ["epicID"]),
+    ],
 )
 data class WorkItemRecord(
     @PrimaryKey val id: String,
@@ -133,6 +137,23 @@ data class WorkItemRecord(
      * `projectID, statusRaw` cannot serve it.
      */
     val sprintID: String? = null,
+    /**
+     * The epic this item belongs to, or `null` for none.
+     *
+     * A plain indexed string for the same reason [sprintID] is one: a pull can deliver the
+     * item before the epic it names, so a foreign key would reject the very ordering that
+     * local-first sync makes normal. The repository is what notices a missing epic.
+     */
+    val epicID: String? = null,
+    /**
+     * Whether the user has filed this item away.
+     *
+     * Distinct from a terminal [statusRaw]: "finished" is a workflow fact, "filed away" is a
+     * choice. Only an epic's archive-all sets it today, which is why it has no query of its
+     * own — the epic's subtasks are read by [WorkItemDao.byEpic].
+     */
+    @androidx.room.ColumnInfo(defaultValue = "0")
+    val isArchived: Boolean = false,
 )
 
 /**
@@ -184,6 +205,33 @@ interface WorkItemDao {
         """,
     )
     suspend fun bySprint(sprintID: String): List<WorkItemRecord>
+
+    /**
+     * Every item linked to an epic, in the board's own order.
+     *
+     * The ordering columns are restated rather than shared, for the reason [bySprint] gives.
+     * This is the one read behind both an epic's progress and its subtask picker, and the
+     * caller counts the whole result — the permission boundary is enforced by which epics
+     * and items ever reach this device, not by filtering here.
+     */
+    @Query(
+        """
+        SELECT * FROM work_items
+        WHERE epicID = :epicID
+        ORDER BY rank ASC, priorityRaw DESC, createdAt ASC, key ASC
+        """,
+    )
+    suspend fun byEpic(epicID: String): List<WorkItemRecord>
+
+    /**
+     * Detaches every item from an epic that is going away.
+     *
+     * Mirrors the server's `ON DELETE SET NULL`: the item survives its epic, so a pulled
+     * epic delete must not leave a dangling link on a card. Called by the sync sink, which
+     * applies a change the server has already made — it therefore queues nothing.
+     */
+    @Query("UPDATE work_items SET epicID = NULL WHERE epicID = :epicID")
+    suspend fun clearEpic(epicID: String)
 
     /**
      * Moves items into a sprint, or back to the backlog when [sprintID] is `null`.

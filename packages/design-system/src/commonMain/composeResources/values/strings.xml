@@ -290,6 +290,49 @@
     <string name="project_create">Create</string>
     <string name="project_delete">Delete Project</string>
 
+    <!--
+      Epics. The Projects tab's segment and the "+" menu, the card, the editor and the
+      archive dialog. The derived status reuses the six status strings above, because an
+      epic's four coarse states are named exactly like the items' categories.
+    -->
+    <string name="projects_segment_projects">Projects</string>
+    <string name="projects_segment_epics">Epics</string>
+    <string name="projects_create_project">New Project</string>
+    <string name="projects_create_epic">New Epic</string>
+    <string name="projects_create_title">Create</string>
+    <string name="epic_new">New Epic</string>
+    <string name="epic_edit">Edit Epic</string>
+    <string name="epic_editor_new_title">New Epic</string>
+    <string name="epic_editor_edit_title">Edit %1$s</string>
+    <string name="epic_title_label">Title</string>
+    <string name="epic_details_label">Notes</string>
+    <string name="epic_due_label">Due</string>
+    <string name="epic_due_set">Set a due date</string>
+    <string name="epic_due_clear">Clear the due date</string>
+    <string name="epic_projects_label">Projects</string>
+    <string name="epic_projects_hint">An epic spans at least two projects.</string>
+    <string name="epic_projects_short">Pick two or more projects.</string>
+    <string name="epic_create">Create</string>
+    <string name="epic_progress">%1$d of %2$d done</string>
+    <string name="epic_progress_empty">No tasks yet</string>
+    <string name="epic_projects_chip">%1$s</string>
+    <string name="epic_subtasks_label">Tasks</string>
+    <string name="epic_subtasks_empty">Link tasks from any project this epic spans.</string>
+    <string name="epic_link_items">Link Tasks</string>
+    <string name="epic_unlink_item">Remove from epic</string>
+    <string name="epic_archive">Archive Epic</string>
+    <string name="epic_unarchive">Unarchive</string>
+    <string name="epic_archive_title">Archive %1$s?</string>
+    <string name="epic_archive_only">Archive epic only</string>
+    <string name="epic_archive_body">Its tasks stay where they are unless you file them too.</string>
+    <plurals name="epic_archive_all">
+        <item quantity="one">Archive epic and %1$d unfinished task</item>
+        <item quantity="other">Archive epic and %1$d unfinished tasks</item>
+    </plurals>
+    <string name="epic_restore_subtasks">Unarchive epic and its tasks</string>
+    <string name="epic_empty_title">No epics yet</string>
+    <string name="epic_empty_body">An epic groups work across two or more projects and shows how far the whole story has come.</string>
+
     <!-- The work item editor, and the card's own affordances. -->
     <string name="work_item_editor_new_title">New Task</string>
     <string name="work_item_editor_edit_title">Edit %1$s</string>

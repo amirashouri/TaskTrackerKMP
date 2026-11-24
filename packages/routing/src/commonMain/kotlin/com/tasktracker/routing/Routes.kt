@@ -1,6 +1,7 @@
 package com.tasktracker.routing
 
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.WorkItemID
@@ -115,6 +116,14 @@ sealed interface AppRoute {
         val focusCommentID: CommentID? = null,
     ) : AppRoute
 
+    /**
+     * The epic editor: create when [epicID] is `null`, edit otherwise.
+     *
+     * An epic spans projects, so it is not project-scoped and opening it must not change the
+     * active project — the same distinction [WorkItemEditor] makes.
+     */
+    data class EpicEditor(val epicID: EpicID? = null) : AppRoute
+
     data object Settings : AppRoute
 
     /**
@@ -154,7 +163,9 @@ val AppRoute.projectIDOrNull: ProjectID?
         // Admin sections are not project-scoped even though one names a project: managing a
         // project's settings is not showing that project's work, and `AdminProjects(projectID)`
         // must not become the active project any more than `WorkItemEditor` does.
-        is AppRoute.AdminProjects, AppRoute.Settings, AppRoute.AdminMembers -> null
+        is AppRoute.AdminProjects, is AppRoute.EpicEditor, AppRoute.Settings,
+        AppRoute.AdminMembers,
+        -> null
     }
 
 /**
@@ -183,8 +194,8 @@ val AppRoute.selectsActiveProject: ProjectID?
         is AppRoute.SprintDetail -> projectID
         is AppRoute.SprintSummary -> projectID
         is AppRoute.SprintMemberProgress -> projectID
-        is AppRoute.WorkItemEditor, AppRoute.Settings, is AppRoute.AdminMembers,
-        is AppRoute.AdminProjects,
+        is AppRoute.WorkItemEditor, is AppRoute.EpicEditor, AppRoute.Settings,
+        is AppRoute.AdminMembers, is AppRoute.AdminProjects,
         -> null
     }
 

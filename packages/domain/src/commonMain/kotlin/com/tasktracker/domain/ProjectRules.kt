@@ -1,6 +1,7 @@
 package com.tasktracker.domain
 
 import com.tasktracker.core.AppError
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemKey
 import com.tasktracker.core.graphemeClusterCount
 
@@ -174,6 +175,66 @@ object WorkItemRules {
      * unused parameters, so the deliberate emptiness stays quiet.
      */
     fun canTransition(from: WorkItemStatus, to: WorkItemStatus): Boolean = true
+}
+
+/**
+ * Input rules for an epic, kept beside the project and work-item rules so the editor and
+ * the store reject the same things for the same reasons.
+ *
+ * The title and details limits are the work item's, deliberately: an epic is a container
+ * for work items and its copy is edited in the same kind of field, so two sets of limits
+ * would only be two ways to be surprised by a length counter.
+ */
+object EpicRules {
+
+    const val MAX_TITLE_LENGTH = WorkItemRules.MAX_TITLE_LENGTH
+    const val MAX_DETAILS_LENGTH = WorkItemRules.MAX_DETAILS_LENGTH
+
+    /**
+     * How many projects an epic must span.
+     *
+     * Two, because that is the entity's reason to exist: a one-project container is a
+     * label, and the product already has those. The server accepts one project so that a
+     * project being removed from an epic does not invalidate the row mid-edit; the client
+     * creation and edit rules are the strict ones.
+     */
+    const val MIN_PROJECTS = 2
+
+    @Throws(AppError::class)
+    fun normaliseTitle(raw: String): String {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) {
+            throw AppError.Validation("An epic needs a title.")
+        }
+        if (graphemeClusterCount(trimmed) > MAX_TITLE_LENGTH) {
+            throw AppError.Validation("Titles are limited to $MAX_TITLE_LENGTH characters.")
+        }
+        return trimmed
+    }
+
+    @Throws(AppError::class)
+    fun normaliseDetails(raw: String): String {
+        val trimmed = raw.trim()
+        if (graphemeClusterCount(trimmed) > MAX_DETAILS_LENGTH) {
+            throw AppError.Validation("Notes are limited to $MAX_DETAILS_LENGTH characters.")
+        }
+        return trimmed
+    }
+
+    /**
+     * The normalised project set, or a validation failure naming what is missing.
+     *
+     * Deduplicated in the order chosen, because the list is also the chips' order and the
+     * server's join table is keyed by it.
+     */
+    @Throws(AppError::class)
+    fun normaliseProjectIDs(raw: List<ProjectID>): List<ProjectID> {
+        val distinct = raw.distinct()
+        if (distinct.size < MIN_PROJECTS) {
+            throw AppError.Validation("An epic must span at least two projects.")
+        }
+        return distinct
+    }
 }
 
 /**

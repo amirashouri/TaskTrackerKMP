@@ -58,6 +58,19 @@ value class SprintID(val rawValue: Uuid) {
     override fun toString(): String = stringValue
 }
 
+/**
+ * A container for work items across projects. Its own type for the same reason as the
+ * others: an epic id and a project id are both UUIDs and mean different things, and a
+ * mixed-up pair would otherwise compile.
+ */
+@Serializable
+@JvmInline
+value class EpicID(val rawValue: Uuid) {
+    constructor(raw: String) : this(Uuid.parse(raw))
+    val stringValue: String get() = rawValue.toString()
+    override fun toString(): String = stringValue
+}
+
 /** One row in a work item's status history. */
 @Serializable
 @JvmInline
@@ -158,6 +171,9 @@ fun randomUserID(): UserID = UserID(Uuid.random())
 fun randomSprintID(): SprintID = SprintID(Uuid.random())
 
 /** Generates a fresh identifier. */
+fun randomEpicID(): EpicID = EpicID(Uuid.random())
+
+/** Generates a fresh identifier. */
 fun randomStatusChangeID(): StatusChangeID = StatusChangeID(Uuid.random())
 
 /** Generates a fresh identifier. */
@@ -197,6 +213,9 @@ fun parseUserID(raw: String): UserID? = runCatching { UserID(Uuid.parse(raw)) }.
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseSprintID(raw: String): SprintID? = runCatching { SprintID(Uuid.parse(raw)) }.getOrNull()
+
+/** Parses an identifier from its wire string, or returns `null` if malformed. */
+fun parseEpicID(raw: String): EpicID? = runCatching { EpicID(Uuid.parse(raw)) }.getOrNull()
 
 /** Parses an identifier from its wire string, or returns `null` if malformed. */
 fun parseStatusChangeID(raw: String): StatusChangeID? =

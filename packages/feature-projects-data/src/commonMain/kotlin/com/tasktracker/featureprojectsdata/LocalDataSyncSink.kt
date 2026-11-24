@@ -10,6 +10,7 @@ import com.tasktracker.database.TaskTrackerDatabase
 import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Sprint
 import com.tasktracker.domain.SprintMember
@@ -101,6 +102,13 @@ class LocalDataSyncSink(
             OutboxEntity.SprintMember -> {
                 val owner = applySprintMember(change)
                 changeBus.send(ProjectChange(kind = ProjectChange.Kind.Sprints, projectID = owner))
+            }
+
+            // An epic document announces its own kind, unscoped: it spans projects, so no
+            // single project id describes it, and the Epic segment reads one list.
+            OutboxEntity.Epic -> {
+                applyEpic(change)
+                changeBus.send(ProjectChange(kind = ProjectChange.Kind.Epics))
             }
 
             // Announced as a work-item change, matching the local write's choice in
@@ -302,6 +310,34 @@ class LocalDataSyncSink(
             }
         }
         return item.projectID
+    }
+
+    /**
+     * Applies one epic, server-wins, without ever touching the outbox (class KDoc).
+     *
+     * A pulled **delete** detaches every item from the epic first, mirroring the server's
+     * `ON DELETE SET NULL`: the items survive their epic, and leaving the link behind would
+     * leave cards pointing at a story this device no longer holds. Nothing is queued for the
+     * links, because this applies a change the server has already made.
+     */
+    private suspend fun applyEpic(change: RemoteChange) {
+        if (change.operation == OutboxOperation.Delete) {
+            inTransaction(database) {
+                database.workItemDao().clearEpic(change.entityID)
+                database.epicDao().deleteByID(change.entityID)
+            }
+            return
+        }
+
+        val epic = decode(Epic.serializer(), change.payload, change.entity)
+        inTransaction(database) {
+            val existing = database.epicDao().byID(epic.id.stringValue)
+            if (existing == null) {
+                database.epicDao().insert(epic.toRecord())
+            } else {
+                database.epicDao().update(existing.apply(epic))
+            }
+        }
     }
 
     /**

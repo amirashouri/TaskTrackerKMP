@@ -73,6 +73,21 @@ abstract class TaskTrackerAppScenarios {
     fun signingOutStopsTheProjectsObservation() = runComposeUiTest(block = ShellScenarios.signingOutStopsTheProjectsObservation)
     @Test
     fun creatingAProjectAddsItToTheList() = runComposeUiTest(block = ShellScenarios.creatingAProjectAddsItToTheList)
+
+    @Test
+    fun projectEpicSegmentScenarios() = runComposeUiTest(block = ShellScenarios.projectEpicSegmentScenarios)
+
+    @Test
+    fun projectCreateMenuScenarios() = runComposeUiTest(block = ShellScenarios.projectCreateMenuScenarios)
+
+    @Test
+    fun epicRowScenarios() = runComposeUiTest(block = ShellScenarios.epicRowScenarios)
+
+    @Test
+    fun epicArchiveDialogScenarios() = runComposeUiTest(block = ShellScenarios.epicArchiveDialogScenarios)
+
+    @Test
+    fun epicEditorScenarios() = runComposeUiTest(block = ShellScenarios.epicEditorScenarios)
     @Test
     fun everyTabGetsToItsOwnScreen() = runComposeUiTest(block = ShellScenarios.everyTabGetsToItsOwnScreen)
     @Test

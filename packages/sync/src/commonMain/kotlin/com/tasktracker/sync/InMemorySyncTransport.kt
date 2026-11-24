@@ -136,6 +136,10 @@ private fun scopeFor(entity: OutboxEntity): SyncScope = when (entity) {
     // work, and a `when` over the enum without it does not compile.
     OutboxEntity.Attachment -> SyncScope.Attachments
     OutboxEntity.SprintMember -> SyncScope.SprintMembers
+    // An epic has its own server stream, so it does here too — the same reasoning as
+    // attachments. Filing it under `workItems` would leave the real `epics` log unread and
+    // a second device would never receive an epic another member created.
+    OutboxEntity.Epic -> SyncScope.Epics
     // The demo server has no notification generator, so this stream stays empty until a real
     // backend writes a row. Filing it anywhere else would deliver a payload no installed
     // scope can decode.

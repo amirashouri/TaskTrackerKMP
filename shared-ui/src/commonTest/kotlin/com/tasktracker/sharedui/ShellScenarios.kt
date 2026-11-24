@@ -61,6 +61,7 @@ import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.BacklogSortBasis
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Sprint
@@ -99,6 +100,24 @@ import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveAllTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveCancelTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveOnlyTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveSheetTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveTag
+import com.tasktracker.featureprojectspresentation.EpicEditorBackTag
+import com.tasktracker.featureprojectspresentation.EpicEditorProgressTag
+import com.tasktracker.featureprojectspresentation.EpicEditorScreenTag
+import com.tasktracker.featureprojectspresentation.EpicEditorStatusTag
+import com.tasktracker.featureprojectspresentation.EpicGlyphTag
+import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
+import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
+import com.tasktracker.featureprojectspresentation.EpicRowTag
+import com.tasktracker.featureprojectspresentation.ProjectsCreateEpicTag
+import com.tasktracker.featureprojectspresentation.ProjectsCreateMenuTag
+import com.tasktracker.featureprojectspresentation.ProjectsCreateProjectTag
+import com.tasktracker.featureprojectspresentation.ProjectsSegment
+import com.tasktracker.featureprojectspresentation.ProjectsSegmentOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddMemberTag
@@ -879,6 +898,8 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
+        waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
 
         onNodeWithTag("name").performTextInput("Gemini")
@@ -890,6 +911,220 @@ object ShellScenarios {
             "expected the sheet to close once the project was created",
         )
         onNodeWithText("Gemini").assertIsDisplayed()
+    }
+
+    /**
+     * The Epic segment switches the list, and the choice survives a tab switch.
+     *
+     * The survival half is the one that matters: a `remember` in the destination would pass
+     * the first assertion and fail the second, and "come back to where I was" is the whole
+     * reason the segment lives in `ShellPreferences`.
+     */
+    val projectEpicSegmentScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectRowTag(ProjectSummary(apollo, itemCount = 0))).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(epic.id.toString())).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(ProjectsListTag)).fetchSemanticsNodes().isEmpty(),
+            "expected the epic segment to replace the project list, not draw over it",
+        )
+
+        onNodeWithTag(TabButtonTag(AppTab.Board)).performClick()
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Projects)).performClick()
+        waitForIdle()
+
+        onNodeWithTag(EpicRowTag(epic.id.toString())).assertIsDisplayed()
+    }
+
+    /**
+     * The "+" offers two things to create, and each opens its own editor.
+     *
+     * Both halves are asserted because a menu whose second row does nothing is the failure a
+     * screenshot cannot catch: the row looks present, the tap is inert.
+     */
+    val projectCreateMenuScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsCreateMenuTag).assertIsDisplayed()
+        onNodeWithTag(ProjectsCreateProjectTag).assertIsDisplayed()
+        onNodeWithTag(ProjectsCreateEpicTag).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsCreateEpicTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
+        waitForIdle()
+        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
+    }
+
+    /**
+     * An epic card carries the glyph, chips, derived status, count and due date, and is not
+     * one of the other two cards.
+     */
+    val epicRowScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        epic.dueDate = Instant.fromEpochSeconds(1_760_086_400)
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done)
+                .also { it.epicID = epic.id },
+        )
+        projects.seed(
+            shellTestWorkItem(borealis.id, keyPrefix = "BO", number = 1, status = WorkItemStatus.Todo)
+                .also { it.epicID = epic.id },
+        )
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+
+        val id = epic.id.toString()
+        onNodeWithTag(EpicRowTag(id)).assertIsDisplayed()
+        onNodeWithTag(EpicGlyphTag, useUnmergedTree = true).assertExists()
+        onNodeWithTag(EpicProjectChipsTag, useUnmergedTree = true).assertIsDisplayed()
+        onNodeWithText("Apollo").assertIsDisplayed()
+        onNodeWithText("Borealis").assertIsDisplayed()
+        // One Done, one Todo derives Todo — the derivation's own truth table, on the screen.
+        onNodeWithText("To Do").assertIsDisplayed()
+        onNodeWithTag(EpicProgressCountTag, useUnmergedTree = true).assertTextEquals("1 of 2 done")
+
+        // Visually distinct from the other two cards, asserted structurally: neither the
+        // project row nor a work-item card is on this screen.
+        assertTrue(
+            onAllNodes(hasTestTag(ProjectRowTag(ProjectSummary(apollo, itemCount = 0))))
+                .fetchSemanticsNodes().isEmpty(),
+            "expected an epic card, not a project row",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemCardTag(
+                shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done),
+            ))).fetchSemanticsNodes().isEmpty(),
+            "expected an epic card, not a work-item card",
+        )
+    }
+
+    /**
+     * The archive dialog offers the second option only when something is unfinished, and names
+     * the count when it does.
+     */
+    val epicArchiveDialogScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val withWork = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        val finished = shellTestEpic(listOf(apollo.id, borealis.id), "Shipped")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(withWork)
+        projects.seedEpic(finished)
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Todo)
+                .also { it.epicID = withWork.id },
+        )
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 2, status = WorkItemStatus.Done)
+                .also { it.epicID = finished.id },
+        )
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+
+        onNodeWithTag(EpicArchiveTag(withWork.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicArchiveSheetTag).assertIsDisplayed()
+        onNodeWithText("Archive epic and 1 unfinished task").assertIsDisplayed()
+        onNodeWithTag(EpicArchiveCancelTag).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicArchiveSheetTag)).fetchSemanticsNodes().isEmpty(),
+            "expected Cancel to close the archive dialog",
+        )
+
+        onNodeWithTag(EpicArchiveTag(finished.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicArchiveOnlyTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicArchiveAllTag)).fetchSemanticsNodes().isEmpty(),
+            "expected no second option when nothing is unfinished",
+        )
+    }
+
+    /**
+     * Progress and status are absent in create and present in edit.
+     *
+     * A zero-of-zero bar on a create would be a claim about an epic that does not exist yet,
+     * which is why the two rows are omitted rather than drawn empty.
+     */
+    val epicEditorScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done)
+                .also { it.epicID = epic.id },
+        )
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsCreateEpicTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicEditorProgressTag)).fetchSemanticsNodes().isEmpty(),
+            "a create has no progress to show",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(EpicEditorStatusTag)).fetchSemanticsNodes().isEmpty(),
+            "a create has no derived status to show",
+        )
+
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(epic.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        onNodeWithTag(EpicEditorProgressTag).assertIsDisplayed()
+        onNodeWithTag(EpicEditorStatusTag).assertIsDisplayed()
     }
 
     /**
@@ -3245,6 +3480,8 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
+        waitForIdle()
 
         onRoot().printToLog("AFTER_NEW_PROJECT_CLICK")
         onNodeWithTag(NewProjectFormTag).assertExists(
@@ -4542,6 +4779,8 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
+        waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertExists()
 
         val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
@@ -4596,6 +4835,8 @@ object ShellScenarios {
         waitForIdle()
 
         onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsCreateProjectTag).performClick()
         waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertExists()
         val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
