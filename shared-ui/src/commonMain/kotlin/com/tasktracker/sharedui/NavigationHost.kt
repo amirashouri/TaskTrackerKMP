@@ -2388,6 +2388,7 @@ private fun WorkItemEditorDestination(
     LaunchedEffect(model) {
         model.refreshComments()
         model.refreshAttachments()
+        model.refreshEpic()
     }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
@@ -2455,6 +2456,7 @@ private fun WorkItemEditorDestination(
 
     WorkItemEditorSheet(
         focusCommentID = focusCommentID,
+        epicTitle = model.epicTitle,
         title = model.title,
         agentSection = if (agentSectionModel != null && model.status == WorkItemStatus.InProgress) {
             {

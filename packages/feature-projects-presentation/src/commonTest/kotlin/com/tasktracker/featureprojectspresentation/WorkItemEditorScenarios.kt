@@ -18,6 +18,7 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -276,6 +277,7 @@ object WorkItemEditorScenarios {
         status: WorkItemStatus = WorkItemStatus.Backlog,
         isFiledAway: Boolean = false,
         selectableStatuses: List<StatusDefinition> = emptyList(),
+        epicTitle: String? = null,
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -297,6 +299,7 @@ object WorkItemEditorScenarios {
                 issuedKey = null,
                 selectableStatuses = selectableStatuses,
                 isFiledAway = isFiledAway,
+                epicTitle = epicTitle,
                 canSave = title.isNotBlank(),
                 isBusy = false,
                 errorMessage = null,
@@ -319,6 +322,19 @@ object WorkItemEditorScenarios {
                 onManageTags = onManageTags,
             )
         }
+    }
+
+    /**
+     * A linked item shows its epic's name as a chip under the title field. The chip is
+     * read-only context: the link itself is changed from the backlog row, not from this form.
+     */
+    val anEpicChipShowsTheLinkedEpicName: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            editorSheet(isCreating = false, epicTitle = "Ship it")
+        }
+
+        onNodeWithTag(WorkItemEditorEpicChipTag).assertIsDisplayed()
+        onNodeWithText("Ship it").assertIsDisplayed()
     }
 
     /**

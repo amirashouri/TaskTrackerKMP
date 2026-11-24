@@ -123,6 +123,14 @@ class WorkItemEditorModel(
     var attachments by mutableStateOf<List<Attachment>>(emptyList())
         private set
 
+    /**
+     * The title of the epic this item belongs to, or null when it has none (or it is no
+     * longer on this device). Read-only context, not a draft field: the link is edited from
+     * the backlog row's picker, not from this form.
+     */
+    var epicTitle: String? by mutableStateOf(null)
+        private set
+
     /** Files picked during creation, held locally until item ID is minted on save. */
     var stagedAttachments by mutableStateOf<List<PickedFile>>(emptyList())
         private set
@@ -143,6 +151,12 @@ class WorkItemEditorModel(
         attachment.id in uploadingIDs -> AttachmentSyncState.Uploading
         attachment.id in refusedIDs -> AttachmentSyncState.Failed
         else -> AttachmentSyncState.Waiting
+    }
+
+    /** Resolves the item's linked epic title for the read-only chip under the title field. */
+    suspend fun refreshEpic() {
+        val epicID = existing?.epicID ?: return
+        epicTitle = reporting { repository.epic(epicID)?.title } ?: epicTitle
     }
 
     /** Refreshes attachment list and retries pending blob uploads. */

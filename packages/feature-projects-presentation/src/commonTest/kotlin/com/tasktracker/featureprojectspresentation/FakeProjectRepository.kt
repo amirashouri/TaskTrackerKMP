@@ -993,6 +993,7 @@ fun testWorkItem(
     blockedByIDs: List<WorkItemID> = emptyList(),
     recurrence: Recurrence? = null,
     tagIDs: List<TagID> = emptyList(),
+    epicID: EpicID? = null,
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -1009,6 +1010,7 @@ fun testWorkItem(
     blockedByIDs = blockedByIDs,
     recurrence = recurrence,
     tagIDs = tagIDs,
+    epicID = epicID,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,

@@ -174,6 +174,9 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   `WorkItem.epicID` is the single link field, so showing the action on an already-linked row
   would either do nothing or replace the link without saying so. Load the choices on demand;
   the backlog's projection is the list being read, and an unopened picker owes it no read.
+  The linked epic's name is context, not an editor field: the work-item editor resolves it
+  once on open into a read-only chip, and `epicID` stays edited only through the backlog
+  picker. A missing epic drops the chip rather than inventing a placeholder.
 
 ### Selection and batches
 

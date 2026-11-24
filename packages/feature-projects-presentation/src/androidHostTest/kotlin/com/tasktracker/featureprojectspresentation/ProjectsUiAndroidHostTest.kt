@@ -578,6 +578,10 @@ class ProjectsUiAndroidHostTest {
         runComposeUiTest(block = WorkItemEditorScenarios.cancellingADirtyEditorAsksBeforeDiscarding)
 
     @Test
+    fun aWorkItemEditorShowsTheLinkedEpicChip() =
+        runComposeUiTest(block = WorkItemEditorScenarios.anEpicChipShowsTheLinkedEpicName)
+
+    @Test
     fun aFiledAwayWorkItemShowsAReadOnlyStatusChip() =
         runComposeUiTest(block = WorkItemEditorScenarios.aFiledAwayItemShowsAReadOnlyStatusChip)
 

@@ -61,6 +61,8 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - `.../backlog/ProjectBacklogModel.kt`, `ProjectBacklogScreen.kt`,
   `WorkItemBacklogRow.kt`, `BacklogEpicPickerSheet.kt` — the row's link action, the
   project-scoped epic list, and the link commit.
+- `.../workitem/WorkItemEditor.kt`, `WorkItemEditorModel.kt` — the linked epic's name
+  as a read-only chip under the item's title field.
 - `shared-ui/.../ProjectsHost.kt`, `NavigationHost.kt` — route and model wiring.
 - `shared-ui/.../ShellPreferences.kt` — the segment choice.
 - `shared-ui/src/commonTest/.../ShellScenarios.kt` + jvm/iOS/Robolectric entry points.
@@ -110,6 +112,9 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
       is absent once the reloaded item carries `epicID`
       (`linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice`,
       `theEpicLinkControlHidesOnceTheItemIsLinked`, `ProjectBacklogModelTest`).
+- [x] A linked work item shows its epic's name in a chip under the editor's title field;
+      an unlinked item draws no chip. The name is read from the store on open and is
+      read-only here (`anEpicChipShowsTheLinkedEpicName`, `WorkItemEditorModelTest`).
 - [x] Reverting the derivation (e.g. treating `InReview` as Done) turns a named test red.
 
 **KMP Constraint:** no platform APIs in `commonMain`; no new `expect`/`actual` is expected.
@@ -131,7 +136,7 @@ New resources land only in `:packages:design-system`.
 - **Before handoff:** `scripts/check.sh full` — this touches rendering (new icons, a card,
   a segmented control), so it needs JVM, iOS and the Robolectric entry points.
 - **Counts / Baselines:** done — `test-baseline.json` regenerated from the green full run
-  (JVM 2454, iOS 2389, Android host 2023) and `check-baseline.sh` passes.
+  (JVM 2457, iOS 2392, Android host 2026) and `check-baseline.sh` passes.
 - **Stays pending:** a device install and the real server round-trip (the mock transport
   cannot prove the wire).
 
@@ -148,7 +153,7 @@ New resources land only in `:packages:design-system`.
   picker, both item pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
   segment-scoped add action; and the five shell scenarios. `scripts/check.sh full` is green on
   JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run
-  (2454 / 2389 / 2023), and
+  (2457 / 2392 / 2026), and
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
   Follow-up: the epic editor's linked-item unlink control now uses the 24dp inline close
@@ -163,7 +168,7 @@ New resources land only in `:packages:design-system`.
   checkmark and unlinks a checked item when tapped. The status derivation now treats partial
   completion as In progress: removing the terminal branch from that predicate turns both new
   truth-table cases red, then restored green. `scripts/check.sh full` and
-  `scripts/check-baseline.sh` remain green (2454 / 2389 / 2023).
+  `scripts/check-baseline.sh` remain green (2457 / 2392 / 2026).
   Follow-up: an epic now has an owner. Schema 5 adds `epics.ownerID` (nullable, so the
   server applies its admin default on push), `Epic.ownerID` is the `ownerId` wire key,
   and the create/update paths carry it. `EpicOwnerPicker` is a single-select
@@ -174,7 +179,8 @@ New resources land only in `:packages:design-system`.
   `BacklogEpicPickerSheet` with the active epics that span the row's project; choosing one
   calls `SetWorkItemEpic` and the action disappears when the item reloads with an `epicID`.
   The list is loaded on demand by `ProjectBacklogModel.loadLinkableEpics`, not on every
-  backlog reload.
+  backlog reload. The work-item editor resolves the paired epic's title on open and shows
+  it as a read-only chip under the title field; an unlinked item draws none.
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against
