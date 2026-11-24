@@ -107,12 +107,15 @@ import com.tasktracker.featureprojectspresentation.EpicArchiveOnlyTag
 import com.tasktracker.featureprojectspresentation.EpicArchiveSheetTag
 import com.tasktracker.featureprojectspresentation.EpicArchiveTag
 import com.tasktracker.featureprojectspresentation.EpicEditorBackTag
+import com.tasktracker.featureprojectspresentation.EpicEditorPickProjectsTag
 import com.tasktracker.featureprojectspresentation.EpicEditorProgressTag
 import com.tasktracker.featureprojectspresentation.EpicEditorScreenTag
 import com.tasktracker.featureprojectspresentation.EpicEditorStatusTag
 import com.tasktracker.featureprojectspresentation.EpicGlyphTag
 import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
 import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
+import com.tasktracker.featureprojectspresentation.EpicProjectPickerDoneTag
+import com.tasktracker.featureprojectspresentation.EpicProjectPickerTag
 import com.tasktracker.featureprojectspresentation.EpicRowTag
 import com.tasktracker.featureprojectspresentation.ProjectsSegment
 import com.tasktracker.featureprojectspresentation.ProjectsSegmentOptionTag
@@ -1074,6 +1077,32 @@ object ShellScenarios {
             onAllNodes(hasTestTag(EpicArchiveAllTag)).fetchSemanticsNodes().isEmpty(),
             "expected no second option when nothing is unfinished",
         )
+    }
+
+    /**
+     * The project picker opens even when the catalog has nothing in it.
+     *
+     * A device with no projects yet is the first run of a fresh install, not an edge case: the
+     * epic form is reachable from the segment and its project button has to answer with an
+     * empty list rather than crashing on an assumption that a project exists.
+     */
+    val epicProjectPickerSurvivesAnEmptyCatalog: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(EpicEditorPickProjectsTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicProjectPickerTag).assertIsDisplayed()
+        onNodeWithTag(EpicProjectPickerDoneTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
     }
 
     /**

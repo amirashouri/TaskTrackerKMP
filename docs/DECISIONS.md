@@ -232,6 +232,11 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   against the number of `@Test` lines you added before assuming you broke it.
   Regenerate from a *green* run only (zero failures and errors on every host),
   then re-run the gate: `check-baseline.sh` alone proves the counts, not the tests.
+- **A sheet's content never scrolls itself.** `TTBottomSheetScaffold` already wraps its card
+  in `verticalScroll`; a second one inside the content is measured with unbounded height and
+  throws `IllegalStateException` when the sheet opens. The epic project picker did this, so
+  the first tap on its project button crashed on a fresh install with no projects. Rows grow
+  and the scaffold scrolls; an empty picker says so instead of drawing nothing.
 - **A windowed sheet's padding is part of its measured geometry.**
   `TTBottomSheetScaffold` caps the window with `heightIn(max = 760.dp)`; 72dp of
   outer padding plus the form's own 16dp inset needs 776dp, so the content

@@ -124,7 +124,8 @@ New resources land only in `:packages:design-system`.
   `AppRoute.EpicEditor`; `EpicListModel`, `EpicRowView`, `EpicProgress`, the editor, both
   pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
   segment-scoped add action; and the five shell scenarios. `scripts/check.sh full` is green on
-  JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run, and
+  JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run
+  (2446 / 2381 / 2017), and
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
@@ -143,6 +144,10 @@ New resources land only in `:packages:design-system`.
   - `TTGlassSegmentedPicker` already exists; do not add a second segmented control.
   - The "+" creates for the showing segment, with no dropdown and no chooser sheet; switching
     the segment is the choice.
+  - A sheet's content must not add its own `verticalScroll`: `TTBottomSheetScaffold` already
+    scrolls the card, and a nested one throws on open. The epic project picker did that and
+    crashed on the first project-button tap; `epicProjectPickerSurvivesAnEmptyCatalog` guards
+    it, and an empty catalog now reads "No projects yet".
   - `EpicEditorModel` sends `Patch.Unmentioned` for an unchanged due date and a null project
     set for an unchanged one; sending them unconditionally costs the remove-project relink
     sweep on every save.

@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -74,10 +72,11 @@ fun EpicItemPickerSheet(
                     color = ttLabelSecondary(),
                 )
             } else {
+                // The scaffold scrolls the card, so this list must not scroll again: the nested
+                // scroll is measured with unbounded height and throws on open.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
                         .testTag(EpicItemPickerRowsTag),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
                 ) {

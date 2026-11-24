@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,6 +30,7 @@ import com.tasktracker.resources.common_done
 import com.tasktracker.resources.epic_projects_hint
 import com.tasktracker.resources.epic_projects_label
 import com.tasktracker.resources.epic_projects_short
+import com.tasktracker.resources.projects_empty_title
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -81,13 +80,23 @@ fun EpicProjectPickerSheet(
                 style = ttTypography.footnote,
                 color = ttLabelSecondary(),
             )
+            // The sheet scaffold already scrolls its card; a second verticalScroll here is
+            // measured with unbounded height and throws as soon as the picker opens, even when
+            // there are no projects to list. The rows simply grow and the sheet scrolls.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
                     .testTag(EpicProjectPickerRowsTag),
                 verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
             ) {
+                if (projects.isEmpty()) {
+                    ttText(
+                        text = stringResource(Res.string.projects_empty_title),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                        modifier = Modifier.padding(horizontal = ttSpacing.sm, vertical = ttSpacing.md),
+                    )
+                }
                 projects.forEach { project ->
                     val isSelected = project.id in selected
                     Row(

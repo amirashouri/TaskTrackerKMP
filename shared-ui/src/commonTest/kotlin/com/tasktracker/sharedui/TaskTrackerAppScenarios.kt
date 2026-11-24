@@ -88,6 +88,10 @@ abstract class TaskTrackerAppScenarios {
 
     @Test
     fun epicEditorScenarios() = runComposeUiTest(block = ShellScenarios.epicEditorScenarios)
+
+    @Test
+    fun epicProjectPickerSurvivesAnEmptyCatalog() =
+        runComposeUiTest(block = ShellScenarios.epicProjectPickerSurvivesAnEmptyCatalog)
     @Test
     fun everyTabGetsToItsOwnScreen() = runComposeUiTest(block = ShellScenarios.everyTabGetsToItsOwnScreen)
     @Test
