@@ -108,9 +108,9 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - [x] The link picker lists already-linked items with a checkmark, and tapping a checked item
       unlinks it (`epicEditorScenarios`).
 - [x] A backlog row offers **Link to epic** only while its item has no epic. The sheet lists
-      active epics that span the item's project as tappable glass cards with an epic glyph and
-      chevron, choosing one commits the link, and the action is absent once the reloaded item
-      carries `epicID`
+      active epics that span the item's project as tappable glass cards with an epic glyph,
+      choosing one commits the link, and the action is absent once the reloaded item carries
+      `epicID`
       (`linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice`,
       `theEpicLinkControlHidesOnceTheItemIsLinked`, `ProjectBacklogModelTest`).
 - [x] A linked work item shows its epic's name in a chip under the work-item page title

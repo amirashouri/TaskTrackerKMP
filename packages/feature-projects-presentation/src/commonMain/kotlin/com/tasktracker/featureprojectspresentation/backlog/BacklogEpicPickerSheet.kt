@@ -23,7 +23,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.ttAccent
-import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttEntityIcons
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttIcon
@@ -112,8 +111,8 @@ fun BacklogEpicPickerSheet(
  * One choice as a glass card, not a line of text.
  *
  * The sheet used to draw plain text rows with no surface or trailing affordance, so nothing on
- * screen said they could be tapped. The card, the epic glyph and the chevron match the app's
- * other pickers, where a row is visibly a control before its label is read.
+ * screen said they could be tapped. The card and the epic glyph match the app's other
+ * pickers, where a row is visibly a control before its label is read.
  */
 @Composable
 private fun EpicChoiceRow(
@@ -168,12 +167,6 @@ private fun EpicChoiceRow(
                 color = ttLabelSecondary(),
             )
         }
-        ttIcon(
-            image = ttActionIcons.chevronRight,
-            contentDescription = null,
-            tint = ttLabelSecondary(),
-            modifier = Modifier.size(EPIC_CHOICE_CHEVRON_SIZE),
-        )
     }
 }
 
@@ -184,5 +177,4 @@ fun BacklogEpicPickerRowTag(epicID: String): String = "backlog.epic.picker.row.$
 
 private val EPIC_CHOICE_BADGE_SIZE = 36.dp
 private val EPIC_CHOICE_GLYPH_SIZE = 20.dp
-private val EPIC_CHOICE_CHEVRON_SIZE = 16.dp
 private const val EPIC_CHOICE_BADGE_FILL_ALPHA = 0.12f

@@ -177,8 +177,8 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   The linked epic's name is context, not an editor field: the work-item editor resolves it
   once on open into a read-only chip under the page title, and `epicID` stays edited only
   through the backlog picker. A missing epic drops the chip rather than inventing a
-  placeholder. Picker choices are glass cards with the epic glyph and a trailing chevron;
-  a bare text row reads as a label, not as something that can be tapped.
+  placeholder. Picker choices are glass cards with the epic glyph; a bare text row reads as
+  a label, not as something that can be tapped.
 
 ### Selection and batches
 
