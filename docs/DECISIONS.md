@@ -219,10 +219,10 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   `remember` in the destination dies on a tab switch, so it lives in `ShellPreferences`
   (`DefaultsKey.ProjectsSegment`) with the value plus a change callback threaded into
   `ProjectsHost`. The same rule as backlog sort: store choices, not screen state.
-- **The Projects "+" is a two-choice sheet.** There is no dropdown primitive, so the menu is
-  the existing bottom-sheet scaffold with New Project and New Epic; each opens its own
-  editor, and the epic editor is a pushed route (`AppRoute.EpicEditor`) rather than a
-  modal.
+- **The Projects "+" creates for the showing segment.** No dropdown and no chooser sheet:
+  the segment above it is the choice, so the plus opens the project form on Projects and the
+  epic editor on Epics. It is hidden when that segment has no editor. The epic editor is a
+  pushed route (`AppRoute.EpicEditor`) rather than a modal.
 - **Silent rendering failures.** `ImageVector.Builder.addPath` draws nothing
   without a `Brush` fill, and equal contours cancel under even-odd just as
   silently. A gradient with `endY = Float.POSITIVE_INFINITY` interpolates at ~0

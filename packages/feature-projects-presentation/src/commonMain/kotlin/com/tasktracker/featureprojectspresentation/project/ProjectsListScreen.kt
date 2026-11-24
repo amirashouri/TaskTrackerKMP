@@ -62,7 +62,6 @@ import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.epic_new
 import com.tasktracker.resources.epic_empty_body
 import com.tasktracker.resources.epic_empty_title
-import com.tasktracker.resources.projects_create_title
 import com.tasktracker.resources.projects_segment_epics
 import com.tasktracker.resources.projects_segment_projects
 import com.tasktracker.resources.projects_empty_body
@@ -101,9 +100,13 @@ fun ProjectsListScreen(
 ) {
     var pendingRemovalID by remember { mutableStateOf<ProjectID?>(null) }
     var pendingArchiveID by remember { mutableStateOf<EpicID?>(null) }
-    var isCreateMenuOpen by remember { mutableStateOf(false) }
     val tabBarInset = LocalTabBarScrollUnderInset.current
-    val canCreate = onNewProject != null || onNewEpic != null
+    // The add action creates for the segment that is showing, so it is only offered when that
+    // segment has an editor; a button for the other list would open a form the user did not ask for.
+    val canCreate = when (segment) {
+        ProjectsSegment.Projects -> onNewProject != null
+        ProjectsSegment.Epics -> onNewEpic != null
+    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().testTag(ProjectsListScreenTag),
@@ -165,8 +168,18 @@ fun ProjectsListScreen(
                         if (canCreate) {
                             ttGlassIconButton(
                                 image = ttActionIcons.add,
-                                contentDescription = stringResource(Res.string.projects_create_title),
-                                onClick = { isCreateMenuOpen = true },
+                                contentDescription = stringResource(
+                                    when (segment) {
+                                        ProjectsSegment.Projects -> Res.string.project_new
+                                        ProjectsSegment.Epics -> Res.string.epic_new
+                                    },
+                                ),
+                                onClick = {
+                                    when (segment) {
+                                        ProjectsSegment.Projects -> onNewProject?.invoke()
+                                        ProjectsSegment.Epics -> onNewEpic?.invoke()
+                                    }
+                                },
                                 modifier = Modifier.testTag(ProjectsListNewTag),
                             )
                         }
@@ -323,20 +336,6 @@ fun ProjectsListScreen(
             }
         }
     }
-
-    ProjectsCreateMenu(
-        visible = isCreateMenuOpen,
-        onNewProject = {
-            isCreateMenuOpen = false
-            onNewProject?.invoke()
-        },
-        onNewEpic = {
-            isCreateMenuOpen = false
-            onNewEpic?.invoke()
-        },
-        onDismissRequest = { isCreateMenuOpen = false },
-        onDismissed = { isCreateMenuOpen = false },
-    )
 
     pendingArchiveID?.let { id ->
         epicRows.firstOrNull { it.epic.id == id }?.let { row ->

@@ -297,9 +297,6 @@
     -->
     <string name="projects_segment_projects">Projects</string>
     <string name="projects_segment_epics">Epics</string>
-    <string name="projects_create_project">New Project</string>
-    <string name="projects_create_epic">New Epic</string>
-    <string name="projects_create_title">Create</string>
     <string name="epic_new">New Epic</string>
     <string name="epic_edit">Edit Epic</string>
     <string name="epic_editor_new_title">New Epic</string>

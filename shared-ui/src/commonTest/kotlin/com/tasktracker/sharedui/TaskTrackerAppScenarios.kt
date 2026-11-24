@@ -78,7 +78,7 @@ abstract class TaskTrackerAppScenarios {
     fun projectEpicSegmentScenarios() = runComposeUiTest(block = ShellScenarios.projectEpicSegmentScenarios)
 
     @Test
-    fun projectCreateMenuScenarios() = runComposeUiTest(block = ShellScenarios.projectCreateMenuScenarios)
+    fun projectCreateActionsScenarios() = runComposeUiTest(block = ShellScenarios.projectCreateActionsScenarios)
 
     @Test
     fun epicRowScenarios() = runComposeUiTest(block = ShellScenarios.epicRowScenarios)

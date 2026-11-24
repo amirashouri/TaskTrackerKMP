@@ -8,8 +8,8 @@
   model/network → data → UI.
 - **context:** Requested 2026-11-24: an Epic groups work items across two or more projects,
   carries title/description/due date/archive state, and derives status and progress from its
-  subtasks. The Projects tab gains a Project | Epic segment, and its "+" offers New project
-  or New Epic. This is the client half of a cross-repo change; read `../AGENTS.md` §1/§2.
+  subtasks. The Projects tab gains a Project | Epic segment, and its "+" creates the kind
+  the showing segment lists. This is the client half of a cross-repo change; read `../AGENTS.md` §1/§2.
   The app is pre-release, so the wire may change freely and the server's spec is the fixed
   point for key names.
 
@@ -57,7 +57,7 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
   `EpicProjectPickerSheet.kt`, `EpicItemPickerSheet.kt`, `EpicArchiveSheet.kt`,
   `EpicProgress.kt`.
 - `.../project/ProjectsListModel.kt`, `ProjectsComponents.kt`, `ProjectsListScreen.kt` —
-  the segment, the two-choice create sheet, and the epic list.
+  the segment, the add action, and the epic list.
 - `shared-ui/.../ProjectsHost.kt`, `NavigationHost.kt` — route and model wiring.
 - `shared-ui/.../ShellPreferences.kt` — the segment choice.
 - `shared-ui/src/commonTest/.../ShellScenarios.kt` + jvm/iOS/Robolectric entry points.
@@ -78,8 +78,8 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - [x] The Projects tab switches Project | Epic with `TTGlassSegmentedPicker`, and the
       selection survives a tab switch through `ShellPreferences`
       (`projectEpicSegmentScenarios`).
-- [x] The "+" offers New project and New Epic; each opens the right editor
-      (`projectCreateMenuScenarios`).
+- [x] The "+" creates for the active segment — the project form on Projects, the epic
+      editor on Epics — with no menu in between (`projectCreateActionsScenarios`).
 - [x] The epic card shows the epic glyph, project chips, derived status, `done/total`, and
       due date, and is visually distinct from `ProjectRowView` and `WorkItemCard`
       (`epicRowScenarios`).
@@ -123,7 +123,7 @@ New resources land only in `:packages:design-system`.
   `LocalDataSyncSink.applyEpic`; `ProjectChange.Kind.Epics`; design-system glyphs and copy;
   `AppRoute.EpicEditor`; `EpicListModel`, `EpicRowView`, `EpicProgress`, the editor, both
   pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
-  two-choice create sheet; and the five shell scenarios. `scripts/check.sh full` is green on
+  segment-scoped add action; and the five shell scenarios. `scripts/check.sh full` is green on
   JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run, and
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
@@ -141,7 +141,8 @@ New resources land only in `:packages:design-system`.
   - A story's segment state lives in `ShellPreferences`; a `remember` in the destination
     dies on a tab switch.
   - `TTGlassSegmentedPicker` already exists; do not add a second segmented control.
-  - There is no dropdown primitive — the "+" uses the existing bottom-sheet scaffold.
+  - The "+" creates for the showing segment, with no dropdown and no chooser sheet; switching
+    the segment is the choice.
   - `EpicEditorModel` sends `Patch.Unmentioned` for an unchanged due date and a null project
     set for an unchanged one; sending them unconditionally costs the remove-project relink
     sweep on every save.

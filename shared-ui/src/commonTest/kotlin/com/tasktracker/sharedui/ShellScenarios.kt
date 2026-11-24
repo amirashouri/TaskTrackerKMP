@@ -85,6 +85,7 @@ import com.tasktracker.featureprojectspresentation.BacklogSortDoneTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
+import com.tasktracker.featureprojectspresentation.NewProjectCancelTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
 import com.tasktracker.featureprojectspresentation.MemberPickerMenuTag
 import com.tasktracker.featureprojectspresentation.MemberPickerRowTag
@@ -113,9 +114,6 @@ import com.tasktracker.featureprojectspresentation.EpicGlyphTag
 import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
 import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
 import com.tasktracker.featureprojectspresentation.EpicRowTag
-import com.tasktracker.featureprojectspresentation.ProjectsCreateEpicTag
-import com.tasktracker.featureprojectspresentation.ProjectsCreateMenuTag
-import com.tasktracker.featureprojectspresentation.ProjectsCreateProjectTag
 import com.tasktracker.featureprojectspresentation.ProjectsSegment
 import com.tasktracker.featureprojectspresentation.ProjectsSegmentOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
@@ -898,8 +896,6 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(ProjectsCreateProjectTag).performClick()
-        waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
 
         onNodeWithTag("name").performTextInput("Gemini")
@@ -950,35 +946,34 @@ object ShellScenarios {
     }
 
     /**
-     * The "+" offers two things to create, and each opens its own editor.
+     * The "+" creates whichever kind the segment is showing, with no menu in between.
      *
-     * Both halves are asserted because a menu whose second row does nothing is the failure a
-     * screenshot cannot catch: the row looks present, the tap is inert.
+     * Both halves are asserted because a plus wired to only one editor is the failure a
+     * screenshot cannot catch: the button looks present and the tap is inert for the other
+     * segment. The chosen segment is the only thing that decides, so this walks both.
      */
-    val projectCreateMenuScenarios: suspend ComposeUiTest.() -> Unit = {
+    val projectCreateActionsScenarios: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
         setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
 
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(ProjectsCreateMenuTag).assertIsDisplayed()
-        onNodeWithTag(ProjectsCreateProjectTag).assertIsDisplayed()
-        onNodeWithTag(ProjectsCreateEpicTag).assertIsDisplayed()
+        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
 
-        onNodeWithTag(ProjectsCreateEpicTag).performClick()
+        onNodeWithTag(NewProjectCancelTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
         onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
 
         onNodeWithTag(EpicEditorBackTag).performClick()
         waitForIdle()
         onNodeWithTag(ProjectsListScreenTag).assertIsDisplayed()
-
-        onNodeWithTag(ProjectsListNewTag).performClick()
-        waitForIdle()
-        onNodeWithTag(ProjectsCreateProjectTag).performClick()
-        waitForIdle()
-        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
     }
 
     /**
@@ -1102,9 +1097,9 @@ object ShellScenarios {
         setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
 
         waitForIdle()
-        onNodeWithTag(ProjectsListNewTag).performClick()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
         waitForIdle()
-        onNodeWithTag(ProjectsCreateEpicTag).performClick()
+        onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
         onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
         assertTrue(
@@ -3480,8 +3475,6 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(ProjectsCreateProjectTag).performClick()
-        waitForIdle()
 
         onRoot().printToLog("AFTER_NEW_PROJECT_CLICK")
         onNodeWithTag(NewProjectFormTag).assertExists(
@@ -4779,8 +4772,6 @@ object ShellScenarios {
         waitForIdle()
         onNodeWithTag(ProjectsListNewTag).performClick()
         waitForIdle()
-        onNodeWithTag(ProjectsCreateProjectTag).performClick()
-        waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertExists()
 
         val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()
@@ -4835,8 +4826,6 @@ object ShellScenarios {
         waitForIdle()
 
         onNodeWithTag(ProjectsListNewTag).performClick()
-        waitForIdle()
-        onNodeWithTag(ProjectsCreateProjectTag).performClick()
         waitForIdle()
         onNodeWithTag(NewProjectFormTag).assertExists()
         val form = onNodeWithTag(NewProjectFormTag).getBoundsInRoot()

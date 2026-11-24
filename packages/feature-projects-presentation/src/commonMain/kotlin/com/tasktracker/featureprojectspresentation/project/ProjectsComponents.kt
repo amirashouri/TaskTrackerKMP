@@ -36,10 +36,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.AmbientBackdrop
-import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ThemeScheme
-import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttBodyLabel
 import com.tasktracker.designsystem.ttCanvas
@@ -59,9 +57,6 @@ import com.tasktracker.domain.TagColor
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.priority_critical
-import com.tasktracker.resources.projects_create_epic
-import com.tasktracker.resources.projects_create_project
-import com.tasktracker.resources.projects_create_title
 import com.tasktracker.resources.priority_high
 import com.tasktracker.resources.priority_low
 import com.tasktracker.resources.priority_lowest
@@ -288,59 +283,6 @@ internal fun ProjectsEmptyState(
         }
     }
 }
-
-/**
- * The "+" menu: one sheet offering the two things the Projects tab can create.
- *
- * Two buttons rather than a dropdown because the design system has no menu primitive, and
- * because the choice is genuinely binary: the tab has two list kinds, and each has an editor.
- * The sheet is drawn over the tab, so it is the same scaffold the other sheets use.
- */
-@Composable
-internal fun ProjectsCreateMenu(
-    visible: Boolean,
-    onNewProject: () -> Unit,
-    onNewEpic: () -> Unit,
-    onDismissRequest: () -> Unit,
-    onDismissed: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    TTBottomSheetScaffold(
-        visible = visible,
-        onDismissRequest = onDismissRequest,
-        modifier = modifier,
-        onDismissed = onDismissed,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(ttSpacing.formStack)
-                .testTag(ProjectsCreateMenuTag),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-        ) {
-            ttText(
-                text = stringResource(Res.string.projects_create_title),
-                style = ttTypography.titleSmall,
-                color = ttLabel(),
-            )
-            ttGlassButton(
-                label = stringResource(Res.string.projects_create_project),
-                onClick = onNewProject,
-                style = TTGlassButtonStyle(prominent = true),
-                modifier = Modifier.fillMaxWidth().testTag(ProjectsCreateProjectTag),
-            )
-            ttGlassButton(
-                label = stringResource(Res.string.projects_create_epic),
-                onClick = onNewEpic,
-                modifier = Modifier.fillMaxWidth().testTag(ProjectsCreateEpicTag),
-            )
-        }
-    }
-}
-
-const val ProjectsCreateMenuTag = "projects.create.menu"
-const val ProjectsCreateProjectTag = "projects.create.project"
-const val ProjectsCreateEpicTag = "projects.create.epic"
 
 /** Preview scaffold rendering canvas background and ambient backdrop. */
 @Composable
