@@ -523,6 +523,14 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = WorkItemEditorScenarios.aPickerFillsAPhoneWidthForm)
 
     @Test
+    fun aWorkItemEditorWideLayoutIsCappedAndCentred() =
+        runComposeUiTest(block = WorkItemEditorScenarios.wideLayoutClampsContentWidthAndCenters)
+
+    @Test
+    fun anEpicEditorWideLayoutIsCappedAndCentred() =
+        runComposeUiTest(block = EpicEditorScenarios.wideLayoutClampsContentWidthAndCenters)
+
+    @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)
 
     @Test

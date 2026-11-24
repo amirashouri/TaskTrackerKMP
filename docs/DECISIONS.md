@@ -301,6 +301,17 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   backlog and the sprint list stay one column capped at `960.dp` and centred
   (`BacklogMaxContentWidth`, `SprintMaxContentWidth`), because their order is
   the information and columns would destroy the scan.
+- **Editors reuse the Backlog's reading width, not a second cap.** The Epic editor
+  and both work-item editor presentations (the sheet form and the full page,
+  including the pinned action row) fill a phone, stop at
+  `BacklogMaxContentWidth` (960dp), and centre the capped column. The content uses
+  `fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally)` followed by
+  `widthIn(max).fillMaxWidth()`, so the screen-sized layer keeps the window width while
+  the form itself does not grow past the cap. The pinned work-item bar is capped with the form, otherwise the
+  actions drift out to the window's edges on a desktop while the fields stop short.
+  Reusing the Backlog constant is deliberate: these are the same single-column
+  reading surfaces, in the same presentation module, and a second width would let
+  them drift apart.
 - **Cap the floating header and the list together.** The backlog header is
   measured for the list's top inset, so the header's width cap and the list's
   live in the same `BoxWithConstraints` and share one `Alignment.TopCenter`.

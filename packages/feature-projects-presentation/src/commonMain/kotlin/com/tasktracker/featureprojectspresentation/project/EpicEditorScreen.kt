@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -102,6 +104,11 @@ fun EpicEditorScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            // The Backlog's reading width: on a desktop the form fills up to the cap and
+            // the capped column is centred in the window instead of stretching edge to edge.
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = BacklogMaxContentWidth)
+            .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = ttSpacing.xxl)
             .padding(top = ttSpacing.screenGutterLarge, bottom = ttSpacing.xxxl)

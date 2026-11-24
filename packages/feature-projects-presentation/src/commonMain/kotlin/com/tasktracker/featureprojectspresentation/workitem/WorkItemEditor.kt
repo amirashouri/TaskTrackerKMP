@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -181,6 +183,11 @@ fun WorkItemEditorScreen(
         onTagToggled = onTagToggled,
         modifier = modifier
             .fillMaxSize()
+            // The Backlog's reading width: on a desktop the form fills up to the cap and
+            // the capped column is centred in the window instead of stretching edge to edge.
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = BacklogMaxContentWidth)
+            .fillMaxWidth()
             .padding(ttSpacing.screenGutterLarge)
             .imePadding()
             .verticalScroll(rememberScrollState())
@@ -428,6 +435,11 @@ private fun ProjectsEditorFullScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Match the Backlog's reading width; the pinned bar below shares it so the
+                // actions stay on the form's edges rather than the window's.
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .widthIn(max = BacklogMaxContentWidth)
+                .fillMaxWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge, vertical = ttSpacing.md)
                 .imePadding()
                 .verticalScroll(rememberScrollState()),
@@ -629,6 +641,8 @@ private fun ProjectsEditorFullScreen(
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .widthIn(max = BacklogMaxContentWidth)
+                .fillMaxWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge)
                 .then(
                     if (keyboardVisible) {

@@ -137,8 +137,8 @@ New resources land only in `:packages:design-system`.
   `:packages:feature-projects-presentation` as each lands.
 - **Before handoff:** `scripts/check.sh full` — this touches rendering (new icons, a card,
   a segmented control), so it needs JVM, iOS and the Robolectric entry points.
-- **Counts / Baselines:** done — `test-baseline.json` regenerated from the green full run
-  (JVM 2457, iOS 2392, Android host 2026) and `check-baseline.sh` passes.
+- **Counts / Baselines:** done — `test-baseline.json` regenerated from the latest green full
+  run (JVM 2459, iOS 2394, Android host 2028) and `check-baseline.sh` passes.
 - **Stays pending:** a device install and the real server round-trip (the mock transport
   cannot prove the wire).
 
@@ -154,8 +154,8 @@ New resources land only in `:packages:design-system`.
   `AppRoute.EpicEditor`;  `EpicListModel`, `EpicRowView`, `EpicProgress`, the editor, the owner
   picker, both item pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
   segment-scoped add action; and the five shell scenarios. `scripts/check.sh full` is green on
-  JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run
-  (2457 / 2392 / 2026), and
+  JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from the latest run
+  (2459 / 2394 / 2028), and
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
   Follow-up: the epic editor's linked-item unlink control now uses the 24dp inline close
@@ -183,6 +183,11 @@ New resources land only in `:packages:design-system`.
   The list is loaded on demand by `ProjectBacklogModel.loadLinkableEpics`, not on every
   backlog reload. The work-item editor resolves the paired epic's title on open and shows
   it as a read-only chip under the page title; an unlinked item draws none.
+  Follow-up: the Epic editor and both work-item editor presentations now use the Backlog's
+  reading width — a phone-width form fills the window, a desktop form stops at 960dp and
+  centres. The pinned work-item action bar shares the cap so its actions stay on the form's
+  edges. New scenarios pin the exact width, centring, and the phone-width fallback on JVM,
+  iOS and Robolectric.
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against
