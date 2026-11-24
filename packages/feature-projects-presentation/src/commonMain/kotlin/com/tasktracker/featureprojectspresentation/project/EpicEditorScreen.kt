@@ -304,8 +304,13 @@ fun EpicEditorScreen(
 
     EpicItemPickerSheet(
         items = model.candidateItems,
+        selectedEpicID = model.savedEpicID,
         visible = isItemPickerOpen,
-        onPick = { id -> scope.launch { model.link(id) } },
+        onToggle = { id, isSelected ->
+            scope.launch {
+                if (isSelected) model.unlink(id) else model.link(id)
+            }
+        },
         onDismissRequest = { isItemPickerOpen = false },
         onDismissed = { isItemPickerOpen = false },
     )

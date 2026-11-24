@@ -107,11 +107,16 @@ import com.tasktracker.featureprojectspresentation.EpicArchiveOnlyTag
 import com.tasktracker.featureprojectspresentation.EpicArchiveSheetTag
 import com.tasktracker.featureprojectspresentation.EpicArchiveTag
 import com.tasktracker.featureprojectspresentation.EpicEditorBackTag
+import com.tasktracker.featureprojectspresentation.EpicEditorLinkItemsTag
 import com.tasktracker.featureprojectspresentation.EpicEditorPickProjectsTag
 import com.tasktracker.featureprojectspresentation.EpicEditorProgressTag
 import com.tasktracker.featureprojectspresentation.EpicEditorScreenTag
 import com.tasktracker.featureprojectspresentation.EpicEditorStatusTag
 import com.tasktracker.featureprojectspresentation.EpicGlyphTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerDoneTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerRowTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerSelectedTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerTag
 import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
 import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
 import com.tasktracker.featureprojectspresentation.EpicProjectPickerRowsTag
@@ -1116,10 +1121,11 @@ object ShellScenarios {
     }
 
     /**
-     * Progress and status are absent in create and present in edit.
+     * Progress and status are absent in create and present in edit, and the link picker toggles.
      *
      * A zero-of-zero bar on a create would be a claim about an epic that does not exist yet,
-     * which is why the two rows are omitted rather than drawn empty.
+     * which is why the two rows are omitted rather than drawn empty. In edit, the picker shows
+     * the already-linked item as checked and a tap removes that check.
      */
     val epicEditorScenarios: suspend ComposeUiTest.() -> Unit = {
         val projects = FakeProjectRepository()
@@ -1129,10 +1135,13 @@ object ShellScenarios {
         projects.seed(apollo)
         projects.seed(borealis)
         projects.seedEpic(epic)
-        projects.seed(
-            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done)
-                .also { it.epicID = epic.id },
-        )
+        val linked = shellTestWorkItem(
+            apollo.id,
+            keyPrefix = "AP",
+            number = 1,
+            status = WorkItemStatus.Done,
+        ).also { it.epicID = epic.id }
+        projects.seed(linked)
         setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
 
         waitForIdle()
@@ -1159,6 +1168,28 @@ object ShellScenarios {
         onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
         onNodeWithTag(EpicEditorProgressTag).assertIsDisplayed()
         onNodeWithTag(EpicEditorStatusTag).assertIsDisplayed()
+
+        // The link picker shows what is already linked, and a tap toggles it off.
+        onNodeWithTag(EpicEditorLinkItemsTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicItemPickerTag).assertIsDisplayed()
+        onNodeWithTag(EpicItemPickerRowTag(linked.id.stringValue)).assertIsDisplayed()
+        // The checkmark is a child of the checkbox row, so semantics merging folds its tag
+        // into the parent; read the unmerged tree to see the marker itself.
+        onNodeWithTag(EpicItemPickerSelectedTag(linked.id.stringValue), useUnmergedTree = true)
+            .assertIsDisplayed()
+        onNodeWithTag(EpicItemPickerRowTag(linked.id.stringValue)).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(
+                hasTestTag(EpicItemPickerSelectedTag(linked.id.stringValue)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isEmpty(),
+            "tapping a checked item must unlink it",
+        )
+        onNodeWithTag(EpicItemPickerDoneTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
     }
 
     /**

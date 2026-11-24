@@ -92,6 +92,8 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
       (`epicProjectPickerSurvivesAnEmptyCatalog`).
 - [x] An epic may name one project but not zero; the rule is shared by the editor's Save state
       and the use case, and the copy says "at least one project" (`EpicUseCasesTest`).
+- [x] The link picker lists already-linked items with a checkmark, and tapping a checked item
+      unlinks it (`epicEditorScenarios`).
 - [x] Reverting the derivation (e.g. treating `InReview` as Done) turns a named test red.
 
 **KMP Constraint:** no platform APIs in `commonMain`; no new `expect`/`actual` is expected.
@@ -141,8 +143,9 @@ New resources land only in `:packages:design-system`.
   the trigger. `ttGlassButton` gained an optional trailing icon so the chevron sits inside the
   Projects button and turns to point at the open list. The minimum is now one project, matching
   the server and the copy: `EpicRules.MIN_PROJECTS` is the single source for the editor's Save
-  state and the use case's validation. `scripts/check.sh full` and `scripts/check-baseline.sh`
-  remain green (2446 / 2381 / 2017).
+  state and the use case's validation. The link picker now lists already-linked items with a
+  checkmark and unlinks a checked item when tapped. `scripts/check.sh full` and
+  `scripts/check-baseline.sh` remain green (2446 / 2381 / 2017).
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against

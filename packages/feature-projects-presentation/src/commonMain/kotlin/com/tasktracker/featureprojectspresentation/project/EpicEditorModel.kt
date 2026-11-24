@@ -66,7 +66,7 @@ class EpicEditorModel(
     var subtasks: List<WorkItem> by mutableStateOf(emptyList())
         private set
 
-    /** Items in the spanned projects that could join this epic, loaded when the picker opens. */
+    /** All items in the spanned projects, including ones already linked here, for the picker. */
     var candidateItems: List<WorkItem> by mutableStateOf(emptyList())
         private set
 
@@ -161,13 +161,19 @@ class EpicEditorModel(
     suspend fun link(workItemID: WorkItemID): Boolean {
         val epicID = savedEpicID ?: return false
         val changed = reporting { setWorkItemEpic(workItemID, Patch.Of(epicID)) } != null
-        if (changed) refreshSubtasks()
+        if (changed) {
+            refreshSubtasks()
+            loadCandidates()
+        }
         return changed
     }
 
     suspend fun unlink(workItemID: WorkItemID): Boolean {
         val changed = reporting { setWorkItemEpic(workItemID, Patch.Of(null)) } != null
-        if (changed) refreshSubtasks()
+        if (changed) {
+            refreshSubtasks()
+            loadCandidates()
+        }
         return changed
     }
 
@@ -181,18 +187,17 @@ class EpicEditorModel(
     }
 
     /**
-     * Items from the epic's projects that are not already linked here.
+     * Every item in the epic's projects, including the ones already linked here.
      *
-     * Items linked to another epic are included on purpose: the product allows moving a task
-     * between stories, and the link replaces the old one. Hiding them would make the picker
-     * silently narrower than the rule it enforces.
+     * The picker draws a checkmark from each item's [WorkItem.epicID] and toggles it, so a linked
+     * item has to be present too. Items linked to another epic are included as well: the product
+     * allows moving a task between stories, and the link replaces the old one.
      */
     suspend fun loadCandidates() {
-        val epicID = savedEpicID ?: return
+        if (savedEpicID == null) return
         val spanned = projectIDs.toSet()
         val loaded = reporting {
             spanned.flatMap { repository.workItems(it) }
-                .filter { it.epicID != epicID }
                 .sortedWith(compareBy({ it.projectID.stringValue }, { it.key.rawValue }))
         }.orEmpty()
         candidateItems = loaded

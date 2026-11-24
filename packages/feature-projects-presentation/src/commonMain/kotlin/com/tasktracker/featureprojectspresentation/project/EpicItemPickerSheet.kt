@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.TTBottomSheetScaffold
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -31,18 +32,19 @@ import com.tasktracker.resources.epic_subtasks_empty
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Picks work items to link to the saved epic.
+ * Toggles work items linked to the saved epic.
  *
- * Candidates are already scoped to the projects the epic spans and exclude items linked to
- * this same epic; an item in *another* epic is offered, because the server accepts a link that
- * replaces the old one and the picker should not be narrower than the rule. The sheet stays
- * open across picks so a story can collect several tasks in one visit.
+ * Candidates cover every item in the projects the epic spans. Items already linked here carry a
+ * checkmark and tapping one unlinks it; items in *another* epic are offered unchecked, because
+ * the server accepts a link that replaces the old one and the picker should not be narrower than
+ * the rule. The sheet stays open across taps so a story can revise its set in one visit.
  */
 @Composable
 fun EpicItemPickerSheet(
     items: List<WorkItem>,
+    selectedEpicID: EpicID?,
     visible: Boolean,
-    onPick: (WorkItemID) -> Unit,
+    onToggle: (WorkItemID, Boolean) -> Unit,
     onDismissRequest: () -> Unit,
     onDismissed: () -> Unit,
     modifier: Modifier = Modifier,
@@ -81,14 +83,15 @@ fun EpicItemPickerSheet(
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
                 ) {
                     items.forEach { item ->
+                        val isSelected = selectedEpicID != null && item.epicID == selectedEpicID
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable(
                                     indication = null,
                                     interactionSource = remember { MutableInteractionSource() },
-                                    role = Role.Button,
-                                    onClick = { onPick(item.id) },
+                                    role = Role.Checkbox,
+                                    onClick = { onToggle(item.id, isSelected) },
                                 )
                                 .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.md)
                                 .testTag(EpicItemPickerRowTag(item.id.stringValue)),
@@ -108,6 +111,16 @@ fun EpicItemPickerSheet(
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f),
                             )
+                            if (isSelected) {
+                                ttText(
+                                    text = "\u2713",
+                                    style = ttTypography.callout,
+                                    color = ttLabel(),
+                                    modifier = Modifier.testTag(
+                                        EpicItemPickerSelectedTag(item.id.stringValue),
+                                    ),
+                                )
+                            }
                         }
                     }
                 }
@@ -132,3 +145,4 @@ const val EpicItemPickerRowsTag = "projects.epic.picker.items.rows"
 const val EpicItemPickerDoneTag = "projects.epic.picker.items.done"
 
 fun EpicItemPickerRowTag(workItemID: String): String = "projects.epic.picker.items.row.$workItemID"
+fun EpicItemPickerSelectedTag(workItemID: String): String = "projects.epic.picker.items.selected.$workItemID"
