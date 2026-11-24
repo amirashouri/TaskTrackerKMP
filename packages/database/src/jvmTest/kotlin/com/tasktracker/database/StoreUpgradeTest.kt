@@ -40,7 +40,7 @@ class StoreUpgradeTest {
 
     @Test
     fun aStoreFromAnEarlierBuildIsRecreatedRatherThanRefused() = runBlocking {
-        // The current schema is version 3; any lower number takes the upgrade path.
+        // The current schema is version 5; any lower number takes the upgrade path.
         assertAStoreAtVersionIsRecreated(version = 2)
     }
 

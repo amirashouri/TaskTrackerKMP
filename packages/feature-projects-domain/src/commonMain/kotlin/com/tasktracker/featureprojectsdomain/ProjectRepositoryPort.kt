@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectsdomain
 import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TagID
@@ -10,6 +11,7 @@ import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.UserID
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.Recurrence
@@ -53,6 +55,26 @@ interface ProjectRepositoryPort {
     suspend fun sprintWorkItems(id: SprintID): List<WorkItem>
 
     suspend fun sprintMembers(sprintID: SprintID): List<SprintMember> = emptyList()
+
+    /**
+     * Every epic this device holds, most recently touched first.
+     *
+     * Not scoped to a project: an epic spans several, and the Projects tab's Epic segment
+     * is a single list. An epic may name projects this device cannot see — visibility is
+     * decided by the server, so the list is "what arrived", not "what I may read".
+     */
+    suspend fun epics(): List<Epic> = emptyList()
+
+    suspend fun epic(id: EpicID): Epic? = null
+
+    /**
+     * The items linked to an epic, in board order.
+     *
+     * This is also the epic's progress: the count is `size`, and the derived status is
+     * [com.tasktracker.domain.deriveEpicStatus] over the same list. Only the items this
+     * device can see are here, which is the permission boundary rather than a bug.
+     */
+    suspend fun workItemsForEpic(id: EpicID): List<WorkItem> = emptyList()
 
     suspend fun createSprintMember(
         sprintID: SprintID,
@@ -142,6 +164,67 @@ interface ProjectRepositoryPort {
 
     suspend fun deleteSprint(id: SprintID, now: Instant)
 
+    /**
+     * Creates an epic spanning [projectIDs], and queues it.
+     *
+     * The one-project minimum is the use case's rule, not this one: a store asked directly
+     * for an epic with no projects writes what it was told. See
+     * [com.tasktracker.featureprojectsdomain.CreateEpic].
+     */
+    suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        ownerID: UserID? = null,
+        now: Instant,
+    ): Epic = throw AppError.Storage("This store does not hold epics.")
+
+    /**
+     * A partial epic edit; [Patch.Unmentioned] leaves a field alone, and
+     * `Patch.Of(null)` clears the due date.
+     *
+     * A changed project set **unlinks** items whose project left the set: a link the epic
+     * no longer explains is one the server refuses on the item's next write. A null [ownerID]
+     * leaves the stored owner alone; there is no unassigned epic.
+     */
+    suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        ownerID: UserID? = null,
+        now: Instant,
+    ): Epic = throw AppError.Storage("This store does not hold epics.")
+
+    /**
+     * Archives or restores an epic, and optionally its subtasks.
+     *
+     * [archiveSubtasks] is the difference between "put the story away" and "put the story
+     * and its work away": when true every linked item's `isArchived` follows the epic's new
+     * state, and the ones the epic filed are the ones a later unarchive restores.
+     */
+    suspend fun setEpicArchived(
+        id: EpicID,
+        isArchived: Boolean,
+        archiveSubtasks: Boolean,
+        now: Instant,
+    ): Epic = throw AppError.Storage("This store does not hold epics.")
+
+    /**
+     * Links an item to an epic, or clears the link with `Patch.Of(null)`.
+     *
+     * The epic must exist and must span the item's project; the use case states that rule
+     * to the user and the store enforces it again, because an offline queue can carry a
+     * link the picker never saw.
+     */
+    suspend fun setWorkItemEpic(
+        workItemID: WorkItemID,
+        epicID: Patch<EpicID?>,
+        now: Instant,
+    ): WorkItem = throw AppError.Storage("This store does not hold epics.")
+
     suspend fun createWorkItem(
         projectID: ProjectID,
         title: String,
@@ -228,6 +311,11 @@ data class ProjectChange(
         Projects,
         WorkItems,
         Sprints,
+        /**
+         * An epic document changed. Deliberately not a work-item kind: an epic spans
+         * projects, and the list that shows it is not scoped to one.
+         */
+        Epics,
     }
 }
 

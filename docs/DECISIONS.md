@@ -147,6 +147,39 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   failed profile PATCH restores the last server-confirmed snapshot rather than
   re-reading `port.userDetails()`, which is a networked read-through.
 
+- **Epic status and progress are derived, never stored.** `deriveEpicStatus` reads only
+  the coarse `WorkItemStatus` category: all terminal → `Done`; any `InProgress`/`InReview`
+  or any terminal subtask → `InProgress`; otherwise any `Todo` → `Todo`, otherwise `Backlog`;
+  an empty list is `Backlog`, not `Done`. A single finished item means the epic has begun, so a
+  Done/Closed subtask beside an unfinished one reads `InProgress`, not `Todo`. `Closed` counts
+  as terminal. No Room column, no wire key, no cached percentage — a stored status would be a
+  second answer that drifts the moment a subtask moves. Mutation-checked: treating `InReview`
+  as `Done` turns `EpicStatusTest.inReviewIsInProgress` red; removing the terminal branch turns
+  both partial-completion cases red.
+- **Epic progress is what this device can see.** The total is `workItemsForEpic(id).size`,
+  which is the permission boundary rather than a bug: a member of one linked project sees a
+  smaller total than a member of both, and the copy stays neutral about it. Never resurrect
+  the total from a server count. `WorkItem.isArchived` is a filing choice: archive-all sets
+  it on the epic's subtasks and unarchive restores them; no listing may read it as
+  "finished".
+- **An epic's owner is one member, defaulted to an admin, never cleared.** `ownerID` decodes
+  with a null default so a row written before the field existed still loads, and the editor
+  shows the signed-in admin or the first active admin from the live directory in that case.
+  The picker is single-select with no "unassigned" entry: the server gives a create its
+  deterministic admin default and keeps the stored owner when an update omits it. Null is
+  therefore a legacy or deleted-account value, not a state the UI may offer.
+- **A backlog item links to an epic through a project-scoped picker, and the action hides
+  once linked.** The picker offers only active epics that list the item's project — the same
+  rule `SetWorkItemEpic` enforces — because anything else is a choice the write refuses.
+  `WorkItem.epicID` is the single link field, so showing the action on an already-linked row
+  would either do nothing or replace the link without saying so. Load the choices on demand;
+  the backlog's projection is the list being read, and an unopened picker owes it no read.
+  The linked epic's name is context, not an editor field: the work-item editor resolves it
+  once on open into a read-only chip under the page title, and `epicID` stays edited only
+  through the backlog picker. A missing epic drops the chip rather than inventing a
+  placeholder. Picker choices are glass cards with the epic glyph; a bare text row reads as
+  a label, not as something that can be tapped.
+
 ### Selection and batches
 
 - **A batch is presentation convenience over per-item commands.** `PutWorkItemsOnBoard` and
@@ -201,6 +234,14 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   uncomposed bar cannot animate away. A `Column`'s `spacedBy` counts children, so an
   `AnimatedVisibility` left as a sibling spends a gap even while empty: supply the gap
   inside the animated content, or swap the bar in place through a single child.
+- **The Project | Epic segment is a preference, not screen state.** It is top-level and a
+  `remember` in the destination dies on a tab switch, so it lives in `ShellPreferences`
+  (`DefaultsKey.ProjectsSegment`) with the value plus a change callback threaded into
+  `ProjectsHost`. The same rule as backlog sort: store choices, not screen state.
+- **The Projects "+" creates for the showing segment.** No dropdown and no chooser sheet:
+  the segment above it is the choice, so the plus opens the project form on Projects and the
+  epic editor on Epics. It is hidden when that segment has no editor. The epic editor is a
+  pushed route (`AppRoute.EpicEditor`) rather than a modal.
 - **Silent rendering failures.** `ImageVector.Builder.addPath` draws nothing
   without a `Brush` fill, and equal contours cancel under even-odd just as
   silently. A gradient with `endY = Float.POSITIVE_INFINITY` interpolates at ~0
@@ -210,6 +251,11 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   against the number of `@Test` lines you added before assuming you broke it.
   Regenerate from a *green* run only (zero failures and errors on every host),
   then re-run the gate: `check-baseline.sh` alone proves the counts, not the tests.
+- **A sheet's content never scrolls itself.** `TTBottomSheetScaffold` already wraps its card
+  in `verticalScroll`; a second one inside the content is measured with unbounded height and
+  throws `IllegalStateException` when the sheet opens. The epic project picker did this, so
+  the first tap on its project button crashed on a fresh install with no projects. Rows grow
+  and the scaffold scrolls; an empty picker says so instead of drawing nothing.
 - **A windowed sheet's padding is part of its measured geometry.**
   `TTBottomSheetScaffold` caps the window with `heightIn(max = 760.dp)`; 72dp of
   outer padding plus the form's own 16dp inset needs 776dp, so the content
@@ -255,6 +301,17 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   backlog and the sprint list stay one column capped at `960.dp` and centred
   (`BacklogMaxContentWidth`, `SprintMaxContentWidth`), because their order is
   the information and columns would destroy the scan.
+- **Editors reuse the Backlog's reading width, not a second cap.** The Epic editor
+  and both work-item editor presentations (the sheet form and the full page,
+  including the pinned action row) fill a phone, stop at
+  `BacklogMaxContentWidth` (960dp), and centre the capped column. The content uses
+  `fillMaxSize().wrapContentWidth(Alignment.CenterHorizontally)` followed by
+  `widthIn(max).fillMaxWidth()`, so the screen-sized layer keeps the window width while
+  the form itself does not grow past the cap. The pinned work-item bar is capped with the form, otherwise the
+  actions drift out to the window's edges on a desktop while the fields stop short.
+  Reusing the Backlog constant is deliberate: these are the same single-column
+  reading surfaces, in the same presentation module, and a second width would let
+  them drift apart.
 - **Cap the floating header and the list together.** The backlog header is
   measured for the list's top inset, so the header's width cap and the list's
   live in the same `BoxWithConstraints` and share one `Alignment.TopCenter`.

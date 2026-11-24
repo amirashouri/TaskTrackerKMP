@@ -18,10 +18,12 @@ import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.designsystem.TTConfirmPopupCancelTag
 import com.tasktracker.designsystem.TTConfirmPopupConfirmTag
@@ -276,6 +278,7 @@ object WorkItemEditorScenarios {
         status: WorkItemStatus = WorkItemStatus.Backlog,
         isFiledAway: Boolean = false,
         selectableStatuses: List<StatusDefinition> = emptyList(),
+        epicTitle: String? = null,
     ) {
         var title by remember { mutableStateOf("") }
         ttTheme(ThemeScheme.Light) {
@@ -297,6 +300,7 @@ object WorkItemEditorScenarios {
                 issuedKey = null,
                 selectableStatuses = selectableStatuses,
                 isFiledAway = isFiledAway,
+                epicTitle = epicTitle,
                 canSave = title.isNotBlank(),
                 isBusy = false,
                 errorMessage = null,
@@ -319,6 +323,27 @@ object WorkItemEditorScenarios {
                 onManageTags = onManageTags,
             )
         }
+    }
+
+    /**
+     * A linked item shows its epic's name as a chip under the title field. The chip is
+     * read-only context: the link itself is changed from the backlog row, not from this form.
+     */
+    val anEpicChipShowsTheLinkedEpicName: suspend ComposeUiTest.() -> Unit = {
+        setContent {
+            editorSheet(isCreating = false, epicTitle = "Ship it")
+        }
+
+        onNodeWithTag(WorkItemEditorEpicChipTag).assertIsDisplayed()
+        onNodeWithText("Ship it").assertIsDisplayed()
+
+        val chip = onNodeWithTag(WorkItemEditorEpicChipTag).fetchSemanticsNode().boundsInRoot
+        val titleField = onNodeWithTag(ProjectsFieldCardTag("Title")).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            chip.bottom <= titleField.top,
+            "the epic chip belongs under the page title, above the task title field: " +
+                "chip=$chip field=$titleField",
+        )
     }
 
     /**
@@ -530,6 +555,70 @@ object WorkItemEditorScenarios {
         )
     }
 
+    /**
+     * On a desktop-wide window the work-item form is capped at the Backlog's reading width and
+     * centred, while a phone-width form still fills the window.
+     *
+     * The title field is read rather than the screen box because the screen box keeps the full
+     * host width for its background and sheet layer; the field is what the cap owns. The cap
+     * is asserted as an exact content width, not just "less than the window": an editor that
+     * stopped short of the cap would pass the weaker check and leave a second, arbitrary
+     * reading measure in the product.
+     *
+     * Centring is read against the screen node for the reason in `docs/DECISIONS.md`: the
+     * forced width can exceed a phone-sized test host, so the host's origin is not the screen's.
+     */
+    val wideLayoutClampsContentWidthAndCenters: suspend ComposeUiTest.() -> Unit = {
+        val width = mutableStateOf(WIDER_FORM_WIDTH.dp)
+        setContent {
+            Box(modifier = Modifier.requiredWidth(width.value)) {
+                editorSheet(selectableStatuses = EDITOR_STATUSES)
+            }
+        }
+        waitForIdle()
+
+        val screen = onNodeWithTag(WorkItemEditorFullScreenTag).fetchSemanticsNode()
+        val title = onNodeWithTag(ProjectsFieldCardTag("Title")).fetchSemanticsNode()
+        val expectedWidth = densityPixels(BacklogMaxContentWidth - ttSpacing.screenGutterLarge * 2)
+
+        assertEquals(
+            expected = expectedWidth,
+            actual = title.size.width.toFloat(),
+            absoluteTolerance = 2f,
+            message = "the work-item form is ${title.size.width}px wide where the Backlog's " +
+                "${BacklogMaxContentWidth} reading width less its gutters is ${expectedWidth}px",
+        )
+        assertEquals(
+            expected = screen.boundsInRoot.left + (screen.size.width - title.size.width) / 2f,
+            actual = title.boundsInRoot.left,
+            absoluteTolerance = 2f,
+            message = "the work-item form is not centred in the screen: " +
+                "screen=${screen.boundsInRoot} title=${title.boundsInRoot}",
+        )
+
+        runOnIdle { width.value = PHONE_FORM_WIDTH.dp }
+        waitForIdle()
+
+        val phoneScreen = onNodeWithTag(WorkItemEditorFullScreenTag).fetchSemanticsNode()
+        val phoneTitle = onNodeWithTag(ProjectsFieldCardTag("Title")).fetchSemanticsNode()
+        val phoneExpectedWidth =
+            densityPixels(PHONE_FORM_WIDTH.dp - ttSpacing.screenGutterLarge * 2)
+        assertEquals(
+            expected = phoneExpectedWidth,
+            actual = phoneTitle.size.width.toFloat(),
+            absoluteTolerance = 2f,
+            message = "the work-item form is ${phoneTitle.size.width}px wide on a " +
+                "${PHONE_FORM_WIDTH}dp window, so the desktop cap leaked into the phone layout",
+        )
+        assertEquals(
+            expected = phoneScreen.boundsInRoot.left +
+                (phoneScreen.size.width - phoneTitle.size.width) / 2f,
+            actual = phoneTitle.boundsInRoot.left,
+            absoluteTolerance = 2f,
+            message = "the work-item form is not centred on a phone-width window",
+        )
+    }
+
     private suspend fun ComposeUiTest.assertOptionsShareOneLineHeight(
         pickerTag: String,
         labels: List<String>,
@@ -568,17 +657,21 @@ private const val NARROW_FORM_WIDTH = 360
 private const val PHONE_FORM_WIDTH = 393
 
 /**
- * A desktop content width, and a wider one to resize into.
+ * A form under the editor's reading-width cap, and one beyond it.
  *
- * Both are wide enough that the five priorities fit one row, which they do not at
- * [NARROW_FORM_WIDTH]: the pair has to differ in *form* width while the picker's content is
- * the same one row, or the width comparison would be measuring a wrap instead of a stretch.
+ * Both are wider than the picker's own cap and wide enough that the five priorities fit
+ * one row, which they do not at [NARROW_FORM_WIDTH]: the pair has to differ in *form*
+ * width while the picker's content is the same one row, or the width comparison would be
+ * measuring a wrap instead of a stretch.
  */
-private const val WIDE_FORM_WIDTH = 1000
+private const val WIDE_FORM_WIDTH = 600
 private const val WIDER_FORM_WIDTH = 1400
 
-/** Pixels, not dp: the widths compared are semantics bounds. Well below the 400px the pair differs by. */
+/** Pixels, not dp: the widths compared are semantics bounds. Well below the span between the pair. */
 private const val MIN_GROWTH = 100f
+
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.densityPixels(dp: Dp): Float = with(density) { dp.toPx() }
 
 /**
  * Three named stages, so the editor's Status picker is drawn at all.

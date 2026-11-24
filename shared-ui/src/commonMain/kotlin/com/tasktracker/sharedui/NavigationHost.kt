@@ -210,6 +210,7 @@ fun NavigationHost(
     // each chrome so the bar, the rail and the sidebar cannot disagree about unread while a
     // read/dismiss is landing.
     val notificationUserID by preferences.currentUserID.collectAsState()
+    val projectsSegment by preferences.projectsSegment.collectAsState()
     var unreadNotificationCount by remember(notifications, notificationUserID) { mutableStateOf(0) }
     LaunchedEffect(notifications, notificationUserID) {
         val port = notifications
@@ -508,6 +509,10 @@ fun NavigationHost(
                         // every other tab ignores both.
                         memberAdminPort = memberAdminPort,
                         adminProjectsPort = adminProjectsPort,
+                        projectsSegment = projectsSegment,
+                        onProjectsSegmentChanged = { segment ->
+                            scope.launch { preferences.setProjectsSegment(segment) }
+                        },
                     )
                 }
                 val pushedPane: @Composable () -> Unit = {
@@ -914,6 +919,15 @@ private fun TabRoot(
      * shell maps each `AdminProject` into the wizard's own flat [AgentSetupProject].
      */
     adminProjectsPort: AdminProjectsPort? = null,
+    /**
+     * The Projects tab's segment and its setter, forwarded from the shell's preferences.
+     *
+     * Defaulted so every other caller and every scenario that builds a tab root keeps working;
+     * only the Projects branch reads them.
+     */
+    projectsSegment: com.tasktracker.featureprojectspresentation.ProjectsSegment =
+        com.tasktracker.featureprojectspresentation.ProjectsSegment.Projects,
+    onProjectsSegmentChanged: (com.tasktracker.featureprojectspresentation.ProjectsSegment) -> Unit = {},
 ) {
     when (tab) {
         AppTab.Projects -> ProjectsHost(
@@ -922,6 +936,8 @@ private fun TabRoot(
             currentUserID = preferences.currentUserID,
             currentUserName = preferences.currentUserName,
             isWide = isWide,
+            projectsSegment = projectsSegment,
+            onProjectsSegmentChanged = onProjectsSegmentChanged,
         )
 
         AppTab.Board -> ProjectScopedTabScreen(
@@ -1010,6 +1026,16 @@ private fun TabRoot(
  * error here rather than a runtime fall-through. The sealed interface exists to give exactly
  * that, and this switch is where it pays off.
  */
+/** Drops the top route from [tab]'s stack, if there is one beneath it. */
+private fun popOneRoute(router: Router, tab: AppTab) {
+    val path = router.path(tab)
+    // A tab root is an empty stack, so a pushed editor can be the *only* route. The Size>1
+    // guard is for tabs whose root is a real route (Sprints); the Projects editor is not one.
+    if (path.isNotEmpty() && (path.size > 1 || path.last() is AppRoute.EpicEditor)) {
+        router.setPath(path.dropLast(1), tab)
+    }
+}
+
 @Composable
 private fun PushedRoute(
     route: AppRoute,
@@ -1095,6 +1121,17 @@ private fun PushedRoute(
             environment = environment,
             scope = scope,
             preferences = preferences,
+        )
+
+        // The epic editor is a page on the Projects stack. Its save and back both drop the
+        // route, which returns to the list exactly where the user left it.
+        is AppRoute.EpicEditor -> EpicEditorDestination(
+            epicID = route.epicID,
+            environment = environment,
+            scope = scope,
+            currentUserID = preferences.currentUserID,
+            onBack = { popOneRoute(router, tab) },
+            onSaved = { popOneRoute(router, tab) },
         )
 
         // The Settings tab root *is* the settings screen, so pushing `AppRoute.Settings` onto
@@ -1614,6 +1651,10 @@ private fun BacklogDestination(
         onClearSelection = model::clearSelection,
         onPutSelectionOnBoard = { statusKey -> scope.launch { model.putSelectionOnBoard(statusKey) } },
         onArchiveSelection = { scope.launch { model.archiveSelection() } },
+        availableEpics = model.linkableEpics,
+        isLoadingEpics = model.isLoadingEpics,
+        onLoadEpics = { scope.launch { model.loadLinkableEpics() } },
+        onLinkItemToEpic = { itemID, epicID -> scope.launch { model.linkToEpic(itemID, epicID) } },
     )
 }
 
@@ -2347,6 +2388,7 @@ private fun WorkItemEditorDestination(
     LaunchedEffect(model) {
         model.refreshComments()
         model.refreshAttachments()
+        model.refreshEpic()
     }
 
     // Tracked here rather than on the model because the model has no in-flight flag, and an
@@ -2414,6 +2456,7 @@ private fun WorkItemEditorDestination(
 
     WorkItemEditorSheet(
         focusCommentID = focusCommentID,
+        epicTitle = model.epicTitle,
         title = model.title,
         agentSection = if (agentSectionModel != null && model.status == WorkItemStatus.InProgress) {
             {

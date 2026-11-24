@@ -39,6 +39,15 @@ enum class OutboxEntity(val wireValue: String) {
      */
     SprintMember("sprintMember"),
     /**
+     * An epic, queued like any other entity.
+     *
+     * `"epic"` is the server's wire value and the change-feed entity name; it must stay
+     * equal to the server's `OutboxEntityEpic`. An epic's payload is the whole document —
+     * title, details, due date, archive state and the project set — so a link change is an
+     * ordinary update.
+     */
+    Epic("epic"),
+    /**
      * A comment, queued like any other entity.
      *
      * Unlike a status change — which is device-local and never queued — a comment is the

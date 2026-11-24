@@ -73,6 +73,15 @@ enum class DefaultsKey(val wireValue: String) {
     PutOnBoardStatus("backlog.putOnBoardStatus"),
 
     /**
+     * Which half of the Projects tab is showing: `projects` or `epics`.
+     *
+     * A UI preference rather than screen state, because the segment is top-level and a
+     * `remember` in the destination dies on a tab switch. Inside the enum so sign-out wipes
+     * it with the rest of the navigation preferences.
+     */
+    ProjectsSegment("projects.segment"),
+
+    /**
      * Debug-only fault injection, persisted so the simulator can be put into an offline
      * state and stay there across launches.
      */

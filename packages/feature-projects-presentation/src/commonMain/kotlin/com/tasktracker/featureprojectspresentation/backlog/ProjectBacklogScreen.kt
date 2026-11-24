@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.designsystem.LocalReducedMotion
@@ -49,6 +50,7 @@ import com.tasktracker.designsystem.ttGlass
 import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttRadius
 import com.tasktracker.domain.BacklogSortOrder
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.StatusDefinition
 import com.tasktracker.domain.WorkItem
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -163,6 +165,14 @@ fun ProjectBacklogScreen(
     onPutSelectionOnBoard: (String?) -> Unit = {},
     /** Files every ticked item away. */
     onArchiveSelection: () -> Unit = {},
+    /** Active epics in this project, as reported by the host's link picker load. */
+    availableEpics: List<Epic> = emptyList(),
+    /** True while the host is reading [availableEpics]. */
+    isLoadingEpics: Boolean = false,
+    /** Asks the host to refresh [availableEpics] before the picker becomes useful. */
+    onLoadEpics: () -> Unit = {},
+    /** Commits the item-to-epic link; the row hides its action when the item reloads linked. */
+    onLinkItemToEpic: (WorkItemID, EpicID) -> Unit = { _, _ -> },
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
@@ -196,6 +206,10 @@ fun ProjectBacklogScreen(
     // resolver below only when it cannot decide on its own — i.e. several columns and no usable
     // default. One sheet serves the single row and the selection: the question is the same one.
     var pendingPutOnBoard by remember { mutableStateOf<BacklogPutOnBoardRequest?>(null) }
+
+    // The item whose epic picker is open, or null when it is closed. Screen state because it is
+    // this visit's question; the epics themselves are the host's read.
+    var pendingEpicLink by remember { mutableStateOf<WorkItem?>(null) }
 
     fun commitPutOnBoard(item: WorkItem, definition: StatusDefinition?) {
         onPutOnBoard(item.id, definition?.id)
@@ -375,6 +389,10 @@ fun ProjectBacklogScreen(
                         onPutOnBoard = { requestPutOnBoard(it) },
                         onFileAway = onFileAway,
                         onCopy = onCopy,
+                        onLinkToEpic = { item ->
+                            pendingEpicLink = item
+                            onLoadEpics()
+                        },
                         onAddTask = onAddTask,
                         isSelecting = isSelecting,
                         selection = selection,
@@ -741,6 +759,19 @@ fun ProjectBacklogScreen(
                 onDismissRequest = { sortSheetOpen = false },
                 visible = sortSheetOpen,
             )
+            pendingEpicLink?.let { item ->
+                BacklogEpicPickerSheet(
+                    epics = availableEpics,
+                    visible = true,
+                    isLoading = isLoadingEpics,
+                    onSelect = { epic ->
+                        onLinkItemToEpic(item.id, epic.id)
+                        pendingEpicLink = null
+                    },
+                    onDismissRequest = { pendingEpicLink = null },
+                    onDismissed = { pendingEpicLink = null },
+                )
+            }
             // The column picker, open only while the resolver has decided it cannot board without
             // a choice. `visible` tracks `pendingPutOnBoard`, so dismissing sets it null and the
             // sheet animates out on its own.
@@ -781,6 +812,7 @@ private fun BacklogSectionList(
     onPutOnBoard: (WorkItem) -> Unit,
     onFileAway: (WorkItemID) -> Unit,
     onCopy: (String) -> Unit,
+    onLinkToEpic: (WorkItem) -> Unit,
     onAddTask: (() -> Unit)?,
     isSelecting: Boolean,
     selection: Set<WorkItemID>,
@@ -819,6 +851,7 @@ private fun BacklogSectionList(
                     isBusy = busyItemID == item.id,
                     onOpen = { onSelect(item.id) },
                     onCopy = onCopy,
+                    onLinkToEpic = { onLinkToEpic(item) },
                     projectTags = projection.project?.tags.orEmpty(),
                     isSelecting = isSelecting,
                     isSelected = item.id in selection,

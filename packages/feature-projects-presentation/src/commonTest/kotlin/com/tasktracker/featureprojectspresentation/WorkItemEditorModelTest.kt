@@ -1470,6 +1470,40 @@ class WorkItemEditorModelTest {
         assertEquals(1, opener.opens.size, "a second press must not open the file twice")
     }
 
+    // MARK: Epic context
+
+    /** The chip reads the linked epic's current title from the store on open. */
+    @Test
+    fun `the linked epics title is resolved for the editor`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val epic = testEpic(listOf(project.id), title = "Ship it")
+        val item = testWorkItem(project.id, epicID = epic.id)
+        repository.seed(project)
+        repository.seed(epic)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.refreshEpic()
+
+        assertEquals("Ship it", model.epicTitle)
+    }
+
+    /** An unlinked item leaves the chip absent rather than drawing an empty one. */
+    @Test
+    fun `an item without an epic has no epic title`() = runTest {
+        val repository = FakeProjectRepository()
+        val project = testProject()
+        val item = testWorkItem(project.id)
+        repository.seed(project)
+        repository.seed(item)
+        val model = editing(item, repository)
+
+        model.refreshEpic()
+
+        assertNull(model.epicTitle)
+    }
+
     // MARK: Helpers
 
     /** A built-in status as the picker offers it when the project has no catalog. */

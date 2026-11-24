@@ -43,6 +43,17 @@ internal fun ProjectChangeBus.announceSprints(projectID: ProjectID) {
     send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = projectID))
 }
 
+/**
+ * An epic document changed — its own fields, its project set, or a link that moves its
+ * derived status.
+ *
+ * Unscoped, because an epic spans projects and the Epic segment is one list: naming any one
+ * of its projects would make every other member's screen miss the event.
+ */
+internal fun ProjectChangeBus.announceEpics() {
+    send(ProjectChange(kind = ProjectChange.Kind.Epics))
+}
+
 internal fun ProjectChangeBus.announceProjectDeletion(projectID: ProjectID) {
     send(ProjectChange(kind = ProjectChange.Kind.Projects, projectID = projectID))
     send(ProjectChange(kind = ProjectChange.Kind.WorkItems, projectID = projectID))

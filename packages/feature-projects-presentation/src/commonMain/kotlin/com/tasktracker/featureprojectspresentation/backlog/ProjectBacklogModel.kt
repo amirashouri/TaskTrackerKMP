@@ -4,16 +4,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.WorkItemID
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.WorkItemStatus
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItem
 import com.tasktracker.featureprojectsdomain.ArchiveWorkItems
 import com.tasktracker.featureprojectsdomain.BacklogSectionedProjection
 import com.tasktracker.featureprojectsdomain.MoveWorkItem
+import com.tasktracker.featureprojectsdomain.Patch
 import com.tasktracker.featureprojectsdomain.ProjectChange
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.PutWorkItemsOnBoard
+import com.tasktracker.featureprojectsdomain.SetWorkItemEpic
 import com.tasktracker.featureprojectsdomain.WorkItemBatchOutcome
 
 /**
@@ -44,6 +48,7 @@ class ProjectBacklogModel(
     private val archiveWorkItem = ArchiveWorkItem(repository, dateProvider)
     private val putWorkItemsOnBoard = PutWorkItemsOnBoard(repository, dateProvider)
     private val archiveWorkItems = ArchiveWorkItems(repository, dateProvider)
+    private val setWorkItemEpic = SetWorkItemEpic(repository, dateProvider)
 
     /**
      * Backlog (`Backlog`) and archived (terminal: `Done` and `Closed`) sections.
@@ -69,6 +74,21 @@ class ProjectBacklogModel(
 
     /** True while a batch command is running; the action bar disables itself on it. */
     var isBatchRunning: Boolean by mutableStateOf(false)
+        private set
+
+    /**
+     * The epics this project may link to: active, and spanning this project.
+     *
+     * Loaded on demand rather than on every reload: the backlog's own projection is the list
+     * being read, and a picker that nobody opened should not pay for another read. Archived
+     * epics are excluded because filing an item into a story that is already put away is not a
+     * link the user can see anywhere.
+     */
+    var linkableEpics: List<Epic> by mutableStateOf(emptyList())
+        private set
+
+    /** True while the link picker's choices are being read. */
+    var isLoadingEpics: Boolean by mutableStateOf(false)
         private set
 
     override fun isRelevant(change: ProjectChange): Boolean =
@@ -157,6 +177,26 @@ class ProjectBacklogModel(
     /** Reopens an archived task to Backlog, clearing its `resolvedAt` date. */
     suspend fun unarchive(itemID: WorkItemID): Boolean = acting(itemID) {
         moveWorkItem(id = itemID, to = WorkItemStatus.Backlog)
+    }
+
+    /** Reads the active epics that span this project, for the link picker. */
+    suspend fun loadLinkableEpics() {
+        if (isLoadingEpics) return
+        isLoadingEpics = true
+        try {
+            linkableEpics = reporting {
+                repository.epics()
+                    .filter { !it.isArchived && projectID in it.projectIDs }
+                    .sortedWith(compareBy({ it.title }, { it.id.stringValue }))
+            }.orEmpty()
+        } finally {
+            isLoadingEpics = false
+        }
+    }
+
+    /** Links [itemID] to [epicID]; the row hides its link action once the item carries one. */
+    suspend fun linkToEpic(itemID: WorkItemID, epicID: EpicID): Boolean = acting(itemID) {
+        setWorkItemEpic(itemID, Patch.Of(epicID))
     }
 
     private suspend fun acting(itemID: WorkItemID, block: suspend () -> Unit): Boolean {

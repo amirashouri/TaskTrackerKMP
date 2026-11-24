@@ -27,8 +27,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
+import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
 import com.tasktracker.designsystem.ttActionIcons
@@ -55,7 +57,13 @@ import com.tasktracker.resources.project_remove_archive
 import com.tasktracker.resources.project_remove_body_clear
 import com.tasktracker.resources.project_remove_body_outstanding
 import com.tasktracker.resources.project_remove_title
+import com.tasktracker.designsystem.ttEntityIcons
 import com.tasktracker.designsystem.ttTabIcons
+import com.tasktracker.resources.epic_new
+import com.tasktracker.resources.epic_empty_body
+import com.tasktracker.resources.epic_empty_title
+import com.tasktracker.resources.projects_segment_epics
+import com.tasktracker.resources.projects_segment_projects
 import com.tasktracker.resources.projects_empty_body
 import com.tasktracker.resources.projects_empty_title
 import com.tasktracker.resources.tab_projects
@@ -79,9 +87,26 @@ fun ProjectsListScreen(
     modifier: Modifier = Modifier,
     onNewProject: (() -> Unit)? = null,
     onEditProject: (ProjectID) -> Unit = {},
+    /** Which half of the tab is showing; held by the shell so a tab switch cannot reset it. */
+    segment: ProjectsSegment = ProjectsSegment.Projects,
+    onSegmentChanged: (ProjectsSegment) -> Unit = {},
+    epicRows: List<EpicListRow> = emptyList(),
+    epicsLoading: Boolean = false,
+    onNewEpic: (() -> Unit)? = null,
+    onOpenEpic: (EpicID) -> Unit = {},
+    onEditEpic: (EpicID) -> Unit = {},
+    onArchiveEpic: (EpicID, Boolean) -> Unit = { _, _ -> },
+    onUnarchiveEpic: (EpicID) -> Unit = {},
 ) {
     var pendingRemovalID by remember { mutableStateOf<ProjectID?>(null) }
+    var pendingArchiveID by remember { mutableStateOf<EpicID?>(null) }
     val tabBarInset = LocalTabBarScrollUnderInset.current
+    // The add action creates for the segment that is showing, so it is only offered when that
+    // segment has an editor; a button for the other list would open a form the user did not ask for.
+    val canCreate = when (segment) {
+        ProjectsSegment.Projects -> onNewProject != null
+        ProjectsSegment.Epics -> onNewEpic != null
+    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().testTag(ProjectsListScreenTag),
@@ -94,7 +119,76 @@ fun ProjectsListScreen(
                 .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            ProjectsHeader(onNewProject = onNewProject)
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                // Same arrangement as the backlog header: a wide window puts the segment on the
+                // title's row, centred in the space the title and the add action leave; below
+                // this width the title keeps the row and the segment gets its own full-width
+                // row, where the picker's own cap lets it span the padded column.
+                val wideHeader = maxWidth >= ProjectsHeaderWideMinimumWidth
+                val segmentPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
+                    TTGlassSegmentedPicker(
+                        options = ProjectsSegment.entries,
+                        selection = segment,
+                        onSelect = onSegmentChanged,
+                        modifier = pickerModifier.testTag(ProjectsSegmentTag),
+                        testTag = { ProjectsSegmentOptionTag(it) },
+                        title = {
+                            stringResource(
+                                when (it) {
+                                    ProjectsSegment.Projects -> Res.string.projects_segment_projects
+                                    ProjectsSegment.Epics -> Res.string.projects_segment_epics
+                                },
+                            )
+                        },
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.lg)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    ) {
+                        // Wrap the title on a wide header so the weighted box spans exactly the
+                        // gap to the add action; weighting the title too would centre the picker
+                        // in a share of the row rather than in the visible gap.
+                        ttText(
+                            text = stringResource(Res.string.tab_projects),
+                            style = ttTypography.largeTitle,
+                            color = ttLabel(),
+                            modifier = if (wideHeader) Modifier else Modifier.weight(1f),
+                        )
+                        if (wideHeader) {
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                segmentPicker(Modifier)
+                            }
+                        }
+                        if (canCreate) {
+                            ttGlassIconButton(
+                                image = ttActionIcons.add,
+                                contentDescription = stringResource(
+                                    when (segment) {
+                                        ProjectsSegment.Projects -> Res.string.project_new
+                                        ProjectsSegment.Epics -> Res.string.epic_new
+                                    },
+                                ),
+                                onClick = {
+                                    when (segment) {
+                                        ProjectsSegment.Projects -> onNewProject?.invoke()
+                                        ProjectsSegment.Epics -> onNewEpic?.invoke()
+                                    }
+                                },
+                                modifier = Modifier.testTag(ProjectsListNewTag),
+                            )
+                        }
+                    }
+                    if (!wideHeader) {
+                        segmentPicker(Modifier)
+                    }
+                }
+            }
             errorMessage?.let { message ->
                 ttBanner(message = message, onDismiss = onDismissError)
             }
@@ -119,7 +213,46 @@ fun ProjectsListScreen(
                     onDismiss = onDismissNotice,
                 )
             }
-            if (rows.isEmpty() && !isLoading) {
+            if (segment == ProjectsSegment.Epics && epicRows.isEmpty() && !epicsLoading) {
+                ProjectsEmptyState(
+                    title = stringResource(Res.string.epic_empty_title),
+                    body = stringResource(Res.string.epic_empty_body),
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    image = ttEntityIcons.epic,
+                    action = if (onNewEpic != null) {
+                        {
+                            ttGlassButton(
+                                label = stringResource(Res.string.epic_new),
+                                onClick = onNewEpic,
+                                style = TTGlassButtonStyle(prominent = true),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                )
+            } else if (segment == ProjectsSegment.Epics) {
+                LazyColumn(
+                    modifier = Modifier.weight(1f).testTag(ProjectsEpicListTag),
+                    contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                ) {
+                    items(epicRows, key = { it.epic.id.stringValue }) { row ->
+                        EpicRowView(
+                            row = row,
+                            onOpen = { onOpenEpic(row.epic.id) },
+                            onEdit = { onEditEpic(row.epic.id) },
+                            onToggleArchived = {
+                                if (row.epic.isArchived) {
+                                    onUnarchiveEpic(row.epic.id)
+                                } else {
+                                    pendingArchiveID = row.epic.id
+                                }
+                            },
+                        )
+                    }
+                }
+            } else if (rows.isEmpty() && !isLoading) {
                 ProjectsEmptyState(
                     title = stringResource(Res.string.projects_empty_title),
                     body = stringResource(Res.string.projects_empty_body),
@@ -204,6 +337,26 @@ fun ProjectsListScreen(
         }
     }
 
+    pendingArchiveID?.let { id ->
+        epicRows.firstOrNull { it.epic.id == id }?.let { row ->
+            EpicArchiveSheet(
+                epicTitle = row.epic.title,
+                unfinishedCount = row.unfinishedCount,
+                visible = true,
+                onArchiveOnly = {
+                    pendingArchiveID = null
+                    onArchiveEpic(id, false)
+                },
+                onArchiveAll = {
+                    pendingArchiveID = null
+                    onArchiveEpic(id, true)
+                },
+                onDismissRequest = { pendingArchiveID = null },
+                onDismissed = { pendingArchiveID = null },
+            )
+        }
+    }
+
     pendingRow?.let { row ->
         RemoveProjectConfirmation(
             row = row,
@@ -216,33 +369,6 @@ fun ProjectsListScreen(
                 onDismissRemove()
             },
         )
-    }
-}
-
-@Composable
-private fun ProjectsHeader(
-    onNewProject: (() -> Unit)?,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-    ) {
-        ttText(
-            text = stringResource(Res.string.tab_projects),
-            style = ttTypography.largeTitle,
-            color = ttLabel(),
-            modifier = Modifier.weight(1f),
-        )
-        if (onNewProject != null) {
-            ttGlassIconButton(
-                image = ttActionIcons.add,
-                contentDescription = stringResource(Res.string.project_new),
-                onClick = onNewProject,
-                modifier = Modifier.testTag(ProjectsListNewTag),
-            )
-        }
     }
 }
 
@@ -301,9 +427,17 @@ private fun RemoveProjectConfirmation(
     }
 }
 
+/** The width at which the segment joins the title row instead of taking its own row. */
+private val ProjectsHeaderWideMinimumWidth = 700.dp
+
 const val ProjectsListScreenTag = "projects.list"
 const val ProjectsListTag = "projects.list.rows"
+const val ProjectsEpicListTag = "projects.list.epics"
 const val ProjectsListNewTag = "projects.list.new"
+const val ProjectsSegmentTag = "projects.segment"
+
+fun ProjectsSegmentOptionTag(segment: ProjectsSegment): String =
+    "projects.segment.${segment.wireValue}"
 const val RemoveProjectConfirmationTag = "projects.remove.confirmation"
 const val RemoveProjectConfirmTag = "projects.remove.confirm"
 const val RemoveProjectCancelTag = "projects.remove.cancel"

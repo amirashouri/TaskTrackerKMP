@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.DateProvider
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.JSONCoding
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
@@ -12,12 +13,14 @@ import com.tasktracker.core.TagID
 import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.core.parseAttachmentID
+import com.tasktracker.core.parseEpicID
 import com.tasktracker.core.parseProjectID
 import com.tasktracker.core.parseSprintID
 import com.tasktracker.core.parseUserID
 import com.tasktracker.core.parseWorkItemID
 import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
+import com.tasktracker.core.randomEpicID
 import com.tasktracker.core.randomProjectID
 import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.randomStatusChangeID
@@ -35,6 +38,7 @@ import com.tasktracker.database.inTransaction
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Attachment
 import com.tasktracker.domain.Comment
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
 import com.tasktracker.domain.Recurrence
@@ -767,6 +771,235 @@ class RoomProjectRepository(
         changeBus.announceWorkItems(projectID)
     }
 
+    // MARK: Epic reads
+
+    override suspend fun epics(): List<Epic> =
+        inTransaction(database) { database.epicDao().all().mapNotNull { it.domainValue } }
+
+    override suspend fun epic(id: EpicID): Epic? =
+        inTransaction(database) { recordForEpic(id)?.domainValue }
+
+    override suspend fun workItemsForEpic(id: EpicID): List<WorkItem> =
+        inTransaction(database) {
+            database.workItemDao().byEpic(id.stringValue).mapNotNull { it.domainValue }
+        }
+
+    // MARK: Epic writes
+
+    /**
+     * Overload for a legacy epic with no owner.
+     *
+     * Production creates go through [ProjectRepositoryPort.createEpic], whose owner comes
+     * from the editor. This overload exists for fixtures and imports of rows written before
+     * the owner column; the server fills the default when the epic is pushed.
+     */
+    suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        now: Instant,
+    ): Epic = createEpic(
+        projectIDs = projectIDs,
+        title = title,
+        details = details,
+        dueDate = dueDate,
+        ownerID = null,
+        now = now,
+    )
+
+    /**
+     * Creates an epic, queues it, and leaves its subtasks alone — there are none yet.
+     *
+     * The record and its outbox row share one transaction for the reason the class KDoc
+     * gives: a crash between them leaves an epic nobody is ever told about.
+     */
+    override suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        ownerID: UserID?,
+        now: Instant,
+    ): Epic {
+        val stamp = currentUserStamp()
+        val epic = Epic(
+            id = randomEpicID(),
+            projectIDs = projectIDs,
+            title = title,
+            details = details,
+            dueDate = dueDate,
+            ownerID = ownerID,
+            createdAt = now,
+            updatedAt = now,
+        )
+
+        inTransaction(database) {
+            database.epicDao().insert(epic.toRecord())
+            enqueueEpic(epic, stamp, now)
+        }
+        changeBus.announceEpics()
+        return epic
+    }
+
+    /**
+     * Overload for an edit that leaves the stored owner alone.
+     *
+     * Production edits go through [ProjectRepositoryPort.updateEpic] with the owner the
+     * editor holds. This overload keeps fixtures that predate the owner column readable.
+     */
+    suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        now: Instant,
+    ): Epic = updateEpic(
+        id = id,
+        title = title,
+        details = details,
+        dueDate = dueDate,
+        projectIDs = projectIDs,
+        ownerID = null,
+        now = now,
+    )
+
+    /**
+     * A partial epic edit, and a project-set change **unlinks** the items it dropped.
+     *
+     * The unlink is the part that is easy to miss: the server refuses an item whose epic no
+     * longer spans its project, so leaving the link behind would mean the item's next write
+     * is dead-lettered for a reason the user never chose. Each unlinked item is queued like
+     * any other edit, in the same transaction as the epic, so the two halves of the change
+     * cannot land apart.
+     */
+    override suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        ownerID: UserID?,
+        now: Instant,
+    ): Epic {
+        val stamp = currentUserStamp()
+        val unlinkedFrom = mutableSetOf<ProjectID>()
+        // Read out of the patch before the transaction: a smart cast to a property from
+        // another module is not available inside the lambda, and `Of(null)` must stay
+        // distinguishable from `Unmentioned`.
+        val dueDateMentioned = dueDate is Patch.Of
+        val dueDateValue = (dueDate as? Patch.Of)?.value
+
+        val updated = inTransaction(database) {
+            val epic = readEpic(id)
+            title?.let { epic.title = it }
+            details?.let { epic.details = it }
+            if (dueDateMentioned) epic.dueDate = dueDateValue
+            if (ownerID != null) epic.ownerID = ownerID
+            if (projectIDs != null) {
+                epic.projectIDs = projectIDs.distinct()
+                for (record in database.workItemDao().byEpic(id.stringValue)) {
+                    val item = record.domainValue ?: continue
+                    if (item.projectID in epic.projectIDs) continue
+                    item.epicID = null
+                    item.updatedAt = now
+                    database.workItemDao().update(item.toRecord())
+                    enqueueWorkItem(item, stamp, now)
+                    unlinkedFrom.add(item.projectID)
+                }
+            }
+            epic.updatedAt = now
+            database.epicDao().update(epic.toRecord())
+            enqueueEpic(epic, stamp, now)
+            epic
+        }
+        changeBus.announceEpics()
+        unlinkedFrom.forEach(changeBus::announceWorkItems)
+        return updated
+    }
+
+    /**
+     * Archives an epic, optionally filing its subtasks with it.
+     *
+     * Archive-only touches one row; archive-all writes and queues each linked item, because
+     * `isArchived` is an item field and a bulk `UPDATE` would produce no payload for the
+     * queue. Items already in the target state are skipped rather than rewritten, so
+     * restoring a partly filed epic queues only the rows it actually changes.
+     */
+    override suspend fun setEpicArchived(
+        id: EpicID,
+        isArchived: Boolean,
+        archiveSubtasks: Boolean,
+        now: Instant,
+    ): Epic {
+        val stamp = currentUserStamp()
+        val touched = mutableSetOf<ProjectID>()
+
+        val archived = inTransaction(database) {
+            val epic = readEpic(id)
+            epic.isArchived = isArchived
+            epic.updatedAt = now
+            if (archiveSubtasks) {
+                for (record in database.workItemDao().byEpic(id.stringValue)) {
+                    val item = record.domainValue ?: continue
+                    if (item.isArchived == isArchived) continue
+                    item.isArchived = isArchived
+                    item.updatedAt = now
+                    database.workItemDao().update(item.toRecord())
+                    enqueueWorkItem(item, stamp, now)
+                    touched.add(item.projectID)
+                }
+            }
+            database.epicDao().update(epic.toRecord())
+            enqueueEpic(epic, stamp, now)
+            epic
+        }
+        changeBus.announceEpics()
+        touched.forEach(changeBus::announceWorkItems)
+        return archived
+    }
+
+    /**
+     * Links an item to an epic, or clears the link.
+     *
+     * The store re-checks that the epic spans the item's project, because a queued link can
+     * outlive the editor that made it: the epic may have dropped the project while the item
+     * was offline. A `Patch.Unmentioned` is a read and no write, so it announces nothing.
+     */
+    override suspend fun setWorkItemEpic(
+        workItemID: WorkItemID,
+        epicID: Patch<EpicID?>,
+        now: Instant,
+    ): WorkItem {
+        if (epicID !is Patch.Of) {
+            return database.workItemDao().byID(workItemID.stringValue)?.domainValue
+                ?: throw missingWorkItem(workItemID)
+        }
+        // Read out of the patch before the transaction: a smart cast to a property from
+        // another module is not available, and naming it once keeps every use the same link.
+        val target = epicID.value
+        val stamp = currentUserStamp()
+        val updated = inTransaction(database) {
+            val item = readWorkItem(workItemID)
+            if (target != null) {
+                val epic = readEpic(target)
+                if (item.projectID !in epic.projectIDs) {
+                    throw AppError.Validation("That epic does not span this item's project.")
+                }
+            }
+            item.epicID = target
+            item.updatedAt = now
+            database.workItemDao().update(item.toRecord())
+            enqueueWorkItem(item, stamp, now)
+            item
+        }
+        changeBus.announceWorkItems(updated.projectID)
+        // The epic's progress and derived status changed even though its own row did not.
+        changeBus.announceEpics()
+        return updated
+    }
+
     // MARK: Work item writes
 
     /**
@@ -1119,6 +1352,12 @@ class RoomProjectRepository(
         OutboxEntity.SprintMember -> {
             val member = database.sprintMemberDao().byID(entityID)?.domainValue ?: return null
             JSONCoding.json.encodeToString(SprintMember.serializer(), member).encodeToByteArray()
+        }
+
+        OutboxEntity.Epic -> {
+            val id = parseEpicID(entityID) ?: return null
+            val epic = recordForEpic(id)?.domainValue ?: return null
+            JSONCoding.json.encodeToString(Epic.serializer(), epic).encodeToByteArray()
         }
 
         OutboxEntity.Comment -> {
@@ -1529,6 +1768,17 @@ class RoomProjectRepository(
         database.workItemDao().byID(id.stringValue)
 
     /** As [readProject]. */
+    private suspend fun readEpic(id: EpicID): Epic {
+        val record = recordForEpic(id) ?: throw missingEpic(id)
+        return record.domainValue ?: throw missingEpic(id)
+    }
+
+    private suspend fun recordForEpic(id: EpicID) = database.epicDao().byID(id.stringValue)
+
+    private fun missingEpic(id: EpicID): AppError.Storage =
+        AppError.Storage("No epic $id in the local store.")
+
+    /** As [readProject]. */
     private suspend fun readSprint(id: SprintID): Sprint {
         val record = database.sprintDao().byID(id.stringValue) ?: throw missingSprint(id)
         return record.domainValue ?: throw missingSprint(id)
@@ -1718,6 +1968,30 @@ class RoomProjectRepository(
                 id = newOutboxID(OutboxEntity.SprintMember, member.id, OutboxOperation.Upsert),
                 entity = OutboxEntity.SprintMember,
                 entityID = member.id,
+                operation = OutboxOperation.Upsert,
+                payload = payload.encodeToByteArray(),
+                createdAt = now,
+                userID = userID,
+            ).toRecord(),
+        )
+    }
+
+    /**
+     * As [enqueueWorkItem], and coalesced for the same reason: an epic edit queues its whole
+     * document, so a newer snapshot supersedes any unsent upsert of the same epic rather
+     * than racing it in the queue.
+     */
+    private suspend fun enqueueEpic(epic: Epic, userID: String?, now: Instant) {
+        val payload = JSONCoding.json.encodeToString(Epic.serializer(), epic)
+        database.outboxDao().deleteSupersededUpserts(
+            entityKind = OutboxEntity.Epic.wireValue,
+            entityID = epic.id.stringValue,
+        )
+        database.outboxDao().insert(
+            NewOutboxEntry(
+                id = newOutboxID(OutboxEntity.Epic, epic.id.stringValue, OutboxOperation.Upsert),
+                entity = OutboxEntity.Epic,
+                entityID = epic.id.stringValue,
                 operation = OutboxOperation.Upsert,
                 payload = payload.encodeToByteArray(),
                 createdAt = now,

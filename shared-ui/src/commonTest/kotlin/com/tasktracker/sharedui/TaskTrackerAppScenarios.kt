@@ -73,6 +73,25 @@ abstract class TaskTrackerAppScenarios {
     fun signingOutStopsTheProjectsObservation() = runComposeUiTest(block = ShellScenarios.signingOutStopsTheProjectsObservation)
     @Test
     fun creatingAProjectAddsItToTheList() = runComposeUiTest(block = ShellScenarios.creatingAProjectAddsItToTheList)
+
+    @Test
+    fun projectEpicSegmentScenarios() = runComposeUiTest(block = ShellScenarios.projectEpicSegmentScenarios)
+
+    @Test
+    fun projectCreateActionsScenarios() = runComposeUiTest(block = ShellScenarios.projectCreateActionsScenarios)
+
+    @Test
+    fun epicRowScenarios() = runComposeUiTest(block = ShellScenarios.epicRowScenarios)
+
+    @Test
+    fun epicArchiveDialogScenarios() = runComposeUiTest(block = ShellScenarios.epicArchiveDialogScenarios)
+
+    @Test
+    fun epicEditorScenarios() = runComposeUiTest(block = ShellScenarios.epicEditorScenarios)
+
+    @Test
+    fun epicProjectPickerSurvivesAnEmptyCatalog() =
+        runComposeUiTest(block = ShellScenarios.epicProjectPickerSurvivesAnEmptyCatalog)
     @Test
     fun everyTabGetsToItsOwnScreen() = runComposeUiTest(block = ShellScenarios.everyTabGetsToItsOwnScreen)
     @Test
@@ -183,6 +202,9 @@ abstract class TaskTrackerAppScenarios {
     fun theSummaryOpensMemberProgressAndBackReturnsToTheSummary() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[16])
     @Test
     fun theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[17])
+    @Test
+    fun theEpicOwnerPickerDefaultsToAnAdminAndCanChange() =
+        runComposeUiTest(block = ShellScenarios.theEpicOwnerPickerDefaultsToAnAdminAndCanChange)
     @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test

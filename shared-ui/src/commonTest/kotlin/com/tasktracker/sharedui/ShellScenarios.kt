@@ -61,6 +61,7 @@ import com.tasktracker.designsystem.TTGlassBackButtonTag
 import com.tasktracker.designsystem.ThemeScheme
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.domain.BacklogSortBasis
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectTag
 import com.tasktracker.domain.Sprint
@@ -84,8 +85,10 @@ import com.tasktracker.featureprojectspresentation.BacklogSortDoneTag
 import com.tasktracker.featureprojectspresentation.BacklogSortPriorityTag
 import com.tasktracker.featureprojectspresentation.BoardFileAwayTag
 import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
+import com.tasktracker.featureprojectspresentation.NewProjectCancelTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
 import com.tasktracker.featureprojectspresentation.MemberPickerMenuTag
+import com.tasktracker.featureprojectspresentation.MemberPickerPillTag
 import com.tasktracker.featureprojectspresentation.MemberPickerRowTag
 import com.tasktracker.featureprojectspresentation.NewProjectFormTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
@@ -99,6 +102,30 @@ import com.tasktracker.featureprojectspresentation.ProjectRowTagPrefix
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectSwitcherTag
 import com.tasktracker.featureprojectspresentation.ProjectsListNewTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveAllTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveCancelTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveOnlyTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveSheetTag
+import com.tasktracker.featureprojectspresentation.EpicArchiveTag
+import com.tasktracker.featureprojectspresentation.EpicEditorBackTag
+import com.tasktracker.featureprojectspresentation.EpicEditorLinkItemsTag
+import com.tasktracker.featureprojectspresentation.EpicOwnerPickerTag
+import com.tasktracker.featureprojectspresentation.EpicEditorPickProjectsTag
+import com.tasktracker.featureprojectspresentation.EpicEditorProgressTag
+import com.tasktracker.featureprojectspresentation.EpicEditorScreenTag
+import com.tasktracker.featureprojectspresentation.EpicEditorStatusTag
+import com.tasktracker.featureprojectspresentation.EpicGlyphTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerDoneTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerRowTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerSelectedTag
+import com.tasktracker.featureprojectspresentation.EpicItemPickerTag
+import com.tasktracker.featureprojectspresentation.EpicProgressCountTag
+import com.tasktracker.featureprojectspresentation.EpicProjectChipsTag
+import com.tasktracker.featureprojectspresentation.EpicProjectPickerRowsTag
+import com.tasktracker.featureprojectspresentation.EpicProjectPickerTag
+import com.tasktracker.featureprojectspresentation.EpicRowTag
+import com.tasktracker.featureprojectspresentation.ProjectsSegment
+import com.tasktracker.featureprojectspresentation.ProjectsSegmentOptionTag
 import com.tasktracker.featureprojectspresentation.ProjectsListScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectsListTag
 import com.tasktracker.featureprojectspresentation.SprintDetailAddMemberTag
@@ -142,6 +169,7 @@ import com.tasktracker.featuresettingspresentation.ThemeControlsSchemeTag
 import com.tasktracker.featuresettingspresentation.ThemeDropdownTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
 import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.featureteamsdomain.MemberRole
 import com.tasktracker.featureteamspresentation.AddMemberCreateTag
 import com.tasktracker.featureteamspresentation.AddMemberEmailFieldTag
 import com.tasktracker.featureteamspresentation.AddMemberFormTag
@@ -890,6 +918,282 @@ object ShellScenarios {
             "expected the sheet to close once the project was created",
         )
         onNodeWithText("Gemini").assertIsDisplayed()
+    }
+
+    /**
+     * The Epic segment switches the list, and the choice survives a tab switch.
+     *
+     * The survival half is the one that matters: a `remember` in the destination would pass
+     * the first assertion and fail the second, and "come back to where I was" is the whole
+     * reason the segment lives in `ShellPreferences`.
+     */
+    val projectEpicSegmentScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectRowTag(ProjectSummary(apollo, itemCount = 0))).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(epic.id.toString())).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(ProjectsListTag)).fetchSemanticsNodes().isEmpty(),
+            "expected the epic segment to replace the project list, not draw over it",
+        )
+
+        onNodeWithTag(TabButtonTag(AppTab.Board)).performClick()
+        waitForIdle()
+        onNodeWithTag(TabButtonTag(AppTab.Projects)).performClick()
+        waitForIdle()
+
+        onNodeWithTag(EpicRowTag(epic.id.toString())).assertIsDisplayed()
+    }
+
+    /**
+     * The "+" creates whichever kind the segment is showing, with no menu in between.
+     *
+     * Both halves are asserted because a plus wired to only one editor is the failure a
+     * screenshot cannot catch: the button looks present and the tap is inert for the other
+     * segment. The chosen segment is the only thing that decides, so this walks both.
+     */
+    val projectCreateActionsScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
+
+        onNodeWithTag(NewProjectCancelTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * An epic card carries the glyph, chips, derived status, count and due date, and is not
+     * one of the other two cards.
+     */
+    val epicRowScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        epic.dueDate = Instant.fromEpochSeconds(1_760_086_400)
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done)
+                .also { it.epicID = epic.id },
+        )
+        projects.seed(
+            shellTestWorkItem(borealis.id, keyPrefix = "BO", number = 1, status = WorkItemStatus.Todo)
+                .also { it.epicID = epic.id },
+        )
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+
+        val id = epic.id.toString()
+        onNodeWithTag(EpicRowTag(id)).assertIsDisplayed()
+        onNodeWithTag(EpicGlyphTag, useUnmergedTree = true).assertExists()
+        onNodeWithTag(EpicProjectChipsTag, useUnmergedTree = true).assertIsDisplayed()
+        onNodeWithText("Apollo").assertIsDisplayed()
+        onNodeWithText("Borealis").assertIsDisplayed()
+        // One Done beside one Todo derives In Progress — a finished subtask means the epic
+        // has begun, even while another subtask is still open.
+        onNodeWithText("In Progress").assertIsDisplayed()
+        onNodeWithTag(EpicProgressCountTag, useUnmergedTree = true).assertTextEquals("1 of 2 done")
+
+        // Visually distinct from the other two cards, asserted structurally: neither the
+        // project row nor a work-item card is on this screen.
+        assertTrue(
+            onAllNodes(hasTestTag(ProjectRowTag(ProjectSummary(apollo, itemCount = 0))))
+                .fetchSemanticsNodes().isEmpty(),
+            "expected an epic card, not a project row",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(WorkItemCardTag(
+                shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Done),
+            ))).fetchSemanticsNodes().isEmpty(),
+            "expected an epic card, not a work-item card",
+        )
+    }
+
+    /**
+     * The archive dialog offers the second option only when something is unfinished, and names
+     * the count when it does.
+     */
+    val epicArchiveDialogScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val withWork = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        val finished = shellTestEpic(listOf(apollo.id, borealis.id), "Shipped")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(withWork)
+        projects.seedEpic(finished)
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 1, status = WorkItemStatus.Todo)
+                .also { it.epicID = withWork.id },
+        )
+        projects.seed(
+            shellTestWorkItem(apollo.id, keyPrefix = "AP", number = 2, status = WorkItemStatus.Done)
+                .also { it.epicID = finished.id },
+        )
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+
+        onNodeWithTag(EpicArchiveTag(withWork.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicArchiveSheetTag).assertIsDisplayed()
+        onNodeWithText("Archive epic and 1 unfinished task").assertIsDisplayed()
+        onNodeWithTag(EpicArchiveCancelTag).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicArchiveSheetTag)).fetchSemanticsNodes().isEmpty(),
+            "expected Cancel to close the archive dialog",
+        )
+
+        onNodeWithTag(EpicArchiveTag(finished.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicArchiveOnlyTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicArchiveAllTag)).fetchSemanticsNodes().isEmpty(),
+            "expected no second option when nothing is unfinished",
+        )
+    }
+
+    /**
+     * The inline project picker expands even when the catalog has nothing in it.
+     *
+     * A device with no projects yet is the first run of a fresh install, not an edge case: the
+     * epic form is reachable from the segment and its project button has to answer with an
+     * empty list rather than crashing on an assumption that a project exists. It expands in
+     * the form now, so the trigger itself closes it — there is no popup Done action.
+     */
+    val epicProjectPickerSurvivesAnEmptyCatalog: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+
+        onNodeWithTag(EpicEditorPickProjectsTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicProjectPickerTag).assertIsDisplayed()
+        onNodeWithTag(EpicProjectPickerRowsTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag("projects.epic.picker.projects.done")).fetchSemanticsNodes().isEmpty(),
+            "an inline picker closes from its trigger, not a popup Done button",
+        )
+        onNodeWithTag(EpicEditorPickProjectsTag).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicProjectPickerTag)).fetchSemanticsNodes().isEmpty(),
+            "tapping the trigger again collapses the inline list",
+        )
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+    }
+
+    /**
+     * Progress and status are absent in create and present in edit, and the link picker toggles.
+     *
+     * A zero-of-zero bar on a create would be a claim about an epic that does not exist yet,
+     * which is why the two rows are omitted rather than drawn empty. In edit, the picker shows
+     * the already-linked item as checked and a tap removes that check.
+     */
+    val epicEditorScenarios: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val apollo = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val borealis = shellTestProject(name = "Borealis", keyPrefix = "BO")
+        val epic = shellTestEpic(listOf(apollo.id, borealis.id), "Checkout")
+        projects.seed(apollo)
+        projects.seed(borealis)
+        projects.seedEpic(epic)
+        val linked = shellTestWorkItem(
+            apollo.id,
+            keyPrefix = "AP",
+            number = 1,
+            status = WorkItemStatus.Done,
+        ).also { it.epicID = epic.id }
+        projects.seed(linked)
+        setUpShell(session = ScriptedSession(restored = signedIn()), projects = projects)
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        assertTrue(
+            onAllNodes(hasTestTag(EpicEditorProgressTag)).fetchSemanticsNodes().isEmpty(),
+            "a create has no progress to show",
+        )
+        assertTrue(
+            onAllNodes(hasTestTag(EpicEditorStatusTag)).fetchSemanticsNodes().isEmpty(),
+            "a create has no derived status to show",
+        )
+
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(epic.id.toString())).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        onNodeWithTag(EpicEditorProgressTag).assertIsDisplayed()
+        onNodeWithTag(EpicEditorStatusTag).assertIsDisplayed()
+
+        // The link picker shows what is already linked, and a tap toggles it off.
+        onNodeWithTag(EpicEditorLinkItemsTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicItemPickerTag).assertIsDisplayed()
+        onNodeWithTag(EpicItemPickerRowTag(linked.id.stringValue)).assertIsDisplayed()
+        // The checkmark is a child of the checkbox row, so semantics merging folds its tag
+        // into the parent; read the unmerged tree to see the marker itself.
+        onNodeWithTag(EpicItemPickerSelectedTag(linked.id.stringValue), useUnmergedTree = true)
+            .assertIsDisplayed()
+        onNodeWithTag(EpicItemPickerRowTag(linked.id.stringValue)).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodes(
+                hasTestTag(EpicItemPickerSelectedTag(linked.id.stringValue)),
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes().isEmpty(),
+            "tapping a checked item must unlink it",
+        )
+        onNodeWithTag(EpicItemPickerDoneTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
     }
 
     /**
@@ -5610,6 +5914,54 @@ object ShellScenarios {
     private fun ComposeUiTest.sortDirectionOf(tag: String): String =
         onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
 
+    /**
+     * An epic shows an active admin as its owner, existing ownerless epics included, and the
+     * picker can replace that choice from the live directory.
+     *
+     * The existing case is the one the requirement names: an epic written before the field
+     * existed has no owner, and opening it must show the admin default rather than an empty
+     * control. The pill is asserted before and after the change because the model must hold
+     * an owner the pushed document can carry, not just draw a name.
+     */
+    val theEpicOwnerPickerDefaultsToAnAdminAndCanChange: suspend ComposeUiTest.() -> Unit = {
+        val admin = shellTestMember(email = "admin@example.com").copy(
+            displayName = "Admin",
+            role = MemberRole.Admin,
+        )
+        val amir = shellTestMember(email = "amir@example.com").copy(displayName = "Amir")
+        val project = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val ownerless = shellTestEpic(listOf(project.id), "Legacy")
+        val projects = FakeProjectRepository()
+        projects.seed(project)
+        projects.seedEpic(ownerless)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
+        )
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(ownerless.id.stringValue)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, admin.id)).assertIsDisplayed()
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicOwnerPickerTag).assertIsDisplayed()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, admin.id)).assertIsDisplayed()
+        onNodeWithTag(EpicOwnerPickerTag).performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerMenuTag(EpicOwnerPickerTag)).assertIsDisplayed()
+        onNodeWithTag(MemberPickerRowTag(EpicOwnerPickerTag, amir.id)).performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, amir.id)).assertIsDisplayed()
+    }
+
     // Append to this list, never insert: TaskTrackerAppScenarios reaches these by index, so a
     // scenario dropped in the middle silently renames every test below it.
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
@@ -5634,6 +5986,8 @@ object ShellScenarios {
         // Appended after [16]; this one is `[17]`.
         ShellScenarios.theSummaryOpensMemberProgressAndBackReturnsToTheSummary,
         ShellScenarios.theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory,
+        // Appended after the live-directory member picker; do not insert above it.
+        ShellScenarios.theEpicOwnerPickerDefaultsToAnAdminAndCanChange,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

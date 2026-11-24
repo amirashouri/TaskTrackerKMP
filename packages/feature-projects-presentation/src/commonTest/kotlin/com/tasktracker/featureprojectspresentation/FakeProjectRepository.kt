@@ -3,6 +3,7 @@ package com.tasktracker.featureprojectspresentation
 import com.tasktracker.core.AppError
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.Broadcaster
+import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
 import com.tasktracker.core.SprintID
 import com.tasktracker.core.TagID
@@ -14,8 +15,10 @@ import com.tasktracker.core.randomSprintID
 import com.tasktracker.core.CommentID
 import com.tasktracker.core.randomAttachmentID
 import com.tasktracker.core.randomCommentID
+import com.tasktracker.core.randomEpicID
 import com.tasktracker.core.randomStatusChangeID
 import com.tasktracker.core.randomWorkItemID
+import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.ProjectRules
@@ -115,6 +118,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
     private val blobBytes = mutableMapOf<AttachmentID, ByteArray>()
     private val storedSprints = mutableListOf<Sprint>()
     private val storedMembers = mutableListOf<SprintMember>()
+    private val storedEpics = mutableListOf<Epic>()
 
     /** Written, so a test can assert which use case ran and with what. */
     val writes = mutableListOf<String>()
@@ -160,6 +164,12 @@ class FakeProjectRepository : ProjectRepositoryPort {
 
     override suspend fun workItem(id: WorkItemID): WorkItem? = locked {
         storedItems.firstOrNull { it.id == id }?.copy()
+    }
+
+    override suspend fun epics(): List<Epic> = locked { storedEpics.map { it.copy() } }
+
+    override suspend fun epic(id: EpicID): Epic? = locked {
+        storedEpics.firstOrNull { it.id == id }?.copy()
     }
 
     override suspend fun counts(projectID: ProjectID): Map<WorkItemStatus, Int> = locked {
@@ -601,6 +611,24 @@ class FakeProjectRepository : ProjectRepositoryPort {
         existing.copy()
     }
 
+    override suspend fun setWorkItemEpic(
+        workItemID: WorkItemID,
+        epicID: Patch<EpicID?>,
+        now: Instant,
+    ): WorkItem = writing({
+        ProjectChange(ProjectChange.Kind.WorkItems, storedItems.first { it.id == workItemID }.projectID)
+    }) {
+        failIfSet()
+        val existing = storedItems.first { it.id == workItemID }
+        when (epicID) {
+            is Patch.Of -> existing.epicID = epicID.value
+            Patch.Unmentioned -> Unit
+        }
+        existing.updatedAt = now
+        writes += "setWorkItemEpic:${existing.epicID?.stringValue ?: "null"}"
+        existing.copy()
+    }
+
     override suspend fun moveWorkItem(
         id: WorkItemID,
         to: WorkItemStatus,
@@ -796,6 +824,9 @@ class FakeProjectRepository : ProjectRepositoryPort {
     /** Adds a work item directly, without recording a write or a status change. */
     suspend fun seed(item: WorkItem) = locked { storedItems += item }
 
+    /** Adds an epic directly, without recording a write. */
+    suspend fun seed(epic: Epic) = locked { storedEpics += epic }
+
     /** Adds a sprint directly, without recording a write. */
     suspend fun seed(sprint: Sprint) = locked { storedSprints += sprint }
 
@@ -925,6 +956,23 @@ fun testProject(
     updatedAt = updatedAt,
 )
 
+/** An epic fixture, on a fixed clock. */
+fun testEpic(
+    projectIDs: List<ProjectID>,
+    title: String = "A story",
+    details: String = "",
+    isArchived: Boolean = false,
+    id: EpicID = randomEpicID(),
+): Epic = Epic(
+    id = id,
+    projectIDs = projectIDs,
+    title = title,
+    details = details,
+    isArchived = isArchived,
+    createdAt = FIXED,
+    updatedAt = FIXED,
+)
+
 /** A work item fixture, on a fixed clock. */
 @Suppress("LongParameterList")
 fun testWorkItem(
@@ -945,6 +993,7 @@ fun testWorkItem(
     blockedByIDs: List<WorkItemID> = emptyList(),
     recurrence: Recurrence? = null,
     tagIDs: List<TagID> = emptyList(),
+    epicID: EpicID? = null,
 ): WorkItem = WorkItem(
     id = id,
     projectID = projectID,
@@ -961,6 +1010,7 @@ fun testWorkItem(
     blockedByIDs = blockedByIDs,
     recurrence = recurrence,
     tagIDs = tagIDs,
+    epicID = epicID,
     rank = rank,
     createdAt = FIXED,
     updatedAt = FIXED,

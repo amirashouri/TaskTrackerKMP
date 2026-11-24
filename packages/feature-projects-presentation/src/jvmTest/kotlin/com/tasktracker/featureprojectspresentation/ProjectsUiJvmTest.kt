@@ -152,8 +152,16 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = ProjectBacklogScenarios.theAddActionTrailsTheSwitcher)
 
     @Test
+    fun linkingABacklogItemOpensTheProjectsEpicsAndCommitsTheChoice() =
+        runComposeUiTest(block = ProjectBacklogScenarios.linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice)
+
+    @Test
     fun backlogRowShowsTheCopyControl() =
         runComposeUiTest(block = WorkItemBacklogRowScenarios.showsTheCopyControl)
+
+    @Test
+    fun aBacklogRowHidesTheEpicLinkControlOnceLinked() =
+        runComposeUiTest(block = WorkItemBacklogRowScenarios.theEpicLinkControlHidesOnceTheItemIsLinked)
 
     @Test
     fun backlogRowShowsTwoLinesOfTheDescription() =
@@ -495,6 +503,10 @@ class ProjectsUiJvmTest {
         runComposeUiTest(block = WorkItemEditorScenarios.cancellingADirtyEditorAsksBeforeDiscarding)
 
     @Test
+    fun aWorkItemEditorShowsTheLinkedEpicChip() =
+        runComposeUiTest(block = WorkItemEditorScenarios.anEpicChipShowsTheLinkedEpicName)
+
+    @Test
     fun aFiledAwayWorkItemShowsAReadOnlyStatusChip() =
         runComposeUiTest(block = WorkItemEditorScenarios.aFiledAwayItemShowsAReadOnlyStatusChip)
 
@@ -509,6 +521,14 @@ class ProjectsUiJvmTest {
     @Test
     fun aWorkItemEditorPickerFillsAPhoneWidthForm() =
         runComposeUiTest(block = WorkItemEditorScenarios.aPickerFillsAPhoneWidthForm)
+
+    @Test
+    fun aWorkItemEditorWideLayoutIsCappedAndCentred() =
+        runComposeUiTest(block = WorkItemEditorScenarios.wideLayoutClampsContentWidthAndCenters)
+
+    @Test
+    fun anEpicEditorWideLayoutIsCappedAndCentred() =
+        runComposeUiTest(block = EpicEditorScenarios.wideLayoutClampsContentWidthAndCenters)
 
     @Test
     fun clickingSortButtonCyclesSortOrders() = runComposeUiTest(block = BoardColumnScenarios.clickingSortButtonCyclesSortOrders)

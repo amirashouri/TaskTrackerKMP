@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,12 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.AttachmentID
 import com.tasktracker.core.CommentID
@@ -43,12 +49,16 @@ import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttCanvas
+import com.tasktracker.designsystem.ttEntityIcons
 import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
+import com.tasktracker.designsystem.ttIcon
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -120,6 +130,8 @@ fun WorkItemEditorScreen(
     onFileAway: () -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    /** The linked epic's name; null draws no chip (create, or an item with no epic). */
+    epicTitle: String? = null,
     attachments: List<Attachment> = emptyList(),
     isAttaching: Boolean = false,
     onAttachClick: () -> Unit = {},
@@ -165,11 +177,17 @@ fun WorkItemEditorScreen(
         onSave = onSave,
         onCancel = onCancel,
         onDismissError = onDismissError,
+        epicTitle = epicTitle,
         projectTags = projectTags,
         selectedTagIDs = selectedTagIDs,
         onTagToggled = onTagToggled,
         modifier = modifier
             .fillMaxSize()
+            // The Backlog's reading width: on a desktop the form fills up to the cap and
+            // the capped column is centred in the window instead of stretching edge to edge.
+            .wrapContentWidth(Alignment.CenterHorizontally)
+            .widthIn(max = BacklogMaxContentWidth)
+            .fillMaxWidth()
             .padding(ttSpacing.screenGutterLarge)
             .imePadding()
             .verticalScroll(rememberScrollState())
@@ -214,6 +232,8 @@ fun WorkItemEditorSheet(
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
     hasUnsavedChanges: Boolean,
+    /** The linked epic's name; null draws no chip (create, or an item with no epic). */
+    epicTitle: String? = null,
     modifier: Modifier = Modifier,
     visible: Boolean = true,
     onDismissRequest: () -> Unit = {},
@@ -291,6 +311,7 @@ fun WorkItemEditorSheet(
         onCancel = onCancel,
         onDismissError = onDismissError,
         hasUnsavedChanges = hasUnsavedChanges,
+        epicTitle = epicTitle,
         onBack = onBack,
         blockers = blockers,
         onOpenBlocker = onOpenBlocker,
@@ -364,6 +385,8 @@ private fun ProjectsEditorFullScreen(
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
     hasUnsavedChanges: Boolean,
+    /** The linked epic's name; null draws no chip (create, or an item with no epic). */
+    epicTitle: String? = null,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     blockers: List<WorkItem> = emptyList(),
@@ -412,6 +435,11 @@ private fun ProjectsEditorFullScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Match the Backlog's reading width; the pinned bar below shares it so the
+                // actions stay on the form's edges rather than the window's.
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .widthIn(max = BacklogMaxContentWidth)
+                .fillMaxWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge, vertical = ttSpacing.md)
                 .imePadding()
                 .verticalScroll(rememberScrollState()),
@@ -446,6 +474,7 @@ private fun ProjectsEditorFullScreen(
                         style = ttTypography.title,
                         color = ttLabel(),
                     )
+                    epicTitle?.let { EpicChip(it) }
                     errorMessage?.let { message ->
                         ttBanner(message = message, onDismiss = onDismissError)
                     }
@@ -609,9 +638,11 @@ private fun ProjectsEditorFullScreen(
 
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
-        Row(
+            Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
+                .widthIn(max = BacklogMaxContentWidth)
+                .wrapContentWidth()
                 .padding(horizontal = ttSpacing.screenGutterLarge)
                 .then(
                     if (keyboardVisible) {
@@ -624,7 +655,7 @@ private fun ProjectsEditorFullScreen(
                 .background(Color.Transparent)
                 .pointerInput(Unit) { }
                 .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.End),
+            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (!isFiledAway) {
@@ -711,6 +742,8 @@ private fun WorkItemEditorForm(
     onSave: () -> Unit,
     onCancel: () -> Unit,
     onDismissError: () -> Unit,
+    /** The linked epic's name; null draws no chip (create, or an item with no epic). */
+    epicTitle: String? = null,
     modifier: Modifier = Modifier,
     blockers: List<WorkItem> = emptyList(),
     onOpenBlocker: (WorkItemID) -> Unit = {},
@@ -751,16 +784,21 @@ private fun WorkItemEditorForm(
                     modifier = Modifier.testTag(WorkItemBackTag),
                 )
             }
-            ttText(
-                text = if (isCreating) {
-                    stringResource(Res.string.work_item_editor_new_title)
-                } else {
-                    stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
-                },
-                style = ttTypography.title,
-                color = ttLabel(),
+            Column(
                 modifier = Modifier.weight(1f),
-            )
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            ) {
+                ttText(
+                    text = if (isCreating) {
+                        stringResource(Res.string.work_item_editor_new_title)
+                    } else {
+                        stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
+                    },
+                    style = ttTypography.title,
+                    color = ttLabel(),
+                )
+                epicTitle?.let { EpicChip(it) }
+            }
         }
         errorMessage?.let { message ->
             ttBanner(message = message, onDismiss = onDismissError)
@@ -929,6 +967,34 @@ private fun WorkItemEditorForm(
     }
 }
 
+/** The linked epic's name, under the title field. */
+@Composable
+private fun EpicChip(title: String) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(ttRadius.control))
+            .background(ttSeparator().copy(alpha = EPIC_CHIP_FILL_ALPHA))
+            .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.xxs)
+            .testTag(WorkItemEditorEpicChipTag),
+        horizontalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ttIcon(
+            image = ttEntityIcons.epic,
+            contentDescription = null,
+            tint = ttAccent(),
+            modifier = Modifier.size(EPIC_CHIP_ICON_SIZE),
+        )
+        ttText(
+            text = title,
+            style = ttTypography.captionSmall,
+            color = ttLabel(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 const val WorkItemEditorScreenTag = "workItem.editor.screen"
 const val WorkItemEditorSheetTag = "workItem.editor.sheet"
 const val WorkItemEditorFullScreenTag = "workItem.editor.fullScreen"
@@ -941,5 +1007,8 @@ const val WorkItemFileAwayTag = "workItem.editor.fileAway"
 const val WorkItemSaveTag = "workItem.editor.save"
 const val WorkItemCancelTag = "workItem.editor.cancel"
 const val WorkItemEditorDiscardTag = "workItem.editor.discard"
+const val WorkItemEditorEpicChipTag = "workItem.editor.epic"
 
 private const val DETAILS_MIN_LINES = 3
+private const val EPIC_CHIP_FILL_ALPHA = 0.10f
+private val EPIC_CHIP_ICON_SIZE = 14.dp
