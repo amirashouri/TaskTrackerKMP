@@ -116,25 +116,66 @@ fun ProjectsListScreen(
                 .padding(top = ttSpacing.screenGutterLarge),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.lg),
         ) {
-            ProjectsHeader(
-                canCreate = canCreate,
-                onAdd = { isCreateMenuOpen = true },
-            )
-            TTGlassSegmentedPicker(
-                options = ProjectsSegment.entries,
-                selection = segment,
-                onSelect = onSegmentChanged,
-                modifier = Modifier.fillMaxWidth().testTag(ProjectsSegmentTag),
-                testTag = { ProjectsSegmentOptionTag(it) },
-                title = {
-                    stringResource(
-                        when (it) {
-                            ProjectsSegment.Projects -> Res.string.projects_segment_projects
-                            ProjectsSegment.Epics -> Res.string.projects_segment_epics
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                // Same arrangement as the backlog header: a wide window puts the segment on the
+                // title's row, centred in the space the title and the add action leave; below
+                // this width the title keeps the row and the segment gets its own full-width
+                // row, where the picker's own cap lets it span the padded column.
+                val wideHeader = maxWidth >= ProjectsHeaderWideMinimumWidth
+                val segmentPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
+                    TTGlassSegmentedPicker(
+                        options = ProjectsSegment.entries,
+                        selection = segment,
+                        onSelect = onSegmentChanged,
+                        modifier = pickerModifier.testTag(ProjectsSegmentTag),
+                        testTag = { ProjectsSegmentOptionTag(it) },
+                        title = {
+                            stringResource(
+                                when (it) {
+                                    ProjectsSegment.Projects -> Res.string.projects_segment_projects
+                                    ProjectsSegment.Epics -> Res.string.projects_segment_epics
+                                },
+                            )
                         },
                     )
-                },
-            )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(ttSpacing.lg)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    ) {
+                        // Wrap the title on a wide header so the weighted box spans exactly the
+                        // gap to the add action; weighting the title too would centre the picker
+                        // in a share of the row rather than in the visible gap.
+                        ttText(
+                            text = stringResource(Res.string.tab_projects),
+                            style = ttTypography.largeTitle,
+                            color = ttLabel(),
+                            modifier = if (wideHeader) Modifier else Modifier.weight(1f),
+                        )
+                        if (wideHeader) {
+                            Box(
+                                modifier = Modifier.weight(1f),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                segmentPicker(Modifier)
+                            }
+                        }
+                        if (canCreate) {
+                            ttGlassIconButton(
+                                image = ttActionIcons.add,
+                                contentDescription = stringResource(Res.string.projects_create_title),
+                                onClick = { isCreateMenuOpen = true },
+                                modifier = Modifier.testTag(ProjectsListNewTag),
+                            )
+                        }
+                    }
+                    if (!wideHeader) {
+                        segmentPicker(Modifier)
+                    }
+                }
+            }
             errorMessage?.let { message ->
                 ttBanner(message = message, onDismiss = onDismissError)
             }
@@ -332,34 +373,6 @@ fun ProjectsListScreen(
     }
 }
 
-@Composable
-private fun ProjectsHeader(
-    canCreate: Boolean,
-    onAdd: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-    ) {
-        ttText(
-            text = stringResource(Res.string.tab_projects),
-            style = ttTypography.largeTitle,
-            color = ttLabel(),
-            modifier = Modifier.weight(1f),
-        )
-        if (canCreate) {
-            ttGlassIconButton(
-                image = ttActionIcons.add,
-                contentDescription = stringResource(Res.string.projects_create_title),
-                onClick = onAdd,
-                modifier = Modifier.testTag(ProjectsListNewTag),
-            )
-        }
-    }
-}
-
 /** Rendered inline rather than via platform Dialog to ensure testability across all multiplatform hosts. */
 @Composable
 private fun RemoveProjectConfirmation(
@@ -414,6 +427,9 @@ private fun RemoveProjectConfirmation(
         }
     }
 }
+
+/** The width at which the segment joins the title row instead of taking its own row. */
+private val ProjectsHeaderWideMinimumWidth = 700.dp
 
 const val ProjectsListScreenTag = "projects.list"
 const val ProjectsListTag = "projects.list.rows"
