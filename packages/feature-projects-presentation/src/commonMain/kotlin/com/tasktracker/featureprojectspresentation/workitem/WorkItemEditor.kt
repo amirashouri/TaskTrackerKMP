@@ -974,7 +974,7 @@ private fun EpicChip(title: String) {
         modifier = Modifier
             .clip(RoundedCornerShape(ttRadius.control))
             .background(ttSeparator().copy(alpha = EPIC_CHIP_FILL_ALPHA))
-            .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.xxs)
+            .padding(horizontal = 0.dp, vertical = ttSpacing.xxs)
             .testTag(WorkItemEditorEpicChipTag),
         horizontalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
         verticalAlignment = Alignment.CenterVertically,
