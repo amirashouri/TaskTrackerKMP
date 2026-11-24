@@ -166,9 +166,9 @@ fun EpicEditorScreen(
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-            // Bottom-aligned with the field itself, not the label above it, so the cross
-            // sits on the control's line instead of floating beside the caption.
-            verticalAlignment = Alignment.Bottom,
+            // Centred against the date row so the compact cross sits on the control's line
+            // rather than hanging off its lower edge.
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             TTDateField(
                 label = stringResource(Res.string.epic_due_label),
