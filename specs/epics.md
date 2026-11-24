@@ -62,7 +62,7 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
   `WorkItemBacklogRow.kt`, `BacklogEpicPickerSheet.kt` — the row's link action, the
   project-scoped epic list, and the link commit.
 - `.../workitem/WorkItemEditor.kt`, `WorkItemEditorModel.kt` — the linked epic's name
-  as a read-only chip under the item's title field.
+  as a read-only chip under the work-item page title.
 - `shared-ui/.../ProjectsHost.kt`, `NavigationHost.kt` — route and model wiring.
 - `shared-ui/.../ShellPreferences.kt` — the segment choice.
 - `shared-ui/src/commonTest/.../ShellScenarios.kt` + jvm/iOS/Robolectric entry points.
@@ -112,9 +112,10 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
       is absent once the reloaded item carries `epicID`
       (`linkingAnItemOpensTheProjectsEpicsAndCommitsTheChoice`,
       `theEpicLinkControlHidesOnceTheItemIsLinked`, `ProjectBacklogModelTest`).
-- [x] A linked work item shows its epic's name in a chip under the editor's title field;
-      an unlinked item draws no chip. The name is read from the store on open and is
-      read-only here (`anEpicChipShowsTheLinkedEpicName`, `WorkItemEditorModelTest`).
+- [x] A linked work item shows its epic's name in a chip under the work-item page title
+      (above the task title field); an unlinked item draws no chip. The name is read from the
+      store on open and is read-only here (`anEpicChipShowsTheLinkedEpicName`,
+      `WorkItemEditorModelTest`).
 - [x] Reverting the derivation (e.g. treating `InReview` as Done) turns a named test red.
 
 **KMP Constraint:** no platform APIs in `commonMain`; no new `expect`/`actual` is expected.
@@ -180,7 +181,7 @@ New resources land only in `:packages:design-system`.
   calls `SetWorkItemEpic` and the action disappears when the item reloads with an `epicID`.
   The list is loaded on demand by `ProjectBacklogModel.loadLinkableEpics`, not on every
   backlog reload. The work-item editor resolves the paired epic's title on open and shows
-  it as a read-only chip under the title field; an unlinked item draws none.
+  it as a read-only chip under the page title; an unlinked item draws none.
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against

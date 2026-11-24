@@ -335,6 +335,14 @@ object WorkItemEditorScenarios {
 
         onNodeWithTag(WorkItemEditorEpicChipTag).assertIsDisplayed()
         onNodeWithText("Ship it").assertIsDisplayed()
+
+        val chip = onNodeWithTag(WorkItemEditorEpicChipTag).fetchSemanticsNode().boundsInRoot
+        val titleField = onNodeWithTag(ProjectsFieldCardTag("Title")).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            chip.bottom <= titleField.top,
+            "the epic chip belongs under the page title, above the task title field: " +
+                "chip=$chip field=$titleField",
+        )
     }
 
     /**

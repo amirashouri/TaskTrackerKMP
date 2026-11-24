@@ -462,6 +462,7 @@ private fun ProjectsEditorFullScreen(
                         style = ttTypography.title,
                         color = ttLabel(),
                     )
+                    epicTitle?.let { EpicChip(it) }
                     errorMessage?.let { message ->
                         ttBanner(message = message, onDismiss = onDismissError)
                     }
@@ -480,7 +481,6 @@ private fun ProjectsEditorFullScreen(
                 onValueChange = onTitleChanged,
                 imeAction = ImeAction.Next,
             )
-            epicTitle?.let { EpicChip(it) }
             ProjectsTextField(
                 title = stringResource(Res.string.work_item_details_label),
                 value = details,
@@ -770,16 +770,21 @@ private fun WorkItemEditorForm(
                     modifier = Modifier.testTag(WorkItemBackTag),
                 )
             }
-            ttText(
-                text = if (isCreating) {
-                    stringResource(Res.string.work_item_editor_new_title)
-                } else {
-                    stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
-                },
-                style = ttTypography.title,
-                color = ttLabel(),
+            Column(
                 modifier = Modifier.weight(1f),
-            )
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xxs),
+            ) {
+                ttText(
+                    text = if (isCreating) {
+                        stringResource(Res.string.work_item_editor_new_title)
+                    } else {
+                        stringResource(Res.string.work_item_editor_edit_title, issuedKey?.toString().orEmpty())
+                    },
+                    style = ttTypography.title,
+                    color = ttLabel(),
+                )
+                epicTitle?.let { EpicChip(it) }
+            }
         }
         errorMessage?.let { message ->
             ttBanner(message = message, onDismiss = onDismissError)
@@ -797,7 +802,6 @@ private fun WorkItemEditorForm(
             onValueChange = onTitleChanged,
             imeAction = ImeAction.Next,
         )
-        epicTitle?.let { EpicChip(it) }
         ProjectsTextField(
             title = stringResource(Res.string.work_item_details_label),
             value = details,
