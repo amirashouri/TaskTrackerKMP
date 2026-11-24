@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,6 +31,7 @@ import com.tasktracker.featureprojectspresentation.ProjectEnvironment
 import com.tasktracker.featureprojectspresentation.ProjectPickerModel
 import com.tasktracker.featureprojectspresentation.ProjectsListModel
 import com.tasktracker.featureprojectspresentation.ProjectsListScreen
+import com.tasktracker.featureteamsdomain.MemberRole
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.Router
@@ -159,6 +161,7 @@ fun ProjectsHost(
                 epicID = route.epicID,
                 environment = environment,
                 scope = scope,
+                currentUserID = currentUserID,
                 onBack = { popProjectsEditor(router) },
                 onSaved = { popProjectsEditor(router) },
             )
@@ -327,14 +330,31 @@ internal fun EpicEditorDestination(
     epicID: EpicID?,
     environment: ProjectEnvironment,
     scope: CoroutineScope,
+    currentUserID: StateFlow<UserID?>,
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
     var model by remember(epicID, environment) { mutableStateOf<EpicEditorModel?>(null) }
+    val signedInID by currentUserID.collectAsState()
 
-    LaunchedEffect(epicID, environment) {
+    // Rebuilt when the session lands: a cold launch can compose this page before the
+    // cached identity is read, and an owner default chosen from `null` would stick.
+    LaunchedEffect(epicID, environment, signedInID) {
         val epic = epicID?.let { environment.repository.epic(it) }
-        val built = EpicEditorModel(epic, environment.repository, environment.dateProvider)
+        // The live directory is the only place the client can name an admin. Prefer the
+        // signed-in one when they administer; otherwise any active admin is a better default
+        // than an empty owner field. The server keeps its own deterministic default if the
+        // directory is unavailable.
+        val directory = searchDirectoryMembers(environment, "")
+        val defaultOwner = directory
+            .firstOrNull { it.id == signedInID && it.role == MemberRole.Admin }?.id
+            ?: directory.firstOrNull { it.role == MemberRole.Admin }?.id
+        val built = EpicEditorModel(
+            epic,
+            environment.repository,
+            environment.dateProvider,
+            defaultOwnerID = defaultOwner,
+        )
         built.load()
         model = built
     }
@@ -344,6 +364,8 @@ internal fun EpicEditorDestination(
             model = current,
             onBack = onBack,
             onSave = { scope.launch { if (current.save()) onSaved() } },
+            searchMembers = { query -> searchDirectoryMembers(environment, query) },
+            resolveSelected = { ids -> resolveDirectoryMembers(environment, ids) },
         )
     }
 }

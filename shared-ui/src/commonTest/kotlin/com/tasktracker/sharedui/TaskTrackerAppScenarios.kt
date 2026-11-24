@@ -203,6 +203,9 @@ abstract class TaskTrackerAppScenarios {
     @Test
     fun theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory() = runComposeUiTest(block = ShellScenarios.projectBacklogScenarios[17])
     @Test
+    fun theEpicOwnerPickerDefaultsToAnAdminAndCanChange() =
+        runComposeUiTest(block = ShellScenarios.theEpicOwnerPickerDefaultsToAnAdminAndCanChange)
+    @Test
     fun exactlyOneTabIsMarkedSelected() = runComposeUiTest(block = ShellScenarios.exactlyOneTabIsMarkedSelected)
     @Test
     fun everyTabIsNamedAndCarriesTheTabRole() = runComposeUiTest(block = ShellScenarios.everyTabIsNamedAndCarriesTheTabRole)

@@ -62,7 +62,8 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
  * migrated. [exportSchema] stays on so a schema change is still visible in review.
  *
  * Version 2 adds `projects.repoUrl`; version 3 adds the `sprintMembers` table; version 4
- * adds the `epics` table, `work_items.epicID` and `work_items.isArchived`.
+ * adds the `epics` table, `work_items.epicID` and `work_items.isArchived`; version 5 adds
+ * `epics.ownerID`, whose null rows let the server apply its admin default on push.
  * The same destructive fallback covers the earlier stores on developer machines,
  * because there is still nothing shipped to preserve.
  *
@@ -85,7 +86,7 @@ expect object TaskTrackerDatabaseConstructor : RoomDatabaseConstructor<TaskTrack
         AttachmentRecord::class,
         NotificationRecord::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(DatabaseConverters::class)

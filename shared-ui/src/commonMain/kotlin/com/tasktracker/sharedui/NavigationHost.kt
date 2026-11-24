@@ -1129,6 +1129,7 @@ private fun PushedRoute(
             epicID = route.epicID,
             environment = environment,
             scope = scope,
+            currentUserID = preferences.currentUserID,
             onBack = { popOneRoute(router, tab) },
             onSaved = { popOneRoute(router, tab) },
         )

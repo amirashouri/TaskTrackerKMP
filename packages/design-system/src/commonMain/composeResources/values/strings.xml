@@ -306,6 +306,7 @@
     <string name="epic_due_label">Due</string>
     <string name="epic_due_set">Set a due date</string>
     <string name="epic_due_clear">Clear the due date</string>
+    <string name="epic_owner_label">Owner</string>
     <string name="epic_projects_label">Projects</string>
     <string name="epic_projects_hint">An epic spans at least one project.</string>
     <string name="epic_projects_short">Pick at least one project.</string>

@@ -156,6 +156,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         title: String,
         details: String,
         dueDate: Instant?,
+        ownerID: UserID?,
         now: Instant,
     ): Epic {
         var created: Epic? = null
@@ -165,6 +166,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
                 title = title,
                 details = details,
                 dueDate = dueDate,
+                ownerID = ownerID,
                 createdAt = now,
                 updatedAt = now,
             )
@@ -182,6 +184,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         details: String?,
         dueDate: Patch<Instant?>,
         projectIDs: List<ProjectID>?,
+        ownerID: UserID?,
         now: Instant,
     ): Epic = writing(ProjectChange.Kind.Epics) {
         val epic = storedEpics.firstOrNull { it.id == id }
@@ -189,6 +192,7 @@ class FakeProjectRepository : ProjectRepositoryPort {
         if (title != null) epic.title = title
         if (details != null) epic.details = details
         if (dueDate is Patch.Of) epic.dueDate = dueDate.value
+        if (ownerID != null) epic.ownerID = ownerID
         if (projectIDs != null) {
             epic.projectIDs = projectIDs.distinct()
             for (item in storedItems) {

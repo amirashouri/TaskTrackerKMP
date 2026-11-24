@@ -787,6 +787,28 @@ class RoomProjectRepository(
     // MARK: Epic writes
 
     /**
+     * Overload for a legacy epic with no owner.
+     *
+     * Production creates go through [ProjectRepositoryPort.createEpic], whose owner comes
+     * from the editor. This overload exists for fixtures and imports of rows written before
+     * the owner column; the server fills the default when the epic is pushed.
+     */
+    suspend fun createEpic(
+        projectIDs: List<ProjectID>,
+        title: String,
+        details: String,
+        dueDate: Instant?,
+        now: Instant,
+    ): Epic = createEpic(
+        projectIDs = projectIDs,
+        title = title,
+        details = details,
+        dueDate = dueDate,
+        ownerID = null,
+        now = now,
+    )
+
+    /**
      * Creates an epic, queues it, and leaves its subtasks alone — there are none yet.
      *
      * The record and its outbox row share one transaction for the reason the class KDoc
@@ -797,6 +819,7 @@ class RoomProjectRepository(
         title: String,
         details: String,
         dueDate: Instant?,
+        ownerID: UserID?,
         now: Instant,
     ): Epic {
         val stamp = currentUserStamp()
@@ -806,6 +829,7 @@ class RoomProjectRepository(
             title = title,
             details = details,
             dueDate = dueDate,
+            ownerID = ownerID,
             createdAt = now,
             updatedAt = now,
         )
@@ -817,6 +841,29 @@ class RoomProjectRepository(
         changeBus.announceEpics()
         return epic
     }
+
+    /**
+     * Overload for an edit that leaves the stored owner alone.
+     *
+     * Production edits go through [ProjectRepositoryPort.updateEpic] with the owner the
+     * editor holds. This overload keeps fixtures that predate the owner column readable.
+     */
+    suspend fun updateEpic(
+        id: EpicID,
+        title: String?,
+        details: String?,
+        dueDate: Patch<Instant?>,
+        projectIDs: List<ProjectID>?,
+        now: Instant,
+    ): Epic = updateEpic(
+        id = id,
+        title = title,
+        details = details,
+        dueDate = dueDate,
+        projectIDs = projectIDs,
+        ownerID = null,
+        now = now,
+    )
 
     /**
      * A partial epic edit, and a project-set change **unlinks** the items it dropped.
@@ -833,6 +880,7 @@ class RoomProjectRepository(
         details: String?,
         dueDate: Patch<Instant?>,
         projectIDs: List<ProjectID>?,
+        ownerID: UserID?,
         now: Instant,
     ): Epic {
         val stamp = currentUserStamp()
@@ -848,6 +896,7 @@ class RoomProjectRepository(
             title?.let { epic.title = it }
             details?.let { epic.details = it }
             if (dueDateMentioned) epic.dueDate = dueDateValue
+            if (ownerID != null) epic.ownerID = ownerID
             if (projectIDs != null) {
                 epic.projectIDs = projectIDs.distinct()
                 for (record in database.workItemDao().byEpic(id.stringValue)) {

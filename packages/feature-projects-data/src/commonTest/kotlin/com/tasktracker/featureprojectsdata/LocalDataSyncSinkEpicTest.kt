@@ -1,6 +1,7 @@
 package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.JSONCoding
+import com.tasktracker.core.randomUserID
 import com.tasktracker.database.OutboxEntity
 import com.tasktracker.database.OutboxOperation
 import com.tasktracker.domain.Epic
@@ -89,6 +90,35 @@ class LocalDataSyncSinkEpicTest {
 
         assertEquals("Checkout v2", harness.repository.epic(epic.id)?.title)
         assertEquals(1, harness.repository.epics().size, "an upsert is not an insert")
+    }
+
+    @Test
+    fun aPulledEpicCarriesItsOwner() = runTest {
+        val harness = Harness()
+        val owner = randomUserID()
+        val epic = Epic(
+            projectIDs = listOf(harness.repository.createProject("Apollo", "APO", "", Moments.start).id),
+            title = "Owned checkout",
+            ownerID = owner,
+            createdAt = Moments.start,
+            updatedAt = Moments.start,
+        )
+        val payload = encoded(epic).decodeToString()
+        assertTrue(payload.contains("\"ownerId\""), "the client must declare the ownerId key")
+
+        harness.sink.apply(upsert(OutboxEntity.Epic, epic.id.stringValue, encoded(epic)))
+
+        assertEquals(owner, harness.repository.epic(epic.id)?.ownerID)
+
+        val replacement = randomUserID()
+        harness.sink.apply(
+            upsert(
+                OutboxEntity.Epic,
+                epic.id.stringValue,
+                encoded(epic.copy(ownerID = replacement, updatedAt = Moments.later)),
+            ),
+        )
+        assertEquals(replacement, harness.repository.epic(epic.id)?.ownerID)
     }
 
     @Test

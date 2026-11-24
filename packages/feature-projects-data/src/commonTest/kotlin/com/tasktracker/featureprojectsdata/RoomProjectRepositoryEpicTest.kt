@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdata
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.JSONCoding
+import com.tasktracker.core.randomUserID
 import com.tasktracker.domain.Epic
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
@@ -65,6 +66,48 @@ class RoomProjectRepositoryEpicTest {
             epic,
             JSONCoding.json.decodeFromString(Epic.serializer(), queued.payload.decodeToString()),
         )
+    }
+
+    @Test
+    fun anEpicOwnerSurvivesTheRealStoreAndTheOutbox() = runTest {
+        val harness = Harness()
+        val apollo = harness.twoProjects().first
+        val owner = randomUserID()
+        val replacement = randomUserID()
+
+        val created = harness.repository.createEpic(
+            projectIDs = listOf(apollo.id),
+            title = "Owned",
+            details = "",
+            dueDate = null,
+            ownerID = owner,
+            now = Moments.start,
+        )
+        assertEquals(owner, harness.repository.epic(created.id)?.ownerID)
+        val createPayload = JSONCoding.json.decodeFromString(
+            Epic.serializer(),
+            queuedEpic(harness, created.id.stringValue).payload.decodeToString(),
+        )
+        assertEquals(owner, createPayload.ownerID)
+
+        val updated = harness.repository.updateEpic(
+            id = created.id,
+            title = null,
+            details = null,
+            dueDate = Patch.Unmentioned,
+            projectIDs = null,
+            ownerID = replacement,
+            now = Moments.later,
+        )
+        assertEquals(replacement, harness.repository.epic(created.id)?.ownerID)
+        val updatePayload = JSONCoding.json.decodeFromString(
+            Epic.serializer(),
+            harness.queued().last {
+                it.entityKind == "epic" && it.entityID == created.id.stringValue
+            }.payload.decodeToString(),
+        )
+        assertEquals(replacement, updatePayload.ownerID)
+        assertEquals(Moments.later, updated.updatedAt)
     }
 
     @Test

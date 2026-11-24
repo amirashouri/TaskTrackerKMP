@@ -54,8 +54,8 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - `packages/routing/.../Routes.kt` — `AppRoute.EpicEditor(epicID)`.
 - `packages/feature-projects-presentation/.../project/EpicListModel.kt`.
 - `.../project/EpicRow.kt`, `EpicEditorModel.kt`, `EpicEditorScreen.kt`,
-  `EpicProjectDropdown.kt`, `EpicItemPickerSheet.kt`, `EpicArchiveSheet.kt`,
-  `EpicProgress.kt`.
+  `EpicOwnerPicker.kt`, `EpicProjectDropdown.kt`, `EpicItemPickerSheet.kt`,
+  `EpicArchiveSheet.kt`, `EpicProgress.kt`.
 - `.../project/ProjectsListModel.kt`, `ProjectsComponents.kt`, `ProjectsListScreen.kt` —
   the segment, the add action, and the epic list.
 - `shared-ui/.../ProjectsHost.kt`, `NavigationHost.kt` — route and model wiring.
@@ -90,6 +90,14 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - [x] The project picker expands as an inline multi-select list in the editor and collapses
       from the same trigger, with no popup Done action
       (`epicProjectPickerSurvivesAnEmptyCatalog`).
+- [x] An epic carries its owner as `ownerId`; the key decodes with a null default and the
+      owner survives the real store, the outbox payload, and a pulled change
+      (`RoomProjectRepositoryEpicTest`, `LocalDataSyncSinkEpicTest`).
+- [x] The editor offers a single-select owner picker, defaults it to an active admin for a
+      new epic and for an existing epic whose owner is null, and holds a changed owner in the
+      model so Save can push it (`theEpicOwnerPickerDefaultsToAnAdminAndCanChange`). The
+      server remains authoritative for the default on create and keeps a stored owner when
+      an update omits it.
 - [x] An epic may name one project but not zero; the rule is shared by the editor's Save state
       and the use case, and the copy says "at least one project" (`EpicUseCasesTest`).
 - [x] The link picker lists already-linked items with a checkmark, and tapping a checked item
@@ -115,7 +123,7 @@ New resources land only in `:packages:design-system`.
 - **Before handoff:** `scripts/check.sh full` — this touches rendering (new icons, a card,
   a segmented control), so it needs JVM, iOS and the Robolectric entry points.
 - **Counts / Baselines:** done — `test-baseline.json` regenerated from the green full run
-  (JVM 2445, iOS 2380, Android host 2016) and `check-baseline.sh` passes.
+  (JVM 2450, iOS 2385, Android host 2019) and `check-baseline.sh` passes.
 - **Stays pending:** a device install and the real server round-trip (the mock transport
   cannot prove the wire).
 
@@ -128,11 +136,11 @@ New resources land only in `:packages:design-system`.
   `CreateEpic`/`UpdateEpic`/`SetEpicArchived`/`SetWorkItemEpic`; `RoomProjectRepository`'s
   atomic epic+outbox, unlink-on-project-drop, archive-all batch and queue coalescing;
   `LocalDataSyncSink.applyEpic`; `ProjectChange.Kind.Epics`; design-system glyphs and copy;
-  `AppRoute.EpicEditor`; `EpicListModel`, `EpicRowView`, `EpicProgress`, the editor, both
-  pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
+  `AppRoute.EpicEditor`;  `EpicListModel`, `EpicRowView`, `EpicProgress`, the editor, the owner
+  picker, both item pickers and the archive sheet; the Project | Epic segment in `ShellPreferences`; the
   segment-scoped add action; and the five shell scenarios. `scripts/check.sh full` is green on
   JVM, iOS and Robolectric (0 failures), `test-baseline.json` regenerated from that run
-  (2446 / 2381 / 2017), and
+  (2450 / 2385 / 2019), and
   `scripts/check-baseline.sh` passes. The mutation ritual was run: treating `InReview` as
   `Done` turns `EpicStatusTest.inReviewIsInProgress` red, then restored green.
   Follow-up: the epic editor's linked-item unlink control now uses the 24dp inline close
@@ -147,7 +155,13 @@ New resources land only in `:packages:design-system`.
   checkmark and unlinks a checked item when tapped. The status derivation now treats partial
   completion as In progress: removing the terminal branch from that predicate turns both new
   truth-table cases red, then restored green. `scripts/check.sh full` and
-  `scripts/check-baseline.sh` remain green (2446 / 2381 / 2017).
+  `scripts/check-baseline.sh` remain green (2450 / 2385 / 2019).
+  Follow-up: an epic now has an owner. Schema 5 adds `epics.ownerID` (nullable, so the
+  server applies its admin default on push), `Epic.ownerID` is the `ownerId` wire key,
+  and the create/update paths carry it. `EpicOwnerPicker` is a single-select
+  `MemberPicker` with no unassigned choice; the editor seeds it from the live directory's
+  signed-in admin, else any active admin, for a create and for an existing ownerless epic.
+  The shell scenario opens both cases and changes the owner from the picker.
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.
 - **Next step:** merge the server branch, run a two-device epic create/link/archive against
@@ -178,6 +192,9 @@ New resources land only in `:packages:design-system`.
   - A pushed `EpicEditor` can be the Projects stack's *only* route (the tab root is an empty
     stack), so back pops even at size 1. The generic `size > 1` guard is for tabs with a real
     root route, like Sprints.
+  - The owner is `ownerId` on the wire and `ownerID` in Kotlin, like every other id key. A
+    null update means "leave the stored owner alone"; only a create may omit it, and then
+    the server picks the oldest active admin. Do not add an "unassigned" picker row.
 
 ## Promote
 

@@ -176,6 +176,7 @@ interface ProjectRepositoryPort {
         title: String,
         details: String,
         dueDate: Instant?,
+        ownerID: UserID? = null,
         now: Instant,
     ): Epic = throw AppError.Storage("This store does not hold epics.")
 
@@ -184,7 +185,8 @@ interface ProjectRepositoryPort {
      * `Patch.Of(null)` clears the due date.
      *
      * A changed project set **unlinks** items whose project left the set: a link the epic
-     * no longer explains is one the server refuses on the item's next write.
+     * no longer explains is one the server refuses on the item's next write. A null [ownerID]
+     * leaves the stored owner alone; there is no unassigned epic.
      */
     suspend fun updateEpic(
         id: EpicID,
@@ -192,6 +194,7 @@ interface ProjectRepositoryPort {
         details: String?,
         dueDate: Patch<Instant?>,
         projectIDs: List<ProjectID>?,
+        ownerID: UserID? = null,
         now: Instant,
     ): Epic = throw AppError.Storage("This store does not hold epics.")
 

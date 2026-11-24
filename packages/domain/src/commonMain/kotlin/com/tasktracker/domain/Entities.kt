@@ -761,10 +761,10 @@ fun deriveEpicStatus(subtasks: List<WorkItem>): EpicStatus {
 /**
  * A container for work items across one or more projects.
  *
- * The epic is authored state only: [title], [details], [dueDate] and [isArchived]. Its
- * status and progress are derived from its subtasks (see [deriveEpicStatus]) and have no
- * field here — a stored status would drift, and a stored count would leak work the reader
- * cannot see.
+ * The epic is authored state only: [title], [details], [dueDate], [ownerID] and
+ * [isArchived]. Its status and progress are derived from its subtasks (see
+ * [deriveEpicStatus]) and have no field here — a stored status would drift, and a stored
+ * count would leak work the reader cannot see.
  *
  * [projectIDs] is the set the epic spans, in the order the user chose. It is also the
  * epic's visibility: the server delivers it to a member of **any** listed project, so a
@@ -787,6 +787,13 @@ data class Epic(
     var details: String = "",
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     var dueDate: Instant? = null,
+    /**
+     * Who answers for the epic. The server fills this with the oldest active admin when a
+     * create omits it; null is only a row written before the field existed or an epic whose
+     * owner account was removed.
+     */
+    @SerialName("ownerId")
+    var ownerID: UserID? = null,
     var isArchived: Boolean = false,
     val createdAt: Instant,
     var updatedAt: Instant,

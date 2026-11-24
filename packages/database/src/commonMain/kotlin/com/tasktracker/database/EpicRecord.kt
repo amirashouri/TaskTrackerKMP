@@ -49,6 +49,8 @@ data class EpicRecord(
      * reads as unversioned.
      */
     @ColumnInfo(defaultValue = "''") val version: String = "",
+    /** The server's owner user id; null only for a row written before this column existed. */
+    val ownerID: String? = null,
 )
 
 /**

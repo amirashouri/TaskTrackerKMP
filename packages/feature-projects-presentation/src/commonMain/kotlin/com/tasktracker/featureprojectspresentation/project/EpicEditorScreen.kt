@@ -42,7 +42,9 @@ import com.tasktracker.designsystem.ttSeparator
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
+import com.tasktracker.core.UserID
 import com.tasktracker.domain.deriveEpicStatus
+import com.tasktracker.featureteamsdomain.User
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_back
 import com.tasktracker.resources.common_save
@@ -81,6 +83,12 @@ fun EpicEditorScreen(
     onBack: () -> Unit,
     onSave: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Directory callbacks for the owner picker; defaulted for previews and isolated tests. */
+    searchMembers: suspend (String) -> List<User> = { emptyList() },
+    resolveSelected: suspend (List<UserID>) -> List<User> = { ids ->
+        val directory = searchMembers("")
+        ids.mapNotNull { id -> directory.firstOrNull { it.id == id } }
+    },
 ) {
     val scope = rememberCoroutineScope()
     var isItemPickerOpen by remember { mutableStateOf(false) }
@@ -170,6 +178,13 @@ fun EpicEditorScreen(
                 )
             }
         }
+
+        EpicOwnerPicker(
+            ownerID = model.ownerID,
+            onOwnerChanged = model::onOwnerChanged,
+            searchMembers = searchMembers,
+            resolveSelected = resolveSelected,
+        )
 
         EpicProjectDropdown(
             projects = model.availableProjects,

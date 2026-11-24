@@ -4,6 +4,7 @@ import com.tasktracker.core.AppError
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Epic
 import com.tasktracker.domain.EpicRules
@@ -29,11 +30,13 @@ class CreateEpic(
         title: String,
         details: String = "",
         dueDate: Instant? = null,
+        ownerID: UserID? = null,
     ): Epic = repository.createEpic(
         projectIDs = EpicRules.normaliseProjectIDs(projectIDs),
         title = EpicRules.normaliseTitle(title),
         details = EpicRules.normaliseDetails(details),
         dueDate = dueDate,
+        ownerID = ownerID,
         now = dateProvider.now(),
     )
 }
@@ -43,7 +46,8 @@ class CreateEpic(
  *
  * [projectIDs] is a plain optional rather than a [Patch], because an epic cannot span no
  * projects: "not mentioned" and "cleared" are the same absence of an instruction. The due
- * date is a [Patch] for the opposite reason — clearing it is a real edit.
+ * date is a [Patch] for the opposite reason — clearing it is a real edit. [ownerID] is plain
+ * optional too: the picker always names one member, so an epic has no "unassigned" choice.
  */
 class UpdateEpic(
     private val repository: ProjectRepositoryPort,
@@ -57,6 +61,7 @@ class UpdateEpic(
         details: String? = null,
         dueDate: Patch<Instant?> = Patch.Unmentioned,
         projectIDs: List<ProjectID>? = null,
+        ownerID: UserID? = null,
     ): Epic {
         val normalisedTitle = title?.let { EpicRules.normaliseTitle(it) }
         val normalisedDetails = details?.let { EpicRules.normaliseDetails(it) }
@@ -65,7 +70,8 @@ class UpdateEpic(
         if (normalisedTitle == null &&
             normalisedDetails == null &&
             dueDate is Patch.Unmentioned &&
-            normalisedProjects == null
+            normalisedProjects == null &&
+            ownerID == null
         ) {
             return repository.epic(id)
                 ?: throw AppError.Storage("That epic no longer exists.")
@@ -77,6 +83,7 @@ class UpdateEpic(
             details = normalisedDetails,
             dueDate = dueDate,
             projectIDs = normalisedProjects,
+            ownerID = ownerID,
             now = dateProvider.now(),
         )
     }

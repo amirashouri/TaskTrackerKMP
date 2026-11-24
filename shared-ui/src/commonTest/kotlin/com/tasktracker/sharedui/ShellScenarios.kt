@@ -88,6 +88,7 @@ import com.tasktracker.featureprojectspresentation.MissingProjectEnvironmentTag
 import com.tasktracker.featureprojectspresentation.NewProjectCancelTag
 import com.tasktracker.featureprojectspresentation.NewProjectCreateTag
 import com.tasktracker.featureprojectspresentation.MemberPickerMenuTag
+import com.tasktracker.featureprojectspresentation.MemberPickerPillTag
 import com.tasktracker.featureprojectspresentation.MemberPickerRowTag
 import com.tasktracker.featureprojectspresentation.NewProjectFormTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
@@ -108,6 +109,7 @@ import com.tasktracker.featureprojectspresentation.EpicArchiveSheetTag
 import com.tasktracker.featureprojectspresentation.EpicArchiveTag
 import com.tasktracker.featureprojectspresentation.EpicEditorBackTag
 import com.tasktracker.featureprojectspresentation.EpicEditorLinkItemsTag
+import com.tasktracker.featureprojectspresentation.EpicOwnerPickerTag
 import com.tasktracker.featureprojectspresentation.EpicEditorPickProjectsTag
 import com.tasktracker.featureprojectspresentation.EpicEditorProgressTag
 import com.tasktracker.featureprojectspresentation.EpicEditorScreenTag
@@ -167,6 +169,7 @@ import com.tasktracker.featuresettingspresentation.ThemeControlsSchemeTag
 import com.tasktracker.featuresettingspresentation.ThemeDropdownTag
 import com.tasktracker.featuresettingspresentation.ThemeOptionTag
 import com.tasktracker.featureteamsdomain.MemberAdminPort
+import com.tasktracker.featureteamsdomain.MemberRole
 import com.tasktracker.featureteamspresentation.AddMemberCreateTag
 import com.tasktracker.featureteamspresentation.AddMemberEmailFieldTag
 import com.tasktracker.featureteamspresentation.AddMemberFormTag
@@ -5911,6 +5914,54 @@ object ShellScenarios {
     private fun ComposeUiTest.sortDirectionOf(tag: String): String =
         onNodeWithTag(tag).fetchSemanticsNode().config[SemanticsProperties.StateDescription]
 
+    /**
+     * An epic shows an active admin as its owner, existing ownerless epics included, and the
+     * picker can replace that choice from the live directory.
+     *
+     * The existing case is the one the requirement names: an epic written before the field
+     * existed has no owner, and opening it must show the admin default rather than an empty
+     * control. The pill is asserted before and after the change because the model must hold
+     * an owner the pushed document can carry, not just draw a name.
+     */
+    val theEpicOwnerPickerDefaultsToAnAdminAndCanChange: suspend ComposeUiTest.() -> Unit = {
+        val admin = shellTestMember(email = "admin@example.com").copy(
+            displayName = "Admin",
+            role = MemberRole.Admin,
+        )
+        val amir = shellTestMember(email = "amir@example.com").copy(displayName = "Amir")
+        val project = shellTestProject(name = "Apollo", keyPrefix = "AP")
+        val ownerless = shellTestEpic(listOf(project.id), "Legacy")
+        val projects = FakeProjectRepository()
+        projects.seed(project)
+        projects.seedEpic(ownerless)
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            projects = projects,
+            memberAdminPort = FakeMemberAdminPort(active = listOf(admin, amir)),
+        )
+
+        waitForIdle()
+        onNodeWithTag(ProjectsSegmentOptionTag(ProjectsSegment.Epics)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicRowTag(ownerless.id.stringValue)).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicEditorScreenTag).assertIsDisplayed()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, admin.id)).assertIsDisplayed()
+        onNodeWithTag(EpicEditorBackTag).performClick()
+        waitForIdle()
+
+        onNodeWithTag(ProjectsListNewTag).performClick()
+        waitForIdle()
+        onNodeWithTag(EpicOwnerPickerTag).assertIsDisplayed()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, admin.id)).assertIsDisplayed()
+        onNodeWithTag(EpicOwnerPickerTag).performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerMenuTag(EpicOwnerPickerTag)).assertIsDisplayed()
+        onNodeWithTag(MemberPickerRowTag(EpicOwnerPickerTag, amir.id)).performClick()
+        waitForIdle()
+        onNodeWithTag(MemberPickerPillTag(EpicOwnerPickerTag, amir.id)).assertIsDisplayed()
+    }
+
     // Append to this list, never insert: TaskTrackerAppScenarios reaches these by index, so a
     // scenario dropped in the middle silently renames every test below it.
     val projectBacklogScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(
@@ -5935,6 +5986,8 @@ object ShellScenarios {
         // Appended after [16]; this one is `[17]`.
         ShellScenarios.theSummaryOpensMemberProgressAndBackReturnsToTheSummary,
         ShellScenarios.theMemberPickerOffersEveryProjectMemberFromTheLiveDirectory,
+        // Appended after the live-directory member picker; do not insert above it.
+        ShellScenarios.theEpicOwnerPickerDefaultsToAnAdminAndCanChange,
     )
 
     private val backlogTabScenarios: List< suspend ComposeUiTest.() -> Unit> = listOf(

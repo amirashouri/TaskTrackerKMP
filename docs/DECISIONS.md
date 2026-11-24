@@ -162,6 +162,12 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   the total from a server count. `WorkItem.isArchived` is a filing choice: archive-all sets
   it on the epic's subtasks and unarchive restores them; no listing may read it as
   "finished".
+- **An epic's owner is one member, defaulted to an admin, never cleared.** `ownerID` decodes
+  with a null default so a row written before the field existed still loads, and the editor
+  shows the signed-in admin or the first active admin from the live directory in that case.
+  The picker is single-select with no "unassigned" entry: the server gives a create its
+  deterministic admin default and keeps the stored owner when an update omits it. Null is
+  therefore a legacy or deleted-account value, not a state the UI may offer.
 
 ### Selection and batches
 

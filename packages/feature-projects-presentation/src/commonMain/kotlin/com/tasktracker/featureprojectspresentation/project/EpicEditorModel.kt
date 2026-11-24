@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import com.tasktracker.core.DateProvider
 import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
+import com.tasktracker.core.UserID
 import com.tasktracker.core.WorkItemID
 import com.tasktracker.domain.Epic
 import com.tasktracker.domain.EpicRules
@@ -34,6 +35,8 @@ class EpicEditorModel(
     private val repository: ProjectRepositoryPort,
     private val dateProvider: DateProvider,
     private val timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    /** The admin to show on a create; the server applies its own default if none is available. */
+    private val defaultOwnerID: UserID? = null,
 ) : ProjectModel() {
 
     private val createEpic = CreateEpic(repository, dateProvider)
@@ -45,6 +48,7 @@ class EpicEditorModel(
     private val originalDetails: String = existing?.details.orEmpty()
     private val originalDueDate: LocalDate? = existing?.dueDate?.let { sprintLocalDate(it, timeZone) }
     private val originalProjectIDs: List<ProjectID> = existing?.projectIDs.orEmpty()
+    private val originalOwnerID: UserID? = existing?.ownerID ?: defaultOwnerID
 
     var title: String by mutableStateOf(originalTitle)
         private set
@@ -56,6 +60,9 @@ class EpicEditorModel(
         private set
 
     var projectIDs: List<ProjectID> by mutableStateOf(originalProjectIDs)
+        private set
+
+    var ownerID: UserID? by mutableStateOf(originalOwnerID)
         private set
 
     /** Every project on this device, including archived ones: an epic may span either. */
@@ -81,12 +88,14 @@ class EpicEditorModel(
 
     val hasChanges: Boolean
         get() = if (isCreating) {
-            title.isNotBlank() || details.isNotBlank() || dueDate != null || projectIDs.isNotEmpty()
+            title.isNotBlank() || details.isNotBlank() || dueDate != null ||
+                projectIDs.isNotEmpty() || ownerID != originalOwnerID
         } else {
             title.trim() != originalTitle ||
                 details.trim() != originalDetails ||
                 dueDate != originalDueDate ||
-                projectIDs != originalProjectIDs
+                projectIDs != originalProjectIDs ||
+                ownerID != originalOwnerID
         }
 
     val canSave: Boolean
@@ -115,6 +124,10 @@ class EpicEditorModel(
         projectIDs = value.distinct()
     }
 
+    fun onOwnerChanged(value: UserID) {
+        ownerID = value
+    }
+
     /** Adds or removes one project from the draft, keeping the user's chosen order. */
     fun toggleProject(id: ProjectID) {
         projectIDs = if (id in projectIDs) projectIDs - id else projectIDs + id
@@ -136,6 +149,7 @@ class EpicEditorModel(
                     title = title,
                     details = details,
                     dueDate = dueDateInstant(),
+                    ownerID = ownerID,
                 )
             } else {
                 updateEpic(
@@ -148,6 +162,7 @@ class EpicEditorModel(
                         Patch.Unmentioned
                     },
                     projectIDs = projectIDs.takeIf { it != originalProjectIDs },
+                    ownerID = ownerID.takeIf { it != originalOwnerID },
                 )
             }
         } ?: return false

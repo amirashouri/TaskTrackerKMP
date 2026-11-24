@@ -2,6 +2,7 @@ package com.tasktracker.featureprojectsdomain
 
 import com.tasktracker.core.AppError
 import com.tasktracker.core.TestDateProvider
+import com.tasktracker.core.randomUserID
 import com.tasktracker.domain.Priority
 import com.tasktracker.domain.Project
 import com.tasktracker.domain.WorkItemStatus
@@ -51,6 +52,25 @@ class EpicUseCasesTest {
 
         assertTrue(failure.message.orEmpty().contains("one project"))
         assertEquals(1, repository.epics().size, "a refused create must write nothing")
+    }
+
+    @Test
+    fun anEpicOwnerIsAuthoredOnCreateAndUpdate() = runTest {
+        val repository = FakeProjectRepository()
+        val (apollo, _) = twoProjects(repository)
+        val owner = randomUserID()
+        val replacement = randomUserID()
+
+        val epic = create(repository)(
+            projectIDs = listOf(apollo.id),
+            title = "Checkout",
+            ownerID = owner,
+        )
+        assertEquals(owner, epic.ownerID)
+
+        val updated = update(repository)(id = epic.id, ownerID = replacement)
+        assertEquals(replacement, updated.ownerID)
+        assertEquals(replacement, repository.epic(epic.id)?.ownerID)
     }
 
     @Test
