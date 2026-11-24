@@ -177,11 +177,15 @@ fun EpicEditorScreen(
                 modifier = Modifier.weight(1f).testTag(EpicEditorDueTag),
             )
             if (model.dueDate != null) {
+                // The same inline close well as a linked item's unlink control: this is an
+                // annotation on the field, not a standalone action competing with it.
                 ttGlassIconButton(
                     image = ttActionIcons.close,
                     contentDescription = stringResource(Res.string.epic_due_clear),
                     onClick = { model.onDueDateChanged(null) },
                     modifier = Modifier.testTag(EpicEditorClearDueTag),
+                    size = ttSpacing.xxxl,
+                    iconSize = ttIconSize.close,
                 )
             }
         }
