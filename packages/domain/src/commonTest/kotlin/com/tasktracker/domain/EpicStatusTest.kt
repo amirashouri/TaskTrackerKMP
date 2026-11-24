@@ -86,7 +86,7 @@ class EpicStatusTest {
     }
 
     @Test
-    fun anyTodoIsTodoWhenNothingIsInProgress() {
+    fun anyTodoIsTodoWhenNothingHasBegun() {
         assertEquals(
             EpicStatus.Todo,
             deriveEpicStatus(listOf(item(WorkItemStatus.Backlog), item(WorkItemStatus.Todo, "TT-2"))),
@@ -94,11 +94,11 @@ class EpicStatusTest {
     }
 
     @Test
-    fun aFinishedSubtaskDoesNotMakeTheEpicDoneWhileAnotherIsTodo() {
+    fun aFinishedSubtaskMakesTheEpicInProgressWhileAnotherIsTodo() {
         assertEquals(
-            EpicStatus.Todo,
+            EpicStatus.InProgress,
             deriveEpicStatus(listOf(item(WorkItemStatus.Done), item(WorkItemStatus.Todo, "TT-2"))),
-            "only *all* terminal is Done; one finished item is not the whole epic",
+            "one finished item is progress even when another has not started; only *all* terminal is Done",
         )
     }
 
@@ -108,9 +108,9 @@ class EpicStatusTest {
     }
 
     @Test
-    fun anUnfinishedBacklogItemKeepsTheEpicBacklog() {
+    fun finishedSubtasksKeepTheEpicInProgressWithABacklogItem() {
         assertEquals(
-            EpicStatus.Backlog,
+            EpicStatus.InProgress,
             deriveEpicStatus(
                 listOf(
                     item(WorkItemStatus.Done),
@@ -118,7 +118,7 @@ class EpicStatusTest {
                     item(WorkItemStatus.Backlog, "TT-3"),
                 ),
             ),
-            "nothing started and nothing to start yet reads as Backlog, not Done",
+            "work has finished, so the epic has begun even if one item is still in backlog",
         )
     }
 

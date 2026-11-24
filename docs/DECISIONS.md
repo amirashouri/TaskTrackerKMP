@@ -149,11 +149,13 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
 
 - **Epic status and progress are derived, never stored.** `deriveEpicStatus` reads only
   the coarse `WorkItemStatus` category: all terminal → `Done`; any `InProgress`/`InReview`
-  → `InProgress`; any `Todo` → `Todo`; otherwise `Backlog`; an empty list is `Backlog`, not
-  `Done`. `Closed` counts as terminal. No Room column, no wire key, no cached percentage —
-  a stored status would be a second answer that drifts the moment a subtask moves.
-  Mutation-checked: treating `InReview` as `Done` turns `EpicStatusTest.inReviewIsInProgress`
-  red.
+  or any terminal subtask → `InProgress`; otherwise any `Todo` → `Todo`, otherwise `Backlog`;
+  an empty list is `Backlog`, not `Done`. A single finished item means the epic has begun, so a
+  Done/Closed subtask beside an unfinished one reads `InProgress`, not `Todo`. `Closed` counts
+  as terminal. No Room column, no wire key, no cached percentage — a stored status would be a
+  second answer that drifts the moment a subtask moves. Mutation-checked: treating `InReview`
+  as `Done` turns `EpicStatusTest.inReviewIsInProgress` red; removing the terminal branch turns
+  both partial-completion cases red.
 - **Epic progress is what this device can see.** The total is `workItemsForEpic(id).size`,
   which is the permission boundary rather than a bug: a member of one linked project sees a
   smaller total than a member of both, and the copy stays neutral about it. Never resurrect

@@ -67,9 +67,9 @@ another feature, or a key on `Project`/`Sprint`. No architecture-table edit: Epi
 - [x] `WorkItem.epicID` decodes when absent (default `null`) and survives a local link and
       a pulled change (`RoomProjectRepositoryEpicTest`, `LocalDataSyncSinkEpicTest`).
 - [x] The derived status matches the truth table: all terminal → Done; any
-      `InProgress`/`InReview` → In progress; any `Todo` → Todo; otherwise Backlog; no
-      subtasks → Backlog. `Closed` counts as terminal, `InReview` as in progress, and only
-      the coarse `category` is read (`EpicStatusTest`).
+      `InProgress`/`InReview` or any terminal subtask → In progress; otherwise any `Todo` →
+      Todo, otherwise Backlog; no subtasks → Backlog. `Closed` counts as terminal,
+      `InReview` as in progress, and only the coarse `category` is read (`EpicStatusTest`).
 - [x] One epic per work item, enforced by the use case and not only by the picker
       (`EpicUseCasesTest`).
 - [x] An item can only join an epic that lists the item's project (`EpicUseCasesTest`).
@@ -144,7 +144,9 @@ New resources land only in `:packages:design-system`.
   Projects button and turns to point at the open list. The minimum is now one project, matching
   the server and the copy: `EpicRules.MIN_PROJECTS` is the single source for the editor's Save
   state and the use case's validation. The link picker now lists already-linked items with a
-  checkmark and unlinks a checked item when tapped. `scripts/check.sh full` and
+  checkmark and unlinks a checked item when tapped. The status derivation now treats partial
+  completion as In progress: removing the terminal branch from that predicate turns both new
+  truth-table cases red, then restored green. `scripts/check.sh full` and
   `scripts/check-baseline.sh` remain green (2446 / 2381 / 2017).
 - **Pending:** a device install and the real server round-trip — the mock transport cannot
   prove the wire, and the server half is still unmerged on `TaskTrackerServer` `feat/epics`.

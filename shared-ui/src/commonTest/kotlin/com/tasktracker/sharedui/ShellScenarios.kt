@@ -1017,8 +1017,9 @@ object ShellScenarios {
         onNodeWithTag(EpicProjectChipsTag, useUnmergedTree = true).assertIsDisplayed()
         onNodeWithText("Apollo").assertIsDisplayed()
         onNodeWithText("Borealis").assertIsDisplayed()
-        // One Done, one Todo derives Todo — the derivation's own truth table, on the screen.
-        onNodeWithText("To Do").assertIsDisplayed()
+        // One Done beside one Todo derives In Progress — a finished subtask means the epic
+        // has begun, even while another subtask is still open.
+        onNodeWithText("In Progress").assertIsDisplayed()
         onNodeWithTag(EpicProgressCountTag, useUnmergedTree = true).assertTextEquals("1 of 2 done")
 
         // Visually distinct from the other two cards, asserted structurally: neither the

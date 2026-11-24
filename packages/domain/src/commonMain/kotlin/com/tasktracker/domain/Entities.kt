@@ -732,8 +732,10 @@ enum class EpicStatus {
  * The status an epic shows for [subtasks] — the items this device can see.
  *
  * Order matters: "everything is finished" is checked first so one stray Todo cannot keep a
- * completed epic out of Done, and an in-progress item outranks a todo one because the epic
- * is reporting whether the work is still moving, not what is left to start.
+ * completed epic out of Done. After that, any sign that work has begun — `InProgress`,
+ * `InReview`, or a finished/closed item — outranks a task that has not started; the epic is
+ * reporting movement, not counting what is left to start. With nothing begun and something to
+ * start, the status is Todo; with only backlog items it stays Backlog.
  *
  * Only [WorkItemStatus] is read, never a project's custom lane: the epic spans projects
  * whose catalogs are not comparable. `Closed` counts as terminal alongside `Done`, and
@@ -744,7 +746,12 @@ enum class EpicStatus {
 fun deriveEpicStatus(subtasks: List<WorkItem>): EpicStatus {
     if (subtasks.isEmpty()) return EpicStatus.Backlog
     if (subtasks.all { it.status.isTerminal }) return EpicStatus.Done
-    if (subtasks.any { it.status == WorkItemStatus.InProgress || it.status == WorkItemStatus.InReview }) {
+    if (subtasks.any {
+            it.status == WorkItemStatus.InProgress ||
+                it.status == WorkItemStatus.InReview ||
+                it.status.isTerminal
+        }
+    ) {
         return EpicStatus.InProgress
     }
     if (subtasks.any { it.status == WorkItemStatus.Todo }) return EpicStatus.Todo
