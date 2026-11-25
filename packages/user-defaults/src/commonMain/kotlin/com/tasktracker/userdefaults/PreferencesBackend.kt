@@ -73,6 +73,16 @@ enum class DefaultsKey(val wireValue: String) {
     PutOnBoardStatus("backlog.putOnBoardStatus"),
 
     /**
+     * Whether the desktop sidebar's Appearance panel is expanded, as a JSON boolean.
+     *
+     * Absent means the user has not chosen yet: the shell may open it by default on every page
+     * except Settings, where the full controls are already on screen. The first header tap writes
+     * an explicit `true` or `false`, and that choice then wins on every page. Like [BacklogSort],
+     * it is wiped on sign-out — an interface habit, not a property of the device.
+     */
+    ThemeControlsExpanded("settings.themeControlsExpanded"),
+
+    /**
      * Debug-only fault injection, persisted so the simulator can be put into an offline
      * state and stay there across launches.
      */

@@ -34,6 +34,16 @@ class ShellPreferences(
     private val _glassIntensity = MutableStateFlow(1f)
     val glassIntensity: StateFlow<Float> = _glassIntensity.asStateFlow()
 
+    /**
+     * Whether the user has chosen to open or close the sidebar's Appearance panel.
+     *
+     * Null until the first header tap: before that the shell may vary the default by page. A
+     * non-null value is a real choice and wins everywhere, so a tab switch cannot silently
+     * re-open a panel the user deliberately closed.
+     */
+    private val _themeControlsExpanded = MutableStateFlow<Boolean?>(null)
+    val themeControlsExpanded: StateFlow<Boolean?> = _themeControlsExpanded.asStateFlow()
+
     private val _forceOffline = MutableStateFlow(false)
     val forceOffline: StateFlow<Boolean> = _forceOffline.asStateFlow()
 
@@ -107,6 +117,12 @@ class ShellPreferences(
             store.value(GLASS_INTENSITY_KEY)?.toFloatOrNull()
         }.getOrNull()?.coerceIn(0f, 1f) ?: 1f
 
+        // `Boolean?` rather than `?: false`: null is the "no choice yet" state the sidebar
+        // resolves against the selected page, and collapsing it here would destroy that info.
+        _themeControlsExpanded.value = runCatching {
+            store.value<Boolean>(DefaultsKey.ThemeControlsExpanded)
+        }.getOrNull()
+
         val offline = runCatching { store.value(FORCE_OFFLINE_KEY) }.getOrNull()
         _forceOffline.value = offline == TRUTHY
 
@@ -158,6 +174,18 @@ class ShellPreferences(
     suspend fun setThemeScheme(scheme: ThemeScheme) {
         _themeScheme.value = scheme
         runCatching { store.set(scheme.wireValue, THEME_KEY) }
+    }
+
+    /**
+     * Remembers the sidebar Appearance panel's open state after the user's first tap.
+     *
+     * Memory first, disk second, like [setThemeScheme]: the sidebar reads the flow, so the tap
+     * must be visible on the next frame even if the write is slow. A failed write leaves this
+     * session correct and the next launch back at the page-dependent default.
+     */
+    suspend fun setThemeControlsExpanded(expanded: Boolean) {
+        _themeControlsExpanded.value = expanded
+        runCatching { store.set(expanded, DefaultsKey.ThemeControlsExpanded) }
     }
 
     suspend fun setAccentPalette(palette: AccentPalette) {

@@ -82,6 +82,8 @@ internal fun NavigationSidebar(
     themeScheme: ThemeScheme,
     accentPalette: AccentPalette,
     glassIntensity: Float,
+    themeControlsExpanded: Boolean?,
+    onThemeControlsExpandedChange: (Boolean) -> Unit,
     onThemeChange: (ThemeScheme) -> Unit,
     onAccentPaletteChange: (AccentPalette) -> Unit,
     onGlassIntensityPreview: (Float) -> Unit,
@@ -322,13 +324,21 @@ internal fun NavigationSidebar(
                         )
                     }
 
+                    // No choice yet means the page decides: Settings already shows the full-size
+                    // controls, so only that page starts collapsed. The first header tap makes
+                    // the choice explicit, and from then on it wins everywhere — including a tab
+                    // switch back to Settings.
+                    val themePanelExpanded = themeControlsExpanded ?: (selected != AppTab.Settings)
+
                     // Bounding the expanded content keeps the navigation rows fixed — and the
                     // travelling lens with them — on a short desktop window; the panel scrolls
                     // instead of pushing the rows away.
                     ThemeControlsPanel(
+                        expanded = themePanelExpanded,
                         themeScheme = themeScheme,
                         accentPalette = accentPalette,
                         glassIntensity = glassIntensity,
+                        onExpandedChange = onThemeControlsExpandedChange,
                         onThemeChange = onThemeChange,
                         onAccentPaletteChange = onAccentPaletteChange,
                         onGlassIntensityPreview = onGlassIntensityPreview,

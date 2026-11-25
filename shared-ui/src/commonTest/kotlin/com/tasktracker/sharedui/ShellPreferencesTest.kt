@@ -178,6 +178,47 @@ class ShellPreferencesTest {
     }
 
     /**
+     * A first launch has no choice to restore, which is what lets the sidebar vary its default
+     * by page. Restoring this as `false` would make Settings' collapsed state leak everywhere;
+     * restoring it as `true` would show the compact controls twice on Settings.
+     */
+    @Test
+    fun anUnchosenThemePanelStaysUnchosenAfterRestore() = runTest {
+        val preferences = ShellPreferences(UserDefaultsStore(InMemoryPreferences()), Router())
+        preferences.restore()
+
+        assertNull(
+            preferences.themeControlsExpanded.value,
+            "a device that never tapped the header must still be able to default open off " +
+                "Settings and closed on Settings",
+        )
+    }
+
+    /**
+     * Both header choices survive a relaunch.
+     *
+     * The shell reads this preference before the sidebar exists, so a write to the wrong key —
+     * or a restore that collapses the nullable flow into a boolean — would look correct until
+     * the next launch, then silently undo the user's choice.
+     */
+    @Test
+    fun aChosenThemePanelStateSurvivesARelaunch() = runTest {
+        listOf(false, true).forEach { chosen ->
+            val store = UserDefaultsStore(InMemoryPreferences())
+            ShellPreferences(store, Router()).setThemeControlsExpanded(chosen)
+
+            val relaunched = ShellPreferences(store, Router())
+            relaunched.restore()
+
+            assertEquals(
+                chosen,
+                relaunched.themeControlsExpanded.value,
+                "the $chosen theme-panel choice did not come back after a relaunch",
+            )
+        }
+    }
+
+    /**
      * The backlog's ordering is still there after a relaunch.
      *
      * A second [ShellPreferences] over the same backend is the relaunch: nothing in memory is

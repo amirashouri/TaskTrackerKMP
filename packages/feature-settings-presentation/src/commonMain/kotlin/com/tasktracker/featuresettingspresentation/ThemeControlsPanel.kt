@@ -23,9 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -70,16 +68,20 @@ fun ThemeControlsAccentLensTag(palette: AccentPalette): String =
  *
  * The settings screen owns the full-size versions of these rows; this is their compact form. It
  * takes values and callbacks rather than reaching into the shell's preferences, so the sidebar
- * and the Settings tab write through the same shell-owned state and cannot disagree.
+ * and the Settings tab write through the same shell-owned state and cannot disagree. The open
+ * state is one of those values: a `remember` here would die on every tab switch and could not
+ * offer a different default on the Settings page.
  *
  * The header stays small when collapsed. When expanded, [contentMaxHeight] bounds the content so
  * a short desktop window scrolls the controls instead of pushing the navigation off the panel.
  */
 @Composable
 fun ThemeControlsPanel(
+    expanded: Boolean,
     themeScheme: ThemeScheme,
     accentPalette: AccentPalette,
     glassIntensity: Float,
+    onExpandedChange: (Boolean) -> Unit,
     onThemeChange: (ThemeScheme) -> Unit,
     onAccentPaletteChange: (AccentPalette) -> Unit,
     onGlassIntensityPreview: (Float) -> Unit,
@@ -87,7 +89,6 @@ fun ThemeControlsPanel(
     modifier: Modifier = Modifier,
     contentMaxHeight: Dp? = null,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val reducedMotion = LocalReducedMotion.current
     val chevronRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -116,7 +117,7 @@ fun ThemeControlsPanel(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
                     role = Role.Button,
-                ) { expanded = !expanded }
+                ) { onExpandedChange(!expanded) }
                 .padding(vertical = ttSpacing.sm)
                 .testTag(ThemeControlsHeaderTag),
             verticalAlignment = Alignment.CenterVertically,

@@ -229,6 +229,9 @@ fun NavigationHost(
     // Reading them here, once, keeps the chrome and the screen on one value per frame.
     val sidebarAccentPalette by preferences.accentPalette.collectAsState()
     val sidebarGlassIntensity by preferences.glassIntensity.collectAsState()
+    // Null is the first-run state the sidebar resolves from the selected page; a non-null
+    // value is the user's explicit answer and has to follow the chrome across tab switches.
+    val sidebarThemeControlsExpanded by preferences.themeControlsExpanded.collectAsState()
 
     // Editors that have been dismissed but are still playing their exit transition.
     // Kept composed until the animation finishes so the exit can be seen.
@@ -840,6 +843,10 @@ fun NavigationHost(
                     themeScheme = themeScheme,
                     accentPalette = sidebarAccentPalette,
                     glassIntensity = sidebarGlassIntensity,
+                    themeControlsExpanded = sidebarThemeControlsExpanded,
+                    onThemeControlsExpandedChange = { expanded ->
+                        scope.launch { preferences.setThemeControlsExpanded(expanded) }
+                    },
                     onThemeChange = { scheme -> scope.launch { preferences.setThemeScheme(scheme) } },
                     onAccentPaletteChange = { palette ->
                         scope.launch { preferences.setAccentPalette(palette) }

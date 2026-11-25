@@ -3316,13 +3316,18 @@ object ShellScenarios {
     }
 
     /**
-     * The sidebar's Theme panel is a small header until someone asks for the controls.
+     * The sidebar's Theme panel is open on a normal page and closed on Settings until the user
+     * chooses for themselves.
+     *
+     * Settings already carries the full-size controls, so it starts from a header alone. Every
+     * other page starts with the controls open. This scenario runs both defaults in one shell so
+     * a tab switch cannot quietly erase the first one.
      *
      * The compact accent grid is asserted by the absence of a palette name, not by counting
      * swatches: a row that kept the Settings labels would still show all six colours and would
      * be twice as tall, which is the size this panel exists to avoid.
      */
-    val theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader:
+    val theSidebarThemePanelStartsOpenExceptOnSettingsAndExpandsFromItsHeader:
         suspend ComposeUiTest.() -> Unit = {
         setUpShell(
             session = ScriptedSession(restored = signedIn()),
@@ -3331,9 +3336,14 @@ object ShellScenarios {
         )
         waitForIdle()
         onNodeWithTag(ThemeControlsPanelTag).assertIsDisplayed()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
+
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
         assertTrue(
             onAllNodesWithTag(ThemeControlsContentTag).fetchSemanticsNodes().isEmpty(),
-            "the theme panel started expanded; only its header should be composed until tapped",
+            "the theme panel stayed open on Settings; the full-size controls already live on " +
+                "that page, so only its header should be composed until the user asks for it",
         )
 
         mainClock.autoAdvance = false
@@ -3417,6 +3427,54 @@ object ShellScenarios {
     }
 
     /**
+     * The first header tap turns a page-dependent default into a real, shell-wide choice.
+     *
+     * Closing on a normal page must survive Settings, where the default alone would also be
+     * closed — otherwise the test cannot tell an explicit choice from the default. Opening on
+     * Settings must survive a return to a normal page, where the default alone would also be
+     * open. Both directions are asserted, and the raw store confirms the header reached the
+     * preference rather than only flipping a local flag.
+     */
+    val theSidebarThemePanelRemembersTheUsersChoiceAcrossTabs:
+        suspend ComposeUiTest.() -> Unit = {
+        val store = UserDefaultsStore(InMemoryPreferences())
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            preferences = store,
+            width = SIDEBAR_WIDTH,
+            density = SIDEBAR_DENSITY,
+        )
+        waitForIdle()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
+
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeBy(250)
+        waitForIdle()
+        assertTrue(
+            onAllNodesWithTag(ThemeControlsContentTag).fetchSemanticsNodes().isEmpty(),
+            "the first header tap did not collapse the theme panel",
+        )
+        assertEquals(false, store.value<Boolean>(DefaultsKey.ThemeControlsExpanded))
+
+        onNodeWithTag(SidebarButtonTag(AppTab.Settings)).performClick()
+        waitForIdle()
+        assertTrue(
+            onAllNodesWithTag(ThemeControlsContentTag).fetchSemanticsNodes().isEmpty(),
+            "the explicitly closed theme panel reopened on Settings",
+        )
+
+        onNodeWithTag(ThemeControlsHeaderTag).performClick()
+        mainClock.advanceTimeBy(250)
+        waitForIdle()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
+        assertEquals(true, store.value<Boolean>(DefaultsKey.ThemeControlsExpanded))
+
+        onNodeWithTag(SidebarButtonTag(AppTab.Projects)).performClick()
+        waitForIdle()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
+    }
+
+    /**
      * All three controls write through the shell preferences the Settings tab uses.
      *
      * The store is read directly rather than through a second composition: the claim is that
@@ -3432,9 +3490,9 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        onNodeWithTag(ThemeControlsHeaderTag).performClick()
-        mainClock.advanceTimeBy(250)
-        waitForIdle()
+        // On a normal page the controls are already open; the first tap is the user's choice,
+        // not a prerequisite for reaching these rows.
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
 
         onNodeWithTag(ThemeControlsSchemeTag(ThemeScheme.Dark)).performClick()
         onNodeWithTag(ThemeControlsAccentCellTag(AccentPalette.Slot3)).performClick()
@@ -3461,9 +3519,7 @@ object ShellScenarios {
             density = SIDEBAR_DENSITY,
         )
         waitForIdle()
-        onNodeWithTag(ThemeControlsHeaderTag).performClick()
-        mainClock.advanceTimeBy(250)
-        waitForIdle()
+        onNodeWithTag(ThemeControlsContentTag).assertIsDisplayed()
 
         onNodeWithTag(ThemeControlsContentTag)
             .performScrollToNode(hasTestTag(ThemeControlsGlassSliderTag))

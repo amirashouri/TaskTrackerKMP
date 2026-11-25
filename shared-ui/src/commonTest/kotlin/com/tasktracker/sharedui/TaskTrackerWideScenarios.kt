@@ -140,9 +140,15 @@ abstract class TaskTrackerWideScenarios {
         )
 
     @Test
-    fun theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader() =
+    fun theSidebarThemePanelStartsOpenExceptOnSettingsAndExpandsFromItsHeader() =
         runComposeUiTest(
-            block = ShellScenarios.theSidebarThemePanelStartsCollapsedAndExpandsFromItsHeader,
+            block = ShellScenarios.theSidebarThemePanelStartsOpenExceptOnSettingsAndExpandsFromItsHeader,
+        )
+
+    @Test
+    fun theSidebarThemePanelRemembersTheUsersChoiceAcrossTabs() =
+        runComposeUiTest(
+            block = ShellScenarios.theSidebarThemePanelRemembersTheUsersChoiceAcrossTabs,
         )
 
     @Test

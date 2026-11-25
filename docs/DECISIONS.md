@@ -332,6 +332,16 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   never reads `user-defaults`, leaving `ShellPreferences` as the one writer. Its
   expanded content is capped at 40% of the sidebar's measured height, so a short
   window scrolls the panel instead of moving the measured destination lens.
+- **The sidebar panel's default is a nullable shell preference.** `null` means
+  "no header tap yet" and resolves to `selected != AppTab.Settings`: the Settings
+  page already carries the full-size controls, so only that page starts
+  collapsed. The first tap writes an explicit `true`/`false` through
+  `ShellPreferences`, and that answer then wins everywhere, including a return
+  to Settings. Keeping the stored state `Boolean?` is load-bearing — restoring
+  an absent key as `false` would leak the Settings default to every page, and
+  restoring it as `true` would show the compact controls twice on Settings.
+  The across-tabs scenario and the relaunch test were mutation-checked by
+  removing the Elvis default, the store write, and the restore, respectively.
 - **Bottom-anchor the sidebar panel with `Arrangement.SpaceBetween`, not a
   weighted spacer.** The project list's `weight(1f, fill = false)` wraps to its
   projects; a second weighted child shares the leftover but does *not* inherit
