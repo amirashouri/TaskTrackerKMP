@@ -60,6 +60,14 @@ class WorkItemEditorModel(
     private val availableStatuses: List<StatusDefinition> = emptyList(),
     /** The catalog lane a create was launched from, so a lane-add keeps that exact lane. */
     private val initialStatusKey: String? = null,
+    /**
+     * An unsaved create restored after the editor left composition, or null for a fresh one.
+     *
+     * Only a create can have one: an edit's source of truth is the stored item, so reopening it
+     * reads the store rather than a shell-held draft. The shell supplies this value and takes
+     * [snapshot] back when the editor is disposed without an explicit cancel or save.
+     */
+    private val initialDraft: WorkItemDraft? = null,
 ) : ProjectModel() {
 
     private val saveWorkItem = SaveWorkItem(repository, dateProvider)
@@ -75,6 +83,9 @@ class WorkItemEditorModel(
 
     private val fetchBlob = FetchAttachment(repository, blobTransport)
     private val fileOpener = opener
+
+    /** The restored form, if this model is recreating a create from a shell-held draft. */
+    private val restoredDraft: WorkItemDraft? = if (existing == null) initialDraft else null
 
     // MARK: Comments
 
@@ -132,7 +143,7 @@ class WorkItemEditorModel(
         private set
 
     /** Files picked during creation, held locally until item ID is minted on save. */
-    var stagedAttachments by mutableStateOf<List<PickedFile>>(emptyList())
+    var stagedAttachments by mutableStateOf(restoredDraft?.stagedAttachments.orEmpty())
         private set
 
     var isAttaching by mutableStateOf(false)
@@ -305,22 +316,27 @@ class WorkItemEditorModel(
         tagIDs = emptyList(),
     )
 
-    var title: String by mutableStateOf(existing?.title.orEmpty())
+    var title: String by mutableStateOf(existing?.title ?: restoredDraft?.title.orEmpty())
         private set
 
-    var details: String by mutableStateOf(existing?.details.orEmpty())
+    var details: String by mutableStateOf(existing?.details ?: restoredDraft?.details.orEmpty())
         private set
 
-    var storyPoints: Int? by mutableStateOf(existing?.storyPoints)
+    var storyPoints: Int? by mutableStateOf(
+        existing?.storyPoints ?: restoredDraft?.storyPointsText?.let(::parseStoryPoints),
+    )
         private set
 
-    var storyPointsText: String by mutableStateOf(existing?.storyPoints?.toString().orEmpty())
+    var storyPointsText: String by mutableStateOf(
+        existing?.storyPoints?.toString() ?: restoredDraft?.storyPointsText.orEmpty(),
+    )
         private set
 
     var status: WorkItemStatus by mutableStateOf(
         existing?.statusKey?.let { key ->
             availableStatuses.firstOrNull { it.id == key }?.category
         } ?: existing?.status
+            ?: restoredDraft?.status
             ?: initialStatusKey?.let { key -> availableStatuses.firstOrNull { it.id == key }?.category }
             ?: initialStatus
             ?: WorkItemStatus.Backlog,
@@ -328,27 +344,41 @@ class WorkItemEditorModel(
         private set
 
     var statusKey: String? by mutableStateOf(
-        existing?.statusKey ?: if (existing == null) initialStatusKey else null,
+        existing?.statusKey ?: if (existing == null) {
+            val restoredKey = restoredDraft?.statusKey
+            when {
+                restoredKey == null -> initialStatusKey
+                availableStatuses.isEmpty() || availableStatuses.any { it.id == restoredKey } -> restoredKey
+                else -> null
+            }
+        } else {
+            null
+        },
     )
         private set
 
-    var priority: Priority by mutableStateOf(existing?.priority ?: Priority.Medium)
+    var priority: Priority by mutableStateOf(existing?.priority ?: restoredDraft?.priority ?: Priority.Medium)
         private set
 
-    var assigneeID: UserID? by mutableStateOf(existing?.assigneeID)
+    var assigneeID: UserID? by mutableStateOf(existing?.assigneeID ?: restoredDraft?.assigneeID)
         private set
 
-    var dueDate: Instant? by mutableStateOf(existing?.dueDate)
+    var dueDate: Instant? by mutableStateOf(existing?.dueDate ?: restoredDraft?.dueDate)
         private set
 
-    var recurrence: Recurrence? by mutableStateOf(existing?.recurrence)
+    var recurrence: Recurrence? by mutableStateOf(existing?.recurrence ?: restoredDraft?.recurrence)
         private set
 
-    var blockedByIDs: List<WorkItemID> by mutableStateOf(existing?.blockedByIDs.orEmpty())
+    var blockedByIDs: List<WorkItemID> by mutableStateOf(
+        existing?.blockedByIDs ?: restoredDraft?.blockedByIDs.orEmpty(),
+    )
         private set
 
     var tagIDs: List<TagID> by mutableStateOf(
-        existing?.tagIDs.orEmpty().retainedIn(availableTags).distinct().take(TagRules.MAX_PER_ITEM),
+        (existing?.tagIDs ?: restoredDraft?.tagIDs.orEmpty())
+            .retainedIn(availableTags)
+            .distinct()
+            .take(TagRules.MAX_PER_ITEM),
     )
         private set
 
@@ -401,6 +431,26 @@ class WorkItemEditorModel(
     )
 
     val canSave: Boolean get() = title.isNotBlank()
+
+    /** The current form as a shell-held draft, or null for an edit which has a stored source. */
+    fun snapshot(): WorkItemDraft? = if (isCreating) {
+        WorkItemDraft(
+            title = title,
+            details = details,
+            storyPointsText = storyPointsText,
+            status = status,
+            statusKey = statusKey,
+            priority = priority,
+            assigneeID = assigneeID,
+            dueDate = dueDate,
+            recurrence = recurrence,
+            blockedByIDs = blockedByIDs,
+            tagIDs = tagIDs,
+            stagedAttachments = stagedAttachments,
+        )
+    } else {
+        null
+    }
 
     fun onTitleChanged(value: String) {
         title = value
@@ -538,6 +588,33 @@ class WorkItemEditorModel(
         }
     }
 }
+
+/**
+ * A create's unsaved form, as the shell keeps it while the editor is off screen.
+ *
+ * Deliberately a value rather than the model itself: the model reads the store and owns
+ * failures, while this holds only what the user typed. `storyPointsText` is the raw field so an
+ * invalid entry (`"five"`) survives, and staged attachments are included because a pick the
+ * user watched land is part of the work they would otherwise lose.
+ */
+data class WorkItemDraft(
+    val title: String,
+    val details: String,
+    val storyPointsText: String,
+    val status: WorkItemStatus,
+    val statusKey: String?,
+    val priority: Priority,
+    val assigneeID: UserID?,
+    val dueDate: Instant?,
+    val recurrence: Recurrence?,
+    val blockedByIDs: List<WorkItemID>,
+    val tagIDs: List<TagID>,
+    val stagedAttachments: List<PickedFile> = emptyList(),
+)
+
+/** Parses story points with the editor's rule: a non-negative integer, or nothing. */
+private fun parseStoryPoints(value: String): Int? =
+    value.trim().toIntOrNull()?.takeIf { it >= 0 }
 
 private fun List<TagID>.retainedIn(catalog: List<ProjectTag>?): List<TagID> =
     catalog?.let { tags -> filter { id -> tags.any { it.id == id } } } ?: this

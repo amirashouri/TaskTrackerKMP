@@ -8,94 +8,137 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.tasktracker.designsystem.LocalReducedMotion
+import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSurface
 
 /**
- * How long the search field takes to unfold and fold away.
+ * How long the search field takes to appear or disappear.
  *
  * One constant for both screens, for the same reason [SEARCH_DEBOUNCE_MILLIS] is one constant:
  * two durations that happen to agree today are how two screens start disagreeing, and the
  * difference is invisible because each screen is only ever seen on its own.
  *
- * 200ms is a compromise between the two things the motion has to do. Shorter and the row does
- * not read as *unfolding* — it flickers into place. Longer and the field arrives after the
- * finger has already moved on, which makes the tap feel unresponsive even though the work
- * started immediately.
+ * 200ms is a compromise between the two things the motion has to do. Shorter and the field
+ * flickers into place; longer and the field arrives after the finger has already moved on,
+ * which makes the tap feel unresponsive even though the work started immediately.
  */
 internal const val SEARCH_REVEAL_MILLIS = 200
 
-/** The fade is deliberately shorter than the unfold: opacity settling early hides the clipping
- * edge of a growing container, which is the part that looks cheap if it is seen. */
+/** The fade settles before the scale, so the field is legible before it finishes moving. */
 private const val SEARCH_FADE_IN_MILLIS = 120
 private const val SEARCH_FADE_OUT_MILLIS = 90
 
 /**
- * Reveals [content] by unfolding it vertically, and folds it away again when [visible] is false.
+ * How much of [ttSurface] backs an overlay field.
  *
- * ## Why the field is not simply hidden with `if`
+ * The field's own glass is translucent, and a compact header has a project title under the
+ * field's slot. Backing it with a near-opaque surface keeps that title from ghosting through
+ * the input; the last few percent stay transparent so the glass still reads as glass.
+ */
+private const val SEARCH_OVERLAY_BASE_ALPHA = 0.94f
+
+/**
+ * Reveals [content] vertically, or in place when [overlay] is true.
  *
- * A field that pops into existence moves everything below it by its own height in a single
- * frame. On these screens that is the list, which means the user's eye is following rows that
- * jump. Unfolding from the top instead keeps the list anchored under the header while the
- * space is made, and shrinking back gives the row back rather than deleting it.
+ * ## The two modes are not interchangeable
+ *
+ * A page whose field is a row above its list (the Epic list) can use the default in-flow mode:
+ * the field takes space, and `expandVertically` gives that space back frame by frame.
+ *
+ * The board and the backlog use [overlay] instead. Their field used to unfold between the
+ * header and the list, which animated a layout dimension: every frame handed a new height to
+ * the lanes below it, and on the backlog the measured header height feeds the list's top
+ * inset, so every frame recomputed that padding too. Tweaking the fade or the easing only
+ * changed how fast the content moved. An overlay gives the field no say in layout: the caller
+ * gives it a fixed slot, and only alpha and scale animate. The field is drawn over the header
+ * row it belongs to, ending before its toggle.
  *
  * ## Reduced motion
  *
- * When the platform reports reduced motion, the transitions are `None`: the field still appears
- * and disappears, it just does so without travel. The state change is not optional — only the
- * motion is. Hiding the field behind an animation the user has asked not to see would be a
- * worse accessibility outcome than the jump this exists to avoid.
+ * With reduced motion the transitions are `None` in either mode: the field still appears and
+ * disappears, it just does so without travel. Hiding the field behind an animation the user
+ * asked not to see would be a worse accessibility outcome than the movement this avoids.
  */
 @Composable
 internal fun SearchReveal(
     visible: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    overlay: Boolean = false,
+    content: @Composable (Modifier) -> Unit,
 ) {
     val reducedMotion = LocalReducedMotion.current
+    val enter: EnterTransition = when {
+        reducedMotion -> EnterTransition.None
+        overlay -> fadeIn(animationSpec = tween(SEARCH_FADE_IN_MILLIS)) +
+            scaleIn(initialScale = 0.96f, animationSpec = tween(SEARCH_REVEAL_MILLIS))
+        else -> expandVertically(
+            animationSpec = tween(SEARCH_REVEAL_MILLIS),
+            expandFrom = Alignment.Top,
+        )
+    }
+    val exit: ExitTransition = when {
+        reducedMotion -> ExitTransition.None
+        overlay -> fadeOut(animationSpec = tween(SEARCH_FADE_OUT_MILLIS)) +
+            scaleOut(targetScale = 0.96f, animationSpec = tween(SEARCH_REVEAL_MILLIS))
+        else -> shrinkVertically(
+            animationSpec = tween(SEARCH_REVEAL_MILLIS),
+            shrinkTowards = Alignment.Top,
+        )
+    }
 
     AnimatedVisibility(
         visible = visible,
         modifier = modifier,
-        enter = if (reducedMotion) {
-            EnterTransition.None
-        } else {
-            fadeIn(animationSpec = tween(SEARCH_FADE_IN_MILLIS)) +
-                expandVertically(
-                    animationSpec = tween(SEARCH_REVEAL_MILLIS),
-                    expandFrom = Alignment.Top,
-                )
-        },
-        exit = if (reducedMotion) {
-            ExitTransition.None
-        } else {
-            fadeOut(animationSpec = tween(SEARCH_FADE_OUT_MILLIS)) +
-                shrinkVertically(
-                    animationSpec = tween(SEARCH_REVEAL_MILLIS),
-                    shrinkTowards = Alignment.Top,
-                )
-        },
+        enter = enter,
+        exit = exit,
     ) {
-        content()
+        if (!overlay) {
+            content(Modifier)
+        } else {
+            Box(
+                // The slot is the header row's height, which can be shorter than the field's
+                // own minimum. `unbounded` lets the field measure itself and overflow the slot
+                // by a few pixels instead of being squeezed into an undersized tap target.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .wrapContentSize(Alignment.CenterStart, unbounded = true),
+            ) {
+                content(
+                    Modifier.background(
+                        color = ttSurface().copy(alpha = SEARCH_OVERLAY_BASE_ALPHA),
+                        shape = RoundedCornerShape(ttRadius.control),
+                    ),
+                )
+            }
+        }
     }
 }
 
 /**
- * The same reveal, unfolding sideways into a row rather than downwards into a column.
+ * The same reveal, unfolding sideways into a row rather than over a fixed slot.
  *
- * The desktop header puts the sort row and the search field beside each other, so opening the
- * field has to make room for it rather than push rows down. `expandHorizontally` grows the
+ * A wide header puts the sort row and the search field beside each other, so opening the
+ * field has to make room for it rather than cover anything. `expandHorizontally` grows the
  * field's slot from zero width while the sort row's `weight` gives the space back frame by
- * frame, which is the shrink the eye reads as one control making room for another.
+ * frame, which is the shrink the eye reads as one control making room for another. No row
+ * below that header changes height, so this travel cannot push the list.
  *
  * Durations and the reduced-motion rule are shared with [SearchReveal] on purpose: the two
- * layouts of the same field must not unfold at different speeds, and reduced motion removes the
- * travel rather than the field.
+ * layouts of the same field must not unfold at different speeds, and reduced motion removes
+ * the travel rather than the field.
  */
 @Composable
 internal fun SearchRevealBeside(

@@ -43,7 +43,7 @@ import kotlin.test.assertTrue
  * Both screens reveal the field from a header toggle, so a scenario that types has to open it
  * first. [typeInBoardSearch] and [typeInBacklogSearch] do that themselves; the two scenarios
  * that drive the clock by hand open the field *before* stopping it, because a reveal that is
- * mid-animation is still a composed field but its height is still moving.
+ * mid-animation is still a composed field but its alpha and scale are still moving.
  *
  * ## The clock is advanced by hand, on purpose
  *
@@ -108,61 +108,50 @@ object WorkItemSearchScenarios {
     }
 
     /**
-     * The field unfolds instead of snapping, and the lanes below move with it.
+     * The field fades and scales into the header row; the lanes below do not move.
      *
-     * The assertion is the *position of the lane row*, not the field's own height: the field is
-     * clipped by the reveal, so its measured bounds can report full height while almost none of
-     * it is visible. The row below has no such ambiguity — if the field is unfolding, the row is
-     * somewhere between where it sits closed and where it sits open, and a jump would put it at
-     * one end or the other.
-     *
-     * The clock is stopped so that "half way through" is a real sample rather than a guess about
-     * how fast the machine is.
+     * The reveal used to animate its height between the header and the lanes, so the lane row
+     * moved on every frame. Presence alone cannot tell that apart from an overlay — a field
+     * that takes a row is still composed — so the primary assertion is the settled position of
+     * the lane row. The other assertions keep the field clear of the toggle that closes it.
      */
     val theFieldUnfoldsRatherThanSnapping: suspend ComposeUiTest.() -> Unit = {
-        // Pinned to a phone width: a desktop host now renders the field beside its toggle, and
-        // that arrangement has no vertical unfold to measure.
+        // Pinned to a phone width: a desktop host renders the field beside its toggle, and that
+        // arrangement has no overlay slot to measure.
         boardShowing(width = COMPACT_BOARD_WIDTH)
 
-        val closedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        val lanesClosedTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
         openBoardSearch()
-        val openTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        val lanesOpenTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
         assertTrue(
-            openTop > closedTop,
-            "the open field must push the lanes down ($openTop should be below $closedTop), " +
-                "or it is overlaying them rather than taking space in the column",
+            abs((lanesOpenTop - lanesClosedTop).value) <= EDGE_TOLERANCE_DP,
+            "opening the search moved the lanes from $lanesClosedTop to $lanesOpenTop: " +
+                "the field must overlay the header, not take a row above the board",
         )
 
-        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
-        waitForIdle()
-
-        mainClock.autoAdvance = false
-        onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
-        mainClock.advanceTimeBy(SEARCH_REVEAL_MILLIS / 2L)
-        mainClock.advanceTimeByFrame()
-
-        val midwayTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
+        val field = onNodeWithTag(ProjectBoardSearchFieldTag).getUnclippedBoundsInRoot()
+        val toggle = onNodeWithTag(ProjectBoardSearchToggleTag).getUnclippedBoundsInRoot()
         assertTrue(
-            midwayTop > closedTop && midwayTop < openTop,
-            "half way through the reveal the lanes should sit between $closedTop and $openTop " +
-                "but were at $midwayTop: the field snapped into place instead of unfolding",
+            field.right <= toggle.left + EDGE_TOLERANCE_DP.dp,
+            "the field ends at ${field.right} and the toggle starts at ${toggle.left}, so the " +
+                "overlay covers the only way to close it: field=$field toggle=$toggle",
         )
-
-        mainClock.autoAdvance = true
-        waitForIdle()
+        val fieldCentre = (field.top + field.bottom) / 2
+        val toggleCentre = (toggle.top + toggle.bottom) / 2
+        assertTrue(
+            abs((fieldCentre - toggleCentre).value) <= EDGE_TOLERANCE_DP,
+            "the field and its toggle are not on one centre line: field=$field toggle=$toggle",
+        )
     }
 
     /**
-     * Reduced motion changes the travel, not the outcome.
+     * Reduced motion changes the reveal, not the outcome.
      *
-     * The field still appears — suppressing it would be a worse accessibility result than the
-     * jump the animation exists to avoid — it simply arrives without unfolding.
-     *
-     * The measurement is the *settled* height, not "somewhere below the closed position". An
-     * earlier version of this scenario only asserted the lanes had moved down at all, and it
-     * passed against a build that ignored the flag entirely: one frame of a 200ms unfold is
-     * already a little taller than closed. So the comparison has to be against the position the
-     * field reaches when the reveal is over, which a travelling field cannot be at on frame one.
+     * The field still appears — suppressing it would be a worse accessibility result than a
+     * little animation — it simply arrives without alpha or scale travel. The lanes have the
+     * same geometry with or without motion: an earlier build animated the field's height, and a
+     * first-frame check of "some movement" could not tell that from an overlay. Comparing the
+     * lane row against its closed position catches a field that took a row again.
      */
     val reducedMotionRevealsTheFieldWithoutTravel: suspend ComposeUiTest.() -> Unit = {
         boardShowing(reducedMotion = true, width = COMPACT_BOARD_WIDTH)
@@ -170,8 +159,11 @@ object WorkItemSearchScenarios {
 
         openBoardSearch()
         val settledTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
-        val fullTravel = settledTop - closedTop
-        assertTrue(fullTravel > 0.dp, "the open field must take space even without motion")
+        assertTrue(
+            abs((settledTop - closedTop).value) <= EDGE_TOLERANCE_DP,
+            "even without motion the field must not take a row above the board: " +
+                "lanes moved from $closedTop to $settledTop",
+        )
 
         // Close, then reopen with the clock stopped, so "the first frame" is a real sample.
         onNodeWithTag(ProjectBoardSearchToggleTag).performClick()
@@ -184,10 +176,9 @@ object WorkItemSearchScenarios {
         onNodeWithTag(ProjectBoardSearchFieldTag).assertExists()
         val travelled = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top - closedTop
         assertTrue(
-            travelled >= fullTravel - 0.5.dp,
-            "with reduced motion the field should be at its full height on the first frame " +
-                "(${fullTravel} of travel), but had only travelled $travelled — the platform " +
-                "setting is being ignored and the reveal is animating anyway",
+            abs(travelled.value) <= EDGE_TOLERANCE_DP,
+            "with reduced motion the field should be in its overlay slot on the first frame, " +
+                "but the lanes travelled $travelled — a layout reveal is still being animated",
         )
 
         mainClock.autoAdvance = true
@@ -214,13 +205,15 @@ object WorkItemSearchScenarios {
         val header = onNodeWithTag(ProjectBoardHeaderTag).getUnclippedBoundsInRoot()
         val lanesOpenTop = onNodeWithTag(ProjectBoardColumnsTag).getUnclippedBoundsInRoot().top
 
-        // The field is 48dp against the 44dp buttons, so the header row itself grows by 4dp.
-        // Anything near a whole field-plus-gap means it took a row of its own.
+        // The field is taller than the icon buttons, so the header reserves that height at
+        // rest. Opening search must not spend even the 4dp difference: a field that took a row
+        // of its own would move the lanes by a whole field plus gap, but any movement here is
+        // the same defect at a smaller scale.
         assertTrue(
-            abs((lanesOpenTop - lanesClosedTop).value) < ttSpacing.lg.value,
+            abs((lanesOpenTop - lanesClosedTop).value) <= EDGE_TOLERANCE_DP,
             "the wide field pushed the lanes down by ${lanesOpenTop - lanesClosedTop} " +
-                "(closed=$lanesClosedTop, open=$lanesOpenTop), so it is stacked under the " +
-                "header instead of opening beside its toggle",
+                "(closed=$lanesClosedTop, open=$lanesOpenTop): the header must reserve the " +
+                "field's height before it opens",
         )
         assertTrue(
             abs((field.right + ttSpacing.sm - toggle.left).value) <= EDGE_TOLERANCE_DP * 2,
@@ -562,8 +555,8 @@ private fun ComposeUiTest.backlogShowing(
  * Open the field from its header toggle, and let the reveal finish.
  *
  * `waitForIdle` is what finishes it: the animation is driven by the test clock, which is running
- * here, so the field is at its final height when this returns. A scenario that stops the clock
- * first has to call this *before* it does, or it measures a field mid-unfold.
+ * here, so the field is at its final alpha and scale when this returns. A scenario that stops the
+ * clock first has to call this *before* it does, or it samples a field mid-reveal.
  */
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.openBoardSearch() {

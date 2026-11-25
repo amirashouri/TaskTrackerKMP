@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -179,6 +180,10 @@ fun ProjectBoardScreen(
     // activity. Leaving the destination and coming back starts closed, which matches the empty
     // query it starts with.
     var searchOpen by remember { mutableStateOf(false) }
+    // The compact overlay stops before its toggle, so the close control stays tappable. Measured
+    // rather than inferred: the assignee stack and switcher are optional, so the toggle's place
+    // in the header row is not a fixed sum of known widths.
+    var searchToggleLeftPx by remember { mutableStateOf(0) }
     // The "Move to" picker's visibility. Screen state like the query: it is a visit, not a
     // preference, and dismissing it must not touch the selection.
     var moveSheetOpen by remember { mutableStateOf(false) }
@@ -217,6 +222,9 @@ fun ProjectBoardScreen(
             // desktop header needs 700dp of room for the project identity, the field and the two
             // actions before it stops fitting on one row.
             val wideHeader = maxWidth >= BoardHeaderWideMinimumWidth + ttSpacing.xxl * 2
+            val compactSearchFieldWidth = with(LocalDensity.current) {
+                (searchToggleLeftPx - ttSpacing.xxl.roundToPx() - ttSpacing.sm.roundToPx()).toDp()
+            }.coerceAtLeast(0.dp)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -240,95 +248,120 @@ fun ProjectBoardScreen(
                 // gap even with the mode off. Inside this column the bar's own top padding supplies
                 // the gap only while the reveal has height to give.
                 Column {
-                    Row(
+                    // A wide field is taller than the 44dp icon buttons. Fixing the slot at the
+                    // field's height means opening search cannot grow the header and push the
+                    // lanes down; centring keeps the toggle on one line in both states.
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalGutter()
+                            .then(if (wideHeader) Modifier.height(ttSpacing.fieldMinHeight) else Modifier)
                             .testTag(ProjectBoardHeaderTag),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                        contentAlignment = Alignment.Center,
                     ) {
                         Row(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            onOpenSwitcher?.let { openSwitcher ->
-                                ProjectSwitcherButton(
-                                    project = projection.project,
-                                    onClick = openSwitcher,
-                                    projects = projects,
-                                    onSelectProject = onSelectProject,
-                                    showName = false,
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                onOpenSwitcher?.let { openSwitcher ->
+                                    ProjectSwitcherButton(
+                                        project = projection.project,
+                                        onClick = openSwitcher,
+                                        projects = projects,
+                                        onSelectProject = onSelectProject,
+                                        showName = false,
+                                    )
+                                }
+                                if (assignees.isNotEmpty()) {
+                                    AssigneeStack(
+                                        names = assignees,
+                                        modifier = Modifier.testTag(ProjectBoardAssigneesTag),
+                                    )
+                                }
+                                ttText(
+                                    text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
+                                    style = ttTypography.titleSmall,
+                                    color = ttLabel(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
                                 )
                             }
-                            if (assignees.isNotEmpty()) {
-                                AssigneeStack(
-                                    names = assignees,
-                                    modifier = Modifier.testTag(ProjectBoardAssigneesTag),
-                                )
-                            }
-                            ttText(
-                                text = activeSprint?.name ?: stringResource(Res.string.board_kanban),
-                                style = ttTypography.titleSmall,
-                                color = ttLabel(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = true).testTag(ProjectBoardTitleTag),
-                            )
-                        }
-                        // The trailing controls keep their order: the search toggle is inserted
-                        // *before* My Tasks rather than after it, so the button that was already
-                        // here does not move when this one appears. No toggle without a project —
-                        // it would reveal a field over "no project selected", which filters a list
-                        // that does not exist.
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            if (projection.project != null && !isSelecting) {
-                                // On a wide header the field unfolds *beside* its button, inside the
-                                // trailing row: it takes width from the title rather than pushing
-                                // the lanes down, which is the same arrangement the backlog header
-                                // uses. A fixed width, because this row wraps its content — a
-                                // weighted child in a wrap-content row receives no space to grow
-                                // into.
-                                if (wideHeader) {
-                                    SearchRevealBeside(visible = searchOpen) {
-                                        searchField(Modifier.width(BoardSearchFieldWidth))
+                            // The trailing controls keep their order: the search toggle is inserted
+                            // *before* My Tasks rather than after it, so the button that was already
+                            // here does not move when this one appears. No toggle without a project —
+                            // it would reveal a field over "no project selected", which filters a list
+                            // that does not exist.
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (projection.project != null && !isSelecting) {
+                                    // On a wide header the field unfolds *beside* its button, inside the
+                                    // trailing row: it takes width from the title rather than pushing
+                                    // the lanes down, which is the same arrangement the backlog header
+                                    // uses. A fixed width, because this row wraps its content — a
+                                    // weighted child in a wrap-content row receives no space to grow
+                                    // into.
+                                    if (wideHeader) {
+                                        SearchRevealBeside(visible = searchOpen) {
+                                            searchField(Modifier.width(BoardSearchFieldWidth))
+                                        }
                                     }
+                                    ttGlassIconButton(
+                                        image = ttActionIcons.search,
+                                        contentDescription = stringResource(
+                                            if (searchOpen) {
+                                                Res.string.work_item_search_close
+                                            } else {
+                                                Res.string.work_item_search_open
+                                            },
+                                        ),
+                                        onClick = {
+                                            searchOpen = !searchOpen
+                                            // Closing is also a reset. A query that outlives its field
+                                            // would leave the board filtered by a control that is no
+                                            // longer on screen, with the lanes simply missing cards and
+                                            // nothing to explain why.
+                                            if (!searchOpen) {
+                                                query = ""
+                                                focusManager.clearFocus()
+                                            }
+                                        },
+                                        tint = if (searchOpen) ttAccent() else ttLabel(),
+                                        modifier = Modifier
+                                            .onGloballyPositioned { searchToggleLeftPx = it.boundsInRoot().left.toInt() }
+                                            .testTag(ProjectBoardSearchToggleTag),
+                                    )
                                 }
                                 ttGlassIconButton(
-                                    image = ttActionIcons.search,
-                                    contentDescription = stringResource(
-                                        if (searchOpen) {
-                                            Res.string.work_item_search_close
-                                        } else {
-                                            Res.string.work_item_search_open
-                                        },
-                                    ),
-                                    onClick = {
-                                        searchOpen = !searchOpen
-                                        // Closing is also a reset. A query that outlives its field
-                                        // would leave the board filtered by a control that is no
-                                        // longer on screen, with the lanes simply missing cards and
-                                        // nothing to explain why.
-                                        if (!searchOpen) {
-                                            query = ""
-                                            focusManager.clearFocus()
-                                        }
-                                    },
-                                    tint = if (searchOpen) ttAccent() else ttLabel(),
-                                    modifier = Modifier.testTag(ProjectBoardSearchToggleTag),
+                                    image = ttActionIcons.person,
+                                    contentDescription = stringResource(Res.string.board_my_tasks),
+                                    onClick = onToggleMyTasks,
+                                    tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
+                                    modifier = Modifier.testTag(ProjectBoardMyTasksTag),
                                 )
                             }
-                            ttGlassIconButton(
-                                image = ttActionIcons.person,
-                                contentDescription = stringResource(Res.string.board_my_tasks),
-                                onClick = onToggleMyTasks,
-                                tint = if (showOnlyMyTasks) ttAccent() else ttLabel(),
-                                modifier = Modifier.testTag(ProjectBoardMyTasksTag),
-                            )
+                        }
+                        // A compact field is an overlay in this row, not another child of the
+                        // outer column: giving it height would move the lanes on every frame of
+                        // the reveal. Its measured width stops it before the close toggle.
+                        if (projection.project != null && !wideHeader && !isSelecting) {
+                            SearchReveal(
+                                visible = searchOpen,
+                                modifier = Modifier.matchParentSize(),
+                                overlay = true,
+                            ) { fieldModifier ->
+                                Box(fieldModifier.width(compactSearchFieldWidth)) {
+                                    searchField(Modifier.fillMaxWidth())
+                                }
+                            }
                         }
                     }
 
@@ -353,14 +386,6 @@ fun ProjectBoardScreen(
                                 .horizontalGutter()
                                 .padding(top = ttSpacing.lg),
                         )
-                    }
-                }
-
-                // Compact header only: on a wide one the field is already in the header row, and
-                // composing it here as well would put two fields on screen with one query.
-                if (projection.project != null && !wideHeader && !isSelecting) {
-                    SearchReveal(visible = searchOpen) {
-                        searchField(Modifier.fillMaxWidth().horizontalGutter())
                     }
                 }
 

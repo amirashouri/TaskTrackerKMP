@@ -73,6 +73,9 @@ abstract class TaskTrackerAppScenarios {
     fun signingOutStopsTheProjectsObservation() = runComposeUiTest(block = ShellScenarios.signingOutStopsTheProjectsObservation)
     @Test
     fun creatingAProjectAddsItToTheList() = runComposeUiTest(block = ShellScenarios.creatingAProjectAddsItToTheList)
+    @Test
+    fun theUnsavedNewTaskSurvivesATabSwitch() =
+        runComposeUiTest(block = ShellScenarios.theUnsavedNewTaskSurvivesATabSwitch)
 
     @Test
     fun projectEpicSegmentScenarios() = runComposeUiTest(block = ShellScenarios.projectEpicSegmentScenarios)

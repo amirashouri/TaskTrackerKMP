@@ -190,6 +190,9 @@ fun NavigationHost(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    // The draft outlives a tab switch because this host does; an editor-local `remember`
+    // would be disposed with the form it is meant to preserve.
+    val workItemDraftStore = remember { WorkItemDraftStore() }
     var navigation by remember(router) { mutableStateOf(router.state.value) }
     LaunchedEffect(router) { router.state.collect { navigation = it } }
 
@@ -591,6 +594,7 @@ fun NavigationHost(
                         teamPort = environment.teamPort,
                         adminProjectsPort = adminProjectsPort,
                         focusCommentID = editorRoute.focusCommentID,
+                        draftStore = workItemDraftStore,
                         onDismiss = { dismissEditor(editorRoute) },
                     )
                 }
@@ -2288,6 +2292,8 @@ private fun WorkItemEditorDestination(
      */
     adminProjectsPort: AdminProjectsPort? = null,
     focusCommentID: com.tasktracker.core.CommentID? = null,
+    /** Session-scoped unsaved creates, owned by [NavigationHost]. */
+    draftStore: WorkItemDraftStore,
 ) {
     // A suspend read, so it cannot be a `remember` block: the model has to be built *after*
     // the item is in hand, and building it earlier would hand it a null and turn an edit into
@@ -2334,6 +2340,12 @@ private fun WorkItemEditorDestination(
         value = runCatching { repository.project(projectID) }.getOrNull()
     }
 
+    // Consumed once, on the first composition of a create. `take` removes it so a second
+    // editor cannot be handed the same form, and the key keeps an edit from touching it at all.
+    val initialDraft = remember(projectID, workItemID, draftStore) {
+        if (workItemID == null) draftStore.take(projectID) else null
+    }
+
     // The tag catalog the picker offers and the draft validates against. `null` is "not known
     // yet" and draws nothing; an empty list is a project whose admin defined no tags.
     //
@@ -2374,6 +2386,7 @@ private fun WorkItemEditorDestination(
         opener,
         currentProject,
         catalog,
+        initialDraft,
     ) {
         WorkItemEditorModel(
             projectID,
@@ -2388,7 +2401,21 @@ private fun WorkItemEditorDestination(
             availableTags = catalog,
             availableStatuses = currentProject?.statuses.orEmpty(),
             initialStatusKey = initialStatusKey,
+            initialDraft = initialDraft,
         )
+    }
+
+    // A create leaves composition on a tab switch, a pushed route, or the Settings trip from
+    // `onManageTags`; none of those is a decision to throw the form away. An explicit Cancel
+    // and a successful Save set this flag and clear the store, so the same dispose path does
+    // not put back what the user just discarded.
+    var draftDiscarded by remember(model) { mutableStateOf(false) }
+    DisposableEffect(model) {
+        onDispose {
+            if (model.isCreating && !draftDiscarded && model.hasUnsavedChanges) {
+                model.snapshot()?.let { draft -> draftStore.put(projectID, draft) }
+            }
+        }
     }
 
     // The thread and the attachments load as soon as the model exists. A create has no
@@ -2539,6 +2566,10 @@ private fun WorkItemEditorDestination(
                 val stored = if (outcome != null) model.flushStagedAttachments() else emptyList()
                 isBusy = false
                 if (outcome != null) {
+                    if (model.isCreating) {
+                        draftDiscarded = true
+                        draftStore.clear(projectID)
+                    }
                     // The same non-blocking handoff an edit's attach uses: the local commit
                     // is done and the metadata is queued, so the bytes upload in the
                     // background and a failure there is retried by a later sync.
@@ -2550,6 +2581,10 @@ private fun WorkItemEditorDestination(
             }
         },
         onCancel = {
+            if (model.isCreating) {
+                draftDiscarded = true
+                draftStore.clear(projectID)
+            }
             onDismiss()
         },
         hasUnsavedChanges = model.hasUnsavedChanges,
