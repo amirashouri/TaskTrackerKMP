@@ -57,6 +57,13 @@ data class RouterState(
      * field, so returning to the tab later does not reopen a search the user already left.
      */
     val pendingSearch: Boolean = false,
+    /**
+     * A request to open the Projects tab's new-project form, placed by the desktop menu.
+     *
+     * One-shot like [pendingSearch]: the Projects host consumes it when it opens the form, so
+     * coming back to the tab later does not reopen a form the user already dismissed.
+     */
+    val pendingNewProject: Boolean = false,
 ) {
     /**
      * The navigation stack belonging to [onTab].
@@ -255,6 +262,9 @@ class Router {
         state.copy(
             selectedTab = AppTab.Backlog,
             pendingSearch = true,
+            // One menu request supersedes the other; a pending project form must not open
+            // behind the backlog the user just asked for.
+            pendingNewProject = false,
         ).withPath(AppTab.Backlog, emptyList())
     }
 
@@ -264,6 +274,33 @@ class Router {
             val current = _state.value
             if (!current.pendingSearch) return false
             if (_state.compareAndSet(current, current.copy(pendingSearch = false))) {
+                return true
+            }
+        }
+    }
+
+    /**
+     * Opens the Projects tab's new-project form, on the list rather than over whatever was
+     * pushed onto the tab.
+     *
+     * The menu can only change router state, so this records an intent for the Projects host to
+     * carry out. Before sign-in there is no Projects tab to open, so the request is a no-op.
+     */
+    fun requestNewProject() = update { state ->
+        if (state.root != RootDestination.Main) return@update state
+        state.copy(
+            selectedTab = AppTab.Projects,
+            pendingNewProject = true,
+            pendingSearch = false,
+        ).withPath(AppTab.Projects, emptyList())
+    }
+
+    /** Takes the pending new-project request, or `false` when there is none. One-shot. */
+    fun consumePendingNewProject(): Boolean {
+        while (true) {
+            val current = _state.value
+            if (!current.pendingNewProject) return false
+            if (_state.compareAndSet(current, current.copy(pendingNewProject = false))) {
                 return true
             }
         }
@@ -442,8 +479,10 @@ class Router {
                 activeProjectID = link.path.firstOrNull()?.selectsActiveProject ?: state.activeProjectID,
                 // A later link without an address must not drop one not yet consumed.
                 pendingServerAddress = link.serverAddress ?: state.pendingServerAddress,
-                // A link is a new destination, not the list the pending search was meant for.
+                // A link is a new destination, not the list a pending menu action was meant
+                // for.
                 pendingSearch = false,
+                pendingNewProject = false,
             ).withPath(link.tab, link.path)
         }
         logNotice("routing: opened deep link")
@@ -514,6 +553,7 @@ class Router {
         notificationsPath = emptyList(),
         settingsPath = emptyList(),
         pendingSearch = false,
+        pendingNewProject = false,
     )
 
     private fun RouterState.withPath(tab: AppTab, path: List<AppRoute>): RouterState = when (tab) {

@@ -330,6 +330,50 @@ class RouterTest {
     }
 
     @Test
+    fun `a new project request opens projects at its root and is consumed once`() {
+        val router = Router()
+        router.enterMain()
+        router.push(AppRoute.EpicEditor(null), AppTab.Projects)
+        router.selectTab(AppTab.Settings)
+
+        router.requestNewProject()
+
+        assertEquals(AppTab.Projects, router.selectedTab)
+        assertTrue(
+            router.path(AppTab.Projects).isEmpty(),
+            "a pushed editor must be popped so the new-project form is not hidden behind it",
+        )
+        assertTrue(router.state.value.pendingNewProject)
+        assertTrue(router.consumePendingNewProject())
+        assertFalse(router.state.value.pendingNewProject)
+        assertFalse(router.consumePendingNewProject(), "the request is one-shot")
+    }
+
+    @Test
+    fun `a new project request before sign-in does nothing`() {
+        val router = Router()
+        router.selectTab(AppTab.Settings)
+
+        router.requestNewProject()
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertFalse(router.state.value.pendingNewProject)
+    }
+
+    @Test
+    fun `a search request supersedes a pending new project request`() {
+        val router = Router()
+        router.enterMain()
+        router.openProject(projectID, AppTab.Backlog)
+        router.requestNewProject()
+
+        router.requestSearch()
+
+        assertFalse(router.state.value.pendingNewProject)
+        assertTrue(router.state.value.pendingSearch)
+    }
+
+    @Test
     fun `switching to the tab already selected emits nothing`() {
         val router = Router()
         router.enterMain()
