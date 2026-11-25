@@ -924,6 +924,41 @@ object ShellScenarios {
     }
 
     /**
+     * A new task's unsaved fields survive leaving the tab and coming back.
+     *
+     * The route stays on the Backlog stack across a tab switch, but the destination does not:
+     * only the selected tab is composed. Without a shell-held draft the rebuilt editor starts
+     * blank, which is the loss this scenario is named for.
+     */
+    val theUnsavedNewTaskSurvivesATabSwitch: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+        )
+        waitForIdle()
+
+        router.openProject(project.id, inTab = AppTab.Backlog)
+        router.push(AppRoute.WorkItemEditor(project.id, null), AppTab.Backlog)
+        waitForIdle()
+        onNodeWithTag("title").performTextInput("Draft title")
+        onNodeWithTag("details").performTextInput("Draft details")
+        waitForIdle()
+
+        router.selectTab(AppTab.Board)
+        waitForIdle()
+        router.selectTab(AppTab.Backlog)
+        waitForIdle()
+
+        onNodeWithTag("title").assertTextEquals("Draft title")
+        onNodeWithTag("details").assertTextEquals("Draft details")
+    }
+
+    /**
      * The Epic segment switches the list, and the choice survives a tab switch.
      *
      * The survival half is the one that matters: a `remember` in the destination would pass

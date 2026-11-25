@@ -98,6 +98,62 @@ class WorkItemEditorModelTest {
         )
     }
 
+    /**
+     * A shell-held draft wins over the route's seed, including fields a lane-add does not carry.
+     *
+     * This is the model half of draft survival: the route may say Backlog while the form holds
+     * an In Progress task, and the invalid points text must survive even though it parses to no
+     * number. Staged files are included because a pick the user watched land is work too.
+     */
+    @Test
+    fun `a restored create keeps the saved draft over its route seed`() = runTest {
+        val project = testProject()
+        val blocker = testWorkItem(projectID = project.id)
+        val tag = ProjectTag(name = "Bug")
+        val due = Instant.parse("2026-04-01T00:00:00Z")
+        val draft = WorkItemDraft(
+            title = "Draft title",
+            details = "Draft notes",
+            storyPointsText = "five",
+            status = WorkItemStatus.InProgress,
+            statusKey = null,
+            priority = Priority.High,
+            assigneeID = samUserID,
+            dueDate = due,
+            recurrence = Recurrence.Weekly(5),
+            blockedByIDs = listOf(blocker.id),
+            tagIDs = listOf(tag.id),
+            stagedAttachments = listOf(
+                PickedFile(fileName = "report.txt", mimeType = "text/plain", bytes = byteArrayOf(1)),
+            ),
+        )
+
+        val model = WorkItemEditorModel(
+            projectID = project.id,
+            existing = null,
+            repository = FakeProjectRepository(),
+            dateProvider = TestDateProvider(),
+            initialStatus = WorkItemStatus.Backlog,
+            availableTags = listOf(tag),
+            initialDraft = draft,
+        )
+
+        assertEquals("Draft title", model.title)
+        assertEquals("Draft notes", model.details)
+        assertEquals("five", model.storyPointsText)
+        assertNull(model.storyPoints, "invalid text stays in the field but is not a number")
+        assertEquals(WorkItemStatus.InProgress, model.status)
+        assertEquals(Priority.High, model.priority)
+        assertEquals(samUserID, model.assigneeID)
+        assertEquals(due, model.dueDate)
+        assertEquals(Recurrence.Weekly(5), model.recurrence)
+        assertEquals(listOf(blocker.id), model.blockedByIDs)
+        assertEquals(listOf(tag.id), model.tagIDs)
+        assertEquals(1, model.stagedAttachments.size)
+        assertTrue(model.hasUnsavedChanges)
+        assertEquals(draft, model.snapshot())
+    }
+
     /** Typing into a create is work, and clearing it back to the start is clean again. */
     @Test
     fun `a typed title is work to discard and clearing it is not`() = runTest {
