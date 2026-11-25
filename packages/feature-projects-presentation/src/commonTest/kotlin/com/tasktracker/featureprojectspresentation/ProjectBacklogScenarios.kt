@@ -269,77 +269,80 @@ object ProjectBacklogScenarios {
     }
 
     /**
-     * The filter row and the search field are the same control width as the section picker, and
-     * the field sits below the sort row rather than above the picker.
+     * A compact search overlays the actions row without moving the picker, sort row or list.
      *
-     * ## The defect this exists for
-     *
-     * The picker is capped at `ttSpacing.pickerMaxWidth` so a desktop does not stretch three
-     * labels into a bar across the page; the sort row and the field below it were plain
-     * `fillMaxWidth`, so the header stacked a capped control, a full-page band and a full-page
-     * field. On a wide window that is three different widths on three consecutive rows, which is
-     * what "does not look nice on a desktop" looked like. The cap is the picker's own sizing
-     * system, so all three now share it.
-     *
-     * The order is asserted as geometry, not as source order: the field is the filter for the
-     * list, and it belongs after the order controls, not between the add action and the picker.
-     * The equality of widths is what carries across hosts — a phone window is under the cap, so
-     * every control fills it and the assertion still holds there.
+     * The field used to be a fourth row under the sort controls. It shared the picker's width,
+     * but it also grew the measured header and pushed the first row down on every frame of the
+     * reveal. It now sits in the actions row, ending before the toggle. Presence alone cannot
+     * tell a settled overlay from a field that took a row, so the picker, the sort row and the
+     * first list row are measured before and after opening.
      */
     val theSortAndSearchRowsShareThePickersWidth: suspend ComposeUiTest.() -> Unit = {
         // The compact stack. The wide arrangement is a row, not a column of equal widths, and
         // has its own scenario below.
-        backlogShowing(items = backlogItems(), onAddTask = {}, width = COMPACT_HEADER_WIDTH)
+        val items = backlogItems()
+        backlogShowing(items = items, onAddTask = {}, width = COMPACT_HEADER_WIDTH)
         waitForIdle()
 
-        val picker = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
-        val sort = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
-
-        assertTrue(
-            abs(sort.width - picker.width) <= EDGE_TOLERANCE_PX,
-            "the sort row is ${sort.width}px wide under a ${picker.width}px picker, so the " +
-                "header stacks two different control widths: sort=$sort picker=$picker",
-        )
-        assertTrue(
-            abs(sort.left - picker.left) <= EDGE_TOLERANCE_PX,
-            "the sort row starts at ${sort.left}px and the picker at ${picker.left}px, so the " +
-                "two controls do not share a column: sort=$sort picker=$picker",
-        )
-        assertTrue(
-            sort.top >= picker.bottom - EDGE_TOLERANCE_PX,
-            "the sort row (${sort.top}..${sort.bottom}) is drawn above or through the section " +
-                "picker (${picker.top}..${picker.bottom}) instead of below it",
-        )
+        val pickerClosed = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val sortClosed = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+        val firstRowClosed = composedRow(items.first()).minBy { it.top }
 
         onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
         waitForIdle()
 
+        val pickerOpen = onNodeWithTag(ProjectBacklogSectionsTag).fetchSemanticsNode().boundsInRoot
+        val sortOpen = onNodeWithTag(BacklogSortControlsTag).fetchSemanticsNode().boundsInRoot
+        val firstRowOpen = composedRow(items.first()).minBy { it.top }
         val search = onNodeWithTag(ProjectBacklogSearchFieldTag).fetchSemanticsNode().boundsInRoot
+        val toggle = onNodeWithTag(ProjectBacklogSearchToggleTag).fetchSemanticsNode().boundsInRoot
 
         assertTrue(
-            abs(search.width - picker.width) <= EDGE_TOLERANCE_PX,
-            "the search field is ${search.width}px wide under a ${picker.width}px picker, so " +
-                "it is a full-page band rather than the header's control width: " +
-                "search=$search picker=$picker",
+            abs(pickerOpen.top - pickerClosed.top) <= EDGE_TOLERANCE_PX &&
+                abs(sortOpen.top - sortClosed.top) <= EDGE_TOLERANCE_PX,
+            "opening search moved the header rows from picker=${pickerClosed.top}, " +
+                "sort=${sortClosed.top} to picker=${pickerOpen.top}, sort=${sortOpen.top}: " +
+                "the field must overlay a row, not add one",
         )
         assertTrue(
-            abs(search.left - picker.left) <= EDGE_TOLERANCE_PX,
-            "the search field starts at ${search.left}px and the picker at ${picker.left}px, " +
-                "so they do not share a column: search=$search picker=$picker",
+            abs(pickerOpen.left - pickerClosed.left) <= EDGE_TOLERANCE_PX &&
+                abs(pickerOpen.width - pickerClosed.width) <= EDGE_TOLERANCE_PX &&
+                abs(sortOpen.left - sortClosed.left) <= EDGE_TOLERANCE_PX &&
+                abs(sortOpen.width - sortClosed.width) <= EDGE_TOLERANCE_PX,
+            "opening search resized the header rows: sort=$sortOpen picker=$pickerOpen",
         )
         assertTrue(
-            search.top >= sort.bottom - EDGE_TOLERANCE_PX,
-            "the search field (${search.top}..${search.bottom}) is drawn above the sort row " +
-                "(${sort.top}..${sort.bottom}) instead of below it, so the field sits between " +
-                "the add action and the section picker again",
+            abs(firstRowOpen.top - firstRowClosed.top) <= EDGE_TOLERANCE_PX,
+            "the first row moved from ${firstRowClosed.top}px to ${firstRowOpen.top}px when " +
+                "search opened: the measured list inset changed instead of the field overlaying",
         )
-        // The compact layout stacks these, so their heights are not forced by a shared row;
-        // they still have to agree, or the two layouts of the same field read as two controls.
+
         assertTrue(
-            abs(search.height - sort.height) <= EDGE_TOLERANCE_PX,
-            "the compact search field is ${search.height}px tall against a ${sort.height}px " +
-                "sort row, so the field is shorter in this layout than in the wide one: " +
-                "search=$search sort=$sort",
+            abs(search.left - pickerOpen.left) <= EDGE_TOLERANCE_PX,
+            "the search field starts at ${search.left}px and the picker at ${pickerOpen.left}px, " +
+                "so they do not share a column: search=$search picker=$pickerOpen",
+        )
+        assertTrue(
+            search.right <= toggle.left + EDGE_TOLERANCE_PX,
+            "the field ends at ${search.right}px and the toggle starts at ${toggle.left}px, " +
+                "so the overlay covers the only way to close it: search=$search toggle=$toggle",
+        )
+        val fieldCentre = (search.top + search.bottom) / 2f
+        val toggleCentre = (toggle.top + toggle.bottom) / 2f
+        assertTrue(
+            abs(fieldCentre - toggleCentre) <= EDGE_TOLERANCE_PX,
+            "the field and its toggle are not on one centre line: search=$search toggle=$toggle",
+        )
+        assertTrue(
+            search.top < sortOpen.top,
+            "the field (${search.top}..${search.bottom}) is below the sort row " +
+                "(${sortOpen.top}..${sortOpen.bottom}) instead of overlaying the actions row",
+        )
+        assertTrue(
+            abs(search.height - sortOpen.height) <= EDGE_TOLERANCE_PX,
+            "the compact search field is ${search.height}px tall against a ${sortOpen.height}px " +
+                "sort row, so the two layouts of the same field disagree: " +
+                "search=$search sort=$sortOpen",
         )
     }
 
@@ -517,9 +520,26 @@ object ProjectBacklogScenarios {
      * ends where the toggle begins — the whole width, not the Backlog portion. That is the
      * difference between "the field stayed put" and "the field was re-laid out by another
      * parent", which is what the previous implementation did.
+     *
+     * The ending also opens the field from a closed Kanban header. That section has no sort
+     * row, so the field's row is the only thing giving the header height; if that height is not
+     * reserved, opening moves the whole list down through the measured top inset.
      */
     val theWideSearchKeepsItsSlotAcrossSections: suspend ComposeUiTest.() -> Unit = {
-        backlogShowing(items = backlogItems(), onAddTask = {}, width = WIDE_HEADER_WIDTH)
+        // One real Kanban row: the section's empty state would pass a row-position check while
+        // hiding the header-height defect this scenario also covers.
+        val kanbanItem = backlogItems().first().copy(
+            id = WorkItemID("00000000-0000-4000-8000-000000000099"),
+            key = WorkItemKey("TT-99"),
+            status = WorkItemStatus.Todo,
+        )
+        val items = backlogItems() + kanbanItem
+        backlogShowing(
+            items = items,
+            onAddTask = {},
+            width = WIDE_HEADER_WIDTH,
+            project = ViewPreviewData.seededProject.withBoardStatuses(singleBoardStatus.first()),
+        )
         waitForIdle()
 
         onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
@@ -576,6 +596,26 @@ object ProjectBacklogScenarios {
                 abs(fieldBack.width - fieldBefore.width) <= EDGE_TOLERANCE_PX,
             "returning to Backlog did not restore the field to the slot it left: " +
                 "before=$fieldBefore after=$fieldBack",
+        )
+
+        // Kanban has no sort row, so its field row used to have zero height while closed. The
+        // header is measured, so the click grew it and pushed every row down. Opening from the
+        // closed state is the only way to catch that; switching sections with the field already
+        // open cannot.
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+        onNodeWithTag(SectionIndicatorTag(getString(Res.string.backlog_section_kanban))).performClick()
+        waitForIdle()
+        val kanbanRowClosed = composedRow(kanbanItem).minBy { it.top }
+
+        onNodeWithTag(ProjectBacklogSearchToggleTag).performClick()
+        waitForIdle()
+        val kanbanRowOpen = composedRow(kanbanItem).minBy { it.top }
+        onNodeWithTag(ProjectBacklogSearchFieldTag).assertExists()
+        assertTrue(
+            abs(kanbanRowOpen.top - kanbanRowClosed.top) <= EDGE_TOLERANCE_PX,
+            "opening search in Kanban moved the first row from ${kanbanRowClosed.top}px to " +
+                "${kanbanRowOpen.top}px: the field's row must keep its height while closed",
         )
     }
 

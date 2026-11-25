@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -33,6 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -198,6 +203,9 @@ fun ProjectBacklogScreen(
     // Closed by default and screen state, like the query: a list is mostly read, and the field
     // returns closed on the next visit rather than remembering that it was open once.
     var searchOpen by remember { mutableStateOf(false) }
+    // The compact overlay stops before its toggle. Measured rather than inferred: the select
+    // action is conditional, so the toggle is not at a fixed offset from the row's trailing edge.
+    var searchToggleLeftPx by remember { mutableIntStateOf(0) }
     // The sort sheet's visibility. Screen state for the same reason: it is a visit, not a
     // preference — the order it edits is the preference, and that is reported on every change.
     var sortSheetOpen by remember { mutableStateOf(false) }
@@ -478,6 +486,9 @@ fun ProjectBacklogScreen(
                         // picker and the two icon actions without squeezing the project name, so the
                         // header keeps its stacked phone arrangement.
                         val wideHeader = maxWidth >= BacklogHeaderWideMinimumWidth
+                        val compactSearchFieldWidth = with(LocalDensity.current) {
+                            (searchToggleLeftPx - ttSpacing.xxl.roundToPx() - ttSpacing.sm.roundToPx()).toDp()
+                        }.coerceAtLeast(0.dp)
                         val sectionPicker: @Composable (Modifier) -> Unit = { pickerModifier ->
                             TTGlassSegmentedPicker(
                                 options = listOf(BacklogSection.Backlog, BacklogSection.Kanban, BacklogSection.Archived),
@@ -580,59 +591,80 @@ fun ProjectBacklogScreen(
                             // On a wide header the section picker joins this row, between the project
                             // selector and the two icon actions: it is a destination switch, so it belongs
                             // beside the project it switches within, not below the actions.
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                            ) {
-                                if (onOpenSwitcher != null) {
-                                    ProjectSwitcherButton(
-                                        project = projection.project,
-                                        onClick = onOpenSwitcher,
-                                        // On a wide header the switcher wraps its own content and
-                                        // the picker's weighted box takes the rest: weighting the
-                                        // switcher instead would leave its unused share as a gap
-                                        // *before* the box, so the picker would centre in the wrong
-                                        // space. On a compact header it still fills the row.
-                                        modifier = if (wideHeader) Modifier else Modifier.weight(1f),
-                                        projects = projects,
-                                        onSelectProject = onSelectProject,
-                                    )
-                                } else {
-                                    Spacer(if (wideHeader) Modifier else Modifier.weight(1f))
-                                }
-                                if (wideHeader) {
-                                    // Centred in the gap between the selector and the add action:
-                                    // the box spans exactly that gap, so centring the capped picker
-                                    // inside it leaves equal space at either end. The search toggle
-                                    // is not in this row — it sits in the sort row's trailing slot
-                                    // below, so the field grows where the toggle already was.
-                                    Box(
-                                        modifier = Modifier.weight(1f),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        sectionPicker(Modifier)
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                ) {
+                                    if (onOpenSwitcher != null) {
+                                        ProjectSwitcherButton(
+                                            project = projection.project,
+                                            onClick = onOpenSwitcher,
+                                            // On a wide header the switcher wraps its own content and
+                                            // the picker's weighted box takes the rest: weighting the
+                                            // switcher instead would leave its unused share as a gap
+                                            // *before* the box, so the picker would centre in the wrong
+                                            // space. On a compact header it still fills the row.
+                                            modifier = if (wideHeader) Modifier else Modifier.weight(1f),
+                                            projects = projects,
+                                            onSelectProject = onSelectProject,
+                                        )
+                                    } else {
+                                        Spacer(if (wideHeader) Modifier else Modifier.weight(1f))
+                                    }
+                                    if (wideHeader) {
+                                        // Centred in the gap between the selector and the add action:
+                                        // the box spans exactly that gap, so centring the capped picker
+                                        // inside it leaves equal space at either end. The search toggle
+                                        // is not in this row — it sits in the sort row's trailing slot
+                                        // below, so the field grows where the toggle already was.
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            sectionPicker(Modifier)
+                                        }
+                                    }
+                                    selectAction(Modifier)
+                                    if (!wideHeader && !isSelecting) {
+                                        searchToggle(
+                                            Modifier.onGloballyPositioned {
+                                                searchToggleLeftPx = it.boundsInRoot().left.toInt()
+                                            },
+                                        )
+                                    }
+                                    onAddTask?.let { addTask ->
+                                        ttGlassIconButton(
+                                            image = ttActionIcons.add,
+                                            contentDescription = stringResource(Res.string.board_add_task),
+                                            onClick = addTask,
+                                            modifier = Modifier.testTag(BacklogAddTaskTag),
+                                        )
                                     }
                                 }
-                                selectAction(Modifier)
+                                // Compact search lies over this row rather than adding one below it:
+                                // the header is measured for the list's top inset, so any height the
+                                // field took would move the whole list on every animation frame.
                                 if (!wideHeader && !isSelecting) {
-                                    searchToggle(Modifier)
-                                }
-                                onAddTask?.let { addTask ->
-                                    ttGlassIconButton(
-                                        image = ttActionIcons.add,
-                                        contentDescription = stringResource(Res.string.board_add_task),
-                                        onClick = addTask,
-                                        modifier = Modifier.testTag(BacklogAddTaskTag),
-                                    )
+                                    SearchReveal(
+                                        visible = searchOpen,
+                                        modifier = Modifier.matchParentSize(),
+                                        overlay = true,
+                                    ) { fieldModifier ->
+                                        Box(fieldModifier.width(compactSearchFieldWidth)) {
+                                            searchField(Modifier.fillMaxWidth())
+                                        }
+                                    }
                                 }
                             }
                             errorMessage?.let { message ->
                                 ttBanner(message = message, onDismiss = onDismissError)
                             }
-                            // Compact header: the picker keeps its own row under the actions, the sort
-                            // row fills the column, and the field unfolds below it. The wide branch below
-                            // is not a wider version of this one — it rearranges the same controls.
+                            // Compact header: the picker keeps its own row under the actions and the
+                            // sort row fills the column. The field overlays the actions row above
+                            // instead of adding a row of its own. The wide branch below is not a wider
+                            // version of this one — it rearranges the same controls.
                             if (!wideHeader) {
                                 sectionPicker(Modifier)
                             }
@@ -693,13 +725,17 @@ fun ProjectBacklogScreen(
                                                         // portion of it. The weighted box gives it
                                                         // everything the toggle does not use, and
                                                         // still lets the reveal travel from zero
-                                                        // width. The leading inset mirrors the row's
-                                                        // gap to the toggle, so the field is not
-                                                        // flush against the header edge on one side
-                                                        // and spaced on the other.
+                                                        // width. Its height is reserved even while
+                                                        // closed: this row is the only thing giving
+                                                        // the header height here, so a zero-height
+                                                        // closed row would grow on the click and
+                                                        // push the whole list down through the
+                                                        // measured top inset. The leading inset
+                                                        // mirrors the row's gap to the toggle.
                                                         Box(
                                                             Modifier
                                                                 .weight(1f)
+                                                                .height(BacklogFilterRowHeight)
                                                                 .padding(start = ttSpacing.sm),
                                                         ) {
                                                             SearchRevealBeside(visible = searchOpen) {
@@ -716,13 +752,16 @@ fun ProjectBacklogScreen(
                                     // leaves the row, so the field grows beside it instead of over the
                                     // only way to dismiss the search.
                                     //
-                                    // Hidden while selecting: the mode closed the query, and a search
-                                    // field would be a filter that unticks rows the user just chose.
-                                    // Hidden through the same sideways fold the field uses rather
-                                    // than an `if`: an instant removal would hand its width to the
-                                    // bar in one frame while the bar is still fading in.
-                                    SearchRevealBeside(visible = !isSelecting) {
-                                        searchToggle(Modifier)
+                                    // Its slot stays reserved while selecting: the mode closed the
+                                    // query, and a search field would be a filter that unticks rows
+                                    // the user just chose. Animating the control's width away at the
+                                    // same time as the bar swap made the sort row reflow sideways
+                                    // under the fading bar, so the slot holds its width and only the
+                                    // control leaves.
+                                    Box(Modifier.size(ttSpacing.iconButtonSize)) {
+                                        if (!isSelecting) {
+                                            searchToggle(Modifier.align(Alignment.Center))
+                                        }
                                     }
                                 }
                             } else {
@@ -753,13 +792,6 @@ fun ProjectBacklogScreen(
                                                     onOpen = openSortSheet,
                                                     modifier = Modifier.fillMaxWidth(),
                                                 )
-                                            }
-                                            // Inside the measured column, so the list's top inset grows with the field
-                                            // and the first row still starts below the header rather than behind it.
-                                            // The reveal is the reason the inset is measured at all: it changes while
-                                            // the field unfolds.
-                                            SearchReveal(visible = searchOpen) {
-                                                searchField(Modifier.widthIn(max = ttSpacing.pickerMaxWidth))
                                             }
                                         }
                                     },
