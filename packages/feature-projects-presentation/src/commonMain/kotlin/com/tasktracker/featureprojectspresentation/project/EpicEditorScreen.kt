@@ -120,7 +120,9 @@ fun EpicEditorScreen(
                 .padding(horizontal = ttSpacing.xxl)
                 .padding(top = ttSpacing.screenGutterLarge, bottom = ttSpacing.xxxl)
                 .testTag(EpicEditorScreenTag),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            // The same field rhythm as the work-item editor: these are separate form
+            // sections, not rows of one list.
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -218,8 +220,8 @@ fun EpicEditorScreen(
             )
             FlowRow(
                 modifier = Modifier.fillMaxWidth().testTag(EpicEditorProjectChipsTag),
-                horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
             ) {
                 model.projectIDs.forEach { id ->
                     SelectedProjectChip(name = projectNames[id] ?: id.stringValue.take(SHORT_ID_LENGTH))
@@ -227,107 +229,117 @@ fun EpicEditorScreen(
             }
 
             if (!model.isCreating) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(DIVIDER_HEIGHT)
-                        .background(ttSeparator()),
-                )
-                Row(
+                // The status block is one reading unit — rule, counts, progress, tasks — so it
+                // keeps the tighter 8dp rhythm inside, while the form sections around it take
+                // the field rhythm.
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
-                    ttText(
-                        text = epicStatusLabel(deriveEpicStatus(subtasks)),
-                        style = ttTypography.captionEmphasised,
-                        color = ttAccent(),
-                        modifier = Modifier.testTag(EpicEditorStatusTag),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(DIVIDER_HEIGHT)
+                            .background(ttSeparator()),
                     )
-                    ttText(
-                        text = stringResource(Res.string.epic_subtasks_label),
-                        style = ttTypography.captionEmphasised,
-                        color = ttLabelSecondary(),
-                    )
-                    Box(modifier = Modifier.weight(1f))
-                    ttGlassButton(
-                        label = stringResource(Res.string.epic_link_items),
-                        onClick = {
-                            scope.launch { model.loadCandidates() }
-                            isItemPickerOpen = true
-                        },
-                        modifier = Modifier.testTag(EpicEditorLinkItemsTag),
-                    )
-                }
-                EpicProgressBar(
-                    done = subtasks.count { it.status.isTerminal },
-                    total = subtasks.size,
-                    modifier = Modifier.testTag(EpicEditorProgressTag),
-                )
-                if (subtasks.isEmpty()) {
-                    ttText(
-                        text = stringResource(Res.string.epic_subtasks_empty),
-                        style = ttTypography.footnote,
-                        color = ttLabelSecondary(),
-                    )
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().testTag(EpicEditorSubtasksTag),
-                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        subtasks.forEachIndexed { index, item ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                ttText(
-                                    text = item.key.rawValue,
-                                    style = ttTypography.captionEmphasised,
-                                    color = ttLabelSecondary(),
-                                )
-                                ttText(
-                                    text = item.title,
-                                    style = ttTypography.callout,
-                                    color = ttLabel(),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                if (item.status.isTerminal) {
-                                    ttText(
-                                        text = "\u2713",
-                                        style = ttTypography.callout,
-                                        color = ttAccent(),
-                                    )
-                                }
-                                // An annotation on the row, not the row's action: the inline close
-                                // glyph keeps the unlink well from dominating the task title.
-                                ttGlassIconButton(
-                                    image = ttActionIcons.close,
-                                    contentDescription = stringResource(Res.string.epic_unlink_item),
-                                    onClick = { scope.launch { model.unlink(item.id) } },
-                                    modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
-                                    size = ttSpacing.xxxl,
-                                    iconSize = ttIconSize.close,
-                                )
-                            }
-                            // Between links only: the line pairs each unlink with the row above it,
-                            // without leaving a stray rule under the last item.
-                            if (index < subtasks.lastIndex) {
-                                Box(
+                        ttText(
+                            text = epicStatusLabel(deriveEpicStatus(subtasks)),
+                            style = ttTypography.captionEmphasised,
+                            color = ttAccent(),
+                            modifier = Modifier.testTag(EpicEditorStatusTag),
+                        )
+                        ttText(
+                            text = stringResource(Res.string.epic_subtasks_label),
+                            style = ttTypography.captionEmphasised,
+                            color = ttLabelSecondary(),
+                        )
+                        Box(modifier = Modifier.weight(1f))
+                        ttGlassButton(
+                            label = stringResource(Res.string.epic_link_items),
+                            onClick = {
+                                scope.launch { model.loadCandidates() }
+                                isItemPickerOpen = true
+                            },
+                            modifier = Modifier.testTag(EpicEditorLinkItemsTag),
+                        )
+                    }
+                    EpicProgressBar(
+                        done = subtasks.count { it.status.isTerminal },
+                        total = subtasks.size,
+                        modifier = Modifier.testTag(EpicEditorProgressTag),
+                    )
+                    if (subtasks.isEmpty()) {
+                        ttText(
+                            text = stringResource(Res.string.epic_subtasks_empty),
+                            style = ttTypography.footnote,
+                            color = ttLabelSecondary(),
+                        )
+                    } else {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().testTag(EpicEditorSubtasksTag),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                        ) {
+                            subtasks.forEachIndexed { index, item ->
+                                Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(DIVIDER_HEIGHT)
-                                        .background(ttSeparator()),
-                                )
+                                        .padding(vertical = ttSpacing.xs),
+                                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    ttText(
+                                        text = item.key.rawValue,
+                                        style = ttTypography.captionEmphasised,
+                                        color = ttLabelSecondary(),
+                                    )
+                                    ttText(
+                                        text = item.title,
+                                        style = ttTypography.callout,
+                                        color = ttLabel(),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    if (item.status.isTerminal) {
+                                        ttText(
+                                            text = "\u2713",
+                                            style = ttTypography.callout,
+                                            color = ttAccent(),
+                                        )
+                                    }
+                                    // An annotation on the row, not the row's action: the inline close
+                                    // glyph keeps the unlink well from dominating the task title.
+                                    ttGlassIconButton(
+                                        image = ttActionIcons.close,
+                                        contentDescription = stringResource(Res.string.epic_unlink_item),
+                                        onClick = { scope.launch { model.unlink(item.id) } },
+                                        modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
+                                        size = ttSpacing.xxxl,
+                                        iconSize = ttIconSize.close,
+                                    )
+                                }
+                                // Between links only: the line pairs each unlink with the row above it,
+                                // without leaving a stray rule under the last item.
+                                if (index < subtasks.lastIndex) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(DIVIDER_HEIGHT)
+                                            .background(ttSeparator()),
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                // Room for the pinned bar, so the last linked task is not laid out underneath it.
-                Spacer(Modifier.height(tabBarInset + BOTTOM_BAR_CLEARANCE))
+                    // Room for the pinned bar, so the last linked task is not laid out underneath it.
+                    Spacer(Modifier.height(tabBarInset + BOTTOM_BAR_CLEARANCE))
+                }
             }
         }
 
@@ -366,6 +378,7 @@ fun EpicEditorScreen(
     EpicItemPickerSheet(
         items = model.candidateItems,
         selectedEpicID = model.savedEpicID,
+        epicTitles = model.candidateEpicTitles,
         visible = isItemPickerOpen,
         onToggle = { id, isSelected ->
             scope.launch {
@@ -403,7 +416,7 @@ private fun SelectedProjectChip(
         modifier = modifier
             .clip(RoundedCornerShape(ttRadius.control))
             .background(ttSeparator().copy(alpha = CHIP_FILL_ALPHA))
-            .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.xxs)
+            .padding(horizontal = ttSpacing.sm, vertical = ttSpacing.xs)
             .testTag(EpicEditorProjectChipTag(name)),
     ) {
         ttText(

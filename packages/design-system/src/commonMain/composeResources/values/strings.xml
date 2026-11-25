@@ -317,6 +317,10 @@
     <string name="epic_subtasks_label">Tasks</string>
     <string name="epic_subtasks_empty">Link tasks from any project this epic spans.</string>
     <string name="epic_link_items">Link Tasks</string>
+    <string name="epic_link_search_placeholder">Search tasks</string>
+    <string name="epic_link_search_empty">No tasks match your search.</string>
+    <string name="epic_link_other">In another epic</string>
+    <string name="epic_link_other_named">In %1$s</string>
     <string name="epic_unlink_item">Remove from epic</string>
     <string name="backlog_link_epic">Link to epic</string>
     <string name="backlog_link_epic_empty">No epics include this project yet.</string>

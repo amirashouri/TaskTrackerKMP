@@ -73,8 +73,19 @@ class EpicEditorModel(
     var subtasks: List<WorkItem> by mutableStateOf(emptyList())
         private set
 
-    /** All items in the spanned projects, including ones already linked here, for the picker. */
+    /**
+     * The picker's choices: items in the spanned projects that could join this epic, plus
+     * anything already linked here.
+     *
+     * Finished and filed-away items are not offered as new subtasks, but an item already
+     * linked to this epic stays in the list so the picker can still show its checkmark and
+     * unlink it.
+     */
     var candidateItems: List<WorkItem> by mutableStateOf(emptyList())
+        private set
+
+    /** Titles for candidate items that already belong to a story, keyed by epic id. */
+    var candidateEpicTitles: Map<EpicID, String> by mutableStateOf(emptyMap())
         private set
 
     var savedEpicID: EpicID? by mutableStateOf(existing?.id)
@@ -202,20 +213,26 @@ class EpicEditorModel(
     }
 
     /**
-     * Every item in the epic's projects, including the ones already linked here.
+     * The epic's projects' items that are eligible to join it, plus the ones already linked.
      *
-     * The picker draws a checkmark from each item's [WorkItem.epicID] and toggles it, so a linked
-     * item has to be present too. Items linked to another epic are included as well: the product
-     * allows moving a task between stories, and the link replaces the old one.
+     * Terminal (`Done`/`Closed`) and filed-away items are excluded because finished work is not
+     * a new subtask. An item that already carries this epic's id is kept regardless of status:
+     * the picker draws a checkmark from [WorkItem.epicID] and toggles it, so a linked Done item
+     * has to remain visible to be unlinked. Items linked to another epic are kept too: the
+     * product allows moving a task between stories, and the link replaces the old one.
      */
     suspend fun loadCandidates() {
-        if (savedEpicID == null) return
+        val epicID = savedEpicID ?: return
         val spanned = projectIDs.toSet()
         val loaded = reporting {
             spanned.flatMap { repository.workItems(it) }
+                .filter { it.epicID == epicID || (!it.status.isTerminal && !it.isArchived) }
                 .sortedWith(compareBy({ it.projectID.stringValue }, { it.key.rawValue }))
         }.orEmpty()
         candidateItems = loaded
+        candidateEpicTitles = reporting {
+            repository.epics().associate { it.id to it.title }
+        }.orEmpty()
     }
 
     private suspend fun refreshSubtasks() {

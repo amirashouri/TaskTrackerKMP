@@ -80,7 +80,7 @@ fun EpicProjectDropdown(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = ttSpacing.xs)
+                    .padding(top = ttSpacing.sm)
                     .ttGlassSurface(
                         shape = RoundedCornerShape(ttRadius.control),
                         base = ttSurface(),
@@ -106,7 +106,7 @@ fun EpicProjectDropdown(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(EpicProjectPickerRowsTag),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                    verticalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                 ) {
                     if (projects.isEmpty()) {
                         ttText(
@@ -114,7 +114,7 @@ fun EpicProjectDropdown(
                             style = ttTypography.footnote,
                             color = ttLabelSecondary(),
                             modifier = Modifier.padding(
-                                horizontal = ttSpacing.sm,
+                                horizontal = ttSpacing.md,
                                 vertical = ttSpacing.md,
                             ),
                         )
@@ -129,7 +129,7 @@ fun EpicProjectDropdown(
                                     role = Role.Checkbox,
                                     onClick = { onToggle(project.id) },
                                 )
-                                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm)
+                                .padding(horizontal = ttSpacing.md, vertical = ttSpacing.md)
                                 .testTag(EpicProjectPickerRowTag(project.id.stringValue)),
                             horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
                             verticalAlignment = Alignment.CenterVertically,
