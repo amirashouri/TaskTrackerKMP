@@ -1029,6 +1029,11 @@
          it is showing. -->
     <string name="work_item_search_open">Search tasks</string>
     <string name="work_item_search_close">Close search</string>
+    <string name="epic_search_placeholder">Search epics</string>
+    <string name="epic_search_open">Search epics</string>
+    <string name="epic_search_close">Close search</string>
+    <string name="epic_search_empty_title">No matching epics</string>
+    <string name="epic_search_empty_body">Try a different word, or clear the search to see everything.</string>
 
     <!--
       Agent. The machine that holds the code runs `tt agent run`; the server only

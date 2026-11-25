@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.semantics.SemanticsActions
@@ -17,6 +19,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.ProjectID
 import com.tasktracker.designsystem.SwipeDefaults
+import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.featureprojectsdomain.ProjectSummary
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.common_delete
@@ -385,6 +388,78 @@ object ProjectsListScenarios {
             getString(Res.string.project_remove_title, summary.name),
         ).assertIsDisplayed()
     }
+
+    /**
+     * The Epic segment's search narrows the cards by title and spans the whole content column
+     * on a wide host, rather than stopping at the backlog's field cap.
+     */
+    val epicSearchFiltersAndFillsTheWidth: suspend ComposeUiTest.() -> Unit = {
+        val project = ViewPreviewData.seededProject
+        val checkout = testEpic(listOf(project.id), title = "Checkout")
+        val onboarding = testEpic(listOf(project.id), title = "Onboarding")
+        val width = 1000.dp
+        listShowing(
+            rows = emptyList(),
+            segment = ProjectsSegment.Epics,
+            epicRows = listOf(
+                EpicListRow(checkout, listOf(project.name), emptyList()),
+                EpicListRow(onboarding, listOf(project.name), emptyList()),
+            ),
+            modifier = Modifier.requiredWidth(width),
+        )
+
+        onNodeWithTag(ProjectsEpicSearchToggleTag).performClick()
+        waitForIdle()
+        onNodeWithTag(ProjectsEpicSearchInputTag).performTextInput("checkout")
+        mainClock.advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 100L)
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+
+        onNodeWithTag(EpicRowTag(checkout.id.toString())).assertIsDisplayed()
+        onNodeWithTag(EpicRowTag(onboarding.id.toString())).assertDoesNotExist()
+
+        onNodeWithTag(ProjectsEpicSearchInputTag).performTextReplacement("billing")
+        mainClock.advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 100L)
+        mainClock.advanceTimeByFrame()
+        waitForIdle()
+        onNodeWithTag(ProjectsEpicEmptySearchTag).assertIsDisplayed()
+
+        val field = onNodeWithTag(ProjectsEpicSearchFieldTag).fetchSemanticsNode()
+        val expected = with(density) { (width - ttSpacing.xxl * 2).toPx() }
+        assertEquals(
+            expected,
+            field.size.width.toFloat(),
+            2f,
+            "the epic search field is ${field.size.width}px wide on a $width screen, " +
+                "where the content column is ${expected}px",
+        )
+    }
+
+    /** The same full-width field on a phone, where the column is under the backlog's cap. */
+    val epicSearchFillsTheWidthOnCompact: suspend ComposeUiTest.() -> Unit = {
+        val project = ViewPreviewData.seededProject
+        val epic = testEpic(listOf(project.id), title = "Checkout")
+        val width = 390.dp
+        listShowing(
+            rows = emptyList(),
+            segment = ProjectsSegment.Epics,
+            epicRows = listOf(EpicListRow(epic, listOf(project.name), emptyList())),
+            modifier = Modifier.requiredWidth(width),
+        )
+
+        onNodeWithTag(ProjectsEpicSearchToggleTag).performClick()
+        waitForIdle()
+
+        val field = onNodeWithTag(ProjectsEpicSearchFieldTag).fetchSemanticsNode()
+        val expected = with(density) { (width - ttSpacing.xxl * 2).toPx() }
+        assertEquals(
+            expected,
+            field.size.width.toFloat(),
+            2f,
+            "the epic search field is ${field.size.width}px wide on a $width screen, " +
+                "where the content column is ${expected}px",
+        )
+    }
 }
 
 /**
@@ -439,6 +514,8 @@ private fun ComposeUiTest.listShowing(
     onDismissRemove: () -> Unit = {},
     onOpen: (ProjectID) -> Unit = {},
     onNewProject: (() -> Unit)? = null,
+    segment: ProjectsSegment = ProjectsSegment.Projects,
+    epicRows: List<EpicListRow> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     setContent {
@@ -454,6 +531,8 @@ private fun ComposeUiTest.listShowing(
                 onDismissNotice = {},
                 onDismissError = {},
                 onNewProject = onNewProject,
+                segment = segment,
+                epicRows = epicRows,
                 modifier = modifier,
             )
         }

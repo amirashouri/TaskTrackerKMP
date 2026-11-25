@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -34,6 +36,7 @@ import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.TTSwipeToRevealRow
+import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttBannerTone
@@ -44,6 +47,7 @@ import com.tasktracker.designsystem.ttGlassSurface
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
+import com.tasktracker.designsystem.ttSearchField
 import com.tasktracker.designsystem.ttSpacing
 import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTypography
@@ -63,6 +67,11 @@ import com.tasktracker.designsystem.ttTabIcons
 import com.tasktracker.resources.epic_new
 import com.tasktracker.resources.epic_empty_body
 import com.tasktracker.resources.epic_empty_title
+import com.tasktracker.resources.epic_search_close
+import com.tasktracker.resources.epic_search_empty_body
+import com.tasktracker.resources.epic_search_empty_title
+import com.tasktracker.resources.epic_search_open
+import com.tasktracker.resources.epic_search_placeholder
 import com.tasktracker.resources.projects_segment_epics
 import com.tasktracker.resources.projects_segment_projects
 import com.tasktracker.resources.projects_empty_body
@@ -101,6 +110,21 @@ fun ProjectsListScreen(
 ) {
     var pendingRemovalID by remember { mutableStateOf<ProjectID?>(null) }
     var pendingArchiveID by remember { mutableStateOf<EpicID?>(null) }
+    // The field is local screen state, as it is on the backlog. Keying it to the segment means a
+    // query cannot outlive the Epic list it narrows and hide rows after every visible control
+    // that explains why has gone.
+    var epicQuery by remember(segment) { mutableStateOf("") }
+    var epicSearchOpen by remember(segment) { mutableStateOf(false) }
+    val appliedEpicQuery = rememberDebouncedQuery(epicQuery)
+    val focusManager = LocalFocusManager.current
+    val shownEpicRows = remember(epicRows, appliedEpicQuery) {
+        if (appliedEpicQuery.isBlank()) {
+            epicRows
+        } else {
+            epicRows.filter { it.matchesSearch(appliedEpicQuery) }
+        }
+    }
+    val epicSearchActive = segment == ProjectsSegment.Epics && appliedEpicQuery.isNotBlank()
     val tabBarInset = LocalTabBarScrollUnderInset.current
     // The add action creates for the segment that is showing, so it is only offered when that
     // segment has an editor; a button for the other list would open a form the user did not ask for.
@@ -166,6 +190,27 @@ fun ProjectsListScreen(
                                 segmentPicker(Modifier)
                             }
                         }
+                        if (segment == ProjectsSegment.Epics) {
+                            ttGlassIconButton(
+                                image = ttActionIcons.search,
+                                contentDescription = stringResource(
+                                    if (epicSearchOpen) {
+                                        Res.string.epic_search_close
+                                    } else {
+                                        Res.string.epic_search_open
+                                    },
+                                ),
+                                onClick = {
+                                    epicSearchOpen = !epicSearchOpen
+                                    if (!epicSearchOpen) {
+                                        epicQuery = ""
+                                        focusManager.clearFocus()
+                                    }
+                                },
+                                tint = if (epicSearchOpen) ttAccent() else ttLabel(),
+                                modifier = Modifier.testTag(ProjectsEpicSearchToggleTag),
+                            )
+                        }
                         if (canCreate) {
                             ttGlassIconButton(
                                 image = ttActionIcons.add,
@@ -187,6 +232,26 @@ fun ProjectsListScreen(
                     }
                     if (!wideHeader) {
                         segmentPicker(Modifier)
+                    }
+                    if (segment == ProjectsSegment.Epics) {
+                        SearchReveal(visible = epicSearchOpen) {
+                            ttSearchField(
+                                value = epicQuery,
+                                onValueChange = { epicQuery = it },
+                                hint = stringResource(Res.string.epic_search_placeholder),
+                                // Full width at every size, unlike the backlog's capped field:
+                                // there the field shares the header row with the sort controls,
+                                // while here it has the whole content column and a short field
+                                // reads as a stray control beside the epic list.
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag(ProjectsEpicSearchFieldTag),
+                                fieldModifier = Modifier.testTag(ProjectsEpicSearchInputTag),
+                                keyboardActions = KeyboardActions(
+                                    onSearch = { focusManager.clearFocus() },
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -214,13 +279,30 @@ fun ProjectsListScreen(
                     onDismiss = onDismissNotice,
                 )
             }
-            if (segment == ProjectsSegment.Epics && epicRows.isEmpty() && !epicsLoading) {
+            if (segment == ProjectsSegment.Epics && shownEpicRows.isEmpty() && !epicsLoading) {
                 ProjectsEmptyState(
-                    title = stringResource(Res.string.epic_empty_title),
-                    body = stringResource(Res.string.epic_empty_body),
+                    title = stringResource(
+                        if (epicSearchActive) {
+                            Res.string.epic_search_empty_title
+                        } else {
+                            Res.string.epic_empty_title
+                        },
+                    ),
+                    body = stringResource(
+                        if (epicSearchActive) {
+                            Res.string.epic_search_empty_body
+                        } else {
+                            Res.string.epic_empty_body
+                        },
+                    ),
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    image = ttEntityIcons.epic,
-                    action = if (onNewEpic != null) {
+                    image = if (epicSearchActive) ttActionIcons.search else ttEntityIcons.epic,
+                    titleModifier = if (epicSearchActive) {
+                        Modifier.testTag(ProjectsEpicEmptySearchTag)
+                    } else {
+                        Modifier
+                    },
+                    action = if (!epicSearchActive && onNewEpic != null) {
                         {
                             ttGlassButton(
                                 label = stringResource(Res.string.epic_new),
@@ -243,7 +325,7 @@ fun ProjectsListScreen(
                     contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
-                    items(epicRows, key = { it.epic.id.stringValue }) { row ->
+                    items(shownEpicRows, key = { it.epic.id.stringValue }) { row ->
                         EpicRowView(
                             row = row,
                             onOpen = { onOpenEpic(row.epic.id) },
@@ -441,6 +523,24 @@ const val ProjectsListTag = "projects.list.rows"
 const val ProjectsEpicListTag = "projects.list.epics"
 const val ProjectsListNewTag = "projects.list.new"
 const val ProjectsSegmentTag = "projects.segment"
+const val ProjectsEpicSearchFieldTag = "projects.epic.search"
+const val ProjectsEpicSearchToggleTag = "projects.epic.search.toggle"
+const val ProjectsEpicSearchInputTag = "projects.epic.search.input"
+const val ProjectsEpicEmptySearchTag = "projects.epic.emptySearch"
+
+/**
+ * Whether an epic matches [query].
+ *
+ * Title and project names, because both are text the card draws. Details are not searched for the
+ * reason [WorkItemSearch] gives: a row whose visible text does not contain the query reads as a
+ * broken filter rather than a thorough one.
+ */
+private fun EpicListRow.matchesSearch(query: String): Boolean {
+    val needle = query.trim()
+    if (needle.isEmpty()) return true
+    return epic.title.contains(needle, ignoreCase = true) ||
+        projectNames.any { it.contains(needle, ignoreCase = true) }
+}
 
 fun ProjectsSegmentOptionTag(segment: ProjectsSegment): String =
     "projects.segment.${segment.wireValue}"

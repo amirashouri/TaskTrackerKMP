@@ -166,6 +166,14 @@ class ProjectsUiIosTest {
     fun wideLayoutDirectDeleteAsksConfirmation() =
         runComposeUiTest(block = ProjectsListScenarios.wideLayoutDirectDeleteAsksConfirmation)
 
+    @Test
+    fun epicSearchFiltersAndFillsTheWidth() =
+        runComposeUiTest(block = ProjectsListScenarios.epicSearchFiltersAndFillsTheWidth)
+
+    @Test
+    fun epicSearchFillsTheWidthOnCompact() =
+        runComposeUiTest(block = ProjectsListScenarios.epicSearchFillsTheWidthOnCompact)
+
     /** The backlog's add action and its rows' trailing actions do not occupy the same pixels. The button used to float over them and win the touch. */
     @Test
     fun theAddActionDoesNotCoverTheLastRow() =
