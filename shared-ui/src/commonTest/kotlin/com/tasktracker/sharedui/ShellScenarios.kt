@@ -76,6 +76,7 @@ import com.tasktracker.featureauthpresentation.PrimaryButtonTag
 import com.tasktracker.featureprojectsdomain.AdminProjectsPort
 import com.tasktracker.featureprojectsdomain.ProjectRepositoryPort
 import com.tasktracker.featureprojectsdomain.ProjectSummary
+import com.tasktracker.featureprojectspresentation.AdminProjectTagsSectionTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsAddTag
 import com.tasktracker.featureprojectspresentation.AdminProjectsScreenTag
 import com.tasktracker.featureprojectspresentation.BacklogRemoveFromSprintTag
@@ -155,6 +156,7 @@ import com.tasktracker.featureprojectspresentation.WorkItemManageTagsTag
 import com.tasktracker.featureprojectspresentation.WorkItemTagOptionTag
 import com.tasktracker.featuresettingsdomain.SettingsPort
 import com.tasktracker.featuresettingspresentation.ServerAddressFieldTag
+import com.tasktracker.featuresettingspresentation.SettingsAgentSetupSheetTag
 import com.tasktracker.featuresettingspresentation.SettingsManageMembersTag
 import com.tasktracker.featuresettingspresentation.SettingsManageProjectsTag
 import com.tasktracker.featuresettingspresentation.SettingsScreenTag
@@ -4243,6 +4245,56 @@ object ShellScenarios {
 
         assertEquals(AppTab.Projects, router.selectedTab)
         onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
+    }
+
+    /**
+     * The desktop Admin menu's Setup Agent item opens the existing pairing wizard.
+     *
+     * The wizard's model lives inside the Settings destination, so the menu can only record
+     * the request. Asserting the sheet is what separates "the tab opened" from "the flow the
+     * menu names actually started".
+     */
+    val theDesktopAgentSetupRequestOpensTheWizard: suspend ComposeUiTest.() -> Unit = {
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+
+        router.requestAgentSetup()
+        waitForIdle()
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        onNodeWithTag(SettingsAgentSetupSheetTag).assertIsDisplayed()
+    }
+
+    /**
+     * The desktop Admin menu's Add Tag item opens the selected project with its tag catalog
+     * in view, rather than at the top of a form the admin would have to scroll.
+     */
+    val theDesktopAddTagRequestOpensTheSelectedProjectsTags: suspend ComposeUiTest.() -> Unit = {
+        val router = Router()
+        val project = shellTestProject(name = "Apollo")
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            settings = FakeShellSettingsPort(),
+            preferences = adminPreferences(),
+            adminProjectsPort = FakeAdminProjectsPort(
+                seeded = listOf(shellTestAdminProject(project = project)),
+            ),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+
+        router.openAdminProjects(project.id, focusTags = true)
+        waitForIdle()
+
+        onNodeWithTag(AdminProjectTagsSectionTag).assertIsDisplayed()
     }
 
     /**

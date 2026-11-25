@@ -152,13 +152,24 @@ fun RootScreen(
     // Injected by tests; production reads the host once per composition, the same seam and
     // the same timing as Reduce Motion. See [platformReduceTransparency].
     reduceTransparency: Boolean = platformReduceTransparency(),
+    /**
+     * Preferences the platform owns, or null to create them here.
+     *
+     * Desktop passes the instance its window menu reads, so the menu and the shell share one
+     * cached role: a second instance would never be refreshed and would hide the Admin menu
+     * from the administrator it belongs to.
+     */
+    shellPreferences: ShellPreferences? = null,
 ) {
     val router = remember(resolver) { resolver.resolve(Router::class) }
     // Handed to `ProvideAuthSession` for the sign-in form's own model. Not a subscription:
     // the session→router transition belongs to the graph's coordinator.
     val session = remember(resolver) { resolver.resolve(AuthSessionPort::class) }
-    val preferences = remember(resolver) {
-        ShellPreferences(store = resolver.resolve(UserDefaultsStore::class), router = router)
+    val preferences = remember(resolver, shellPreferences) {
+        shellPreferences ?: ShellPreferences(
+            store = resolver.resolve(UserDefaultsStore::class),
+            router = router,
+        )
     }
 
     // The projects collaborators, resolved rather than constructed. `getOrNull` on both

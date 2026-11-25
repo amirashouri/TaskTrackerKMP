@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -51,6 +54,7 @@ import com.tasktracker.resources.project_name_label
 import com.tasktracker.resources.project_repo_url_hint
 import com.tasktracker.resources.project_repo_url_label
 import com.tasktracker.resources.project_repo_url_placeholder
+import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -86,15 +90,30 @@ fun ProjectEditorScreen(
     statusesSection: (@Composable () -> Unit)? = null,
     /** Optional custom slot (e.g. project-scoped agent pairing). */
     agentSection: (@Composable () -> Unit)? = null,
+    /** Bring the tag catalog into view on open, for the desktop Add Tag action. */
+    scrollToTags: Boolean = false,
 ) {
     val saveEnabled = canSave && !isBusy
     var showDiscardConfirmation by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    var tagsTop by remember { mutableStateOf<Int?>(null) }
+    var hasScrolledToTags by remember(scrollToTags) { mutableStateOf(false) }
+
+    // The first layout that knows where the tag catalog sits is the one to scroll to. Keying
+    // the effect on the position as well as the request lets it wait for that layout, and the
+    // latch stops a tag edit changing the section's height from yanking the page back down.
+    LaunchedEffect(scrollToTags, tagsTop) {
+        if (!scrollToTags || hasScrolledToTags) return@LaunchedEffect
+        val top = tagsTop ?: return@LaunchedEffect
+        hasScrolledToTags = true
+        scrollState.animateScrollTo(top)
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(horizontal = ttSpacing.xxl, vertical = ttSpacing.formStack)
                 .testTag(ProjectEditorTag),
             verticalArrangement = Arrangement.spacedBy(ttSpacing.fieldStack),
@@ -193,7 +212,15 @@ fun ProjectEditorScreen(
                 }
             }
             membersSection?.invoke()
-            tagsSection?.invoke()
+            tagsSection?.let { section ->
+                Box(
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        tagsTop = coordinates.positionInParent().y.roundToInt()
+                    },
+                ) {
+                    section()
+                }
+            }
             statusesSection?.invoke()
             agentSection?.invoke()
             if (errorMessage != null) {

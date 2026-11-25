@@ -710,6 +710,7 @@ fun NavigationHost(
                                 memberAdminPort = memberAdminPort,
                                 scope = scope,
                                 isWide = true,
+                                focusTags = backgroundPushed.focusTags,
                             )
                         }
 
@@ -1179,6 +1180,7 @@ private fun PushedRoute(
                     adminProjectsPort = adminProjectsPort,
                     memberAdminPort = memberAdminPort,
                     scope = scope,
+                    focusTags = route.focusTags,
                 )
             }
     }
@@ -2783,7 +2785,8 @@ private fun SettingsDestination(
     // feature edge. `UserRole.Admin` is the only role that opens the Admin section, and a
     // `null` role — nobody signed in — is not one: fail closed on the screen that leads to
     // member and project management.
-    val isAdmin = preferences.currentUserRole.collectAsState().value == UserRole.Admin
+    val currentRole by preferences.currentUserRole.collectAsState()
+    val isAdmin = currentRole == UserRole.Admin
 
     // A pairing link arrives as an intent, not a screen: the router holds the address until
     // this destination exists to carry it out. Consuming on arrival is what makes it one-shot —
@@ -2795,6 +2798,19 @@ private fun SettingsDestination(
         val prefill = pendingServerAddress ?: return@LaunchedEffect
         model.openServerAddressEditor(prefill = prefill)
         router.consumePendingServerAddress()
+    }
+
+    // The desktop Admin menu's Setup Agent item, carried as a one-shot intent because the
+    // wizard's model lives here. A null role means the cached profile has not been read yet;
+    // waiting is what keeps a member's request from being consumed by a frame that guessed.
+    val pendingAgentSetup = router.state.collectAsState().value.pendingAgentSetup
+    LaunchedEffect(pendingAgentSetup, currentRole) {
+        if (!pendingAgentSetup) return@LaunchedEffect
+        when (currentRole) {
+            null -> return@LaunchedEffect
+            UserRole.Admin -> if (router.consumePendingAgentSetup()) model.openAgentSetup()
+            else -> router.consumePendingAgentSetup()
+        }
     }
 
     SettingsScreen(

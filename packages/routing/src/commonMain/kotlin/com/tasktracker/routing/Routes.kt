@@ -145,8 +145,15 @@ sealed interface AppRoute {
     /**
      * The projects administration section, in the same shape and for the same reasons as
      * [AdminMembers] was: `null` is the active/archived list, non-null is one project's editor.
+     *
+     * [focusTags] asks the editor to scroll its tag catalog into view when the desktop Admin
+     * menu's Add Tag action opens it. It is not part of the project's identity, but it is part of
+     * the route the menu installs, so a recomposition keeps the request that created the page.
      */
-    data class AdminProjects(val projectID: ProjectID? = null) : AppRoute
+    data class AdminProjects(
+        val projectID: ProjectID? = null,
+        val focusTags: Boolean = false,
+    ) : AppRoute
 }
 
 /** The project a route is scoped to, or null for [AppRoute.Settings] and the admin sections. */

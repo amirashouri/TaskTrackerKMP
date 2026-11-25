@@ -361,6 +361,36 @@ class RouterTest {
     }
 
     @Test
+    fun `an agent setup request opens settings at its root and is consumed once`() {
+        val router = Router()
+        router.enterMain()
+        router.openAdminMembers()
+
+        router.requestAgentSetup()
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertTrue(
+            router.path(AppTab.Settings).isEmpty(),
+            "a pushed admin section must be popped so the setup wizard is not hidden behind it",
+        )
+        assertTrue(router.state.value.pendingAgentSetup)
+        assertTrue(router.consumePendingAgentSetup())
+        assertFalse(router.state.value.pendingAgentSetup)
+        assertFalse(router.consumePendingAgentSetup(), "the request is one-shot")
+    }
+
+    @Test
+    fun `an agent setup request before sign-in does nothing`() {
+        val router = Router()
+        router.selectTab(AppTab.Projects)
+
+        router.requestAgentSetup()
+
+        assertEquals(AppTab.Projects, router.selectedTab)
+        assertFalse(router.state.value.pendingAgentSetup)
+    }
+
+    @Test
     fun `a search request supersedes a pending new project request`() {
         val router = Router()
         router.enterMain()
@@ -958,6 +988,14 @@ class RouterTest {
                 AppRoute.AdminProjects(projectID),
             ),
             router.path(AppTab.Settings),
+        )
+
+        router.openAdminProjects(projectID, focusTags = true)
+        assertEquals(adminProjectsStack(projectID, focusTags = true), router.path(AppTab.Settings))
+        assertEquals(
+            true,
+            (router.path(AppTab.Settings).last() as AppRoute.AdminProjects).focusTags,
+            "Add Tag must install the same project editor with the tag catalog in view",
         )
     }
 
