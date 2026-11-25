@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,16 +26,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTDateField
 import com.tasktracker.designsystem.TTGlassButtonStyle
 import com.tasktracker.designsystem.ttAccent
 import com.tasktracker.designsystem.ttActionIcons
 import com.tasktracker.designsystem.ttBanner
 import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassCard
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttLabel
@@ -95,243 +100,266 @@ fun EpicEditorScreen(
     val scope = rememberCoroutineScope()
     var isItemPickerOpen by remember { mutableStateOf(false) }
     var isArchiveSheetOpen by remember { mutableStateOf(false) }
+    val tabBarInset = LocalTabBarScrollUnderInset.current
 
     val projectNames = remember(model.availableProjects) {
         model.availableProjects.associate { it.id to it.name }
     }
     val subtasks = model.subtasks
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // The Backlog's reading width: on a desktop the form fills up to the cap and
-            // the capped column is centred in the window instead of stretching edge to edge.
-            .wrapContentWidth(Alignment.CenterHorizontally)
-            .widthIn(max = BacklogMaxContentWidth)
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = ttSpacing.xxl)
-            .padding(top = ttSpacing.screenGutterLarge, bottom = ttSpacing.xxxl)
-            .testTag(EpicEditorScreenTag),
-        verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-            verticalAlignment = Alignment.CenterVertically,
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // The Backlog's reading width: on a desktop the form fills up to the cap and
+                // the capped column is centred in the window instead of stretching edge to edge.
+                .wrapContentWidth(Alignment.CenterHorizontally)
+                .widthIn(max = BacklogMaxContentWidth)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = ttSpacing.xxl)
+                .padding(top = ttSpacing.screenGutterLarge, bottom = ttSpacing.xxxl)
+                .testTag(EpicEditorScreenTag),
+            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
         ) {
-            ttGlassIconButton(
-                image = ttActionIcons.chevronLeft,
-                contentDescription = stringResource(Res.string.common_back),
-                onClick = onBack,
-                modifier = Modifier.testTag(EpicEditorBackTag),
-            )
-            ttText(
-                text = if (model.isCreating) {
-                    stringResource(Res.string.epic_editor_new_title)
-                } else {
-                    stringResource(Res.string.epic_editor_edit_title, model.title)
-                },
-                style = ttTypography.titleSmall,
-                color = ttLabel(),
-                modifier = Modifier.weight(1f),
-            )
-            if (model.canSave) {
-                ttGlassButton(
-                    label = stringResource(
-                        if (model.isCreating) Res.string.epic_create else Res.string.common_save,
-                    ),
-                    onClick = onSave,
-                    style = TTGlassButtonStyle(prominent = true),
-                    modifier = Modifier.testTag(EpicEditorSaveTag),
-                )
-            }
-        }
-
-        model.errorMessage?.let { message ->
-            ttBanner(message = message, onDismiss = model::dismissError)
-        }
-
-        ProjectsTextField(
-            title = stringResource(Res.string.epic_title_label),
-            value = model.title,
-            onValueChange = model::onTitleChanged,
-            fieldTag = EpicEditorTitleTag,
-            imeAction = ImeAction.Next,
-        )
-
-        ProjectsTextField(
-            title = stringResource(Res.string.epic_details_label),
-            value = model.details,
-            onValueChange = model::onDetailsChanged,
-            fieldTag = EpicEditorDetailsTag,
-            singleLine = false,
-            minLines = 3,
-            imeAction = ImeAction.Default,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-            // Centred against the date row so the compact cross sits on the control's line
-            // rather than hanging off its lower edge.
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            TTDateField(
-                label = stringResource(Res.string.epic_due_label),
-                value = model.dueDate,
-                onValueChange = { model.onDueDateChanged(it) },
-                modifier = Modifier.weight(1f).testTag(EpicEditorDueTag),
-            )
-            if (model.dueDate != null) {
-                // The same inline close well as a linked item's unlink control: this is an
-                // annotation on the field, not a standalone action competing with it.
-                ttGlassIconButton(
-                    image = ttActionIcons.close,
-                    contentDescription = stringResource(Res.string.epic_due_clear),
-                    onClick = { model.onDueDateChanged(null) },
-                    modifier = Modifier.testTag(EpicEditorClearDueTag),
-                    size = ttSpacing.xxxl,
-                    iconSize = ttIconSize.close,
-                )
-            }
-        }
-
-        EpicOwnerPicker(
-            ownerID = model.ownerID,
-            onOwnerChanged = model::onOwnerChanged,
-            searchMembers = searchMembers,
-            resolveSelected = resolveSelected,
-        )
-
-        EpicProjectDropdown(
-            projects = model.availableProjects,
-            selected = model.projectIDs,
-            onToggle = model::toggleProject,
-        )
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().testTag(EpicEditorProjectChipsTag),
-            horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-            verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-        ) {
-            model.projectIDs.forEach { id ->
-                SelectedProjectChip(name = projectNames[id] ?: id.stringValue.take(SHORT_ID_LENGTH))
-            }
-        }
-
-        if (!model.isCreating) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(DIVIDER_HEIGHT)
-                    .background(ttSeparator()),
-            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ttText(
-                    text = epicStatusLabel(deriveEpicStatus(subtasks)),
-                    style = ttTypography.captionEmphasised,
-                    color = ttAccent(),
-                    modifier = Modifier.testTag(EpicEditorStatusTag),
+                ttGlassIconButton(
+                    image = ttActionIcons.chevronLeft,
+                    contentDescription = stringResource(Res.string.common_back),
+                    onClick = onBack,
+                    modifier = Modifier.testTag(EpicEditorBackTag),
                 )
                 ttText(
-                    text = stringResource(Res.string.epic_subtasks_label),
-                    style = ttTypography.captionEmphasised,
-                    color = ttLabelSecondary(),
-                )
-                Box(modifier = Modifier.weight(1f))
-                ttGlassButton(
-                    label = stringResource(Res.string.epic_link_items),
-                    onClick = {
-                        scope.launch { model.loadCandidates() }
-                        isItemPickerOpen = true
+                    text = if (model.isCreating) {
+                        stringResource(Res.string.epic_editor_new_title)
+                    } else {
+                        stringResource(Res.string.epic_editor_edit_title, model.title)
                     },
-                    modifier = Modifier.testTag(EpicEditorLinkItemsTag),
+                    style = ttTypography.titleSmall,
+                    color = ttLabel(),
+                    modifier = Modifier.weight(1f),
                 )
-            }
-            EpicProgressBar(
-                done = subtasks.count { it.status.isTerminal },
-                total = subtasks.size,
-                modifier = Modifier.testTag(EpicEditorProgressTag),
-            )
-            if (subtasks.isEmpty()) {
-                ttText(
-                    text = stringResource(Res.string.epic_subtasks_empty),
-                    style = ttTypography.footnote,
-                    color = ttLabelSecondary(),
-                )
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxWidth().testTag(EpicEditorSubtasksTag),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
-                ) {
-                    subtasks.forEachIndexed { index, item ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            ttText(
-                                text = item.key.rawValue,
-                                style = ttTypography.captionEmphasised,
-                                color = ttLabelSecondary(),
-                            )
-                            ttText(
-                                text = item.title,
-                                style = ttTypography.callout,
-                                color = ttLabel(),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (item.status.isTerminal) {
-                                ttText(
-                                    text = "\u2713",
-                                    style = ttTypography.callout,
-                                    color = ttAccent(),
-                                )
-                            }
-                            // An annotation on the row, not the row's action: the inline close
-                            // glyph keeps the unlink well from dominating the task title.
-                            ttGlassIconButton(
-                                image = ttActionIcons.close,
-                                contentDescription = stringResource(Res.string.epic_unlink_item),
-                                onClick = { scope.launch { model.unlink(item.id) } },
-                                modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
-                                size = ttSpacing.xxxl,
-                                iconSize = ttIconSize.close,
-                            )
-                        }
-                        // Between links only: the line pairs each unlink with the row above it,
-                        // without leaving a stray rule under the last item.
-                        if (index < subtasks.lastIndex) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(DIVIDER_HEIGHT)
-                                    .background(ttSeparator()),
-                            )
-                        }
-                    }
+                if (model.canSave) {
+                    ttGlassButton(
+                        label = stringResource(
+                            if (model.isCreating) Res.string.epic_create else Res.string.common_save,
+                        ),
+                        onClick = onSave,
+                        style = TTGlassButtonStyle(prominent = true),
+                        modifier = Modifier.testTag(EpicEditorSaveTag),
+                    )
                 }
             }
 
-            ttGlassButton(
-                label = stringResource(
-                    if (model.isArchived) Res.string.epic_unarchive else Res.string.epic_archive,
-                ),
-                onClick = {
-                    if (model.isArchived) {
-                        scope.launch { model.setArchived(isArchived = false, archiveSubtasks = true) }
-                    } else {
-                        isArchiveSheetOpen = true
-                    }
-                },
-                modifier = Modifier.testTag(EpicEditorArchiveTag),
+            model.errorMessage?.let { message ->
+                ttBanner(message = message, onDismiss = model::dismissError)
+            }
+
+            ProjectsTextField(
+                title = stringResource(Res.string.epic_title_label),
+                value = model.title,
+                onValueChange = model::onTitleChanged,
+                fieldTag = EpicEditorTitleTag,
+                imeAction = ImeAction.Next,
             )
+
+            ProjectsTextField(
+                title = stringResource(Res.string.epic_details_label),
+                value = model.details,
+                onValueChange = model::onDetailsChanged,
+                fieldTag = EpicEditorDetailsTag,
+                singleLine = false,
+                minLines = 3,
+                imeAction = ImeAction.Default,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                // Centred against the date row so the compact cross sits on the control's line
+                // rather than hanging off its lower edge.
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TTDateField(
+                    label = stringResource(Res.string.epic_due_label),
+                    value = model.dueDate,
+                    onValueChange = { model.onDueDateChanged(it) },
+                    modifier = Modifier.weight(1f).testTag(EpicEditorDueTag),
+                )
+                if (model.dueDate != null) {
+                    // The same inline close well as a linked item's unlink control: this is an
+                    // annotation on the field, not a standalone action competing with it.
+                    ttGlassIconButton(
+                        image = ttActionIcons.close,
+                        contentDescription = stringResource(Res.string.epic_due_clear),
+                        onClick = { model.onDueDateChanged(null) },
+                        modifier = Modifier.testTag(EpicEditorClearDueTag),
+                        size = ttSpacing.xxxl,
+                        iconSize = ttIconSize.close,
+                    )
+                }
+            }
+
+            EpicOwnerPicker(
+                ownerID = model.ownerID,
+                onOwnerChanged = model::onOwnerChanged,
+                searchMembers = searchMembers,
+                resolveSelected = resolveSelected,
+            )
+
+            EpicProjectDropdown(
+                projects = model.availableProjects,
+                selected = model.projectIDs,
+                onToggle = model::toggleProject,
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().testTag(EpicEditorProjectChipsTag),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+            ) {
+                model.projectIDs.forEach { id ->
+                    SelectedProjectChip(name = projectNames[id] ?: id.stringValue.take(SHORT_ID_LENGTH))
+                }
+            }
+
+            if (!model.isCreating) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(DIVIDER_HEIGHT)
+                        .background(ttSeparator()),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ttText(
+                        text = epicStatusLabel(deriveEpicStatus(subtasks)),
+                        style = ttTypography.captionEmphasised,
+                        color = ttAccent(),
+                        modifier = Modifier.testTag(EpicEditorStatusTag),
+                    )
+                    ttText(
+                        text = stringResource(Res.string.epic_subtasks_label),
+                        style = ttTypography.captionEmphasised,
+                        color = ttLabelSecondary(),
+                    )
+                    Box(modifier = Modifier.weight(1f))
+                    ttGlassButton(
+                        label = stringResource(Res.string.epic_link_items),
+                        onClick = {
+                            scope.launch { model.loadCandidates() }
+                            isItemPickerOpen = true
+                        },
+                        modifier = Modifier.testTag(EpicEditorLinkItemsTag),
+                    )
+                }
+                EpicProgressBar(
+                    done = subtasks.count { it.status.isTerminal },
+                    total = subtasks.size,
+                    modifier = Modifier.testTag(EpicEditorProgressTag),
+                )
+                if (subtasks.isEmpty()) {
+                    ttText(
+                        text = stringResource(Res.string.epic_subtasks_empty),
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().testTag(EpicEditorSubtasksTag),
+                        verticalArrangement = Arrangement.spacedBy(ttSpacing.xs),
+                    ) {
+                        subtasks.forEachIndexed { index, item ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                ttText(
+                                    text = item.key.rawValue,
+                                    style = ttTypography.captionEmphasised,
+                                    color = ttLabelSecondary(),
+                                )
+                                ttText(
+                                    text = item.title,
+                                    style = ttTypography.callout,
+                                    color = ttLabel(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                if (item.status.isTerminal) {
+                                    ttText(
+                                        text = "\u2713",
+                                        style = ttTypography.callout,
+                                        color = ttAccent(),
+                                    )
+                                }
+                                // An annotation on the row, not the row's action: the inline close
+                                // glyph keeps the unlink well from dominating the task title.
+                                ttGlassIconButton(
+                                    image = ttActionIcons.close,
+                                    contentDescription = stringResource(Res.string.epic_unlink_item),
+                                    onClick = { scope.launch { model.unlink(item.id) } },
+                                    modifier = Modifier.testTag(EpicEditorUnlinkTag(item.id.stringValue)),
+                                    size = ttSpacing.xxxl,
+                                    iconSize = ttIconSize.close,
+                                )
+                            }
+                            // Between links only: the line pairs each unlink with the row above it,
+                            // without leaving a stray rule under the last item.
+                            if (index < subtasks.lastIndex) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(DIVIDER_HEIGHT)
+                                        .background(ttSeparator()),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Room for the pinned bar, so the last linked task is not laid out underneath it.
+                Spacer(Modifier.height(tabBarInset + BOTTOM_BAR_CLEARANCE))
+            }
+        }
+
+        if (!model.isCreating) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .widthIn(max = BacklogMaxContentWidth)
+                    .wrapContentWidth()
+                    .padding(horizontal = ttSpacing.xxl)
+                    .padding(bottom = tabBarInset + ttSpacing.md)
+                    .ttGlassCard()
+                    .background(Color.Transparent)
+                    .pointerInput(Unit) { }
+                    .padding(horizontal = ttSpacing.md, vertical = ttSpacing.sm),
+                horizontalArrangement = Arrangement.spacedBy(ttSpacing.sm, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ttGlassButton(
+                    label = stringResource(
+                        if (model.isArchived) Res.string.epic_unarchive else Res.string.epic_archive,
+                    ),
+                    onClick = {
+                        if (model.isArchived) {
+                            scope.launch { model.setArchived(isArchived = false, archiveSubtasks = true) }
+                        } else {
+                            isArchiveSheetOpen = true
+                        }
+                    },
+                    modifier = Modifier.testTag(EpicEditorArchiveTag),
+                )
+            }
         }
     }
 
@@ -409,3 +437,6 @@ fun EpicEditorUnlinkTag(id: String): String = "projects.epic.editor.subtasks.unl
 private const val SHORT_ID_LENGTH = 8
 private const val CHIP_FILL_ALPHA = 0.10f
 private val DIVIDER_HEIGHT = 1.dp
+
+/** Space the scrolling form leaves under its last row for the pinned action bar. */
+private val BOTTOM_BAR_CLEARANCE = 96.dp
