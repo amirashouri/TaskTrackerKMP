@@ -234,10 +234,11 @@ dropped. Sections 1–5 above remain authoritative for the structural invariants
   uncomposed bar cannot animate away. A `Column`'s `spacedBy` counts children, so an
   `AnimatedVisibility` left as a sibling spends a gap even while empty: supply the gap
   inside the animated content, or swap the bar in place through a single child.
-- **The Project | Epic segment is a preference, not screen state.** It is top-level and a
-  `remember` in the destination dies on a tab switch, so it lives in `ShellPreferences`
-  (`DefaultsKey.ProjectsSegment`) with the value plus a change callback threaded into
-  `ProjectsHost`. The same rule as backlog sort: store choices, not screen state.
+- **The Project | Epic segment is session state, and every launch starts on Projects.**
+  It is top-level and a `remember` in the destination dies on a tab switch, so it lives in
+  `ShellPreferences` with the value plus a change callback threaded into `ProjectsHost`.
+  Unlike backlog sort it is not persisted: the chosen segment survives a tab switch, but a
+  cold start opens the tab's home, the project list.
 - **The Projects "+" creates for the showing segment.** No dropdown and no chooser sheet:
   the segment above it is the choice, so the plus opens the project form on Projects and the
   epic editor on Epics. It is hidden when that segment has no editor. The epic editor is a

@@ -1,5 +1,18 @@
 package com.tasktracker.featureprojectspresentation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -9,6 +22,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.tasktracker.core.EpicID
 import com.tasktracker.core.ProjectID
+import com.tasktracker.designsystem.LocalReducedMotion
 import com.tasktracker.designsystem.LocalTabBarScrollUnderInset
 import com.tasktracker.designsystem.TTGlassSegmentedPicker
 import com.tasktracker.designsystem.TTGlassButtonStyle
@@ -44,6 +59,8 @@ import com.tasktracker.designsystem.ttError
 import com.tasktracker.designsystem.ttGlassButton
 import com.tasktracker.designsystem.ttGlassIconButton
 import com.tasktracker.designsystem.ttGlassSurface
+import com.tasktracker.designsystem.ttIcon
+import com.tasktracker.designsystem.ttIconSize
 import com.tasktracker.designsystem.ttLabel
 import com.tasktracker.designsystem.ttLabelSecondary
 import com.tasktracker.designsystem.ttRadius
@@ -124,8 +141,9 @@ fun ProjectsListScreen(
             epicRows.filter { it.matchesSearch(appliedEpicQuery) }
         }
     }
-    val epicSearchActive = segment == ProjectsSegment.Epics && appliedEpicQuery.isNotBlank()
     val tabBarInset = LocalTabBarScrollUnderInset.current
+    // One pace for the whole segment swap: the header and the list it names move together.
+    val reducedMotion = LocalReducedMotion.current
     // The add action creates for the segment that is showing, so it is only offered when that
     // segment has an editor; a button for the other list would open a form the user did not ask for.
     val canCreate = when (segment) {
@@ -173,15 +191,73 @@ fun ProjectsListScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
                     ) {
-                        // Wrap the title on a wide header so the weighted box spans exactly the
-                        // gap to the add action; weighting the title too would centre the picker
-                        // in a share of the row rather than in the visible gap.
-                        ttText(
-                            text = stringResource(Res.string.tab_projects),
-                            style = ttTypography.largeTitle,
-                            color = ttLabel(),
+                        // The glyph and the title are one statement about which half is on
+                        // screen, so they swap as a unit: an "Epics" glyph over a "Projects"
+                        // title, even for a frame, is the page disagreeing with itself.
+                        AnimatedContent(
+                            targetState = segment,
+                            // On a wide header the group keeps its natural width; on a compact
+                            // one it takes the row's spare space so the controls stay trailing.
                             modifier = if (wideHeader) Modifier else Modifier.weight(1f),
-                        )
+                            transitionSpec = {
+                                if (reducedMotion) {
+                                    ContentTransform(
+                                        targetContentEnter = EnterTransition.None,
+                                        initialContentExit = ExitTransition.None,
+                                        sizeTransform = SizeTransform(clip = true) { _, _ -> snap() },
+                                    )
+                                } else {
+                                    ContentTransform(
+                                        targetContentEnter =
+                                            fadeIn(
+                                                animationSpec = tween(SEGMENT_SWAP_FADE_MILLIS),
+                                            ) + slideInVertically(
+                                                animationSpec = tween(SEGMENT_SWAP_TRAVEL_MILLIS),
+                                            ) { it / 4 },
+                                        initialContentExit =
+                                            fadeOut(
+                                                animationSpec = tween(SEGMENT_SWAP_FADE_MILLIS),
+                                            ) + slideOutVertically(
+                                                animationSpec = tween(SEGMENT_SWAP_TRAVEL_MILLIS),
+                                            ) { -it / 4 },
+                                        sizeTransform = SizeTransform(clip = true) { _, _ ->
+                                            tween(SEGMENT_SWAP_TRAVEL_MILLIS)
+                                        },
+                                    )
+                                }
+                            },
+                            label = "projects-segment-header",
+                        ) { shown ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // The glyph names the half on screen, so the header says which
+                                // entity the list below is made of before the words are read.
+                                ttIcon(
+                                    image = when (shown) {
+                                        ProjectsSegment.Projects -> ttEntityIcons.project
+                                        ProjectsSegment.Epics -> ttEntityIcons.epic
+                                    },
+                                    contentDescription = null,
+                                    tint = ttAccent(),
+                                    modifier = Modifier.size(ttIconSize.tab),
+                                )
+                                ttText(
+                                    // The header names the half on screen, not just the tab: an
+                                    // "Epics" list under a "Projects" title would be the page
+                                    // disagreeing with its own segment.
+                                    text = stringResource(
+                                        when (shown) {
+                                            ProjectsSegment.Projects -> Res.string.tab_projects
+                                            ProjectsSegment.Epics -> Res.string.projects_segment_epics
+                                        },
+                                    ),
+                                    style = ttTypography.largeTitle,
+                                    color = ttLabel(),
+                                )
+                            }
+                        }
                         if (wideHeader) {
                             Box(
                                 modifier = Modifier.weight(1f),
@@ -279,132 +355,182 @@ fun ProjectsListScreen(
                     onDismiss = onDismissNotice,
                 )
             }
-            if (segment == ProjectsSegment.Epics && shownEpicRows.isEmpty() && !epicsLoading) {
-                ProjectsEmptyState(
-                    title = stringResource(
-                        if (epicSearchActive) {
-                            Res.string.epic_search_empty_title
-                        } else {
-                            Res.string.epic_empty_title
-                        },
-                    ),
-                    body = stringResource(
-                        if (epicSearchActive) {
-                            Res.string.epic_search_empty_body
-                        } else {
-                            Res.string.epic_empty_body
-                        },
-                    ),
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    image = if (epicSearchActive) ttActionIcons.search else ttEntityIcons.epic,
-                    titleModifier = if (epicSearchActive) {
-                        Modifier.testTag(ProjectsEpicEmptySearchTag)
+            AnimatedContent(
+                targetState = segment,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                transitionSpec = {
+                    if (reducedMotion) {
+                        ContentTransform(
+                            targetContentEnter = EnterTransition.None,
+                            initialContentExit = ExitTransition.None,
+                            sizeTransform = SizeTransform(clip = true) { _, _ -> snap() },
+                        )
                     } else {
-                        Modifier
-                    },
-                    action = if (!epicSearchActive && onNewEpic != null) {
-                        {
-                            ttGlassButton(
-                                label = stringResource(Res.string.epic_new),
-                                onClick = onNewEpic,
-                                style = TTGlassButtonStyle(prominent = true),
-                            )
-                        }
-                    } else {
-                        null
-                    },
-                )
-            } else if (segment == ProjectsSegment.Epics) {
-                LazyColumn(
-                    modifier = Modifier
-                        .weight(1f)
-                        .widthIn(max = BacklogMaxContentWidth)
-                        .fillMaxWidth()
-                        .align(Alignment.CenterHorizontally)
-                        .testTag(ProjectsEpicListTag),
-                    contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                ) {
-                    items(shownEpicRows, key = { it.epic.id.stringValue }) { row ->
-                        EpicRowView(
-                            row = row,
-                            onOpen = { onOpenEpic(row.epic.id) },
-                            onEdit = { onEditEpic(row.epic.id) },
-                            onToggleArchived = {
-                                if (row.epic.isArchived) {
-                                    onUnarchiveEpic(row.epic.id)
-                                } else {
-                                    pendingArchiveID = row.epic.id
-                                }
+                        // Forward is Projects -> Epics; the outgoing half leaves the way the
+                        // incoming one arrived, so a return trip reads as a step back.
+                        val forward = targetState == ProjectsSegment.Epics
+                        ContentTransform(
+                            targetContentEnter =
+                                fadeIn(animationSpec = tween(SEGMENT_SWAP_FADE_MILLIS)) +
+                                    slideInHorizontally(
+                                        animationSpec = tween(SEGMENT_SWAP_TRAVEL_MILLIS),
+                                    ) { width -> if (forward) width / 4 else -width / 4 },
+                            initialContentExit =
+                                fadeOut(animationSpec = tween(SEGMENT_SWAP_FADE_MILLIS)) +
+                                    slideOutHorizontally(
+                                        animationSpec = tween(SEGMENT_SWAP_TRAVEL_MILLIS),
+                                    ) { width -> if (forward) -width / 4 else width / 4 },
+                            sizeTransform = SizeTransform(clip = true) { _, _ ->
+                                tween(SEGMENT_SWAP_TRAVEL_MILLIS)
                             },
                         )
                     }
-                }
-            } else if (rows.isEmpty() && !isLoading) {
-                ProjectsEmptyState(
-                    title = stringResource(Res.string.projects_empty_title),
-                    body = stringResource(Res.string.projects_empty_body),
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    image = ttTabIcons.projects,
-                    action = if (onNewProject != null) {
-                        {
-                            ttGlassButton(
-                                label = stringResource(Res.string.project_new),
-                                onClick = onNewProject,
-                                style = TTGlassButtonStyle(prominent = true),
-                            )
+                },
+                label = "projects-segment-content",
+            ) { shown ->
+                // The outgoing half stays composed for the swap, so every branch below reads
+                // [shown] rather than the live segment: the old list must not turn into the
+                // new list's data halfway out.
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (shown == ProjectsSegment.Epics && shownEpicRows.isEmpty() && !epicsLoading) {
+                        val searchActive = appliedEpicQuery.isNotBlank()
+                        ProjectsEmptyState(
+                            title = stringResource(
+                                if (searchActive) {
+                                    Res.string.epic_search_empty_title
+                                } else {
+                                    Res.string.epic_empty_title
+                                },
+                            ),
+                            body = stringResource(
+                                if (searchActive) {
+                                    Res.string.epic_search_empty_body
+                                } else {
+                                    Res.string.epic_empty_body
+                                },
+                            ),
+                            // The epic list below is capped and centred; the empty state takes
+                            // the same column so switching between "no epics" and a page of
+                            // them does not move the content sideways on a desktop window.
+                            modifier = Modifier
+                                .widthIn(max = BacklogMaxContentWidth)
+                                .fillMaxSize()
+                                .align(Alignment.Center),
+                            image = if (searchActive) ttActionIcons.search else ttEntityIcons.epic,
+                            titleModifier = if (searchActive) {
+                                Modifier.testTag(ProjectsEpicEmptySearchTag)
+                            } else {
+                                Modifier
+                            },
+                            action = if (!searchActive && onNewEpic != null) {
+                                {
+                                    ttGlassButton(
+                                        label = stringResource(Res.string.epic_new),
+                                        onClick = onNewEpic,
+                                        style = TTGlassButtonStyle(prominent = true),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    } else if (shown == ProjectsSegment.Epics) {
+                        LazyColumn(
+                            modifier = Modifier
+                                .widthIn(max = BacklogMaxContentWidth)
+                                .fillMaxSize()
+                                .align(Alignment.Center)
+                                .testTag(ProjectsEpicListTag),
+                            contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                        ) {
+                            items(shownEpicRows, key = { it.epic.id.stringValue }) { row ->
+                                EpicRowView(
+                                    row = row,
+                                    onOpen = { onOpenEpic(row.epic.id) },
+                                    onEdit = { onEditEpic(row.epic.id) },
+                                    onToggleArchived = {
+                                        if (row.epic.isArchived) {
+                                            onUnarchiveEpic(row.epic.id)
+                                        } else {
+                                            pendingArchiveID = row.epic.id
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    } else if (rows.isEmpty() && !isLoading) {
+                        ProjectsEmptyState(
+                            title = stringResource(Res.string.projects_empty_title),
+                            body = stringResource(Res.string.projects_empty_body),
+                            // The same reading column as the epic half, so the two empty
+                            // states do not jump sideways when the segment changes.
+                            modifier = Modifier
+                                .widthIn(max = BacklogMaxContentWidth)
+                                .fillMaxSize()
+                                .align(Alignment.Center),
+                            image = ttTabIcons.projects,
+                            action = if (onNewProject != null) {
+                                {
+                                    ttGlassButton(
+                                        label = stringResource(Res.string.project_new),
+                                        onClick = onNewProject,
+                                        style = TTGlassButtonStyle(prominent = true),
+                                    )
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    } else if (isWide) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = ProjectCardMinimumWidth),
+                            modifier = Modifier.fillMaxSize().testTag(ProjectsListTag),
+                            contentPadding = PaddingValues(
+                                bottom = ttSpacing.xl + tabBarInset,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+                        ) {
+                            items(rows, key = { it.summary.id.stringValue }) { row ->
+                                TTSwipeToRevealRow(
+                                    revealLabel = stringResource(Res.string.common_delete),
+                                    isRevealed = pendingRemovalID == row.summary.id,
+                                    onRevealed = { pendingRemovalID = row.summary.id },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    ProjectRowView(
+                                        project = row.summary,
+                                        onOpen = { onOpen(row.summary.id) },
+                                        onRemove = { pendingRemovalID = row.summary.id },
+                                        onEdit = { onEditProject(row.summary.id) },
+                                    )
+                                }
+                            }
                         }
                     } else {
-                        null
-                    },
-                )
-            } else if (isWide) {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = ProjectCardMinimumWidth),
-                    modifier = Modifier.weight(1f).testTag(ProjectsListTag),
-                    contentPadding = PaddingValues(
-                        bottom = ttSpacing.xl + tabBarInset,
-                    ),
-                    horizontalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                ) {
-                    items(rows, key = { it.summary.id.stringValue }) { row ->
-                        TTSwipeToRevealRow(
-                            revealLabel = stringResource(Res.string.common_delete),
-                            isRevealed = pendingRemovalID == row.summary.id,
-                            onRevealed = { pendingRemovalID = row.summary.id },
-                            modifier = Modifier.fillMaxWidth(),
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize().testTag(ProjectsListTag),
+                            contentPadding = PaddingValues(
+                                bottom = ttSpacing.xl + tabBarInset,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                         ) {
-                            ProjectRowView(
-                                project = row.summary,
-                                onOpen = { onOpen(row.summary.id) },
-                                onRemove = { pendingRemovalID = row.summary.id },
-                                onEdit = { onEditProject(row.summary.id) },
-                            )
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f).testTag(ProjectsListTag),
-                    contentPadding = PaddingValues(
-                        bottom = ttSpacing.xl + tabBarInset,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
-                ) {
-                    items(rows, key = { it.summary.id.stringValue }) { row ->
-                        TTSwipeToRevealRow(
-                            revealLabel = stringResource(Res.string.common_delete),
-                            isRevealed = pendingRemovalID == row.summary.id,
-                            onRevealed = { pendingRemovalID = row.summary.id },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            ProjectRowView(
-                                project = row.summary,
-                                onOpen = { onOpen(row.summary.id) },
-                                onRemove = { pendingRemovalID = row.summary.id },
-                                onEdit = { onEditProject(row.summary.id) },
-                            )
+                            items(rows, key = { it.summary.id.stringValue }) { row ->
+                                TTSwipeToRevealRow(
+                                    revealLabel = stringResource(Res.string.common_delete),
+                                    isRevealed = pendingRemovalID == row.summary.id,
+                                    onRevealed = { pendingRemovalID = row.summary.id },
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    ProjectRowView(
+                                        project = row.summary,
+                                        onOpen = { onOpen(row.summary.id) },
+                                        onRemove = { pendingRemovalID = row.summary.id },
+                                        onEdit = { onEditProject(row.summary.id) },
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -517,6 +643,10 @@ private fun RemoveProjectConfirmation(
 
 /** The width at which the segment joins the title row instead of taking its own row. */
 private val ProjectsHeaderWideMinimumWidth = 700.dp
+
+/** The segment swap settles quickly: it is a change of reading, not a reveal. */
+private const val SEGMENT_SWAP_FADE_MILLIS = 120
+private const val SEGMENT_SWAP_TRAVEL_MILLIS = 180
 
 const val ProjectsListScreenTag = "projects.list"
 const val ProjectsListTag = "projects.list.rows"
