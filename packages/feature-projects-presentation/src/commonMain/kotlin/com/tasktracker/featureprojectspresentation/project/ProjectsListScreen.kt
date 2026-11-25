@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -233,7 +234,12 @@ fun ProjectsListScreen(
                 )
             } else if (segment == ProjectsSegment.Epics) {
                 LazyColumn(
-                    modifier = Modifier.weight(1f).testTag(ProjectsEpicListTag),
+                    modifier = Modifier
+                        .weight(1f)
+                        .widthIn(max = BacklogMaxContentWidth)
+                        .fillMaxWidth()
+                        .align(Alignment.CenterHorizontally)
+                        .testTag(ProjectsEpicListTag),
                     contentPadding = PaddingValues(bottom = ttSpacing.xl + tabBarInset),
                     verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
                 ) {
