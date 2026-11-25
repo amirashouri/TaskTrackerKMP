@@ -93,6 +93,7 @@ import com.tasktracker.featureprojectspresentation.MemberPickerRowTag
 import com.tasktracker.featureprojectspresentation.NewProjectFormTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogListTag
 import com.tasktracker.featureprojectspresentation.ProjectBacklogScreenTag
+import com.tasktracker.featureprojectspresentation.ProjectBacklogSearchFieldTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardColumnsTag
 import com.tasktracker.featureprojectspresentation.ProjectBoardScreenTag
 import com.tasktracker.featureprojectspresentation.ProjectEditorTag
@@ -4178,6 +4179,39 @@ object ShellScenarios {
             "choosing a backlog row did not open the editor in the right pane, so the split " +
                 "layout is missing the half that matters",
         )
+    }
+
+    /**
+     * The desktop menu's search request survives navigation and opens the backlog's field.
+     *
+     * The menu can only change router state, so this is the whole seam: request the search while
+     * another tab is selected, and the Backlog destination must both appear and act on the
+     * one-shot request. Asserting the field is displayed is what separates "the tab opened" from
+     * "the action the menu names actually happened".
+     */
+    val theDesktopSearchRequestOpensTheBacklogField: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+        projects.seed(shellTestWorkItem(projectID = project.id, number = 1, status = WorkItemStatus.Todo))
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        router.requestSearch()
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogScreenTag).assertIsDisplayed()
+        onNodeWithTag(ProjectBacklogSearchFieldTag).assertIsDisplayed()
     }
 
     /**

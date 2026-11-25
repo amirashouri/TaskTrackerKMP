@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -173,6 +174,15 @@ fun ProjectBacklogScreen(
     onLoadEpics: () -> Unit = {},
     /** Commits the item-to-epic link; the row hides its action when the item reloads linked. */
     onLinkItemToEpic: (WorkItemID, EpicID) -> Unit = { _, _ -> },
+    /**
+     * A one-shot request to reveal the search field, from the desktop menu.
+     *
+     * Screen state still owns whether the field is open; this only asks it to open once, which is
+     * why the host clears the request through [onSearchOpened] as soon as it lands.
+     */
+    openSearch: Boolean = false,
+    /** Called after [openSearch] has opened the field, so the host can consume the request. */
+    onSearchOpened: () -> Unit = {},
 ) {
     val tabBarInset = LocalTabBarScrollUnderInset.current
     var currentSection by remember { mutableStateOf(projection.currentSection) }
@@ -197,6 +207,15 @@ fun ProjectBacklogScreen(
     // previous load's rows.
     val shown = remember(projection, appliedQuery) { projection.matching(appliedQuery) }
     val focusManager = LocalFocusManager.current
+
+    // Opening the field is the whole request: the query stays the user's, and closing the
+    // field by hand still resets it through the same path a toggle does.
+    LaunchedEffect(openSearch) {
+        if (openSearch) {
+            searchOpen = true
+            onSearchOpened()
+        }
+    }
 
     // The board columns this project exposes. Empty when the project has no catalog, in which case
     // boarding falls back to the legacy `Todo` lane with no key.

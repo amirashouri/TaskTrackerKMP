@@ -1,24 +1,65 @@
 package com.tasktracker.sharedui
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.tasktracker.core.ProjectID
 import com.tasktracker.core.isDesktopApp
 import com.tasktracker.compositionroot.AppGraph
 import com.tasktracker.compositionroot.platformApiBaseUrl
+import com.tasktracker.designsystem.TTGlassButtonStyle
+import com.tasktracker.designsystem.ThemeScheme
+import com.tasktracker.designsystem.ttGlassButton
+import com.tasktracker.designsystem.ttGlassCard
+import com.tasktracker.designsystem.ttLabel
+import com.tasktracker.designsystem.ttLabelSecondary
+import com.tasktracker.designsystem.ttSpacing
+import com.tasktracker.designsystem.ttText
+import com.tasktracker.designsystem.ttTheme
+import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.di.Resolver
+import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.app_name
+import com.tasktracker.resources.common_close
+import com.tasktracker.resources.desktop_about_body
+import com.tasktracker.resources.desktop_about_item
+import com.tasktracker.resources.desktop_menu_file
+import com.tasktracker.resources.desktop_menu_new_task
+import com.tasktracker.resources.desktop_menu_search
+import com.tasktracker.resources.desktop_quit_item
+import com.tasktracker.resources.settings_version
+import com.tasktracker.resources.tab_settings
+import com.tasktracker.routing.RootDestination
+import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.WindowGeometry
 import com.tasktracker.userdefaults.WindowGeometryDefaults
+import java.awt.Desktop
 import java.awt.Image
 import java.awt.Taskbar
 import java.awt.Toolkit
+import java.awt.desktop.PreferencesHandler
 import javax.imageio.ImageIO
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -35,6 +76,108 @@ import org.jetbrains.compose.resources.stringResource
  * launch.
  */
 private const val DesktopDisplayName = "Task Tracker"
+
+/** The settings root, expressed as the link grammar the router already owns. */
+private const val DESKTOP_SETTINGS_LINK = "tasktracker://settings"
+
+/** macOS is where the primary shortcut modifier is Command rather than Control. */
+private fun isMacDesktop(): Boolean =
+    System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)
+
+/** The platform's primary shortcut modifier: Command on macOS, Control elsewhere. */
+private fun desktopShortcut(key: Key, isMac: Boolean): KeyShortcut =
+    if (isMac) KeyShortcut(key, meta = true) else KeyShortcut(key, ctrl = true)
+
+/** The create-task route, built through the same grammar every other entry point uses. */
+private fun newTaskLink(projectID: ProjectID): String =
+    "tasktracker://workitem/${projectID.stringValue}/new"
+
+/**
+ * Puts Settings in macOS's own leftmost application menu.
+ *
+ * The OS owns that menu and already places About and Quit there; a Settings row drawn in the
+ * File menu would be a second copy of the same destination. AWT's preferences action is the
+ * native seam, and it is installed only while signed in because the settings route refuses to
+ * bypass the auth gate.
+ */
+@Composable
+private fun MacSettingsMenuItem(router: Router, signedIn: Boolean) {
+    DisposableEffect(signedIn) {
+        setMacPreferencesHandler(
+            if (signedIn) {
+                { router.open(DESKTOP_SETTINGS_LINK) }
+            } else {
+                null
+            },
+        )
+        onDispose { setMacPreferencesHandler(null) }
+    }
+}
+
+/**
+ * Registers the macOS Settings action, or removes it for a null handler.
+ *
+ * Guarded twice because AWT's desktop integration is optional: a headless or minimal JVM can
+ * report no desktop support, and a platform without the preferences action would throw on
+ * `setPreferencesHandler`. Either way the app opens without the native row rather than failing.
+ */
+private fun setMacPreferencesHandler(onSettings: (() -> Unit)?) {
+    try {
+        if (!Desktop.isDesktopSupported()) return
+        val desktop = Desktop.getDesktop()
+        if (!desktop.isSupported(Desktop.Action.APP_PREFERENCES)) return
+        desktop.setPreferencesHandler(
+            onSettings?.let { open -> PreferencesHandler { open() } },
+        )
+    } catch (_: Exception) {
+        // No desktop integration: Settings remains reachable through the shell.
+    }
+}
+
+/**
+ * About, as a small modal over the shell rather than a second window.
+ *
+ * The version is optional because a developer run has no packaged version to read; the row is
+ * then absent rather than printing a blank, matching the Settings screen's About section.
+ */
+@Composable
+private fun AboutDialog(version: String?, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        ttTheme(ThemeScheme.System) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 380.dp)
+                    .ttGlassCard()
+                    .padding(ttSpacing.xxl),
+                verticalArrangement = Arrangement.spacedBy(ttSpacing.md),
+            ) {
+                ttText(
+                    text = stringResource(Res.string.app_name),
+                    style = ttTypography.title,
+                    color = ttLabel(),
+                )
+                version?.let {
+                    ttText(
+                        text = "${stringResource(Res.string.settings_version)} $it",
+                        style = ttTypography.footnote,
+                        color = ttLabelSecondary(),
+                    )
+                }
+                ttText(
+                    text = stringResource(Res.string.desktop_about_body),
+                    style = ttTypography.callout,
+                    color = ttLabelSecondary(),
+                )
+                ttGlassButton(
+                    label = stringResource(Res.string.common_close),
+                    onClick = onDismiss,
+                    style = TTGlassButtonStyle(prominent = true),
+                    modifier = Modifier.align(Alignment.End),
+                )
+            }
+        }
+    }
+}
 
 /**
  * The Desktop entry point.
@@ -64,7 +207,9 @@ fun main() {
     startDesktopProcess {
         setDockIcon()
         val resolver = DesktopGraph.resolver
+        val appVersion = resolver.getOrNull(AppVersion::class)?.display
         application {
+            val router = resolver.resolve(Router::class)
             val windowState = rememberWindowState(
                 size = desktopWindowSize(WindowGeometryDefaults.load()),
             )
@@ -74,6 +219,57 @@ fun main() {
                 state = windowState,
                 icon = painterResource("AppIcon.png"),
             ) {
+                val navigation by router.state.collectAsState()
+                val appName = stringResource(Res.string.app_name)
+                val isMac = isMacDesktop()
+                // macOS already shows the OS-owned app menu named Task Tracker, so the window
+                // menu takes the conventional name instead of drawing the same title twice.
+                val menuTitle = if (isMac) stringResource(Res.string.desktop_menu_file) else appName
+                var isAboutOpen by remember { mutableStateOf(false) }
+                val signedIn = navigation.root == RootDestination.Main
+                val activeProject = navigation.activeProjectID
+                if (isMac) MacSettingsMenuItem(router = router, signedIn = signedIn)
+                MenuBar {
+                    Menu(text = menuTitle) {
+                        Item(
+                            text = stringResource(Res.string.desktop_menu_new_task),
+                            enabled = signedIn && activeProject != null,
+                            shortcut = desktopShortcut(Key.N, isMac),
+                            onClick = {
+                                activeProject?.let { router.open(newTaskLink(it)) }
+                            },
+                        )
+                        Item(
+                            text = stringResource(Res.string.desktop_menu_search),
+                            enabled = signedIn && activeProject != null,
+                            shortcut = desktopShortcut(Key.F, isMac),
+                            onClick = { router.requestSearch() },
+                        )
+                        Separator()
+                        // macOS already renders Settings in its own application menu.
+                        if (!isMac) {
+                            Item(
+                                text = stringResource(Res.string.tab_settings),
+                                enabled = signedIn,
+                                shortcut = desktopShortcut(Key.Comma, isMac),
+                                onClick = { router.open(DESKTOP_SETTINGS_LINK) },
+                            )
+                            Separator()
+                        }
+                        Item(
+                            text = stringResource(Res.string.desktop_about_item, appName),
+                            onClick = { isAboutOpen = true },
+                        )
+                        Item(
+                            text = stringResource(Res.string.desktop_quit_item, appName),
+                            shortcut = desktopShortcut(Key.Q, isMac),
+                            onClick = ::exitApplication,
+                        )
+                    }
+                }
+                if (isAboutOpen) {
+                    AboutDialog(version = appVersion, onDismiss = { isAboutOpen = false })
+                }
                 RememberWindowGeometry(windowState)
                 DesktopContent(resolver = resolver)
             }
