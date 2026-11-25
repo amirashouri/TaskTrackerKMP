@@ -102,6 +102,12 @@ abstract class TaskTrackerWideScenarios {
     fun theDesktopNewProjectRequestOpensTheProjectsForm() =
         runComposeUiTest(block = ShellScenarios.theDesktopNewProjectRequestOpensTheProjectsForm)
     @Test
+    fun theDesktopAgentSetupRequestOpensTheWizard() =
+        runComposeUiTest(block = ShellScenarios.theDesktopAgentSetupRequestOpensTheWizard)
+    @Test
+    fun theDesktopAddTagRequestOpensTheSelectedProjectsTags() =
+        runComposeUiTest(block = ShellScenarios.theDesktopAddTagRequestOpensTheSelectedProjectsTags)
+    @Test
     fun aWideShellShowsAPlaceholderWhenNothingIsSelected() =
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
     @Test

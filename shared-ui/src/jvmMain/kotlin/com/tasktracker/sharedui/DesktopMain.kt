@@ -39,12 +39,15 @@ import com.tasktracker.designsystem.ttText
 import com.tasktracker.designsystem.ttTheme
 import com.tasktracker.designsystem.ttTypography
 import com.tasktracker.di.Resolver
+import com.tasktracker.featureauthdomain.UserRole
 import com.tasktracker.featuresettingsdomain.AppVersion
 import com.tasktracker.resources.Res
 import com.tasktracker.resources.app_name
 import com.tasktracker.resources.common_close
 import com.tasktracker.resources.desktop_about_body
 import com.tasktracker.resources.desktop_about_item
+import com.tasktracker.resources.desktop_menu_add_tag
+import com.tasktracker.resources.desktop_menu_admin
 import com.tasktracker.resources.desktop_menu_file
 import com.tasktracker.resources.desktop_menu_new
 import com.tasktracker.resources.desktop_menu_new_epic
@@ -52,12 +55,16 @@ import com.tasktracker.resources.desktop_menu_new_project
 import com.tasktracker.resources.desktop_menu_new_task
 import com.tasktracker.resources.desktop_menu_search
 import com.tasktracker.resources.desktop_quit_item
+import com.tasktracker.resources.settings_agent_setup
+import com.tasktracker.resources.settings_manage_members
+import com.tasktracker.resources.settings_manage_projects
 import com.tasktracker.resources.settings_version
 import com.tasktracker.resources.tab_settings
 import com.tasktracker.routing.AppRoute
 import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.RootDestination
 import com.tasktracker.routing.Router
+import com.tasktracker.userdefaults.UserDefaultsStore
 import com.tasktracker.userdefaults.WindowGeometry
 import com.tasktracker.userdefaults.WindowGeometryDefaults
 import java.awt.Desktop
@@ -215,6 +222,15 @@ fun main() {
         val appVersion = resolver.getOrNull(AppVersion::class)?.display
         application {
             val router = resolver.resolve(Router::class)
+            // Created here rather than inside the shell so the window menu can read the same
+            // cached role the Settings screen gates on. RootScreen receives this instance
+            // instead of making a second one that nothing would refresh.
+            val preferences = remember(resolver) {
+                ShellPreferences(
+                    store = resolver.resolve(UserDefaultsStore::class),
+                    router = router,
+                )
+            }
             val windowState = rememberWindowState(
                 size = desktopWindowSize(WindowGeometryDefaults.load()),
             )
@@ -233,6 +249,8 @@ fun main() {
                 var isAboutOpen by remember { mutableStateOf(false) }
                 val signedIn = navigation.root == RootDestination.Main
                 val activeProject = navigation.activeProjectID
+                val userRole by preferences.currentUserRole.collectAsState()
+                val canAdmin = signedIn && userRole == UserRole.Admin
                 if (isMac) MacSettingsMenuItem(router = router, signedIn = signedIn)
                 MenuBar {
                     Menu(text = menuTitle) {
@@ -287,12 +305,39 @@ fun main() {
                             onClick = ::exitApplication,
                         )
                     }
+                    // Hidden rather than disabled for a member: these are the actions the
+                    // Settings screen itself withholds from them, and a greyed row would
+                    // still advertise a section that is not theirs.
+                    if (canAdmin) {
+                        Menu(text = stringResource(Res.string.desktop_menu_admin)) {
+                            Item(
+                                text = stringResource(Res.string.settings_manage_members),
+                                onClick = router::openAdminMembers,
+                            )
+                            Item(
+                                text = stringResource(Res.string.settings_manage_projects),
+                                onClick = { router.openAdminProjects() },
+                            )
+                            Separator()
+                            Item(
+                                text = stringResource(Res.string.settings_agent_setup),
+                                onClick = router::requestAgentSetup,
+                            )
+                            Item(
+                                text = stringResource(Res.string.desktop_menu_add_tag),
+                                enabled = activeProject != null,
+                                onClick = {
+                                    activeProject?.let { router.openAdminProjects(it, focusTags = true) }
+                                },
+                            )
+                        }
+                    }
                 }
                 if (isAboutOpen) {
                     AboutDialog(version = appVersion, onDismiss = { isAboutOpen = false })
                 }
                 RememberWindowGeometry(windowState)
-                DesktopContent(resolver = resolver)
+                DesktopContent(resolver = resolver, shellPreferences = preferences)
             }
         }
     }
@@ -423,8 +468,8 @@ public val preferencesFilePath: String
     get() = com.tasktracker.userdefaults.preferencesFile().path
 
 @Composable
-private fun DesktopContent(resolver: Resolver) {
-    TaskTrackerApp(resolver = resolver)
+private fun DesktopContent(resolver: Resolver, shellPreferences: ShellPreferences) {
+    TaskTrackerApp(resolver = resolver, shellPreferences = shellPreferences)
 }
 
 /**

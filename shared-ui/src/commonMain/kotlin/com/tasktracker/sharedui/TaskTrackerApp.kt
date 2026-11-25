@@ -22,6 +22,13 @@ fun TaskTrackerApp(
     splashMinimumHoldMillis: Long = SPLASH_MINIMUM_HOLD_MILLIS,
     /** Deep link source stream for pairing and navigation routes. */
     deepLinks: DeepLinkSource = appDeepLinks,
+    /**
+     * The shell preferences the platform already owns, or null to let the root create them.
+     *
+     * Desktop passes its own so the window's menu can read the signed-in role — the menu is
+     * outside this composition, and a second instance would carry a second, unrefreshed role.
+     */
+    shellPreferences: ShellPreferences? = null,
 ) {
     ShellMotionProvider {
         Box(
@@ -31,6 +38,7 @@ fun TaskTrackerApp(
                 resolver = resolver,
                 splashMinimumHoldMillis = splashMinimumHoldMillis,
                 deepLinks = deepLinks,
+                shellPreferences = shellPreferences,
             )
         }
     }

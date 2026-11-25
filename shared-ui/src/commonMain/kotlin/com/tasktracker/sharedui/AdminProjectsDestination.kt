@@ -52,6 +52,8 @@ fun AdminProjectsDestination(
     /** Null in a demo graph, where there is no server to mint a pairing code. */
     agentPairingPort: AgentPairingPort? = null,
     isWide: Boolean = false,
+    /** Scroll the selected project's tag catalog into view when the editor opens. */
+    focusTags: Boolean = false,
 ) {
     val create = remember(adminProjectsPort) { AdminProjectCreateModel(adminProjectsPort) }
 
@@ -145,6 +147,7 @@ fun AdminProjectsDestination(
                         resolveSelected = resolveSelected,
                         onClose = closeEditor,
                         scope = scope,
+                        focusTags = focusTags,
                     )
                 }
             },
@@ -161,6 +164,7 @@ fun AdminProjectsDestination(
             resolveSelected = resolveSelected,
             onClose = closeEditor,
             scope = scope,
+            focusTags = focusTags,
         )
         return
     }
@@ -220,6 +224,7 @@ private fun AdminProjectEditor(
     resolveSelected: suspend (List<UserID>) -> List<User>,
     onClose: () -> Unit,
     scope: CoroutineScope,
+    focusTags: Boolean = false,
 ) {
     // Built here, where `stringResource` lives: the model needs the labels of the built-in six
     // to seed a project that has no catalog of its own, and it cannot call a composable.
@@ -300,6 +305,7 @@ private fun AdminProjectEditor(
                 ProjectAgentSection(port = port, projectID = projectID)
             }
         },
+        scrollToTags = focusTags,
     )
 }
 

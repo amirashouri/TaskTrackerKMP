@@ -64,6 +64,13 @@ data class RouterState(
      * coming back to the tab later does not reopen a form the user already dismissed.
      */
     val pendingNewProject: Boolean = false,
+    /**
+     * A request to open the agent setup wizard, placed by the desktop Admin menu.
+     *
+     * One-shot like [pendingSearch]: Settings consumes it when it opens the wizard, so
+     * returning to the tab later does not reopen a flow the admin already dismissed.
+     */
+    val pendingAgentSetup: Boolean = false,
 ) {
     /**
      * The navigation stack belonging to [onTab].
@@ -262,9 +269,10 @@ class Router {
         state.copy(
             selectedTab = AppTab.Backlog,
             pendingSearch = true,
-            // One menu request supersedes the other; a pending project form must not open
-            // behind the backlog the user just asked for.
+            // One menu request supersedes the others; a pending form must not open behind
+            // the backlog the user just asked for.
             pendingNewProject = false,
+            pendingAgentSetup = false,
         ).withPath(AppTab.Backlog, emptyList())
     }
 
@@ -292,6 +300,7 @@ class Router {
             selectedTab = AppTab.Projects,
             pendingNewProject = true,
             pendingSearch = false,
+            pendingAgentSetup = false,
         ).withPath(AppTab.Projects, emptyList())
     }
 
@@ -301,6 +310,34 @@ class Router {
             val current = _state.value
             if (!current.pendingNewProject) return false
             if (_state.compareAndSet(current, current.copy(pendingNewProject = false))) {
+                return true
+            }
+        }
+    }
+
+    /**
+     * Opens the Settings tab's agent setup wizard.
+     *
+     * Like the other menu intents this only records the request: the Settings destination owns
+     * the wizard's model and opens it when the tab appears. Before sign-in there is no Settings
+     * tab to open, so the request is a no-op.
+     */
+    fun requestAgentSetup() = update { state ->
+        if (state.root != RootDestination.Main) return@update state
+        state.copy(
+            selectedTab = AppTab.Settings,
+            pendingAgentSetup = true,
+            pendingSearch = false,
+            pendingNewProject = false,
+        ).withPath(AppTab.Settings, emptyList())
+    }
+
+    /** Takes the pending agent-setup request, or `false` when there is none. One-shot. */
+    fun consumePendingAgentSetup(): Boolean {
+        while (true) {
+            val current = _state.value
+            if (!current.pendingAgentSetup) return false
+            if (_state.compareAndSet(current, current.copy(pendingAgentSetup = false))) {
                 return true
             }
         }
@@ -400,10 +437,14 @@ class Router {
      * Same shape and same reasoning as [openAdminMembers], including why the active project
      * does not move: this manages a project's settings, which is not the same act as
      * showing that project's work.
+     *
+     * [focusTags] is the desktop Admin menu's Add Tag entry: it opens the selected project's
+     * editor with the tag catalog scrolled into view. Every other caller leaves it false and
+     * lands at the top of the page.
      */
-    fun openAdminProjects(projectID: ProjectID? = null) = update { state ->
+    fun openAdminProjects(projectID: ProjectID? = null, focusTags: Boolean = false) = update { state ->
         state.copy(selectedTab = AppTab.Settings)
-            .withPath(AppTab.Settings, adminProjectsStack(projectID))
+            .withPath(AppTab.Settings, adminProjectsStack(projectID, focusTags))
     }
 
     /** Pushes onto [onTab], defaulting to the selected tab; pops if already on top. */
@@ -483,6 +524,7 @@ class Router {
                 // for.
                 pendingSearch = false,
                 pendingNewProject = false,
+                pendingAgentSetup = false,
             ).withPath(link.tab, link.path)
         }
         logNotice("routing: opened deep link")
@@ -554,6 +596,7 @@ class Router {
         settingsPath = emptyList(),
         pendingSearch = false,
         pendingNewProject = false,
+        pendingAgentSetup = false,
     )
 
     private fun RouterState.withPath(tab: AppTab, path: List<AppRoute>): RouterState = when (tab) {
@@ -630,10 +673,13 @@ fun adminMembersStack(): List<AppRoute> = listOf(AppRoute.Settings, AppRoute.Adm
  * The same shape as [adminMembersStack], and the same argument for it — see that function's
  * note rather than a second copy here.
  */
-fun adminProjectsStack(projectID: ProjectID? = null): List<AppRoute> =
+fun adminProjectsStack(
+    projectID: ProjectID? = null,
+    focusTags: Boolean = false,
+): List<AppRoute> =
     listOf(AppRoute.Settings, AppRoute.AdminProjects()) +
         if (projectID == null) {
             emptyList()
         } else {
-            listOf(AppRoute.AdminProjects(projectID))
+            listOf(AppRoute.AdminProjects(projectID, focusTags))
         }
