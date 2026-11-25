@@ -99,6 +99,9 @@ abstract class TaskTrackerWideScenarios {
     fun theDesktopSearchRequestOpensTheBacklogField() =
         runComposeUiTest(block = ShellScenarios.theDesktopSearchRequestOpensTheBacklogField)
     @Test
+    fun theDesktopNewProjectRequestOpensTheProjectsForm() =
+        runComposeUiTest(block = ShellScenarios.theDesktopNewProjectRequestOpensTheProjectsForm)
+    @Test
     fun aWideShellShowsAPlaceholderWhenNothingIsSelected() =
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
     @Test

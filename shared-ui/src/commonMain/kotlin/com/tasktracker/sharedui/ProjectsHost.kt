@@ -115,6 +115,16 @@ fun ProjectsHost(
     var isProjectEditorOpen by remember { mutableStateOf(false) }
     var projectEditorModel by remember(environment) { mutableStateOf<ProjectEditorModel?>(null) }
 
+    // The desktop menu's New -> Project action is a router intent rather than a route: the
+    // form is a modal over this tab and already has a host here. Consuming it keeps the
+    // request one-shot, so a later return to the tab does not reopen a dismissed form.
+    val pendingNewProject = navigation.pendingNewProject
+    LaunchedEffect(pendingNewProject) {
+        if (!pendingNewProject) return@LaunchedEffect
+        if (!router.consumePendingNewProject()) return@LaunchedEffect
+        projectEditorModel = ProjectEditorModel(null, environment.repository, environment.dateProvider)
+        isProjectEditorOpen = true
+    }
 
     Box(
         modifier = modifier

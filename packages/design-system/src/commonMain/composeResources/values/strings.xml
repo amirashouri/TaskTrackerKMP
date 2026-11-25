@@ -878,7 +878,10 @@
       it is an identity card, not a feature list.
     -->
     <string name="desktop_menu_file">File</string>
-    <string name="desktop_menu_new_task">New Task</string>
+    <string name="desktop_menu_new">New</string>
+    <string name="desktop_menu_new_task">Task</string>
+    <string name="desktop_menu_new_epic">Epic</string>
+    <string name="desktop_menu_new_project">Project</string>
     <string name="desktop_menu_search">Search Tasks</string>
     <string name="desktop_about_item">About %1$s</string>
     <string name="desktop_quit_item">Quit %1$s</string>

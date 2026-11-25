@@ -4215,6 +4215,37 @@ object ShellScenarios {
     }
 
     /**
+     * The desktop menu's New -> Project request opens the same form the Projects tab does.
+     *
+     * Requested while the Board tab is showing, because the menu's job is to carry the user
+     * from wherever they are to the form. The sheet lives in the Projects host rather than on
+     * a route, so this is the seam that proves the one-shot intent reaches it.
+     */
+    val theDesktopNewProjectRequestOpensTheProjectsForm: suspend ComposeUiTest.() -> Unit = {
+        val projects = FakeProjectRepository()
+        val project = shellTestProject(name = "Apollo")
+        projects.seed(project)
+
+        val router = Router()
+        setUpShell(
+            session = ScriptedSession(restored = signedIn()),
+            router = router,
+            projects = projects,
+            settings = FakeShellSettingsPort(),
+            width = DESKTOP_WIDTH,
+        )
+        waitForIdle()
+        router.openProject(project.id, inTab = AppTab.Board)
+        waitForIdle()
+
+        router.requestNewProject()
+        waitForIdle()
+
+        assertEquals(AppTab.Projects, router.selectedTab)
+        onNodeWithTag(NewProjectFormTag).assertIsDisplayed()
+    }
+
+    /**
      * A wide Backlog draws the chosen item's editor beside the list, not over it.
      *
      * Presence is not the claim — the desktop editor window this tab used to open draws the

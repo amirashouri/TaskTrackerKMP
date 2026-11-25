@@ -46,11 +46,16 @@ import com.tasktracker.resources.common_close
 import com.tasktracker.resources.desktop_about_body
 import com.tasktracker.resources.desktop_about_item
 import com.tasktracker.resources.desktop_menu_file
+import com.tasktracker.resources.desktop_menu_new
+import com.tasktracker.resources.desktop_menu_new_epic
+import com.tasktracker.resources.desktop_menu_new_project
 import com.tasktracker.resources.desktop_menu_new_task
 import com.tasktracker.resources.desktop_menu_search
 import com.tasktracker.resources.desktop_quit_item
 import com.tasktracker.resources.settings_version
 import com.tasktracker.resources.tab_settings
+import com.tasktracker.routing.AppRoute
+import com.tasktracker.routing.AppTab
 import com.tasktracker.routing.RootDestination
 import com.tasktracker.routing.Router
 import com.tasktracker.userdefaults.WindowGeometry
@@ -231,14 +236,30 @@ fun main() {
                 if (isMac) MacSettingsMenuItem(router = router, signedIn = signedIn)
                 MenuBar {
                     Menu(text = menuTitle) {
-                        Item(
-                            text = stringResource(Res.string.desktop_menu_new_task),
-                            enabled = signedIn && activeProject != null,
-                            shortcut = desktopShortcut(Key.N, isMac),
-                            onClick = {
-                                activeProject?.let { router.open(newTaskLink(it)) }
-                            },
-                        )
+                        Menu(text = stringResource(Res.string.desktop_menu_new)) {
+                            Item(
+                                text = stringResource(Res.string.desktop_menu_new_task),
+                                enabled = signedIn && activeProject != null,
+                                shortcut = desktopShortcut(Key.N, isMac),
+                                onClick = {
+                                    activeProject?.let { router.open(newTaskLink(it)) }
+                                },
+                            )
+                            // The same entry points the Projects tab offers: an epic editor
+                            // pushed onto that tab, and the project form drawn by its host.
+                            Item(
+                                text = stringResource(Res.string.desktop_menu_new_epic),
+                                enabled = signedIn,
+                                onClick = {
+                                    router.push(AppRoute.EpicEditor(null), AppTab.Projects)
+                                },
+                            )
+                            Item(
+                                text = stringResource(Res.string.desktop_menu_new_project),
+                                enabled = signedIn,
+                                onClick = router::requestNewProject,
+                            )
+                        }
                         Item(
                             text = stringResource(Res.string.desktop_menu_search),
                             enabled = signedIn && activeProject != null,
