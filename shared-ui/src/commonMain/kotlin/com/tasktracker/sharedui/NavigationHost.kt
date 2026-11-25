@@ -1588,6 +1588,10 @@ private fun BacklogDestination(
         onDispose { picker.stopObserving() }
     }
 
+    // The desktop menu asks for this before the tab is selected, so the request survives the
+    // composition that selects Backlog and is consumed by the screen that can act on it.
+    val pendingSearch = router.state.collectAsState().value.pendingSearch
+
     // A selection is the pane's content, not a history entry. From the list it pushes the
     // editor; with one already in the pane it replaces that route rather than stacking a
     // second; and tapping Add again while the create form stands leaves it there. A plain
@@ -1655,6 +1659,8 @@ private fun BacklogDestination(
         isLoadingEpics = model.isLoadingEpics,
         onLoadEpics = { scope.launch { model.loadLinkableEpics() } },
         onLinkItemToEpic = { itemID, epicID -> scope.launch { model.linkToEpic(itemID, epicID) } },
+        openSearch = pendingSearch,
+        onSearchOpened = { router.consumePendingSearch() },
     )
 }
 

@@ -50,6 +50,13 @@ data class RouterState(
      * before sign-in survives `enterMain`.
      */
     val pendingServerAddress: String? = null,
+    /**
+     * A request to reveal the backlog's search field, placed by the desktop menu.
+     *
+     * One-shot like [highlightedNotificationID]: the backlog consumes it when it opens the
+     * field, so returning to the tab later does not reopen a search the user already left.
+     */
+    val pendingSearch: Boolean = false,
 ) {
     /**
      * The navigation stack belonging to [onTab].
@@ -235,6 +242,33 @@ class Router {
         state.copy(selectedTab = AppTab.Notifications, highlightedNotificationID = highlight)
     }
 
+    /**
+     * Opens the active project's backlog with its search field revealed.
+     *
+     * The backlog's search belongs to the list, so this also returns that tab to its root: a
+     * pushed work-item editor would otherwise stay on screen and the request would be invisible.
+     * Without an active project — or before the session reaches the main root — there is no
+     * backlog to search, so the request is a no-op.
+     */
+    fun requestSearch() = update { state ->
+        if (state.root != RootDestination.Main || state.activeProjectID == null) return@update state
+        state.copy(
+            selectedTab = AppTab.Backlog,
+            pendingSearch = true,
+        ).withPath(AppTab.Backlog, emptyList())
+    }
+
+    /** Takes the pending search request, or `false` when there is none. One-shot. */
+    fun consumePendingSearch(): Boolean {
+        while (true) {
+            val current = _state.value
+            if (!current.pendingSearch) return false
+            if (_state.compareAndSet(current, current.copy(pendingSearch = false))) {
+                return true
+            }
+        }
+    }
+
     /** Takes the pending inbox highlight, or `null` when there is none. One-shot. */
     fun consumeNotificationHighlight(): NotificationID? {
         while (true) {
@@ -408,6 +442,8 @@ class Router {
                 activeProjectID = link.path.firstOrNull()?.selectsActiveProject ?: state.activeProjectID,
                 // A later link without an address must not drop one not yet consumed.
                 pendingServerAddress = link.serverAddress ?: state.pendingServerAddress,
+                // A link is a new destination, not the list the pending search was meant for.
+                pendingSearch = false,
             ).withPath(link.tab, link.path)
         }
         logNotice("routing: opened deep link")
@@ -477,6 +513,7 @@ class Router {
         sprintsPath = emptyList(),
         notificationsPath = emptyList(),
         settingsPath = emptyList(),
+        pendingSearch = false,
     )
 
     private fun RouterState.withPath(tab: AppTab, path: List<AppRoute>): RouterState = when (tab) {

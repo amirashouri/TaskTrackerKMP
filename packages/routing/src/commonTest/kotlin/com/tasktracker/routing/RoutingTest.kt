@@ -297,6 +297,39 @@ class RouterTest {
     }
 
     @Test
+    fun `a search request opens the active projects backlog and is consumed once`() {
+        val router = Router()
+        router.enterMain()
+        router.openProject(projectID, AppTab.Backlog)
+        router.push(AppRoute.WorkItemEditor(projectID, null), AppTab.Backlog)
+        assertTrue(router.path(AppTab.Backlog).isNotEmpty())
+
+        router.requestSearch()
+
+        assertEquals(AppTab.Backlog, router.selectedTab)
+        assertTrue(
+            router.path(AppTab.Backlog).isEmpty(),
+            "a pushed editor must be popped so the search field is actually on screen",
+        )
+        assertTrue(router.state.value.pendingSearch)
+        assertTrue(router.consumePendingSearch())
+        assertFalse(router.state.value.pendingSearch)
+        assertFalse(router.consumePendingSearch(), "the request is one-shot")
+    }
+
+    @Test
+    fun `a search request without an active project does nothing`() {
+        val router = Router()
+        router.enterMain()
+        router.selectTab(AppTab.Settings)
+
+        router.requestSearch()
+
+        assertEquals(AppTab.Settings, router.selectedTab)
+        assertFalse(router.state.value.pendingSearch)
+    }
+
+    @Test
     fun `switching to the tab already selected emits nothing`() {
         val router = Router()
         router.enterMain()

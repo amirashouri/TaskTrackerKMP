@@ -96,6 +96,9 @@ abstract class TaskTrackerWideScenarios {
     fun aWideBacklogHasNoDetailPaneUntilARowIsChosen() =
         runComposeUiTest(block = ShellScenarios.aWideBacklogHasNoDetailPaneUntilARowIsChosen)
     @Test
+    fun theDesktopSearchRequestOpensTheBacklogField() =
+        runComposeUiTest(block = ShellScenarios.theDesktopSearchRequestOpensTheBacklogField)
+    @Test
     fun aWideShellShowsAPlaceholderWhenNothingIsSelected() =
         runComposeUiTest(block = ShellScenarios.aWideShellShowsAPlaceholderWhenNothingIsSelected)
     @Test

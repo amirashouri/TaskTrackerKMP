@@ -711,6 +711,10 @@ class ProjectsUiAndroidHostTest {
     fun theBacklogHidesTheSearchUntilAsked() = runComposeUiTest(block = WorkItemSearchScenarios.theBacklogHidesTheSearchUntilAsked)
 
     @Test
+    fun theBacklogOpensItsSearchWhenTheShellAsks() =
+        runComposeUiTest(block = WorkItemSearchScenarios.theBacklogOpensItsSearchWhenTheShellAsks)
+
+    @Test
     fun theRosterShowsEachMachineItsHostAndHealth() =
         runComposeUiTest(block = AgentManagementScenarios.theRosterShowsEachMachineItsHostAndHealth)
 

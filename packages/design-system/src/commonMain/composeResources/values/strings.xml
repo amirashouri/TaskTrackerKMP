@@ -126,6 +126,7 @@
     -->
     <string name="common_back">Back</string>
     <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
     <string name="common_delete">Delete</string>
     <string name="common_discard">Discard</string>
     <string name="common_done">Done</string>
@@ -871,6 +872,17 @@
     <string name="settings_signout_force">Force Sign Out</string>
     <string name="settings_about_section">About</string>
     <string name="settings_version">Version</string>
+    <!--
+      The Desktop application menu. Labels that name the app take `%1$s` so the menu and the
+      About dialog cannot disagree with `app_name`; the dialog's body stays one sentence because
+      it is an identity card, not a feature list.
+    -->
+    <string name="desktop_menu_file">File</string>
+    <string name="desktop_menu_new_task">New Task</string>
+    <string name="desktop_menu_search">Search Tasks</string>
+    <string name="desktop_about_item">About %1$s</string>
+    <string name="desktop_quit_item">Quit %1$s</string>
+    <string name="desktop_about_body">Offline-first task tracking for projects, boards, sprints and epics.</string>
     <!--
       The creator card closes the Settings list. "Creator" is a capsule in the card's top-right
       corner rather than a caption above the name. The email row carries a mailto:

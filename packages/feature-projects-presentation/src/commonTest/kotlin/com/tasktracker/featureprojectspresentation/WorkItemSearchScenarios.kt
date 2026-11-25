@@ -241,6 +241,21 @@ object WorkItemSearchScenarios {
         )
     }
 
+    /**
+     * A shell request opens the backlog's field, and the request is consumed once.
+     *
+     * The desktop menu is the caller that cannot click the toggle, so this pins the seam the
+     * menu relies on: the field opens from the parameter, and the host is told to clear it.
+     */
+    val theBacklogOpensItsSearchWhenTheShellAsks: suspend ComposeUiTest.() -> Unit = {
+        var consumed = false
+        backlogShowing(openSearch = true, onSearchOpened = { consumed = true })
+        waitForIdle()
+
+        onNodeWithTag(ProjectBacklogSearchFieldTag).assertIsDisplayed()
+        assertTrue(consumed, "the opening must be reported so the host can clear the request")
+    }
+
     /** The backlog hides it the same way, so the two screens do not drift. */
     val theBacklogHidesTheSearchUntilAsked: suspend ComposeUiTest.() -> Unit = {
         backlogShowing()
@@ -521,6 +536,8 @@ private fun ComposeUiTest.boardShowing(
 @OptIn(ExperimentalTestApi::class)
 private fun ComposeUiTest.backlogShowing(
     projection: BacklogSectionedProjection = ViewPreviewData.backlogSectionedProjection(),
+    openSearch: Boolean = false,
+    onSearchOpened: () -> Unit = {},
 ) {
     setContent {
         Themed {
@@ -534,6 +551,8 @@ private fun ComposeUiTest.backlogShowing(
                 onFileAway = {},
                 onUnarchive = {},
                 onDismissError = {},
+                openSearch = openSearch,
+                onSearchOpened = onSearchOpened,
             )
         }
     }
